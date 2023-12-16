@@ -32,7 +32,7 @@ config("skia_public") {
     "SK_DEFAULT_TYPEFACE_IS_EMPTY",
     "SK_DISABLE_LEGACY_DEFAULT_TYPEFACE",
 
-    # TODO(305780908) re-enable after fixing Android
+    # TODO(305780908) re-enable after fixing Android and G3
     #"SK_DISABLE_LEGACY_FONTMGR_FACTORY",
     #"SK_DISABLE_LEGACY_FONTMGR_REFDEFAULT",
   ]
@@ -430,7 +430,7 @@ optional("fontmgr_FontConfigInterface_factory") {
 
 optional("fontmgr_fuchsia") {
   enabled = skia_enable_fontmgr_fuchsia
-
+  public_defines = [ "SK_FONTMGR_FUCHSIA_AVAILABLE" ]
   deps = []
 
   if (is_fuchsia && using_fuchsia_sdk) {
@@ -914,7 +914,6 @@ optional("gpu_shared") {
 
   if (skia_use_dawn) {
     public_defines += [ "SK_DAWN" ]
-    sources += skia_shared_dawn_sources
 
     # When building for WASM, the WebGPU headers are provided by Emscripten. For native builds we
     # have to depend on Dawn directly.
@@ -962,6 +961,10 @@ optional("gpu_shared") {
   if (skia_use_metal) {
     public_defines += [ "SK_METAL" ]
     sources += skia_shared_mtl_sources
+  }
+
+  if (is_android) {
+    sources += skia_shared_android_sources
   }
 }
 
@@ -1234,7 +1237,8 @@ optional("graphite") {
 }
 
 optional("pdf") {
-  enabled = skia_use_zlib && skia_enable_pdf
+  enabled = skia_use_zlib && skia_enable_pdf && skia_use_libjpeg_turbo_decode &&
+            skia_use_libjpeg_turbo_encode
   public_defines = [ "SK_SUPPORT_PDF" ]
 
   deps = [ "//third_party/zlib" ]
@@ -1249,21 +1253,10 @@ optional("pdf") {
     defines = [ "SK_PDF_USE_SFNTLY" ]
   }
 
-  if (skia_use_libjpeg_turbo_decode) {
-    deps += [
-      ":jpeg_decode",
-
-      # This is not a public_dep so we need to directly depend on it
-      # to use jpeg headers
-      "//third_party/libjpeg-turbo:libjpeg",
-    ]
-    sources += [ "src/pdf/SkJpegInfo_libjpegturbo.cpp" ]
-  } else {
-    sources += [ "src/pdf/SkJpegInfo_none.cpp" ]
-  }
-  if (skia_use_libjpeg_turbo_encode) {
-    deps += [ ":jpeg_encode" ]
-  }
+  deps += [
+    ":jpeg_decode",
+    ":jpeg_encode",
+  ]
 }
 
 optional("xps") {
@@ -2027,7 +2020,11 @@ if (skia_enable_tools) {
           "X11",
         ]
       } else if (is_win) {
-        sources += [ "tools/gpu/gl/win/CreatePlatformGLTestContext_win.cpp" ]
+        sources += [
+          "tools/gpu/gl/win/CreatePlatformGLTestContext_win.cpp",
+          "tools/gpu/gl/win/SkWGL.h",
+          "tools/gpu/gl/win/SkWGL_win.cpp",
+        ]
         libs += [ "Gdi32.lib" ]
         if (target_cpu != "arm64") {
           libs += [ "OpenGL32.lib" ]
@@ -2684,10 +2681,7 @@ if (skia_enable_tools) {
       "tools/skdiff/skdiff_main.cpp",
       "tools/skdiff/skdiff_utils.cpp",
     ]
-    deps = [
-      ":skia",
-      ":tool_utils",
-    ]
+    deps = [ ":skia" ]
   }
 
   test_app("skp_parser") {

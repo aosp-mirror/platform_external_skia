@@ -24,6 +24,7 @@
 #include "tools/Stats.h"
 #include "tools/flags/CommandLineFlags.h"
 #include "tools/testrunners/benchmark/target/BenchmarkTarget.h"
+#include "tools/testrunners/common/compilation_mode_keys/CompilationModeKeys.h"
 #include "tools/testrunners/common/surface_manager/SurfaceManager.h"
 #include "tools/timer/Timer.h"
 
@@ -127,6 +128,16 @@ static DEFINE_bool(csv, false, "Print status in CSV format.");
 static DEFINE_bool2(quiet, q, false, "if true, do not print status updates.");
 
 static DEFINE_bool2(verbose, v, false, "Enable verbose output from the test runner.");
+
+// Set in //bazel/devicesrc but only consumed by adb_test_runner.go. We cannot use the
+// DEFINE_string macro because the flag name includes dashes.
+[[maybe_unused]] static bool unused =
+        SkFlagInfo::CreateStringFlag("device-specific-bazel-config",
+                                     nullptr,
+                                     new CommandLineFlags::StringArray(),
+                                     nullptr,
+                                     "Ignored by this test runner.",
+                                     nullptr);
 
 // TODO(lovisolo): Move these flag validation utilities under //tools/testrunners.
 
@@ -631,6 +642,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i < FLAGS_key.size(); i += 2) {
         keyValuePairs[FLAGS_key[i - 1]] = FLAGS_key[i];
     }
+    keyValuePairs.merge(GetCompilationModeGoldAndPerfKeyValuePairs());
     jsonWriter.addKey(keyValuePairs);
 
     // Links.

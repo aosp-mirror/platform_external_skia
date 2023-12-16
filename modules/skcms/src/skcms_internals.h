@@ -26,20 +26,37 @@ extern "C" {
         #define SKCMS_FALLTHROUGH [[clang::fallthrough]]
     #endif
 
-    #if __has_cpp_attribute(clang::musttail) && !__has_feature(memory_sanitizer) \
-                                             && !__has_feature(address_sanitizer)
-        // Sanitizers do not work well with [[clang::musttail]], and corrupt the src/dst pointers.
-        #define SKCMS_MUSTTAIL [[clang::musttail]]
-    #else
-        #define SKCMS_MUSTTAIL
+    #ifndef SKCMS_HAS_MUSTTAIL
+        // [[clang::musttail]] is great for performance, but it's not well supported and we run into
+        // a variety of problems when we use it. Fortunately, it's an optional feature that doesn't
+        // affect correctness, and usually the compiler will generate a tail-call even for us
+        // whether or not we force it to do so.
+        //
+        // Known limitations:
+        // - Sanitizers do not work well with [[clang::musttail]], and corrupt src/dst pointers.
+        //   (https://github.com/llvm/llvm-project/issues/70849)
+        // - Wasm tail-calls were only introduced in 2023 and aren't a mainstream feature yet.
+        // - Clang 18 runs into an ICE on armv7/androideabi with [[clang::musttail]].
+        //   (http://crbug.com/1504548)
+        // - Android RISC-V also runs into an ICE (b/314692534)
+        // - Windows builds generate incorrect code with [[clang::musttail]] and crash mysteriously.
+        //   (http://crbug.com/1505442)
+        #if __has_cpp_attribute(clang::musttail) && !__has_feature(memory_sanitizer) \
+                                                 && !__has_feature(address_sanitizer) \
+                                                 && !defined(__EMSCRIPTEN__) \
+                                                 && !defined(__arm__) \
+                                                 && !defined(__riscv) \
+                                                 && !defined(_WIN32) && !defined(__SYMBIAN32__)
+            #define SKCMS_HAS_MUSTTAIL 1
+        #endif
     #endif
 #endif
 
 #ifndef SKCMS_FALLTHROUGH
     #define SKCMS_FALLTHROUGH
 #endif
-#ifndef SKCMS_MUSTTAIL
-    #define SKCMS_MUSTTAIL
+#ifndef SKCMS_HAS_MUSTTAIL
+    #define SKCMS_HAS_MUSTTAIL 0
 #endif
 
 #if defined(__clang__)
@@ -66,7 +83,7 @@ extern "C" {
 // If this isn't Clang, GCC, or Emscripten with SIMD support, we are in SKCMS_PORTABLE mode.
 #if !defined(SKCMS_PORTABLE) && !(defined(__clang__) || \
                                   defined(__GNUC__) || \
-                                  (defined(__EMSCRIPTEN_major__) && defined(__wasm_simd128__)))
+                                  (defined(__EMSCRIPTEN__) && defined(__wasm_simd128__)))
     #define SKCMS_PORTABLE 1
 #endif
 

@@ -24,7 +24,9 @@
 #include "include/core/SkGraphics.h"
 #include "src/base/SkHalf.h"
 #include "src/base/SkLeanWindows.h"
+#include "src/base/SkNoDestructor.h"
 #include "src/base/SkSpinlock.h"
+#include "src/base/SkTime.h"
 #include "src/core/SkChecksum.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkMD5.h"
@@ -147,6 +149,7 @@ static DEFINE_bool2(veryVerbose, V, false, "tell individual tests to be verbose.
 static DEFINE_bool(cpu, true, "Run CPU-bound work?");
 static DEFINE_bool(gpu, true, "Run GPU-bound work?");
 static DEFINE_bool(graphite, true, "Run Graphite work?");
+static DEFINE_bool(neverYieldToWebGPU, false, "Run Graphite with never-yield context option.");
 
 static DEFINE_bool(dryRun, false,
                    "just print the tests that would be run, without actually running them.");
@@ -295,16 +298,18 @@ static void register_codecs() {
 }
 
 // We use a spinlock to make locking this in a signal handler _somewhat_ safe.
-static SkSpinlock*        gMutex = new SkSpinlock;
-static int                gPending;
-static TArray<Running>*   gRunning = new TArray<Running>;
+static SkSpinlock                      gMutex;
+static int                             gPending;
+static int                             gTotalCounts;
+static double                          gLastUpdate;
+static SkNoDestructor<TArray<Running>> gRunning;
 
 static void done(const char* config, const char* src, const char* srcOptions, const char* name) {
     SkString id = SkStringPrintf("%s %s %s %s", config, src, srcOptions, name);
-    vlog("done  %s\n", id.c_str());
+    vlog("[%d/%d] %s done\n", gTotalCounts - gPending, gTotalCounts, id.c_str());
     int pending;
     {
-        SkAutoSpinlock lock(*gMutex);
+        SkAutoSpinlock lock(gMutex);
         for (int i = 0; i < gRunning->size(); i++) {
             if (gRunning->at(i).id == id) {
                 gRunning->removeShuffle(i);
@@ -316,25 +321,35 @@ static void done(const char* config, const char* src, const char* srcOptions, co
 
     // We write out dm.json file and print out a progress update every once in a while.
     // Notice this also handles the final dm.json and progress update when pending == 0.
-    if (pending % 500 == 0) {
+    double lastUpdate = gLastUpdate;
+    double now = SkTime::GetNSecs();
+    if (pending % 500 == 0 || now - lastUpdate > 4e9) {
         dump_json();
 
         int curr = sk_tools::getCurrResidentSetSizeMB(),
             peak = sk_tools::getMaxResidentSetSizeMB();
 
-        SkAutoSpinlock lock(*gMutex);
-        info("\n%dMB RAM, %dMB peak, %d queued, %d active:\n",
-             curr, peak, gPending - gRunning->size(), gRunning->size());
-        for (auto& task : *gRunning) {
-            task.dump();
+        SkAutoSpinlock lock(gMutex);
+
+        // Since multiple threads can call `done`, it's possible that another thread has raced with
+        // this one and printed an update since we did our progress check above. We detect this case
+        // by checking to see if `gLastUpdate` has changed; if so, we don't need to print anything.
+        if (lastUpdate == gLastUpdate) {
+            info("\n[%d/%d] %dMB RAM, %dMB peak, %d queued, %d threads:\n\t%s  done\n",
+                 gTotalCounts - gPending, gTotalCounts,
+                 curr, peak, gPending - gRunning->size(), gRunning->size() + 1, id.c_str());
+            for (auto& task : *gRunning) {
+                task.dump();
+            }
+            gLastUpdate = now;
         }
     }
 }
 
 static void start(const char* config, const char* src, const char* srcOptions, const char* name) {
     SkString id = SkStringPrintf("%s %s %s %s", config, src, srcOptions, name);
-    vlog("start %s\n", id.c_str());
-    SkAutoSpinlock lock(*gMutex);
+    vlog("\tstart %s\n", id.c_str());
+    SkAutoSpinlock lock(gMutex);
     gRunning->push_back({id,SkGetThreadID()});
 }
 
@@ -364,7 +379,7 @@ static void find_culprit() {
         #undef _
         };
 
-        SkAutoSpinlock lock(*gMutex);
+        SkAutoSpinlock lock(gMutex);
 
         const DWORD code = e->ExceptionRecord->ExceptionCode;
         info("\nCaught exception %lu", code);
@@ -403,7 +418,7 @@ static void find_culprit() {
     static void (*previous_handler[max_of(SIGABRT,SIGBUS,SIGFPE,SIGILL,SIGSEGV,SIGTERM)+1])(int);
 
     static void crash_handler(int sig) {
-        SkAutoSpinlock lock(*gMutex);
+        SkAutoSpinlock lock(gMutex);
 
         info("\nCaught signal %d [%s] (%dMB RAM, peak %dMB), was running:\n",
              sig, strsignal(sig),
@@ -976,7 +991,7 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
 
     // Try a simple Src as a canary.  If it fails, skip this sink.
     struct : public Src {
-        Result draw(SkCanvas* c) const override {
+        Result draw(SkCanvas* c, skiatest::graphite::GraphiteTestContext*) const override {
             c->drawRect(SkRect::MakeWH(1,1), SkPaint());
             return Result::Ok();
         }
@@ -1535,11 +1550,11 @@ static void run_ganesh_test(skiatest::Test test, const GrContextOptions& grCtxOp
     done("unit", "test", "", test.fName);
 }
 
-static void run_graphite_test(skiatest::Test test, skgpu::graphite::ContextOptions options) {
+static void run_graphite_test(skiatest::Test test, skiatest::graphite::TestOptions& options) {
     DMReporter reporter;
     if (!FLAGS_dryRun && !should_skip("_", "tests", "_", test.fName)) {
         AutoreleasePool pool;
-        test.modifyGraphiteContextOptions(&options);
+        test.modifyGraphiteContextOptions(&options.fContextOptions);
 
         skiatest::ReporterContext ctx(&reporter, SkString(test.fName));
         start("unit", "test", "", test.fName);
@@ -1592,8 +1607,10 @@ int main(int argc, char** argv) {
         gVLog = stderr;
     }
 
-    skgpu::graphite::ContextOptions graphiteCtxOptions;
-    // Currently no command line flags directly control the Graphite context options
+    skiatest::graphite::TestOptions graphiteOptions;
+    if (FLAGS_neverYieldToWebGPU) {
+        graphiteOptions.fNeverYieldToWebGPU = true;
+    }
 
     GrContextOptions grCtxOptions;
     CommonFlags::SetCtxOptions(&grCtxOptions);
@@ -1616,7 +1633,6 @@ int main(int argc, char** argv) {
     if (!gather_srcs()) {
         return 1;
     }
-    // TODO(dogben): This is a bit ugly. Find a cleaner way to do this.
     bool defaultConfigs = true;
     for (int i = 0; i < argc; i++) {
         if (strcmp(argv[i], "--config") == 0) {
@@ -1630,6 +1646,8 @@ int main(int argc, char** argv) {
     gather_tests();
     int testCount = gCPUTests->size() + gGaneshTests->size() + gGraphiteTests->size();
     gPending = gSrcs->size() * gSinks->size() + testCount;
+    gTotalCounts = gPending;
+    gLastUpdate = SkTime::GetNSecs();
     info("%d srcs * %d sinks + %d tests == %d tasks\n",
          gSrcs->size(), gSinks->size(), testCount,
          gPending);
@@ -1643,7 +1661,7 @@ int main(int argc, char** argv) {
             if (src->veto(sink->flags()) ||
                 should_skip(sink.tag.c_str(), src.tag.c_str(),
                             src.options.c_str(), src->name().c_str())) {
-                SkAutoSpinlock lock(*gMutex);
+                SkAutoSpinlock lock(gMutex);
                 gPending--;
                 continue;
             }
@@ -1663,7 +1681,7 @@ int main(int argc, char** argv) {
     // With the parallel work running, run serial tasks and tests here on main thread.
     for (Task& task : serial) { Task::Run(task); }
     for (skiatest::Test& test : *gGaneshTests) { run_ganesh_test(test, grCtxOptions); }
-    for (skiatest::Test& test : *gGraphiteTests) { run_graphite_test(test, graphiteCtxOptions); }
+    for (skiatest::Test& test : *gGraphiteTests) { run_graphite_test(test, graphiteOptions); }
 
     // Wait for any remaining parallel work to complete (including any spun off of serial tasks).
     parallel.wait();

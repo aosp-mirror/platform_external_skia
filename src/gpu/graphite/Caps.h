@@ -188,6 +188,9 @@ public:
     // Supports BackendSemaphores
     bool semaphoreSupport() const { return fSemaphoreSupport; }
 
+    // If false then calling Context::submit with SyncToCpu::kYes is an error.
+    bool allowCpuSync() const { return fAllowCpuSync; }
+
     // Returns whether storage buffers are supported.
     bool storageBufferSupport() const { return fStorageBufferSupport; }
 
@@ -208,6 +211,12 @@ public:
 
     // Returns whether compute shaders are supported.
     bool computeSupport() const { return fComputeSupport; }
+
+    /**
+     * Returns true if the given backend supports importing AHardwareBuffers. This will only
+     * ever be supported on Android devices with API level >= 26.
+     */
+    bool supportsAHardwareBufferImages() const { return fSupportsAHardwareBufferImages; }
 
     // Returns the skgpu::Swizzle to use when sampling or reading back from a texture with the
     // passed in SkColorType and TextureInfo.
@@ -297,6 +306,7 @@ protected:
     bool fClampToBorderSupport = true;
     bool fProtectedSupport = false;
     bool fSemaphoreSupport = false;
+    bool fAllowCpuSync = true;
     bool fStorageBufferSupport = false;
     bool fStorageBufferPreferred = false;
     bool fDrawBufferCanBeMapped = true;
@@ -304,6 +314,7 @@ protected:
     bool fMSAARenderToSingleSampledSupport = false;
 
     bool fComputeSupport = false;
+    bool fSupportsAHardwareBufferImages = false;
 
     ResourceBindingRequirements fResourceBindingReqs;
 

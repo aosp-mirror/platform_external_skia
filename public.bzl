@@ -187,6 +187,7 @@ SKIA_PUBLIC_HDRS = [
     "include/gpu/vk/GrVkTypes.h",
     "include/gpu/vk/VulkanExtensions.h",
     "include/gpu/vk/VulkanMemoryAllocator.h",
+    "include/gpu/vk/VulkanMutableTextureState.h",
     "include/gpu/vk/VulkanTypes.h",
     "include/pathops/SkPathOps.h",
     "include/ports/SkCFObject.h",
@@ -783,9 +784,10 @@ BASE_SRCS_ALL = [
     "src/gpu/BufferWriter.h",
     "src/gpu/DitherUtils.cpp",
     "src/gpu/DitherUtils.h",
+    "src/gpu/GpuRefCnt.h",
     "src/gpu/GpuTypesPriv.h",
     "src/gpu/KeyBuilder.h",
-    "src/gpu/MutableTextureStateRef.h",
+    "src/gpu/MutableTextureState.cpp",
     "src/gpu/PipelineUtils.cpp",
     "src/gpu/PipelineUtils.h",
     "src/gpu/Rectanizer.h",
@@ -797,6 +799,7 @@ BASE_SRCS_ALL = [
     "src/gpu/ResourceKey.cpp",
     "src/gpu/ResourceKey.h",
     "src/gpu/ShaderErrorHandler.cpp",
+    "src/gpu/SkBackingFit.cpp",
     "src/gpu/SkBackingFit.h",
     "src/gpu/SkRenderEngineAbortf.h",
     "src/gpu/Swizzle.cpp",
@@ -947,7 +950,6 @@ BASE_SRCS_ALL = [
     "src/gpu/ganesh/GrRecordingContext.cpp",
     "src/gpu/ganesh/GrRecordingContextPriv.cpp",
     "src/gpu/ganesh/GrRecordingContextPriv.h",
-    "src/gpu/ganesh/GrRefCnt.h",
     "src/gpu/ganesh/GrRenderTarget.cpp",
     "src/gpu/ganesh/GrRenderTarget.h",
     "src/gpu/ganesh/GrRenderTargetContext.h",
@@ -1361,8 +1363,6 @@ BASE_SRCS_ALL = [
     "src/pdf/SkClusterator.h",
     "src/pdf/SkDeflate.cpp",
     "src/pdf/SkDeflate.h",
-    "src/pdf/SkJpegInfo.h",
-    "src/pdf/SkJpegInfo_none.cpp",
     "src/pdf/SkKeyedImage.cpp",
     "src/pdf/SkKeyedImage.h",
     "src/pdf/SkPDFBitmap.cpp",
@@ -2069,6 +2069,7 @@ PORTS_SRCS_WASM = [
     "src/ports/SkFontMgr_custom.cpp",
     "src/ports/SkFontMgr_custom.h",
     "src/ports/SkFontMgr_custom_embedded.cpp",
+    "src/ports/SkFontMgr_custom_empty.cpp",
     "src/ports/SkFontMgr_empty_factory.cpp",
     "src/ports/SkGlobalInitialization_default.cpp",
     "src/ports/SkMemory_malloc.cpp",
@@ -2138,6 +2139,8 @@ MTL_SRCS = [
 ]
 
 VULKAN_SRCS = [
+    "src/gpu/vk/VulkanMutableTextureState.cpp",
+    "src/gpu/vk/VulkanMutableTextureStatePriv.h",
     "src/gpu/ganesh/vk/GrVkBackendSemaphore.cpp",
     "src/gpu/ganesh/vk/GrVkBackendSurface.cpp",
     "src/gpu/ganesh/vk/GrVkBackendSurfacePriv.h",
@@ -2149,6 +2152,8 @@ VULKAN_SRCS = [
     "src/gpu/ganesh/vk/GrVkCommandBuffer.h",
     "src/gpu/ganesh/vk/GrVkCommandPool.cpp",
     "src/gpu/ganesh/vk/GrVkCommandPool.h",
+    "src/gpu/ganesh/vk/GrVkContextThreadSafeProxy.cpp",
+    "src/gpu/ganesh/vk/GrVkContextThreadSafeProxy.h",
     "src/gpu/ganesh/vk/GrVkDescriptorPool.cpp",
     "src/gpu/ganesh/vk/GrVkDescriptorPool.h",
     "src/gpu/ganesh/vk/GrVkDescriptorSet.cpp",
@@ -2241,17 +2246,33 @@ UNIX_DEFINES = [
     "SK_R32_SHIFT=16",
     "SK_GL",
     "SK_CODEC_DECODES_JPEG",
+    "SK_FONTMGR_FREETYPE_DIRECTORY_AVAILABLE",
+    "SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE",
+    "SK_FONTMGR_FONTCONFIG_AVAILABLE",
 ]
-ANDROID_DEFINES = [
+ANDROID_BASE_DEFINES = [
     "SK_BUILD_FOR_ANDROID",
+    "SK_GL",
+]
+ANDROID_FONT_DEFINES = [
+    "SK_FONTMGR_ANDROID_AVAILABLE",
+    "SK_FONTMGR_FREETYPE_DIRECTORY_AVAILABLE",
+    "SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE",
+    "SK_FONTMGR_FONTCONFIG_AVAILABLE",
+]
+ANDROID_CODEC_DEFINES = [
     "SK_CODEC_DECODES_PNG",
     "SK_CODEC_DECODES_WEBP",
-    "SK_GL",
     "SK_CODEC_DECODES_JPEG",
 ]
+
+# TODO(kjlubick) Delete these once we use the more granular versions
+ANDROID_DEFINES = ANDROID_BASE_DEFINES + ANDROID_FONT_DEFINES + ANDROID_CODEC_DEFINES
+ANDROID_NO_CODECS_DEFINES = ANDROID_BASE_DEFINES
 IOS_DEFINES = [
     "SK_BUILD_FOR_IOS",
     "SK_CODEC_DECODES_JPEG",
+    "SK_FONTMGR_CORETEXT_AVAILABLE",
 ]
 WASM_DEFINES = [
     "SK_DISABLE_LEGACY_SHADERCONTEXT",
@@ -2262,6 +2283,7 @@ WASM_DEFINES = [
     "SK_FORCE_8_BYTE_ALIGNMENT",
     "SKNX_NO_SIMD",
     "SK_CODEC_DECODES_JPEG",
+    "SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE",
 ]
 FUCHSIA_DEFINES = [
     "SK_BUILD_FOR_UNIX",
@@ -2270,15 +2292,13 @@ FUCHSIA_DEFINES = [
     "SK_R32_SHIFT=16",
     "SK_VULKAN",
     "SK_CODEC_DECODES_JPEG",
+    "SK_FONTMGR_FUCHSIA_AVAILABLE",
 ]
 MACOS_DEFINES = [
     "SK_BUILD_FOR_MAC",
     "SK_GL",
     "SK_CODEC_DECODES_JPEG",
-]
-ANDROID_NO_CODECS_DEFINES = [
-    "SK_BUILD_FOR_ANDROID",
-    "SK_GL",
+    "SK_FONTMGR_CORETEXT_AVAILABLE",
 ]
 
 ################################################################################

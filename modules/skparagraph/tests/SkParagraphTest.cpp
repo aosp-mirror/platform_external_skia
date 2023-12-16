@@ -28,6 +28,7 @@
 #include "modules/skparagraph/include/TextShadow.h"
 #include "modules/skparagraph/include/TextStyle.h"
 #include "modules/skparagraph/include/TypefaceFontProvider.h"
+#include "modules/skparagraph/src/OneLineShaper.h"
 #include "modules/skparagraph/src/ParagraphBuilderImpl.h"
 #include "modules/skparagraph/src/ParagraphImpl.h"
 #include "modules/skparagraph/src/Run.h"
@@ -113,6 +114,7 @@ public:
 
         SkString path;
         while (iter.next(&path)) {
+            //SkDebugf("font %s\n", path.c_str());
             // Look for a sentinel font, without which several tests will fail/crash.
             if (path.endsWith("Roboto-Italic.ttf")) {
                 fFontsFound = true;
@@ -1985,7 +1987,9 @@ UNIX_ONLY_TEST(SkParagraph_JustifyRTL, reporter) {
     const char* text =
             "אאא בּבּבּבּ אאאא בּבּ אאא בּבּבּ אאאאא בּבּבּבּ אאאא בּבּבּבּבּ "
             "אאאאא בּבּבּבּבּ אאאבּבּבּבּבּבּאאאאא בּבּבּבּבּבּאאאאאבּבּבּבּבּבּ אאאאא בּבּבּבּבּ "
-            "אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ";
+            "אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ "
+            "אאאאאבּבּבּבּבּבּאאאאאבּבּבּבּבּבּאאאאאבּבּבּבּבּבּ "
+            "אאאאא בּבּבּבּבּבּ";
     const size_t len = strlen(text);
 
     ParagraphStyle paragraph_style;
@@ -2013,8 +2017,10 @@ UNIX_ONLY_TEST(SkParagraph_JustifyRTL, reporter) {
         return TestCanvasWidth - 100 - line.width();
     };
     for (auto& line : impl->lines()) {
-        if (&line == &impl->lines().back()) {
+        if (&line == &impl->lines().back() || &line == &impl->lines()[impl->lines().size() - 2]) {
+            // Second-last line will be also right-aligned because it is only one cluster
             REPORTER_ASSERT(reporter, calculate(line) > EPSILON100);
+            REPORTER_ASSERT(reporter, line.offset().fX > EPSILON100);
         } else {
             REPORTER_ASSERT(reporter, SkScalarNearlyEqual(calculate(line), 0, EPSILON100));
         }
@@ -2032,14 +2038,23 @@ UNIX_ONLY_TEST(SkParagraph_JustifyRTL, reporter) {
     canvas.drawRects(SK_ColorRED, boxes);
     REPORTER_ASSERT(reporter, boxes.size() == 3);
 
-    boxes = paragraph->getRectsForRange(240, 250, rect_height_style, rect_width_style);
+    boxes = paragraph->getRectsForRange(226, 278, rect_height_style, rect_width_style);
+    canvas.drawRects(SK_ColorYELLOW, boxes);
+    REPORTER_ASSERT(reporter, boxes.size() == 1);
+
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.left(), 16, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.top(), 130, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.right(), 900, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.bottom(), 156, EPSILON100));
+
+    boxes = paragraph->getRectsForRange(292, 296, rect_height_style, rect_width_style);
     canvas.drawRects(SK_ColorBLUE, boxes);
     REPORTER_ASSERT(reporter, boxes.size() == 1);
 
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.left(), 588, EPSILON100));
-    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.top(), 130, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.top(), 156, EPSILON100));
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.right(), 640, EPSILON100));
-    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.bottom(), 156, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.bottom(), 182, EPSILON100));
 }
 
 UNIX_ONLY_TEST(SkParagraph_JustifyRTLNewLine, reporter) {
@@ -7561,6 +7576,14 @@ UNIX_ONLY_TEST(SkParagraph_RtlEllipsis2, reporter) {
         });
 };
 
+static bool has_empty_typeface(SkFont f) {
+    SkTypeface* face = f.getTypeface();
+    if (!face) {
+        return true; // Should be impossible, but just in case...
+    }
+    return face->countGlyphs() == 0 && face->getBounds().isEmpty();
+}
+
 UNIX_ONLY_TEST(SkParagraph_TextEditingFunctionality, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
@@ -7641,7 +7664,7 @@ UNIX_ONLY_TEST(SkParagraph_TextEditingFunctionality, reporter) {
                                               glyphInfo.fClusterTextRange.end == 229);
 
     auto font = paragraph->getFontAt(10);
-    REPORTER_ASSERT(reporter, font.getTypeface() != nullptr);
+    REPORTER_ASSERT(reporter, !has_empty_typeface(font));
     SkString fontFamily;
     font.getTypeface()->getFamilyName(&fontFamily);
     REPORTER_ASSERT(reporter, fontFamily.equals("Roboto"));
@@ -7649,7 +7672,7 @@ UNIX_ONLY_TEST(SkParagraph_TextEditingFunctionality, reporter) {
     auto fonts = paragraph->getFonts();
     REPORTER_ASSERT(reporter, fonts.size() == 1);
     REPORTER_ASSERT(reporter, fonts[0].fTextRange.start == 0 && fonts[0].fTextRange.end == len);
-    REPORTER_ASSERT(reporter, fonts[0].fFont.getTypeface() != nullptr);
+    REPORTER_ASSERT(reporter, !has_empty_typeface(fonts[0].fFont));
     font.getTypeface()->getFamilyName(&fontFamily);
     REPORTER_ASSERT(reporter, fontFamily.equals("Roboto"));
 }
@@ -7715,8 +7738,8 @@ UNIX_ONLY_TEST(SkParagraph_API_USES_UTF16, reporter) {
     auto paragraph = builder.Build();
     paragraph->layout(TestCanvasWidth);
 
-    REPORTER_ASSERT(reporter, paragraph->getFontAtUTF16Offset(0).getTypeface() != nullptr);
-    REPORTER_ASSERT(reporter, paragraph->getFontAtUTF16Offset(4).getTypeface() == nullptr);
+    REPORTER_ASSERT(reporter, !has_empty_typeface(paragraph->getFontAtUTF16Offset(0)));
+    REPORTER_ASSERT(reporter, has_empty_typeface(paragraph->getFontAtUTF16Offset(4)));
 
     REPORTER_ASSERT(reporter, paragraph->getGlyphInfoAtUTF16Offset(0, nullptr));
     REPORTER_ASSERT(reporter, !paragraph->getGlyphInfoAtUTF16Offset(4, nullptr));
@@ -7758,7 +7781,7 @@ UNIX_ONLY_TEST(SkParagraph_Empty_Paragraph_Metrics, reporter) {
     auto paragraph = builder.Build();
     paragraph->layout(TestCanvasWidth);
 
-    REPORTER_ASSERT(reporter, paragraph->getFontAt(0).getTypeface() == nullptr);
+    REPORTER_ASSERT(reporter, has_empty_typeface(paragraph->getFontAt(0)));
     REPORTER_ASSERT(reporter, !paragraph->getGlyphClusterAt(0, nullptr));
     REPORTER_ASSERT(reporter, paragraph->getLineNumberAt(0) == -1);
     REPORTER_ASSERT(reporter, !paragraph->getClosestGlyphClusterAt(10.0, 5.0, nullptr));
@@ -7874,7 +7897,6 @@ UNIX_ONLY_TEST(SkParagraph_SingleDummyPlaceholder, reporter) {
     auto impl = static_cast<ParagraphImpl*>(paragraph.get());
     REPORTER_ASSERT(reporter, impl->placeholders().size() == 1);
 
-
     size_t index = 0;
     for (auto& line : impl->lines()) {
         line.scanStyles(StyleType::kDecorations,
@@ -7913,4 +7935,109 @@ UNIX_ONLY_TEST(SkParagraph_EndWithLineSeparator, reporter) {
         }
     });
     REPORTER_ASSERT(reporter, visitedCount == 3);
+}
+
+UNIX_ONLY_TEST(SkParagraph_EmojiFontResolution, reporter) {
+    auto fontCollection = sk_make_sp<FontCollection>();
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr(), std::vector<SkString>());
+    fontCollection->enableFontFallback();
+
+    const char* text = "♻️🏴󠁧󠁢󠁳󠁣󠁴󠁿";
+    const char* text1 = "♻️";
+    const size_t len = strlen(text);
+    const size_t len1 = strlen(text1);
+
+    ParagraphStyle paragraph_style;
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("")});
+    builder.pushStyle(text_style);
+    builder.addText(text, len);
+    auto paragraph = builder.Build();
+    paragraph->layout(SK_ScalarMax);
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+
+    ParagraphBuilderImpl builder1(paragraph_style, fontCollection);
+    builder1.pushStyle(text_style);
+    builder1.addText(text1, len1);
+    auto paragraph1 = builder1.Build();
+    paragraph1->layout(SK_ScalarMax);
+
+    auto impl1 = static_cast<ParagraphImpl*>(paragraph1.get());
+    REPORTER_ASSERT(reporter, impl1->runs().size() == 1);
+    if (impl1->runs().size() == 1) {
+        SkString ff;
+        impl->run(0).font().getTypeface()->getFamilyName(&ff);
+        SkString ff1;
+        impl1->run(0).font().getTypeface()->getFamilyName(&ff1);
+        REPORTER_ASSERT(reporter, ff.equals(ff1));
+    }
+}
+
+UNIX_ONLY_TEST(SkParagraph_EmojiRuns, reporter) {
+
+    auto icu = SkUnicode::MakeIcuBasedUnicode();
+
+    auto test = [&](const char* text, SkUnichar expected) {
+        SkString str(text);
+        if ((false)) {
+            SkDebugf("'%s'\n", text);
+            const char* begin = str.data();
+            const char* end = str.data() + str.size();
+            while (begin != end) {
+                auto unicode = SkUTF::NextUTF8WithReplacement(&begin, end);
+                SkDebugf("  %d: %s %s\n", unicode,
+                         icu->isEmoji(unicode) ? "isEmoji" : "",
+                         icu->isEmojiComponent(unicode) ? "isEmojiComponent" : ""
+                         );
+            }
+
+            SkDebugf("Graphemes:");
+            skia_private::TArray<SkUnicode::CodeUnitFlags, true> codeUnitProperties;
+            icu->computeCodeUnitFlags(str.data(), str.size(), false, &codeUnitProperties);
+            int index = 0;
+            for (auto& cp : codeUnitProperties) {
+                if (SkUnicode::hasGraphemeStartFlag(cp)) {
+                    SkDebugf(" %d", index);
+                }
+                ++index;
+            }
+            SkDebugf("\n");
+        }
+
+        SkSpan<const char> textSpan(str.data(), str.size());
+        const char* begin = str.data();
+        const char* end = begin + str.size();
+        auto emojiStart = OneLineShaper::getEmojiSequenceStart(icu.get(), &begin, end);
+        REPORTER_ASSERT(reporter, expected == emojiStart);
+    };
+
+    test("", -1);
+    test("0", -1);
+    test("2nd", -1);
+    test("99", -1);
+    test("0️⃣", 48);
+    test("0️⃣12", 48);
+    test("#", -1);
+    test("#️⃣", 35);
+    test("#️⃣#", 35);
+    test("#️⃣#️⃣", 35);
+    test("*", -1);
+    test("*️⃣", 42);
+    test("*️⃣abc", 42);
+    test("*️⃣😊", 42);
+    test("😊", 128522);
+    test("😊abc", 128522);
+    test("😊*️⃣",128522);
+    test("👨‍👩‍👦‍👦", 128104);
+
+    // These 2 have emoji components as the first codepoint
+    test("🇷🇺", 127479); // Flag sequence
+    test("0️⃣", 48); // Keycap sequence
+
+    // These have a simple emoji as a first codepoint
+    test("🏴󠁧󠁢󠁥󠁮󠁧󠁿", 127988); // Tag sequence
+    test("👋🏼", 128075); // Modifier sequence
+    test("👨‍👩‍👧‍👦", 128104); // ZWJ sequence
 }

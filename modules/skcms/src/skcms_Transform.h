@@ -17,7 +17,7 @@ namespace skcms_private {
 
 /** All transform ops */
 
-#define SKCMS_LOAD_OPS(M) \
+#define SKCMS_WORK_OPS(M) \
     M(load_a8)            \
     M(load_g8)            \
     M(load_4444)          \
@@ -33,9 +33,8 @@ namespace skcms_private {
     M(load_hhh)           \
     M(load_hhhh)          \
     M(load_fff)           \
-    M(load_ffff)
-
-#define SKCMS_WORK_OPS(M) \
+    M(load_ffff)          \
+                          \
     M(swap_rb)            \
     M(clamp)              \
     M(invert)             \
@@ -106,7 +105,6 @@ namespace skcms_private {
 
 enum class Op : int {
 #define M(op) op,
-    SKCMS_LOAD_OPS(M)
     SKCMS_WORK_OPS(M)
     SKCMS_STORE_OPS(M)
 #undef M
@@ -141,21 +139,21 @@ enum class Op : int {
 
 namespace baseline {
 
-void run_program(const Op* program, const void** contexts, ptrdiff_t /*programSize*/,
+void run_program(const Op* program, const void** contexts, ptrdiff_t programSize,
                  const char* src, char* dst, int n,
                  const size_t src_bpp, const size_t dst_bpp);
 
 }
 namespace hsw {
 
-void run_program(const Op* program, const void** contexts, ptrdiff_t /*programSize*/,
+void run_program(const Op* program, const void** contexts, ptrdiff_t programSize,
                  const char* src, char* dst, int n,
                  const size_t src_bpp, const size_t dst_bpp);
 
 }
 namespace skx {
 
-void run_program(const Op* program, const void** contexts, ptrdiff_t /*programSize*/,
+void run_program(const Op* program, const void** contexts, ptrdiff_t programSize,
                  const char* src, char* dst, int n,
                  const size_t src_bpp, const size_t dst_bpp);
 

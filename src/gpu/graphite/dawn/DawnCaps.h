@@ -17,10 +17,15 @@
 namespace skgpu::graphite {
 struct ContextOptions;
 
+struct DawnBackendContext;
+
 class DawnCaps final : public Caps {
 public:
-    DawnCaps(const wgpu::Device&, const ContextOptions&);
+    DawnCaps(const DawnBackendContext&, const ContextOptions&);
     ~DawnCaps() override;
+
+    bool useAsyncPipelineCreation() const { return fUseAsyncPipelineCreation; }
+    bool allowScopedErrorChecks() const { return fAllowScopedErrorChecks; }
 
     TextureInfo getDefaultSampledTextureInfo(SkColorType,
                                              Mipmapped mipmapped,
@@ -61,7 +66,7 @@ private:
                                              const TextureInfo& srcTextureInfo,
                                              SkColorType dstColorType) const override;
 
-    void initCaps(const wgpu::Device& device, const ContextOptions& options);
+    void initCaps(const DawnBackendContext& backendContext, const ContextOptions& options);
     void initShaderCaps(const wgpu::Device& device);
     void initFormatTable(const wgpu::Device& device);
 
@@ -112,6 +117,8 @@ private:
     void setColorType(SkColorType, std::initializer_list<wgpu::TextureFormat> formats);
 
     bool fTransientAttachmentSupport = false;
+    bool fUseAsyncPipelineCreation = true;
+    bool fAllowScopedErrorChecks = true;
 };
 
 } // namespace skgpu::graphite

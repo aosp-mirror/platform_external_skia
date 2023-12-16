@@ -319,9 +319,10 @@ public:
                 ? std::make_unique<SkShaper::TrivialLanguageRunIterator>(fDesc.fLocale, utf8_bytes)
                 : SkShaper::MakeStdLanguageRunIterator(start, utf8_bytes);
         const auto font_iter = SkShaper::MakeFontMgrRunIterator(
-                                    start, utf8_bytes, fFont, fFontMgr, // used as fallback
-                                    nullptr,
-                                    SkFontPriv::RefTypefaceOrDefault(fFont)->fontStyle(),
+                                    start, utf8_bytes, fFont,
+                                    fFontMgr ? fFontMgr : SkFontMgr::RefEmpty(), // used as fallback
+                                    fDesc.fFontFamily,
+                                    fFont.getTypeface()->fontStyle(),
                                     lang_iter.get());
         const auto bidi_iter = SkShaper::MakeBiDiRunIterator(start, utf8_bytes,
                                     shape_ltr ? kBidiLevelLTR : kBidiLevelRTL);

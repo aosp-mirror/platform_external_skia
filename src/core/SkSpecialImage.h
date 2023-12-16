@@ -73,9 +73,8 @@ public:
     void draw(SkCanvas* canvas,
               SkScalar x, SkScalar y,
               const SkSamplingOptions& sampling,
-              const SkPaint* paint) const {
-        return this->onDraw(canvas, x, y, sampling, paint);
-    }
+              const SkPaint* paint,
+              bool strict = true) const;
     void draw(SkCanvas* canvas, SkScalar x, SkScalar y) const {
         this->draw(canvas, x, y, SkSamplingOptions(), nullptr);
     }
@@ -91,26 +90,26 @@ public:
     }
 
     /**
-     * Create an SkImage from the contents of this special image optionally extracting a subset.
-     * It may or may not point to the same backing memory.
-     * Note: when no 'subset' parameter is specified the the entire SkSpecialImage will be
-     * returned - including whatever extra padding may have resulted from a loose fit!
-     * When the 'subset' parameter is specified the returned image will be tight even if that
-     * entails a copy! The 'subset' is relative to this special image's content rect.
+     * Create an SkImage view of the contents of this special image, pointing to the same
+     * underlying memory.
+     *
+     * TODO: If SkImages::MakeFiltered were to return an SkShader that accounted for the subset
+     * constraint and offset, then this could move to a private virtual for use in draw() and
+     * asShader().
      */
-    // TODO: The only version that uses the subset is the tile image filter, and that doesn't need
-    // to if it can be rewritten to use asShader() and SkTileModes. Similarly, the only use case of
-    // asImage() w/o a subset is SkImage::makeFiltered() and that could/should return an SkShader so
-    // that users don't need to worry about correctly applying the subset, etc.
-    sk_sp<SkImage> asImage(const SkIRect* subset = nullptr) const;
+    virtual sk_sp<SkImage> asImage() const = 0;
 
     /**
      * Create an SkShader that samples the contents of this special image, applying tile mode for
      * any sample that falls outside its internal subset.
      */
     sk_sp<SkShader> asShader(SkTileMode, const SkSamplingOptions&, const SkMatrix& lm) const;
-    sk_sp<SkShader> asShader(const SkSamplingOptions& sampling) const;
-    sk_sp<SkShader> asShader(const SkSamplingOptions& sampling, const SkMatrix& lm) const;
+    /**
+     * Create an SkShader that samples the contents of this special image, assuming that the
+     * coords it's evaluated at will not access pixels beyond its subset
+     * (i.e., non-strict sampling).
+     */
+    sk_sp<SkShader> asShaderFast(const SkSamplingOptions& sampling, const SkMatrix& lm) const;
 
     /**
      *  If the SpecialImage is backed by a gpu texture, return true.
@@ -123,39 +122,21 @@ public:
      */
     virtual GrRecordingContext* getContext() const { return nullptr; }
 
-    /**
-     *  Regardless of the underlying backing store, return the contents as an SkBitmap.
-     *  The returned bitmap represents the subset accessed by this image, thus (0,0) refers to the
-     *  top-left corner of 'subset'.
-     */
-    bool getROPixels(SkBitmap* bm) const {
-        return this->onGetROPixels(bm);
-    }
-
 protected:
     SkSpecialImage(const SkIRect& subset,
                    uint32_t uniqueID,
                    const SkColorInfo&,
                    const SkSurfaceProps&);
 
-    virtual void onDraw(SkCanvas*,
-                        SkScalar x, SkScalar y,
-                        const SkSamplingOptions&,
-                        const SkPaint*) const = 0;
-
-    virtual bool onGetROPixels(SkBitmap*) const = 0;
-
     // This subset is relative to the backing store's coordinate frame, it has already been mapped
     // from the content rect by the non-virtual makeSubset().
     virtual sk_sp<SkSpecialImage> onMakeSubset(const SkIRect& subset) const = 0;
 
-    // This subset (when not null) is relative to the backing store's coordinate frame, it has
-    // already been mapped from the content rect by the non-virtual asImage().
-    virtual sk_sp<SkImage> onAsImage(const SkIRect* subset) const = 0;
-
+    // The default implementation calls `asImage()` or `SkImageShader::MakeSubset` based on `strict`
     virtual sk_sp<SkShader> onAsShader(SkTileMode,
                                        const SkSamplingOptions&,
-                                       const SkMatrix&) const = 0;
+                                       const SkMatrix&,
+                                       bool strict) const;
 
 private:
     const SkIRect        fSubset;
@@ -169,6 +150,8 @@ namespace SkSpecialImages {
 sk_sp<SkSpecialImage> MakeFromRaster(const SkIRect& subset, sk_sp<SkImage>, const SkSurfaceProps&);
 sk_sp<SkSpecialImage> MakeFromRaster(const SkIRect& subset, const SkBitmap&, const SkSurfaceProps&);
 sk_sp<SkSpecialImage> CopyFromRaster(const SkIRect& subset, const SkBitmap&, const SkSurfaceProps&);
+
+bool AsBitmap(const SkSpecialImage* img, SkBitmap*);
 
 }  // namespace SkSpecialImages
 

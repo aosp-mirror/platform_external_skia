@@ -837,6 +837,8 @@ skia_cc_library(
     ],
     defines = [
         "SK_DISABLE_LEGACY_FONTMGR_FACTORY",
+        "SK_DISABLE_LEGACY_FONTMGR_REFDEFAULT",
+        "SK_DISABLE_LEGACY_DEFAULT_TYPEFACE",
     ],
     features = ["layering_check"],
     local_defines = [
@@ -866,7 +868,11 @@ skia_cc_library(
     srcs = [":core_priv_srcs"],
     hdrs = [":core_priv_hdrs"],
     features = ["layering_check"],
-    visibility = ["//src:__subpackages__"],
+    visibility = [
+        "//modules:__subpackages__",
+        "//src:__subpackages__",
+        "//tools:__subpackages__",
+    ],
     deps = [
         ":core",
         "//modules/skcms",

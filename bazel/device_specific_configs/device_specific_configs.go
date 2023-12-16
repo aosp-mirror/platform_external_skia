@@ -3,18 +3,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-package configs
+package device_specific_configs
 
-// DeviceSpecificBazelConfig represents a Bazel config that communicates information about the
-// device under test to GM and benchmark tests.
+import (
+	"fmt"
+	"sort"
+)
+
+// Config represents a Bazel config that communicates information about the device under test.
 //
-// This struct is used to generate file //bazel/configs/devicesrc.
+// This struct is used to generate file //bazel/devicesrc.
 //
 // Configurations of this kind should not be used to set build time settings, such as the target
 // Bazel platform (e.g. Linux, Android), optimization level (e.g. Debug, Release) or local vs. RBE.
 // For that kind of information, please pass a second --config flag using one of the configurations
 // defined in //bazel/buildrc.
-type DeviceSpecificBazelConfig struct {
+type Config struct {
 	// Name of the config (the <foo> that gets passed to Bazel via --config=<foo>).
 	Name string
 
@@ -40,12 +44,58 @@ type DeviceSpecificBazelConfig struct {
 	SwarmingDimensions map[string]string
 }
 
-// DeviceSpecificBazelConfigs contains all known device-specific Bazel configs.
+// Model returns the "model" key in the Keys dictionary.
+func (d Config) Model() string {
+	model, ok := d.Keys["model"]
+	if !ok {
+		// Should never happen. We have a unit test that ensures all configs have this key.
+		panic(fmt.Sprintf("config %q does not contain key \"model\"", d.Name))
+	}
+	return model
+}
+
+// TestRunnerArgs returns the command-line arguments that should be passed to the Bazel test
+// target.
+func (d Config) TestRunnerArgs() []string {
+	args := []string{
+		// Pass the name of the Bazel configuration as an argument. Android tests use this to infer the
+		// model of the device under test. Specifically, adb_test_runner.go will take device-specific
+		// setup and teardown steps based on the model. C++ tests running on the same machine as Bazel
+		// will ignore this flag.
+		"--device-specific-bazel-config",
+		d.Name,
+	}
+
+	// Sort keys for determinism.
+	var keys []string
+	for key := range d.Keys {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	// Add key/value pairs.
+	args = append(args, "--key")
+	for _, key := range keys {
+		args = append(args, key, d.Keys[key])
+	}
+
+	if d.CPU != "" {
+		args = append(args, "--cpuName", d.CPU)
+	}
+
+	if d.GPU != "" {
+		args = append(args, "--gpuName", d.GPU)
+	}
+
+	return args
+}
+
+// Configs contains all known device-specific Bazel configs.
 //
-// The contents of this map are used to generate file //bazel/configs/devicesrc.
+// The contents of this map are used to generate file //bazel/devicesrc.
 //
 // TODO(lovisolo): Populate field SwarmingDimensions for all configs.
-var DeviceSpecificBazelConfigs = map[string]DeviceSpecificBazelConfig{
+var Configs = map[string]Config{
 	"AlphaR2": {
 		Name: "AlphaR2",
 		Keys: map[string]string{
@@ -440,6 +490,12 @@ var DeviceSpecificBazelConfigs = map[string]DeviceSpecificBazelConfig{
 		},
 		CPU: "AVX2",
 		GPU: "RTX3060",
+		// Based on
+		// https://skia.googlesource.com/skia/+/5606ef899116266132253e979a793fea97f12604/infra/bots/gen_tasks_logic/gen_tasks_logic.go#952.
+		SwarmingDimensions: map[string]string{
+			"os":  "Debian-11.5",
+			"cpu": "x86-64-i7-9750H",
+		},
 	},
 	"NUC9i7QN_Win10": {
 		Name: "NUC9i7QN_Win10",
@@ -532,6 +588,13 @@ var DeviceSpecificBazelConfigs = map[string]DeviceSpecificBazelConfig{
 			"os":    "Android",
 		},
 		GPU: "Adreno620",
+		// Based on
+		// https://skia.googlesource.com/skia/+/f8daeeb7f092abe1674bc2303c0781f9fb1756ab/infra/bots/gen_tasks_logic/gen_tasks_logic.go#836.
+		SwarmingDimensions: map[string]string{
+			"os":          "Android",
+			"device_type": "redfin",
+			"device_os":   "RD1A.200810.022.A4",
+		},
 	},
 	"Pixel5_Android12": {
 		Name: "Pixel5_Android12",
@@ -541,6 +604,13 @@ var DeviceSpecificBazelConfigs = map[string]DeviceSpecificBazelConfig{
 			"os":    "Android12",
 		},
 		GPU: "Adreno620",
+		// Based on
+		// https://skia.googlesource.com/skia/+/f8daeeb7f092abe1674bc2303c0781f9fb1756ab/infra/bots/gen_tasks_logic/gen_tasks_logic.go#910.
+		SwarmingDimensions: map[string]string{
+			"os":          "Android",
+			"device_type": "redfin",
+			"device_os":   "SP2A.220305.012",
+		},
 	},
 	"Pixel6": {
 		Name: "Pixel6",

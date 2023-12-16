@@ -27,6 +27,7 @@ struct InsertRecordingInfo;
 class ResourceProvider;
 class SharedContext;
 class Task;
+class UploadBufferManager;
 
 class QueueManager {
 public:
@@ -44,6 +45,7 @@ public:
                                      SkSpan<const sk_sp<Buffer>> buffersToAsyncMap = {});
 
     [[nodiscard]] bool submitToGpu();
+    [[nodiscard]] bool hasUnfinishedGpuWork();
     void checkForFinishedWork(SyncToCpu);
 
 #if defined(GRAPHITE_TEST_UTILS)
@@ -54,6 +56,8 @@ public:
     void returnCommandBuffer(std::unique_ptr<CommandBuffer>);
 
     virtual void tick() const {}
+
+    void addUploadBufferManagerRefs(UploadBufferManager*);
 
 protected:
     QueueManager(const SharedContext* sharedContext);

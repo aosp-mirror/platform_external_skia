@@ -29,6 +29,7 @@
 #include "include/gpu/graphite/Recording.h"
 #include "include/gpu/graphite/Surface.h"
 #include "src/gpu/BlurUtils.h"
+#include "src/gpu/SkBackingFit.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandBuffer.h"
@@ -94,11 +95,16 @@ sk_sp<SkSpecialImage> eval_blur(skgpu::graphite::Recorder* recorder,
                                 const SkSurfaceProps& outProps) {
     SkImageInfo outII = SkImageInfo::Make({dstRect.width(), dstRect.height()},
                                           colorType, kPremul_SkAlphaType, std::move(outCS));
+    // Protected-ness is pulled off of the recorder
     auto device = skgpu::graphite::Device::Make(recorder,
                                                 outII,
                                                 skgpu::Budgeted::kYes,
                                                 skgpu::Mipmapped::kNo,
-                                                skgpu::Protected::kNo,
+#if defined(GRAPHITE_USE_APPROX_FIT_FOR_FILTERS)
+                                                SkBackingFit::kApprox,
+#else
+                                                SkBackingFit::kExact,
+#endif
                                                 outProps,
                                                 /*addInitialClear=*/false);
     if (!device) {
@@ -308,11 +314,12 @@ std::tuple<TextureProxyView, SkColorType> MakeBitmapProxyView(Recorder* recorder
         mipmapped = Mipmapped::kNo;
     }
 
-    auto textureInfo = caps->getDefaultSampledTextureInfo(ct, mipmapped, Protected::kNo,
+    Protected isProtected = recorder->priv().isProtected();
+    auto textureInfo = caps->getDefaultSampledTextureInfo(ct, mipmapped, isProtected,
                                                           Renderable::kNo);
     if (!textureInfo.isValid()) {
         ct = kRGBA_8888_SkColorType;
-        textureInfo = caps->getDefaultSampledTextureInfo(ct, mipmapped, Protected::kNo,
+        textureInfo = caps->getDefaultSampledTextureInfo(ct, mipmapped, isProtected,
                                                          Renderable::kNo);
     }
     SkASSERT(textureInfo.isValid());
@@ -744,7 +751,11 @@ public:
                                              imageInfo,
                                              skgpu::Budgeted::kYes,
                                              skgpu::Mipmapped::kNo,
-                                             skgpu::Protected::kNo,
+#if defined(GRAPHITE_USE_APPROX_FIT_FOR_FILTERS)
+                                             SkBackingFit::kApprox,
+#else
+                                             SkBackingFit::kExact,
+#endif
                                              props ? *props : this->surfaceProps(),
                                              /*addInitialClear=*/false);
     }
@@ -772,7 +783,6 @@ public:
 
     // SkBlurEngine
     const SkBlurEngine::Algorithm* findAlgorithm(SkSize sigma,
-                                                 SkTileMode tileMode,
                                                  SkColorType colorType) const override {
         // The runtime effect blurs handle all tilemodes and color types
         return this;
@@ -784,6 +794,8 @@ public:
         // skgpu::kMaxLinearBlurSigma.
         return SK_ScalarInfinity;
     }
+
+    bool supportsOnlyDecalTiling() const override { return false; }
 
     sk_sp<SkSpecialImage> blur(SkSize sigma,
                                sk_sp<SkSpecialImage> src,

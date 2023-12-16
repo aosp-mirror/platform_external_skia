@@ -11,13 +11,14 @@
 
 #include "include/gpu/graphite/ContextOptions.h"
 #include "include/gpu/graphite/TextureInfo.h"
-#include "src/gpu/dawn/DawnUtilsPriv.h"
+#include "include/gpu/graphite/dawn/DawnBackendContext.h"
 #include "src/gpu/graphite/AttachmentTypes.h"
 #include "src/gpu/graphite/ComputePipelineDesc.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/GraphiteResourceKey.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
+#include "src/gpu/graphite/dawn/DawnUtilsPriv.h"
 #include "src/sksl/SkSLUtil.h"
 
 namespace {
@@ -51,18 +52,18 @@ static constexpr wgpu::TextureFormat kFormats[skgpu::graphite::DawnCaps::kFormat
 
 namespace skgpu::graphite {
 
-DawnCaps::DawnCaps(const wgpu::Device& device, const ContextOptions& options)
+DawnCaps::DawnCaps(const DawnBackendContext& backendContext, const ContextOptions& options)
     : Caps() {
-    this->initCaps(device, options);
-    this->initShaderCaps(device);
-    this->initFormatTable(device);
+    this->initCaps(backendContext, options);
+    this->initShaderCaps(backendContext.fDevice);
+    this->initFormatTable(backendContext.fDevice);
     this->finishInitialization(options);
 }
 
 DawnCaps::~DawnCaps() = default;
 
 uint32_t DawnCaps::channelMask(const TextureInfo& info) const {
-    return skgpu::DawnFormatChannels(info.dawnTextureSpec().fFormat);
+    return DawnFormatChannels(info.dawnTextureSpec().fFormat);
 }
 
 bool DawnCaps::onIsTexturable(const TextureInfo& info) const {
@@ -268,15 +269,15 @@ SkColorType DawnCaps::supportedReadPixelsColorType(SkColorType srcColorType,
     return kUnknown_SkColorType;
 }
 
-void DawnCaps::initCaps(const wgpu::Device& device, const ContextOptions& options) {
+void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextOptions& options) {
 #if defined(GRAPHITE_TEST_UTILS) && !defined(__EMSCRIPTEN__)
     wgpu::AdapterProperties props;
-    device.GetAdapter().GetProperties(&props);
+    backendContext.fDevice.GetAdapter().GetProperties(&props);
     this->setDeviceName(props.name);
 #endif
 
     wgpu::SupportedLimits limits;
-    if (!device.GetLimits(&limits)) {
+    if (!backendContext.fDevice.GetLimits(&limits)) {
         SkASSERT(false);
     }
     fMaxTextureSize = limits.limits.maxTextureDimension2D;
@@ -308,10 +309,23 @@ void DawnCaps::initCaps(const wgpu::Device& device, const ContextOptions& option
 
 #if !defined(__EMSCRIPTEN__)
     fMSAARenderToSingleSampledSupport =
-            device.HasFeature(wgpu::FeatureName::MSAARenderToSingleSampled);
+            backendContext.fDevice.HasFeature(wgpu::FeatureName::MSAARenderToSingleSampled);
 
-    fTransientAttachmentSupport = device.HasFeature(wgpu::FeatureName::TransientAttachments);
+    fTransientAttachmentSupport =
+            backendContext.fDevice.HasFeature(wgpu::FeatureName::TransientAttachments);
 #endif
+    if (!backendContext.fTick) {
+        fAllowCpuSync = false;
+        // This seems paradoxical. However, if we use the async pipeline creation methods (e.g
+        // Device::CreateRenderPipelineAsync) then we may have to synchronize before a submit that
+        // uses the pipeline. If we use the methods that look synchronous (e.g.
+        // Device::CreateRenderPipeline) they actually operate asynchronously on WebGPU but the
+        // browser becomes responsible for synchronizing when we call submit.
+        fUseAsyncPipelineCreation = false;
+
+        // The implementation busy waits after popping.
+        fAllowScopedErrorChecks = false;
+    }
 }
 
 void DawnCaps::initShaderCaps(const wgpu::Device& device) {

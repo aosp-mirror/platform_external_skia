@@ -25,6 +25,7 @@ import (
 	"go.skia.org/infra/go/cas/rbe"
 	"go.skia.org/infra/go/cipd"
 	"go.skia.org/infra/task_scheduler/go/specs"
+	"go.skia.org/skia/bazel/device_specific_configs"
 )
 
 const (
@@ -734,7 +735,7 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "ColorSpaces", "GL",
 				"SkottieTracing", "SkottieWASM", "GpuTess", "DMSAAStats", "Mskp", "Docker", "PDF",
 				"Puppeteer", "SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile",
-				"WebGL2", "i5", "OldestSupportedSkpVersion"}
+				"WebGL2", "i5", "OldestSupportedSkpVersion", "NeverYield", "Protected"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -818,12 +819,16 @@ func (b *taskBuilder) swarmDimensions() {
 	b.defaultSwarmDimensions()
 }
 
+// androidDeviceInfo maps Android models (as in the "model" part of a task) to the device_type and
+// device_os Swarming dimensions.
 var androidDeviceInfos = map[string][]string{
 	"AndroidOne":      {"sprout", "MOB30Q"},
 	"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
 	"GalaxyS9":        {"starlte", "QP1A.190711.020"},     // This is Android10.
 	"GalaxyS20":       {"exynos990", "QP1A.190711.020"},
 	"JioNext":         {"msm8937", "RKQ1.210602.002"},
+	"Mokey":           {"mokey", "UDC_11161052"},
+	"MokeyGo32":       {"mokey_go32", "UQ1A.240105.003.A1_11159138"},
 	"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 	"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
 	"P30":             {"HWELE", "HUAWEIELE-L29"},
@@ -862,6 +867,8 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Mac11":      "Mac-11.4",
 			"Mac12":      "Mac-12",
 			"Mac13":      "Mac-13",
+			"Mokey":      "Android",
+			"MokeyGo32":  "Android",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-19045",
@@ -2190,6 +2197,7 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	// Note: these paths are relative to the WORKSPACE in //example/external_client
 	"path_combiner":     {"//:path_combiner", ""},
 	"png_decoder":       {"//:png_decoder", ""},
+	"shape_text":        {"//:shape_text", ""},
 	"write_text_to_png": {"//:write_text_to_png", ""},
 
 	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
@@ -2226,7 +2234,7 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 // specify additional Bazel args to build faster. Optionally, a subset of the //bazel-bin directory
 // will be stored into CAS for use by subsequent tasks.
 func (b *jobBuilder) bazelBuild() {
-	shorthand, config, host, cross := b.parts.bazelBuildParts()
+	shorthand, config, host := b.parts.bazelBuildParts()
 	labelAndSavedOutputDir, ok := shorthandToLabel[shorthand]
 	if !ok {
 		panic("unsupported Bazel label shorthand " + shorthand)
@@ -2252,12 +2260,6 @@ func (b *jobBuilder) bazelBuild() {
 			)
 		}
 
-		if cross != "" {
-			// The cross (and host) platform is expected to be defined in
-			// //bazel/common_config_settings/BUILD.bazel
-			cross = "//bazel/common_config_settings:" + cross
-			cmd = append(cmd, "--cross="+cross)
-		}
 		if host == "linux_x64" {
 			b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 			b.usesBazel("linux_x64")
@@ -2311,7 +2313,7 @@ const (
 )
 
 func (b *jobBuilder) bazelTest() {
-	taskdriverName, shorthand, config, host, cross := b.parts.bazelTestParts()
+	taskdriverName, shorthand, buildConfig, host, testConfig := b.parts.bazelTestParts()
 	labelAndSavedOutputDir, ok := shorthandToLabel[shorthand]
 	if !ok {
 		panic("unsupported Bazel label shorthand " + shorthand)
@@ -2338,6 +2340,20 @@ func (b *jobBuilder) bazelTest() {
 		taskdriverName = "bazel_test_benchmark"
 	}
 
+	var deviceSpecificBazelConfig *device_specific_configs.Config
+	if testConfig != "" {
+		if config, ok := device_specific_configs.Configs[testConfig]; ok {
+			deviceSpecificBazelConfig = &config
+		} else {
+			panic(fmt.Sprintf("Unknown device-specific Bazel config: %q", testConfig))
+		}
+	}
+
+	bazelCacheDir := bazelCacheDirOnGCELinux
+	if deviceSpecificBazelConfig != nil && deviceSpecificBazelConfig.Keys["model"] != "GCE" {
+		bazelCacheDir = bazelCacheDirOnSkoloLinux
+	}
+
 	b.addTask(b.Name, func(b *taskBuilder) {
 		cmd := []string{"./" + taskdriverName,
 			"--project_id=skia-swarming-bots",
@@ -2350,15 +2366,15 @@ func (b *jobBuilder) bazelTest() {
 		case "canvaskit_gold":
 			cmd = append(cmd,
 				"--bazel_label="+labelAndSavedOutputDir.label,
-				"--bazel_config="+config,
-				"--bazel_cache_dir="+bazelCacheDirOnGCELinux,
+				"--bazel_config="+buildConfig,
+				"--bazel_cache_dir="+bazelCacheDir,
 				"--goldctl_path=./cipd_bin_packages/goldctl",
 				"--git_commit="+specs.PLACEHOLDER_REVISION,
 				"--changelist_id="+specs.PLACEHOLDER_ISSUE,
 				"--patchset_order="+specs.PLACEHOLDER_PATCHSET,
 				"--tryjob_id="+specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID)
 			b.cipd(CIPD_PKGS_GOLDCTL)
-			switch config {
+			switch buildConfig {
 			case "ck_full_cpu_release_chrome":
 				cmd = append(cmd, "--cpu_or_gpu=CPU", "--cpu_or_gpu_value=CPU",
 					"--compilation_mode=Release", "--browser=Chrome")
@@ -2366,20 +2382,20 @@ func (b *jobBuilder) bazelTest() {
 				cmd = append(cmd, "--cpu_or_gpu=GPU", "--cpu_or_gpu_value=WebGL2",
 					"--compilation_mode=Release", "--browser=Chrome")
 			default:
-				panic("Gold keys not specified for config " + config)
+				panic("Gold keys not specified for config " + buildConfig)
 			}
 
 		case "cpu_tests":
 			cmd = append(cmd,
 				"--bazel_label="+labelAndSavedOutputDir.label,
-				"--bazel_config="+config,
-				"--bazel_cache_dir="+bazelCacheDirOnGCELinux)
+				"--bazel_config="+buildConfig,
+				"--bazel_cache_dir="+bazelCacheDir)
 
 		case "toolchain_layering_check":
 			cmd = append(cmd,
 				"--bazel_label="+labelAndSavedOutputDir.label,
-				"--bazel_config="+config,
-				"--bazel_cache_dir="+bazelCacheDirOnGCELinux)
+				"--bazel_config="+buildConfig,
+				"--bazel_cache_dir="+bazelCacheDir)
 
 		case "bazel_test_precompiled":
 			// Compute the file name of the test based on its Bazel label. The file name will be relative to
@@ -2425,8 +2441,8 @@ func (b *jobBuilder) bazelTest() {
 		case "bazel_test_gm":
 			cmd = append(cmd,
 				"--bazel_label="+labelAndSavedOutputDir.label,
-				"--bazel_config="+config,
-				"--bazel_cache_dir="+bazelCacheDirOnGCELinux,
+				"--bazel_config="+buildConfig,
+				"--bazel_cache_dir="+bazelCacheDir,
 				"--goldctl_path=./cipd_bin_packages/goldctl",
 				"--git_commit="+specs.PLACEHOLDER_REVISION,
 				"--changelist_id="+specs.PLACEHOLDER_ISSUE,
@@ -2438,7 +2454,7 @@ func (b *jobBuilder) bazelTest() {
 			// Note that these tasks run on Skolo machines.
 			cmd = append(cmd,
 				"--bazel_label="+labelAndSavedOutputDir.label,
-				"--bazel_config="+config,
+				"--bazel_config="+buildConfig,
 				"--bazel_cache_dir="+bazelCacheDirOnSkoloLinux,
 				"--git_commit="+specs.PLACEHOLDER_REVISION,
 				"--changelist_id="+specs.PLACEHOLDER_ISSUE,
@@ -2448,24 +2464,21 @@ func (b *jobBuilder) bazelTest() {
 			cmd = append(cmd,
 				"--bazel_label="+labelAndSavedOutputDir.label,
 				"--path_in_skia=example/external_client",
-				"--bazel_cache_dir="+bazelCacheDirOnGCELinux)
+				"--bazel_cache_dir="+bazelCacheDir)
 			b.usesDocker()
 
 		default:
 			panic("Unsupported Bazel taskdriver " + taskdriverName)
 		}
 
-		if cross != "" {
-			// The cross (and host) platform is expected to be defined in
-			// //bazel/common_config_settings/BUILD.bazel
-			cross = "//bazel/common_config_settings:" + cross
-			cmd = append(cmd, "--cross="+cross)
+		if deviceSpecificBazelConfig != nil {
+			cmd = append(cmd, "--device_specific_bazel_config="+deviceSpecificBazelConfig.Name)
 		}
 
 		if host == "linux_x64" {
 			b.dep(b.buildTaskDrivers("linux", "amd64"))
 			b.usesBazel("linux_x64")
-		} else if host == "linux_arm64" {
+		} else if host == "linux_arm64" || host == "on_rpi" {
 			b.dep(b.buildTaskDrivers("linux", "arm64"))
 			// The RPIs do not run Bazel directly, they have precompiled binary
 			// to run instead.
@@ -2473,57 +2486,28 @@ func (b *jobBuilder) bazelTest() {
 			panic("unsupported Bazel host " + host)
 		}
 
-		if taskdriverName == "bazel_test_precompiled" {
-			// This task precompiles the test and stores it to CAS.
-			b.dep(fmt.Sprintf("BazelBuild-%s-%s-linux_x64", shorthand, config))
-
-			// Normalize device name in the format used by the androidDeviceInfos map.
-			normalizedDeviceNameFromConfig, ok := map[string]string{
-				// TODO(lovisolo): Add more devices.
-				"pixel_5": "Pixel5",
-				"pixel_7": "Pixel7",
-			}[config]
-			if !ok {
-				log.Fatalf("Unknown device name derived from config %q.", config)
-			}
-
-			// Look up device type and OS.
-			deviceInfo, ok := androidDeviceInfos[normalizedDeviceNameFromConfig]
-			if !ok {
-				log.Fatalf("Entry %q not found in Android mapping.", normalizedDeviceNameFromConfig)
-			}
-			deviceType := deviceInfo[0]
-			deviceOS := deviceInfo[1]
-
-			// We have more Pixel 5 devices running Android 12 than Android 11.
-			if normalizedDeviceNameFromConfig == "Pixel5" {
-				deviceOS = "SP2A.220305.012"
+		if taskdriverName == "bazel_test_gm" ||
+			taskdriverName == "bazel_test_benchmark" ||
+			taskdriverName == "bazel_test_precompiled" {
+			if taskdriverName == "bazel_test_precompiled" {
+				// This task precompiles the test and stores it to CAS.
+				b.dep(fmt.Sprintf("BazelBuild-%s-%s-linux_x64", shorthand, buildConfig))
 			}
 
 			// Set dimensions.
-			b.dimension(
-				"os:Android",
-				fmt.Sprintf("device_type:%s", deviceType),
-				fmt.Sprintf("device_os:%s", deviceOS),
-				fmt.Sprintf("pool:%s", b.cfg.Pool),
-			)
-		} else if taskdriverName == "bazel_test_benchmark" {
-			// Chosen on 2023-10-19 based on the following criteria:
-			//
-			// - Linux.
-			// - Bare-metal machine as opposed to a GCE VM.
-			// - High capacity: 18 machines with 1357.3% "Percent of Optimistic Estimate" as per
-			//   https://status.skia.org/capacity at the time of writing.
-			//
-			// The above criteria is good enough for a few sample CI tasks, but we will probably want to
-			// be more specific moving forward.
-			b.dimension(
-				// Modeled after "Perf-Debian11-Clang-NUC9i7QN-CPU-AVX2-x86_64-OptimizeForSize-All". See
-				// https://skia.googlesource.com/skia/+/b540ed3ba8e78066b7788cc408d16a42fbff250a/infra/bots/tasks.json.
-				"cpu:x86-64-i7-9750H",
-				"os:Debian-11.5",
-				fmt.Sprintf("pool:%s", b.cfg.Pool),
-			)
+			if deviceSpecificBazelConfig == nil {
+				log.Fatalf("While processing job %q: task driver %q requires a device-specific Bazel config.", b.Name, taskdriverName)
+			}
+			if len(deviceSpecificBazelConfig.SwarmingDimensions) == 0 {
+				log.Fatalf("While processing job %q: device-specific Bazel config %q does not provide Swarming dimensions.", b.Name, deviceSpecificBazelConfig.Name)
+			}
+			var dimensions []string
+			for name, value := range deviceSpecificBazelConfig.SwarmingDimensions {
+				dimensions = append(dimensions, fmt.Sprintf("%s:%s", name, value))
+			}
+			dimensions = append(dimensions, fmt.Sprintf("pool:%s", b.cfg.Pool))
+			sort.Strings(dimensions)
+			b.dimension(dimensions...)
 		} else {
 			b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 		}

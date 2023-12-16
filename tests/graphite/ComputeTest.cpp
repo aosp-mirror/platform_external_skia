@@ -62,7 +62,11 @@ sk_sp<Buffer> sync_buffer_to_cpu(Recorder* recorder, const Buffer* buffer) {
             buffer->size(), BufferType::kXferGpuToCpu, AccessPattern::kHostVisible);
     SkASSERT(xferBuffer);
 
-    recorder->priv().add(CopyBufferToBufferTask::Make(sk_ref_sp(buffer), xferBuffer));
+    recorder->priv().add(CopyBufferToBufferTask::Make(buffer,
+                                                      /*srcOffset=*/0,
+                                                      xferBuffer,
+                                                      /*dstOffset=*/0,
+                                                      buffer->size()));
     return xferBuffer;
 }
 
@@ -202,7 +206,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_SingleDispatchTest,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer.
     float* outData = static_cast<float*>(
@@ -221,6 +225,11 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_DispatchGroupTest,
                                               reporter,
                                               context,
                                               testContext) {
+    // This fails on Dawn D3D11, b/315834710
+    if (testContext->contextType() == skgpu::ContextType::kDawn_D3D11) {
+        return;
+    }
+
     constexpr uint32_t kProblemSize = 512;
     constexpr float kFactor1 = 4.f;
     constexpr float kFactor2 = 3.f;
@@ -433,7 +442,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_DispatchGroupTest,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer from step 2
     float* outData = static_cast<float*>(
@@ -467,6 +476,11 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_UniformBufferTest,
                                               reporter,
                                               context,
                                               testContext) {
+    // This fails on Dawn D3D11, b/315834710
+    if (testContext->contextType() == skgpu::ContextType::kDawn_D3D11) {
+        return;
+    }
+
     constexpr uint32_t kProblemSize = 512;
     constexpr float kFactor = 4.f;
 
@@ -596,7 +610,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_UniformBufferTest,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer.
     float* outData = static_cast<float*>(
@@ -717,7 +731,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_ExternallyAssignedBuffer,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer.
     float* outData = static_cast<float*>(
@@ -803,7 +817,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_StorageTexture,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     SkBitmap bitmap;
     SkImageInfo imgInfo =
@@ -957,7 +971,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_StorageTextureReadAndWrite
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     SkBitmap bitmap;
     SkImageInfo imgInfo =
@@ -1103,7 +1117,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_StorageTextureMultipleComp
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     SkBitmap bitmap;
     SkImageInfo imgInfo =
@@ -1271,7 +1285,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_SampledTexture,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     SkBitmap bitmap;
     SkImageInfo imgInfo =
@@ -1306,6 +1320,11 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_AtomicOperationsTest,
                                               reporter,
                                               context,
                                               testContext) {
+    // This fails on Dawn D3D11, b/315834710
+    if (testContext->contextType() == skgpu::ContextType::kDawn_D3D11) {
+        return;
+    }
+
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
 
     constexpr uint32_t kWorkgroupCount = 32;
@@ -1409,7 +1428,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_AtomicOperationsTest,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer.
     constexpr uint32_t kExpectedCount = kWorkgroupCount * kWorkgroupSize;
@@ -1431,6 +1450,11 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_AtomicOperationsOverArrayA
                                               reporter,
                                               context,
                                               testContext) {
+    // This fails on Dawn D3D11, b/315834710
+    if (testContext->contextType() == skgpu::ContextType::kDawn_D3D11) {
+        return;
+    }
+
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
 
     constexpr uint32_t kWorkgroupCount = 32;
@@ -1545,7 +1569,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_AtomicOperationsOverArrayA
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer.
     constexpr uint32_t kExpectedCount = kWorkgroupCount * kWorkgroupSize / 2;
@@ -1662,7 +1686,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_ClearedBuffer,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer.
     uint32_t* outData = static_cast<uint32_t*>(
@@ -1784,7 +1808,7 @@ DEF_GRAPHITE_TEST_FOR_METAL_CONTEXT(Compute_NativeShaderSourceMetal,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer.
     constexpr uint32_t kExpectedCount = kWorkgroupCount * kWorkgroupSize;
@@ -1914,7 +1938,7 @@ DEF_GRAPHITE_TEST_FOR_METAL_CONTEXT(Compute_WorkgroupBufferDescMetal,
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer.
     constexpr uint32_t kExpectedCount = kWorkgroupCount * kWorkgroupSize;
@@ -1928,6 +1952,11 @@ DEF_GRAPHITE_TEST_FOR_METAL_CONTEXT(Compute_WorkgroupBufferDescMetal,
 }
 
 DEF_GRAPHITE_TEST_FOR_DAWN_CONTEXT(Compute_NativeShaderSourceWGSL, reporter, context, testContext) {
+    // This fails on Dawn D3D11, b/315834710
+    if (testContext->contextType() == skgpu::ContextType::kDawn_D3D11) {
+        return;
+    }
+
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
 
     constexpr uint32_t kWorkgroupCount = 32;
@@ -2032,7 +2061,7 @@ DEF_GRAPHITE_TEST_FOR_DAWN_CONTEXT(Compute_NativeShaderSourceWGSL, reporter, con
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
 
     // Verify the contents of the output buffer.
     constexpr uint32_t kExpectedCount = kWorkgroupCount * kWorkgroupSize;
