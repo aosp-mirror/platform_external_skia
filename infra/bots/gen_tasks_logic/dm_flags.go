@@ -309,7 +309,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				// Crashes and failures
 				// https://skbug.com/14105
 				skip(ALL, "test", ALL, "BackendTextureTest")
-				skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
 				skip(ALL, "test", ALL, "PaintParamsKeyTest")
 
 				if b.matchOs("Win10") {
@@ -1310,6 +1309,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		match = append(match, "drawlines_with_local_matrix")
 		match = append(match, "gradients_interesting")
 		match = append(match, "manypathatlases_2048")
+		match = append(match, "custommesh_cs_uniforms")
 		match = append(match, "paint_alpha_normals_rt")
 		match = append(match, "runtimefunctions")
 		match = append(match, "savelayer_f16")
