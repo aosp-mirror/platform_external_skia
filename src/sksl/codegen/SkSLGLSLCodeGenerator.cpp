@@ -262,7 +262,7 @@ void GLSLCodeGenerator::writeExpression(const Expression& expr, Precedence paren
             this->writePostfixExpression(expr.as<PostfixExpression>(), parentPrecedence);
             break;
         case Expression::Kind::kSetting:
-            this->writeExpression(*expr.as<Setting>().toLiteral(fContext), parentPrecedence);
+            this->writeExpression(*expr.as<Setting>().toLiteral(*fContext.fCaps), parentPrecedence);
             break;
         case Expression::Kind::kSwizzle:
             this->writeSwizzle(expr.as<Swizzle>());
@@ -893,7 +893,11 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
             }
             break;
         case SK_SECONDARYFRAGCOLOR_BUILTIN:
-            this->writeIdentifier("gl_SecondaryFragColorEXT");
+            if (this->caps().fDualSourceBlendingSupport) {
+                this->writeIdentifier("gl_SecondaryFragColorEXT");
+            } else {
+                fContext.fErrors->error(ref.position(), "'sk_SecondaryFragColor' not supported");
+            }
             break;
         case SK_FRAGCOORD_BUILTIN:
             this->writeFragCoord();
@@ -917,7 +921,11 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
             this->writeIdentifier("gl_InstanceID");
             break;
         case SK_LASTFRAGCOLOR_BUILTIN:
-            this->write(this->caps().fFBFetchColorName);
+            if (this->caps().fFBFetchColorName) {
+                this->write(this->caps().fFBFetchColorName);
+            } else {
+                fContext.fErrors->error(ref.position(), "'sk_LastFragColor' not supported");
+            }
             break;
         case SK_SAMPLEMASKIN_BUILTIN:
             // GLSL defines gl_SampleMaskIn as an array of ints. SkSL defines it as a scalar uint.
@@ -1770,7 +1778,13 @@ void GLSLCodeGenerator::writeProgramElement(const ProgramElement& e) {
 }
 
 void GLSLCodeGenerator::writeInputVars() {
-    if (fProgram.fInterface.fUseFlipRTUniform) {
+    // If we are using sk_FragCoordWorkaround, we don't need to apply RTFlip to gl_FragCoord.
+    uint8_t useRTFlipUniform = fProgram.fInterface.fRTFlipUniform;
+    if (!this->caps().fCanUseFragCoord) {
+        useRTFlipUniform &= ~Program::Interface::kRTFlip_FragCoord;
+    }
+
+    if (useRTFlipUniform != Program::Interface::kRTFlip_None) {
         const char* precision = this->usesPrecisionModifiers() ? "highp " : "";
         fGlobals.writeText("uniform ");
         fGlobals.writeText(precision);
