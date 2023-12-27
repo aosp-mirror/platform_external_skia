@@ -44,7 +44,6 @@ constexpr int SK_LOCALINVOCATIONINDEX_BUILTIN =   29;
 
 namespace SkSL {
 
-class Expression;
 class Inliner;
 class OutputStream;
 class ProgramUsage;
@@ -104,6 +103,17 @@ public:
         return result;
     }
 
+    /**
+     * Creates an SkSL compiler with no shader caps. This can be used to compile programs into an
+     * state suitable for a pipeline stage, like runtime shaders or mesh programs, but cannot
+     * generate finished vertex/fragment/compute programs. It is also suitable for SkRP compilation.
+     */
+    Compiler();
+
+    /**
+     * Creates an SkSL compiler with shader caps for a particular GPU. With shader caps, a compiler
+     * is able to compile all program kinds, including native vertex/fragment/compute shaders.
+     */
     Compiler(const ShaderCaps* caps);
 
     ~Compiler();
@@ -126,8 +136,6 @@ public:
     std::unique_ptr<Program> convertProgram(ProgramKind kind,
                                             std::string text,
                                             ProgramSettings settings);
-
-    std::unique_ptr<Expression> convertIdentifier(Position pos, std::string_view name);
 
     bool toSPIRV(Program& program, OutputStream& out);
 

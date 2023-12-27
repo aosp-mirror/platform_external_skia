@@ -22,22 +22,10 @@
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/analysis/SkSLProgramUsage.h"
-#include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLFieldAccess.h"
-#include "src/sksl/ir/SkSLFieldSymbol.h"
-#include "src/sksl/ir/SkSLFunctionDeclaration.h"
-#include "src/sksl/ir/SkSLFunctionReference.h"
-#include "src/sksl/ir/SkSLIRNode.h"
 #include "src/sksl/ir/SkSLProgram.h"
-#include "src/sksl/ir/SkSLSymbol.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"  // IWYU pragma: keep
-#include "src/sksl/ir/SkSLType.h"
-#include "src/sksl/ir/SkSLTypeReference.h"
-#include "src/sksl/ir/SkSLVariable.h"
-#include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/transform/SkSLTransform.h"
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -70,8 +58,6 @@ namespace SkSL {
 Compiler::OverrideFlag Compiler::sOptimizer = OverrideFlag::kDefault;
 Compiler::OverrideFlag Compiler::sInliner = OverrideFlag::kDefault;
 
-using RefKind = VariableReference::RefKind;
-
 class AutoSource {
 public:
     AutoSource(Compiler* compiler, std::string_view source)
@@ -103,29 +89,12 @@ public:
     ProgramConfig* fOldConfig;
 };
 
-class AutoShaderCaps {
-public:
-    AutoShaderCaps(std::shared_ptr<Context>& context, const ShaderCaps* caps)
-            : fContext(context.get())
-            , fOldCaps(fContext->fCaps) {
-        fContext->fCaps = caps;
-    }
-
-    ~AutoShaderCaps() {
-        fContext->fCaps = fOldCaps;
-    }
-
-    Context* fContext;
-    const ShaderCaps* fOldCaps;
-};
-
 Compiler::Compiler(const ShaderCaps* caps) : fErrorReporter(this), fCaps(caps) {
-    SkASSERT(caps);
-
     auto moduleLoader = ModuleLoader::Get();
-    fContext = std::make_shared<Context>(moduleLoader.builtinTypes(), /*caps=*/nullptr,
-                                         fErrorReporter);
+    fContext = std::make_shared<Context>(moduleLoader.builtinTypes(), fErrorReporter);
 }
+
+Compiler::Compiler() : Compiler(nullptr) {}
 
 Compiler::~Compiler() {}
 
@@ -195,9 +164,6 @@ std::unique_ptr<Module> Compiler::compileModule(ProgramKind kind,
     SkASSERT(!moduleSource.empty());
     SkASSERT(this->errorCount() == 0);
 
-    // Modules are shared and cannot rely on shader caps.
-    AutoShaderCaps autoCaps(fContext, nullptr);
-
     // Compile the module from source, using default program settings.
     ProgramSettings settings;
     FinalizeSettings(&settings, kind);
@@ -220,9 +186,6 @@ std::unique_ptr<Program> Compiler::convertProgram(ProgramKind kind,
 
     // Make sure the passed-in settings are valid.
     FinalizeSettings(&settings, kind);
-
-    // Put the ShaderCaps into the context while compiling a program.
-    AutoShaderCaps autoCaps(fContext, fCaps);
 
     this->resetErrors();
 
@@ -248,38 +211,6 @@ std::unique_ptr<SkSL::Program> Compiler::releaseProgram(std::unique_ptr<std::str
     SkASSERT(instance.fProgramElements.empty());
     SkASSERT(!fContext->fSymbolTable);
     return success ? std::move(result) : nullptr;
-}
-
-std::unique_ptr<Expression> Compiler::convertIdentifier(Position pos, std::string_view name) {
-    const Symbol* result = this->symbolTable()->find(name);
-    if (!result) {
-        this->errorReporter().error(pos, "unknown identifier '" + std::string(name) + "'");
-        return nullptr;
-    }
-    switch (result->kind()) {
-        case Symbol::Kind::kFunctionDeclaration:
-            return std::make_unique<FunctionReference>(*fContext, pos,
-                                                       &result->as<FunctionDeclaration>());
-
-        case Symbol::Kind::kVariable: {
-            const Variable* var = &result->as<Variable>();
-            // default to kRead_RefKind; this will be corrected later if the variable is written to
-            return VariableReference::Make(pos, var, VariableReference::RefKind::kRead);
-        }
-        case Symbol::Kind::kField: {
-            const FieldSymbol* field = &result->as<FieldSymbol>();
-            auto base = VariableReference::Make(pos, &field->owner(),
-                                                VariableReference::RefKind::kRead);
-            return FieldAccess::Make(*fContext, pos, std::move(base), field->fieldIndex(),
-                                     FieldAccess::OwnerKind::kAnonymousInterfaceBlock);
-        }
-        case Symbol::Kind::kType:
-            return TypeReference::Convert(*fContext, pos, &result->as<Type>());
-
-        default:
-            SkDEBUGFAILF("unsupported symbol type %d\n", (int)result->kind());
-            return nullptr;
-    }
 }
 
 bool Compiler::optimizeModuleBeforeMinifying(ProgramKind kind, Module& module, bool shrinkSymbols) {
@@ -370,8 +301,6 @@ bool Compiler::optimize(Program& program) {
         return true;
     }
 
-    AutoShaderCaps autoCaps(fContext, fCaps);
-
     SkASSERT(!this->errorCount());
     if (this->errorCount() == 0) {
 #ifndef SK_ENABLE_OPTIMIZE_SIZE
@@ -403,7 +332,6 @@ bool Compiler::optimize(Program& program) {
 void Compiler::runInliner(Program& program) {
 #ifndef SK_ENABLE_OPTIMIZE_SIZE
     AutoProgramConfig autoConfig(this->context(), program.fConfig.get());
-    AutoShaderCaps autoCaps(fContext, fCaps);
     Inliner inliner(fContext.get());
     this->runInliner(&inliner, program.fOwnedElements, program.fSymbols, program.fUsage.get());
 #endif
@@ -429,8 +357,6 @@ bool Compiler::runInliner(Inliner* inliner,
 }
 
 bool Compiler::finalize(Program& program) {
-    AutoShaderCaps autoCaps(fContext, fCaps);
-
     // Copy all referenced built-in functions into the Program.
     Transform::FindAndDeclareBuiltinFunctions(program);
 
@@ -501,7 +427,7 @@ static bool validate_spirv(ErrorReporter& reporter, std::string_view program) {
 bool Compiler::toSPIRV(Program& program, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toSPIRV");
     AutoSource as(this, *program.fSource);
-    AutoShaderCaps autoCaps(fContext, fCaps);
+    SkASSERT(fCaps != nullptr);
     ProgramSettings settings;
     settings.fUseMemoryPool = false;
     ThreadContext::Start(this, program.fConfig->fKind, settings);
@@ -509,7 +435,7 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
     fContext->fSymbolTable = program.fSymbols;
 #ifdef SK_ENABLE_SPIRV_VALIDATION
     StringStream buffer;
-    SPIRVCodeGenerator cg(fContext.get(), &program, &buffer);
+    SPIRVCodeGenerator cg(fContext.get(), fCaps, &program, &buffer);
     bool result = cg.generateCode();
 
     if (result && program.fConfig->fSettings.fValidateSPIRV) {
@@ -518,7 +444,7 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
         out.write(binary.data(), binary.size());
     }
 #else
-    SPIRVCodeGenerator cg(fContext.get(), &program, &out);
+    SPIRVCodeGenerator cg(fContext.get(), fCaps, &program, &out);
     bool result = cg.generateCode();
 #endif
     ThreadContext::End();
@@ -537,8 +463,8 @@ bool Compiler::toSPIRV(Program& program, std::string* out) {
 bool Compiler::toGLSL(Program& program, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toGLSL");
     AutoSource as(this, *program.fSource);
-    AutoShaderCaps autoCaps(fContext, fCaps);
-    GLSLCodeGenerator cg(fContext.get(), &program, &out);
+    SkASSERT(fCaps != nullptr);
+    GLSLCodeGenerator cg(fContext.get(), fCaps, &program, &out);
     bool result = cg.generateCode();
     return result;
 }
@@ -579,8 +505,8 @@ bool Compiler::toHLSL(Program& program, std::string* out) {
 bool Compiler::toMetal(Program& program, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toMetal");
     AutoSource as(this, *program.fSource);
-    AutoShaderCaps autoCaps(fContext, fCaps);
-    MetalCodeGenerator cg(fContext.get(), &program, &out);
+    SkASSERT(fCaps != nullptr);
+    MetalCodeGenerator cg(fContext.get(), fCaps, &program, &out);
     bool result = cg.generateCode();
     return result;
 }
@@ -634,10 +560,10 @@ static bool validate_wgsl(ErrorReporter& reporter, const std::string& wgsl, std:
 bool Compiler::toWGSL(Program& program, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toWGSL");
     AutoSource as(this, *program.fSource);
-    AutoShaderCaps autoCaps(fContext, fCaps);
+    SkASSERT(fCaps != nullptr);
 #ifdef SK_ENABLE_WGSL_VALIDATION
     StringStream wgsl;
-    WGSLCodeGenerator cg(fContext.get(), &program, &wgsl);
+    WGSLCodeGenerator cg(fContext.get(), fCaps, &program, &wgsl);
     bool result = cg.generateCode();
     if (result) {
         std::string wgslString = wgsl.str();
@@ -651,7 +577,7 @@ bool Compiler::toWGSL(Program& program, OutputStream& out) {
         out.writeString(wgslString);
     }
 #else
-    WGSLCodeGenerator cg(fContext.get(), &program, &out);
+    WGSLCodeGenerator cg(fContext.get(), fCaps, &program, &out);
     bool result = cg.generateCode();
 #endif
     return result;
@@ -759,11 +685,8 @@ std::string Compiler::errorText(bool showCount) {
 void Compiler::writeErrorCount() {
     int count = this->errorCount();
     if (count) {
-        fErrorText += std::to_string(count) + " error";
-        if (count > 1) {
-            fErrorText += "s";
-        }
-        fErrorText += "\n";
+        fErrorText += std::to_string(count) +
+                      ((count == 1) ? " error\n" : " errors\n");
     }
 }
 

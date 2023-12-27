@@ -26,7 +26,6 @@
 #include "src/sksl/SkSLPool.h"
 #include "src/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBlock.h"
@@ -1316,7 +1315,7 @@ SpvId SPIRVCodeGenerator::writeExpression(const Expression& expr, OutputStream& 
         case Expression::Kind::kIndex:
             return this->writeIndexExpression(expr.as<IndexExpression>(), out);
         case Expression::Kind::kSetting:
-            return this->writeExpression(*expr.as<Setting>().toLiteral(*fContext.fCaps), out);
+            return this->writeExpression(*expr.as<Setting>().toLiteral(fCaps), out);
         default:
             SkDEBUGFAILF("unsupported expression: %s", expr.description().c_str());
             break;
@@ -2741,7 +2740,8 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
 }
 
 std::unique_ptr<Expression> SPIRVCodeGenerator::identifier(std::string_view name) {
-    std::unique_ptr<Expression> expr = ThreadContext::Compiler().convertIdentifier(Position(),name);
+    std::unique_ptr<Expression> expr =
+            fProgram.fSymbols->instantiateSymbolRef(fContext, name, Position());
     return expr ? std::move(expr)
                 : Poison::Make(Position(), fContext);
 }
@@ -3163,7 +3163,7 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
             if (op.kind() == Operator::Kind::STAR) {
                 // When the rewriteMatrixVectorMultiply bit is set, we rewrite medium-precision
                 // matrix * vector multiplication as (mat[0]*vec[0] + ... + mat[N]*vec[N]).
-                if (fContext.fCaps->fRewriteMatrixVectorMultiply &&
+                if (fCaps.fRewriteMatrixVectorMultiply &&
                     rightType.isVector() &&
                     !resultType.highPrecision()) {
                     return this->writeDecomposedMatrixVectorMultiply(leftType, lhs, rightType, rhs,
@@ -4623,7 +4623,7 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
     // However, if the program naturally declares it, we don't want to include it a second time;
     // we keep track of the real global variable declarations to see if sk_Clockwise is emitted.
     const VarDeclaration* missingClockwiseDecl = nullptr;
-    if (fContext.fCaps->fMustDeclareFragmentFrontFacing) {
+    if (fCaps.fMustDeclareFragmentFrontFacing) {
         if (const Symbol* clockwise = program.fSymbols->findBuiltinSymbol("sk_Clockwise")) {
             missingClockwiseDecl = clockwise->as<Variable>().varDeclaration();
         }
