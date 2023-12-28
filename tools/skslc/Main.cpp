@@ -125,6 +125,16 @@ public:
         return sCaps;
     }
 
+
+    static const SkSL::ShaderCaps* DualSourceBlending() {
+        static const SkSL::ShaderCaps* sCaps = [] {
+            std::unique_ptr<SkSL::ShaderCaps> caps = MakeShaderCaps();
+            caps->fDualSourceBlendingSupport = true;
+            return caps.release();
+        }();
+        return sCaps;
+    }
+
     static const SkSL::ShaderCaps* EmulateAbsIntFunction() {
         static const SkSL::ShaderCaps* sCaps = [] {
             std::unique_ptr<SkSL::ShaderCaps> caps = MakeShaderCaps();
@@ -140,6 +150,15 @@ public:
             std::unique_ptr<SkSL::ShaderCaps> caps = MakeShaderCaps();
             caps->fFBFetchSupport = true;
             caps->fFBFetchColorName = "gl_LastFragData[0]";
+            return caps.release();
+        }();
+        return sCaps;
+    }
+
+    static const SkSL::ShaderCaps* MustDeclareFragmentFrontFacing() {
+        static const SkSL::ShaderCaps* sCaps = [] {
+            std::unique_ptr<SkSL::ShaderCaps> caps = MakeShaderCaps();
+            caps->fMustDeclareFragmentFrontFacing = true;
             return caps.release();
         }();
         return sCaps;
@@ -358,6 +377,9 @@ static bool detect_shader_settings(const std::string& text,
                 if (consume_suffix(&settingsText, " CannotUseVoidInSequenceExpressions")) {
                     *caps = Factory::CannotUseVoidInSequenceExpressions();
                 }
+                if (consume_suffix(&settingsText, " DualSourceBlending")) {
+                    *caps = Factory::DualSourceBlending();
+                }
                 if (consume_suffix(&settingsText, " Default")) {
                     *caps = Factory::Default();
                 }
@@ -369,6 +391,9 @@ static bool detect_shader_settings(const std::string& text,
                 }
                 if (consume_suffix(&settingsText, " MustGuardDivisionEvenAfterExplicitZeroCheck")) {
                     *caps = Factory::MustGuardDivisionEvenAfterExplicitZeroCheck();
+                }
+                if (consume_suffix(&settingsText, " MustDeclareFragmentFrontFacing")) {
+                    *caps = Factory::MustDeclareFragmentFrontFacing();
                 }
                 if (consume_suffix(&settingsText, " MustForceNegatedAtanParamToFloat")) {
                     *caps = Factory::MustForceNegatedAtanParamToFloat();

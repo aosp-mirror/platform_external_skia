@@ -226,7 +226,8 @@ sk_sp<Device> Device::Make(Recorder* recorder,
                            Mipmapped mipmapped,
                            SkBackingFit backingFit,
                            const SkSurfaceProps& props,
-                           bool addInitialClear) {
+                           bool addInitialClear,
+                           Device* parentDevice) {
     SkASSERT(!(mipmapped == Mipmapped::kYes && backingFit == SkBackingFit::kApprox));
 
     if (!recorder) {
@@ -247,7 +248,8 @@ sk_sp<Device> Device::Make(Recorder* recorder,
     }
 
     return Make(
-            recorder, std::move(target), ii.dimensions(), ii.colorInfo(), props, addInitialClear);
+            recorder, std::move(target), ii.dimensions(), ii.colorInfo(), props,
+            addInitialClear, parentDevice);
 }
 
 sk_sp<Device> Device::Make(Recorder* recorder,
@@ -263,7 +265,8 @@ sk_sp<Device> Device::Make(Recorder* recorder,
                            SkISize deviceSize,
                            const SkColorInfo& colorInfo,
                            const SkSurfaceProps& props,
-                           bool addInitialClear) {
+                           bool addInitialClear,
+                           Device* parentDevice) {
     if (!recorder) {
         return nullptr;
     }
@@ -278,7 +281,7 @@ sk_sp<Device> Device::Make(Recorder* recorder,
         return nullptr;
     }
 
-    return sk_sp<Device>(new Device(recorder, std::move(dc), addInitialClear));
+    return sk_sp<Device>(new Device(recorder, std::move(dc), addInitialClear, parentDevice));
 }
 
 // These default tuning numbers for the HybridBoundsManager were chosen from looking at performance
@@ -294,10 +297,14 @@ static constexpr int kGridCellSize = 16;
 static constexpr int kMaxBruteForceN = 64;
 static constexpr int kMaxGridSize = 32;
 
-Device::Device(Recorder* recorder, sk_sp<DrawContext> dc, bool addInitialClear)
+Device::Device(Recorder* recorder,
+               sk_sp<DrawContext> dc,
+               bool addInitialClear,
+               Device* parentDevice)
         : SkDevice(dc->imageInfo(), dc->surfaceProps())
         , fRecorder(recorder)
         , fDC(std::move(dc))
+        , fParentDevice(parentDevice)
         , fClip(this)
         , fColorDepthBoundsManager(
                     std::make_unique<HybridBoundsManager>(fDC->imageInfo().dimensions(),
@@ -356,7 +363,8 @@ sk_sp<SkDevice> Device::createDevice(const CreateInfo& info, const SkPaint*) {
                 SkBackingFit::kExact,
 #endif
                 props,
-                addInitialClear);
+                addInitialClear,
+                this);
 }
 
 sk_sp<SkSurface> Device::makeSurface(const SkImageInfo& ii, const SkSurfaceProps& props) {
@@ -1367,15 +1375,7 @@ void Device::flushPendingWorkToRecorder() {
     // TODO: we may need to further split this function up since device->device drawList and
     // DrawPass stealing will need to share some of the same logic w/o becoming a Task.
 
-    // Push any pending uploads from the atlasProvider
-    fRecorder->priv().atlasProvider()->recordUploads(fDC.get(), fRecorder);
-
-    auto uploadTask = fDC->snapUploadTask(fRecorder);
-    if (uploadTask) {
-        fRecorder->priv().add(std::move(uploadTask));
-    }
-    // Issue next upload flush token
-    fRecorder->priv().tokenTracker()->issueFlushToken();
+    this->flushPendingUploadsToRecorder();
 
     fClip.recordDeferredClipDraws();
 
@@ -1399,6 +1399,20 @@ void Device::flushPendingWorkToRecorder() {
     fCurrentDepth = DrawOrder::kClearDepth;
 }
 
+void Device::flushPendingUploadsToRecorder() {
+    if (fParentDevice) {
+        fParentDevice->flushPendingUploadsToRecorder();
+    }
+
+    // Push any pending uploads from the atlasProvider
+    fRecorder->priv().atlasProvider()->recordUploads(fDC.get(), fRecorder);
+
+    auto uploadTask = fDC->snapUploadTask(fRecorder);
+    if (uploadTask) {
+        fRecorder->priv().add(std::move(uploadTask));
+    }
+}
+
 bool Device::needsFlushBeforeDraw(int numNewRenderSteps, DstReadRequirement dstReadReq) const {
     // Must also account for the elements in the clip stack that might need to be recorded.
     numNewRenderSteps += fClip.maxDeferredClipDraws() * Renderer::kMaxRenderSteps;
@@ -1412,7 +1426,8 @@ bool Device::needsFlushBeforeDraw(int numNewRenderSteps, DstReadRequirement dstR
 void Device::drawSpecial(SkSpecialImage* special,
                          const SkMatrix& localToDevice,
                          const SkSamplingOptions& sampling,
-                         const SkPaint& paint) {
+                         const SkPaint& paint,
+                         SkCanvas::SrcRectConstraint constraint) {
     SkASSERT(!paint.getMaskFilter() && !paint.getImageFilter());
 
     sk_sp<SkImage> img = special->asImage();
@@ -1427,7 +1442,7 @@ void Device::drawSpecial(SkSpecialImage* special,
             sampling,
             /*src=*/SkRect::Make(special->subset()),
             /*dst=*/SkRect::MakeIWH(special->width(), special->height()),
-            /*strictSrcSubset=*/true,
+            /*strictSrcSubset=*/constraint == SkCanvas::kStrict_SrcRectConstraint,
             &paintWithShader);
     if (dst.isEmpty()) {
         return;
