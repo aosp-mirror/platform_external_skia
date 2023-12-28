@@ -700,9 +700,11 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             }
             if (!reader->isVersionLT(SkPicturePriv::Version::kMultipleFiltersOnSaveLayer) &&
                 (flatFlags & SAVELAYERREC_HAS_MULTIPLE_FILTERS)) {
-                uint32_t filterCount = reader->readUInt();
+                int filterCount = reader->readUInt();
+                reader->validate(filterCount > 0 && filterCount <= SkCanvas::kMaxFiltersPerLayer);
+                BREAK_ON_READ_ERROR(reader);
                 filters.reset(filterCount);
-                for (uint32_t i = 0; i < filterCount; ++i) {
+                for (int i = 0; i < filterCount; ++i) {
                     const SkPaint& paint = fPictureData->requiredPaint(reader);
                     filters[i] = paint.refImageFilter();
                 }

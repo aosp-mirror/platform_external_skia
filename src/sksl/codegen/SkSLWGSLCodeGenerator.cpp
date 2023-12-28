@@ -606,7 +606,7 @@ std::optional<WGSLCodeGenerator::Builtin> builtin_from_sksl_name(int builtin) {
             // TODO(skia:13092): While `front_facing` is the corresponding built-in, it does not
             // imply a particular winding order. We correctly compute the face orientation based
             // on how Skia configured the render pipeline for all references to this built-in
-            // variable (see `SkSL::Program::Interface::fUseFlipRTUniform`).
+            // variable (see `SkSL::Program::Interface::fRTFlipUniform`).
             return Builtin::kFrontFacing;
         case SK_SAMPLEMASKIN_BUILTIN:
             return Builtin::kSampleMaskIn;
@@ -2130,7 +2130,7 @@ std::string WGSLCodeGenerator::assembleExpression(const Expression& e,
             return this->assemblePostfixExpression(e.as<PostfixExpression>(), parentPrecedence);
 
         case Expression::Kind::kSetting:
-            return this->assembleExpression(*e.as<Setting>().toLiteral(fContext), parentPrecedence);
+            return this->assembleExpression(*e.as<Setting>().toLiteral(fCaps), parentPrecedence);
 
         case Expression::Kind::kSwizzle:
             return this->assembleSwizzle(e.as<Swizzle>());
@@ -3540,9 +3540,7 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Type& left,
         SkASSERT(left.rows() == right.rows());
         SkASSERT(left.columns() == right.columns());
         int columns = left.columns();
-        const Type& vecType = left.componentType().toCompound(fContext,
-                                                              /*columns=*/left.rows(),
-                                                              /*rows=*/1);
+        const Type& vecType = left.columnType(fContext);
         const char* separator = "(";
         for (int index = 0; index < columns; ++index) {
             expr += separator;
