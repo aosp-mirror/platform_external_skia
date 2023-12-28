@@ -404,6 +404,8 @@ sksl_spirv_tests = [
   "spirv/StructArrayMemberInDifferentLayouts.sksl",
   "spirv/UnusedInterfaceBlock.sksl",
   "spirv/WrongCombinedSamplerLayoutForWebGPUSampler.sksl",
+  "workarounds/DualSourceBlending.sksl",
+  "workarounds/MustDeclareFragmentFrontFacing.sksl",
   "workarounds/RewriteMatrixVectorMultiply.sksl",
 ]
 
@@ -873,6 +875,7 @@ sksl_settings_tests = [
   "workarounds/BlendGuardedDivide.sksl",
   "workarounds/BuiltinDeterminantSupport.sksl",
   "workarounds/BuiltinFMASupport.sksl",
+  "workarounds/DualSourceBlending.sksl",
   "workarounds/FractNegative.sksl",
   "workarounds/FragCoords.sksl",
   "workarounds/LoopCondition.sksl",
@@ -917,6 +920,7 @@ sksl_rte_tests = [
   "runtime/LoopInt.rts",
   "runtime/MultipleCallsInOneStatement.rts",
   "runtime/Ossfuzz52603.rts",
+  "runtime/Ossfuzz65111.rtb",
   "runtime/PrecisionQualifiers.rts",
   "runtime/QualifierOrder.rts",
   "runtime/RecursiveComparison_Arrays.rts",
