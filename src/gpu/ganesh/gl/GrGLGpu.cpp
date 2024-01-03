@@ -440,7 +440,7 @@ GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrDirectContext* dContext)
     // Toss out any pre-existing OOM that was hanging around before we got started.
     this->checkAndResetOOMed();
 
-    this->initCapsAndCompiler(sk_ref_sp(fGLContext->caps()));
+    this->initCaps(sk_ref_sp(fGLContext->caps()));
 
     fHWTextureUnitBindings.reset(this->numTextureUnits());
 
@@ -3340,7 +3340,7 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
     std::string glsl[kGrShaderTypeCount];
     SkSL::ProgramSettings settings;
     SkSL::Program::Interface interface;
-    SkSLToGLSL(this->shaderCompiler(), vertexSkSL, SkSL::ProgramKind::kVertex, settings,
+    SkSLToGLSL(shaderCaps, vertexSkSL, SkSL::ProgramKind::kVertex, settings,
                &glsl[kVertex_GrShaderType], &interface, errorHandler);
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext,
                                                   fCopyPrograms[progIdx].fProgram,
@@ -3356,7 +3356,7 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
         return false;
     }
 
-    SkSLToGLSL(this->shaderCompiler(), fragmentSkSL, SkSL::ProgramKind::kFragment, settings,
+    SkSLToGLSL(shaderCaps, fragmentSkSL, SkSL::ProgramKind::kFragment, settings,
                &glsl[kFragment_GrShaderType], &interface, errorHandler);
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext,
                                                   fCopyPrograms[progIdx].fProgram,
@@ -3525,7 +3525,7 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
     SkSL::ProgramSettings settings;
     SkSL::Program::Interface interface;
 
-    SkSLToGLSL(this->shaderCompiler(), vertexSkSL, SkSL::ProgramKind::kVertex, settings,
+    SkSLToGLSL(shaderCaps, vertexSkSL, SkSL::ProgramKind::kVertex, settings,
                &glsl[kVertex_GrShaderType], &interface, errorHandler);
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext,
                                                   fMipmapPrograms[progIdx].fProgram,
@@ -3540,7 +3540,7 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
         return false;
     }
 
-    SkSLToGLSL(this->shaderCompiler(), fragmentSkSL, SkSL::ProgramKind::kFragment, settings,
+    SkSLToGLSL(shaderCaps, fragmentSkSL, SkSL::ProgramKind::kFragment, settings,
                &glsl[kFragment_GrShaderType], &interface, errorHandler);
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext,
                                                   fMipmapPrograms[progIdx].fProgram,
