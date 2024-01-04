@@ -94,10 +94,6 @@ const GrCaps* GrGLProgramBuilder::caps() const {
     return fGpu->caps();
 }
 
-SkSL::Compiler* GrGLProgramBuilder::shaderCompiler() const {
-    return fGpu->shaderCompiler();
-}
-
 bool GrGLProgramBuilder::compileAndAttachShaders(const std::string& glsl,
                                                  GrGLuint programId,
                                                  GrGLenum type,
@@ -335,7 +331,7 @@ sk_sp<GrGLProgram> GrGLProgramBuilder::finalize(const GrGLPrecompiledProgram* pr
             if (fFS.fForceHighPrecision) {
                 settings.fForceHighPrecision = true;
             }
-            if (!SkSLToGLSL(this->gpu()->shaderCompiler(),
+            if (!SkSLToGLSL(this->gpu()->caps()->shaderCaps(),
                             *sksl[kFragment_GrShaderType],
                             SkSL::ProgramKind::kFragment,
                             settings,
@@ -364,7 +360,7 @@ sk_sp<GrGLProgram> GrGLProgramBuilder::finalize(const GrGLPrecompiledProgram* pr
         if (glsl[kVertex_GrShaderType].empty()) {
             // Don't have cached GLSL, need to compile SkSL->GLSL
             SkSL::Program::Interface unusedInterface;
-            if (!SkSLToGLSL(this->gpu()->shaderCompiler(),
+            if (!SkSLToGLSL(this->gpu()->caps()->shaderCaps(),
                             *sksl[kVertex_GrShaderType],
                             SkSL::ProgramKind::kVertex,
                             settings,
@@ -491,7 +487,12 @@ bool GrGLProgramBuilder::PrecompileProgram(GrDirectContext* dContext,
     auto compileShader = [&](SkSL::ProgramKind kind, const std::string& sksl, GrGLenum type) {
         std::string glsl;
         SkSL::Program::Interface unusedInterface;
-        if (!SkSLToGLSL(glGpu->shaderCompiler(), sksl, kind, settings, &glsl, &unusedInterface,
+        if (!SkSLToGLSL(glGpu->caps()->shaderCaps(),
+                        sksl,
+                        kind,
+                        settings,
+                        &glsl,
+                        &unusedInterface,
                         errorHandler)) {
             return false;
         }

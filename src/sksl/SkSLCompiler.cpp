@@ -46,12 +46,6 @@
 #include "spirv-tools/libspirv.hpp"
 #endif
 
-#ifdef SK_ENABLE_WGSL_VALIDATION
-#include "tint/tint.h"
-#include "src/tint/lang/wgsl/reader/options.h"
-#include "src/tint/lang/wgsl/extension.h"
-#endif
-
 namespace SkSL {
 
 // These flags allow tools like Viewer or Nanobench to override the compiler's ProgramSettings.
@@ -89,12 +83,10 @@ public:
     ProgramConfig* fOldConfig;
 };
 
-Compiler::Compiler(const ShaderCaps* caps) : fErrorReporter(this), fCaps(caps) {
+Compiler::Compiler() : fErrorReporter(this) {
     auto moduleLoader = ModuleLoader::Get();
     fContext = std::make_shared<Context>(moduleLoader.builtinTypes(), fErrorReporter);
 }
-
-Compiler::Compiler() : Compiler(nullptr) {}
 
 Compiler::~Compiler() {}
 
@@ -424,10 +416,10 @@ static bool validate_spirv(ErrorReporter& reporter, std::string_view program) {
 }
 #endif
 
-bool Compiler::toSPIRV(Program& program, OutputStream& out) {
+bool Compiler::toSPIRV(Program& program, const ShaderCaps* caps, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toSPIRV");
     AutoSource as(this, *program.fSource);
-    SkASSERT(fCaps != nullptr);
+    SkASSERT(caps != nullptr);
     ProgramSettings settings;
     settings.fUseMemoryPool = false;
     ThreadContext::Start(this, program.fConfig->fKind, settings);
@@ -435,7 +427,7 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
     fContext->fSymbolTable = program.fSymbols;
 #ifdef SK_ENABLE_SPIRV_VALIDATION
     StringStream buffer;
-    SPIRVCodeGenerator cg(fContext.get(), fCaps, &program, &buffer);
+    SPIRVCodeGenerator cg(fContext.get(), caps, &program, &buffer);
     bool result = cg.generateCode();
 
     if (result && program.fConfig->fSettings.fValidateSPIRV) {
@@ -444,53 +436,45 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
         out.write(binary.data(), binary.size());
     }
 #else
-    SPIRVCodeGenerator cg(fContext.get(), fCaps, &program, &out);
+    SPIRVCodeGenerator cg(fContext.get(), caps, &program, &out);
     bool result = cg.generateCode();
 #endif
     ThreadContext::End();
     return result;
 }
 
-bool Compiler::toSPIRV(Program& program, std::string* out) {
+bool Compiler::toSPIRV(Program& program, const ShaderCaps* caps, std::string* out) {
     StringStream buffer;
-    if (!this->toSPIRV(program, buffer)) {
+    if (!this->toSPIRV(program, caps, buffer)) {
         return false;
     }
     *out = buffer.str();
     return true;
 }
 
-bool Compiler::toGLSL(Program& program, OutputStream& out) {
-    TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toGLSL");
-    AutoSource as(this, *program.fSource);
-    SkASSERT(fCaps != nullptr);
-    GLSLCodeGenerator cg(fContext.get(), fCaps, &program, &out);
-    bool result = cg.generateCode();
-    return result;
+bool Compiler::toGLSL(Program& program, const ShaderCaps* caps, OutputStream& out) {
+    // TODO(johnstiles): migrate callers to use SkSL::ToGLSL directly
+    return SkSL::ToGLSL(program, caps, out);
 }
 
-bool Compiler::toGLSL(Program& program, std::string* out) {
-    StringStream buffer;
-    if (!this->toGLSL(program, buffer)) {
-        return false;
-    }
-    *out = buffer.str();
-    return true;
+bool Compiler::toGLSL(Program& program, const ShaderCaps* caps, std::string* out) {
+    // TODO(johnstiles): migrate callers to use SkSL::ToGLSL directly
+    return SkSL::ToGLSL(program, caps, out);
 }
 
-bool Compiler::toHLSL(Program& program, OutputStream& out) {
+bool Compiler::toHLSL(Program& program, const ShaderCaps* caps, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toHLSL");
     std::string hlsl;
-    if (!this->toHLSL(program, &hlsl)) {
+    if (!this->toHLSL(program, caps, &hlsl)) {
         return false;
     }
     out.writeString(hlsl);
     return true;
 }
 
-bool Compiler::toHLSL(Program& program, std::string* out) {
+bool Compiler::toHLSL(Program& program, const ShaderCaps* caps, std::string* out) {
     std::string spirv;
-    if (!this->toSPIRV(program, &spirv)) {
+    if (!this->toSPIRV(program, caps, &spirv)) {
         return false;
     }
 
@@ -502,94 +486,24 @@ bool Compiler::toHLSL(Program& program, std::string* out) {
     return true;
 }
 
-bool Compiler::toMetal(Program& program, OutputStream& out) {
-    TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toMetal");
-    AutoSource as(this, *program.fSource);
-    SkASSERT(fCaps != nullptr);
-    MetalCodeGenerator cg(fContext.get(), fCaps, &program, &out);
-    bool result = cg.generateCode();
-    return result;
+bool Compiler::toMetal(Program& program, const ShaderCaps* caps, OutputStream& out) {
+    // TODO(johnstiles): migrate callers to use SkSL::ToMetal directly
+    return SkSL::ToMetal(program, caps, out);
 }
 
-bool Compiler::toMetal(Program& program, std::string* out) {
-    StringStream buffer;
-    if (!this->toMetal(program, buffer)) {
-        return false;
-    }
-    *out = buffer.str();
-    return true;
+bool Compiler::toMetal(Program& program, const ShaderCaps* caps, std::string* out) {
+    // TODO(johnstiles): migrate callers to use SkSL::ToMetal directly
+    return SkSL::ToMetal(program, caps, out);
 }
 
-#if defined(SK_ENABLE_WGSL_VALIDATION)
-static bool validate_wgsl(ErrorReporter& reporter, const std::string& wgsl, std::string* warnings) {
-    // Enable the WGSL optional features that Skia might rely on.
-    tint::wgsl::reader::Options options;
-    for (auto extension : {tint::wgsl::Extension::kChromiumExperimentalPixelLocal,
-                           tint::wgsl::Extension::kChromiumInternalDualSourceBlending}) {
-        options.allowed_features.extensions.insert(extension);
-    }
-
-    // Verify that the WGSL we produced is valid.
-    tint::Source::File srcFile("", wgsl);
-    tint::Program program(tint::wgsl::reader::Parse(&srcFile, options));
-
-    if (program.Diagnostics().contains_errors()) {
-        // The program isn't valid WGSL. In debug, report the error via SkDEBUGFAIL. We also append
-        // the generated program for ease of debugging.
-        tint::diag::Formatter diagFormatter;
-        std::string diagOutput = diagFormatter.format(program.Diagnostics());
-        diagOutput += "\n";
-        diagOutput += wgsl;
-#if defined(SKSL_STANDALONE)
-        reporter.error(Position(), diagOutput);
-#else
-        SkDEBUGFAILF("%s", diagOutput.c_str());
-#endif
-        return false;
-    }
-
-    if (!program.Diagnostics().empty()) {
-        // The program contains warnings. Report them as-is.
-        tint::diag::Formatter diagFormatter;
-        *warnings = diagFormatter.format(program.Diagnostics());
-    }
-    return true;
-}
-#endif  // defined(SK_ENABLE_WGSL_VALIDATION)
-
-bool Compiler::toWGSL(Program& program, OutputStream& out) {
-    TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toWGSL");
-    AutoSource as(this, *program.fSource);
-    SkASSERT(fCaps != nullptr);
-#ifdef SK_ENABLE_WGSL_VALIDATION
-    StringStream wgsl;
-    WGSLCodeGenerator cg(fContext.get(), fCaps, &program, &wgsl);
-    bool result = cg.generateCode();
-    if (result) {
-        std::string wgslString = wgsl.str();
-        std::string warnings;
-        result = validate_wgsl(this->errorReporter(), wgslString, &warnings);
-        if (!warnings.empty()) {
-            out.writeText("/*\n\n");
-            out.writeString(warnings);
-            out.writeText("*/\n\n");
-        }
-        out.writeString(wgslString);
-    }
-#else
-    WGSLCodeGenerator cg(fContext.get(), fCaps, &program, &out);
-    bool result = cg.generateCode();
-#endif
-    return result;
+bool Compiler::toWGSL(Program& program, const ShaderCaps* caps, OutputStream& out) {
+    // TODO(johnstiles): migrate callers to use SkSL::ToWGSL directly
+    return SkSL::ToWGSL(program, caps, out);
 }
 
-bool Compiler::toWGSL(Program& program, std::string* out) {
-    StringStream buffer;
-    if (!this->toWGSL(program, buffer)) {
-        return false;
-    }
-    *out = buffer.str();
-    return true;
+bool Compiler::toWGSL(Program& program, const ShaderCaps* caps, std::string* out) {
+    // TODO(johnstiles): migrate callers to use SkSL::ToWGSL directly
+    return SkSL::ToWGSL(program, caps, out);
 }
 
 #endif // defined(SKSL_STANDALONE) || defined(SK_GANESH) || defined(SK_GRAPHITE)
