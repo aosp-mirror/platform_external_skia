@@ -55,6 +55,9 @@ config("skia_public") {
   if (skia_enable_precompile) {
     defines += [ "SK_ENABLE_PRECOMPILE" ]
   }
+  if (skia_enable_sksl_tracing) {
+    defines += [ "SKSL_ENABLE_TRACING" ]
+  }
   if (is_fuchsia) {
     defines += fuchsia_defines
   }
@@ -995,6 +998,11 @@ optional("gpu") {
 
   if (is_android) {
     sources += skia_gpu_android_private
+
+    # this lib is required to link against AHardwareBuffer
+    if (defined(ndk_api) && ndk_api >= 26) {
+      libs += [ "android" ]
+    }
   }
 
   if (skia_use_gl) {
@@ -1052,13 +1060,6 @@ optional("gpu") {
     }
     if (is_android) {
       sources += skia_gpu_vk_android_private
-    }
-  }
-
-  if (is_android && (skia_use_gl || skia_use_vulkan)) {
-    # this lib is required to link against AHardwareBuffer
-    if (defined(ndk_api) && ndk_api >= 26) {
-      libs += [ "android" ]
     }
   }
 
@@ -1542,10 +1543,8 @@ skia_component("skia") {
   libs = []
 
   if (skia_enable_sksl_tracing) {
-    defines += [ "SKSL_ENABLE_TRACING" ]
     sources += skia_sksl_tracing_sources
   }
-
   if (skia_build_for_debugger) {
     defines += [ "SK_BUILD_FOR_DEBUGGER" ]
   }
@@ -3042,13 +3041,6 @@ if (skia_enable_tools) {
       sources += [ "tools/gpu/vk/VkTestUtils.h" ]
       sources += [ "tools/gpu/vk/VkTestUtils.cpp" ]
       deps = [ ":skia" ]
-    }
-  }
-
-  if (is_android && defined(ndk) && ndk != "") {
-    copy("gdbserver") {
-      sources = [ "$ndk/$ndk_gdbserver" ]
-      outputs = [ "$root_out_dir/gdbserver" ]
     }
   }
 

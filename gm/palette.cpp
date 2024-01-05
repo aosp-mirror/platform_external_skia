@@ -55,7 +55,7 @@ constexpr SkFontArguments::Palette::Override kColorOverridesAll[] = {
         { 5, 0xffd802e2},
         {13, 0xff00ffff},
         {12, 0xff00ffff},
-        {-1, 0xff00ff00},
+        {static_cast<uint16_t>(-1), 0xff00ff00},
 };
 
 constexpr SkFontArguments::Palette::Override kColorOverridesOne[] = {
