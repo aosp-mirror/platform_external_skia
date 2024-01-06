@@ -271,11 +271,16 @@ std::pair<SkColorType, bool /*isRGBFormat*/> DawnCaps::supportedReadPixelsColorT
 }
 
 void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextOptions& options) {
-#if defined(GRAPHITE_TEST_UTILS) && !defined(__EMSCRIPTEN__)
+    // GetAdapter() is not available in WASM and there's no way to get AdapterProperties off of
+    // the WGPUDevice directly.
+#if !defined(__EMSCRIPTEN__)
     wgpu::AdapterProperties props;
     backendContext.fDevice.GetAdapter().GetProperties(&props);
+
+#if defined(GRAPHITE_TEST_UTILS)
     this->setDeviceName(props.name);
 #endif
+#endif // defined(__EMSCRIPTEN__)
 
     wgpu::SupportedLimits limits;
 
@@ -299,14 +304,22 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
     fTextureDataRowBytesAlignment = 256;
 
     fResourceBindingReqs.fUniformBufferLayout = Layout::kStd140;
-    // TODO(skia:14639): We cannot use std430 layout for SSBOs until SkSL gracefully handles
-    // implicit array stride.
-    fResourceBindingReqs.fStorageBufferLayout = Layout::kStd140;
+    // The WGSL generator assumes tightly packed std430 layout for SSBOs which is also the default
+    // for all types outside the uniform address space in WGSL.
+    fResourceBindingReqs.fStorageBufferLayout = Layout::kStd430;
     fResourceBindingReqs.fSeparateTextureAndSamplerBinding = true;
 
-    // TODO: support storage buffer
+#if !defined(__EMSCRIPTEN__)
+    // TODO(b/318817249): SSBOs trigger FXC compiler failures when attempting to unroll loops
+    fStorageBufferSupport = props.backendType != wgpu::BackendType::D3D11;
+    fStorageBufferPreferred = props.backendType != wgpu::BackendType::D3D11;
+#else
+    // WASM doesn't provide a way to query the backend, so can't tell if we are on d3d11 or not.
+    // Pessimistically assume we could be. Once b/318817249 is fixed, this can go away and SSBOs
+    // can always be enabled.
     fStorageBufferSupport = false;
     fStorageBufferPreferred = false;
+#endif
 
     fDrawBufferCanBeMapped = false;
     fBufferMapsAreAsync = true;
