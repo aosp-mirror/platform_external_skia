@@ -177,7 +177,7 @@ static void async_callback(void* c, std::unique_ptr<const SkImage::AsyncReadResu
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(FinishedAsyncProcWhenAbandonedTest,
                                        reporter,
                                        ctxInfo,
-                                       CtsEnforcement::kApiLevel_T) {
+                                       CtsEnforcement::kNextRelease) {
     auto dContext = ctxInfo.directContext();
 
     SkImageInfo info =
