@@ -44,12 +44,15 @@ class Variable;
  */
 class Parser {
 public:
-    Parser(Compiler* compiler, const ProgramSettings& settings, ProgramKind kind, std::string text);
+    Parser(Compiler* compiler,
+           const ProgramSettings& settings,
+           ProgramKind kind,
+           std::unique_ptr<std::string> text);
     ~Parser();
 
-    std::unique_ptr<Program> program();
+    std::unique_ptr<Program> programInheritingFrom(const Module* module);
 
-    std::unique_ptr<Module> moduleInheritingFrom(const Module* parent);
+    std::unique_ptr<Module> moduleInheritingFrom(const Module* parentModule);
 
     std::string_view text(Token token);
 
