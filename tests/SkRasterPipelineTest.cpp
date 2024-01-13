@@ -487,10 +487,17 @@ DEF_TEST(SkRasterPipeline_InitLaneMasks, reporter) {
     }
 }
 
+// This is the bit pattern of the "largest" signaling NaN. The next integer is a quiet NaN.
+// We use this as the starting point for various memory-shuffling tests below, to ensure that our
+// code doesn't interpret values as float when they might be integral. Using floats can cause
+// signaling NaN values to change (becoming quiet), even with the most innocuous operations
+// (particularly on 32-bit x86, where floats are often passed around in the x87 FPU).
+static constexpr int kLastSignalingNaN    = 0x7fbfffff;
+
 DEF_TEST(SkRasterPipeline_CopyFromIndirectUnmasked, r) {
     // Allocate space for 5 source slots, and 5 dest slots.
-    alignas(64) float src[5 * SkRasterPipeline_kMaxStride_highp];
-    alignas(64) float dst[5 * SkRasterPipeline_kMaxStride_highp];
+    alignas(64) int src[5 * SkRasterPipeline_kMaxStride_highp];
+    alignas(64) int dst[5 * SkRasterPipeline_kMaxStride_highp];
 
     // Test with various mixes of indirect offsets.
     static_assert(SkRasterPipeline_kMaxStride_highp == 8);
@@ -503,9 +510,9 @@ DEF_TEST(SkRasterPipeline_CopyFromIndirectUnmasked, r) {
 
     for (const uint32_t* offsets : {kOffsets1, kOffsets2, kOffsets3, kOffsets4}) {
         for (int copySize = 1; copySize <= 5; ++copySize) {
-            // Initialize the destination slots to 0,1,2.. and the source slots to 1000,1001,1002...
-            std::iota(&dst[0], &dst[5 * N], 0.0f);
-            std::iota(&src[0], &src[5 * N], 1000.0f);
+            // Initialize the destination slots to 0,1,2.. and the source slots to various NaNs
+            std::iota(&dst[0], &dst[5 * N], 0);
+            std::iota(&src[0], &src[5 * N], kLastSignalingNaN);
 
             // Run `copy_from_indirect_unmasked` over our data.
             SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
@@ -531,9 +538,9 @@ DEF_TEST(SkRasterPipeline_CopyFromIndirectUnmasked, r) {
 
             // Verify that the destination has been overwritten in the mask-on fields, and has
             // not been overwritten in the mask-off fields, for each destination slot.
-            float expectedUnchanged = 0.0f;
-            float expectedFromZero = src[0 * N], expectedFromTwo = src[2 * N];
-            float* destPtr = dst;
+            int expectedUnchanged = 0;
+            int expectedFromZero = src[0 * N], expectedFromTwo = src[2 * N];
+            int* destPtr = dst;
             for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
                 for (int checkLane = 0; checkLane < N; ++checkLane) {
                     if (checkSlot < copySize) {
@@ -549,9 +556,9 @@ DEF_TEST(SkRasterPipeline_CopyFromIndirectUnmasked, r) {
                     }
 
                     ++destPtr;
-                    expectedUnchanged += 1.0f;
-                    expectedFromZero += 1.0f;
-                    expectedFromTwo += 1.0f;
+                    expectedUnchanged += 1;
+                    expectedFromZero += 1;
+                    expectedFromTwo += 1;
                 }
             }
         }
@@ -561,8 +568,8 @@ DEF_TEST(SkRasterPipeline_CopyFromIndirectUnmasked, r) {
 DEF_TEST(SkRasterPipeline_CopyFromIndirectUniformUnmasked, r) {
     // Allocate space for 5 source uniform values, and 5 dest slots.
     // (Note that unlike slots, uniforms don't use multiple lanes per value.)
-    alignas(64) float src[5];
-    alignas(64) float dst[5 * SkRasterPipeline_kMaxStride_highp];
+    alignas(64) int src[5];
+    alignas(64) int dst[5 * SkRasterPipeline_kMaxStride_highp];
 
     // Test with various mixes of indirect offsets.
     static_assert(SkRasterPipeline_kMaxStride_highp == 8);
@@ -575,10 +582,9 @@ DEF_TEST(SkRasterPipeline_CopyFromIndirectUniformUnmasked, r) {
 
     for (const uint32_t* offsets : {kOffsets1, kOffsets2, kOffsets3, kOffsets4}) {
         for (int copySize = 1; copySize <= 5; ++copySize) {
-            // Initialize the destination slots to 0,1,2.. and the source uniforms to
-            // 1000,1001,1002...
-            std::iota(&dst[0], &dst[5 * N], 0.0f);
-            std::iota(&src[0], &src[5], 1000.0f);
+            // Initialize the destination slots to 0,1,2.. and the source uniforms to various NaNs
+            std::iota(&dst[0], &dst[5 * N], 0);
+            std::iota(&src[0], &src[5], kLastSignalingNaN);
 
             // Run `copy_from_indirect_unmasked` over our data.
             SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
@@ -603,9 +609,9 @@ DEF_TEST(SkRasterPipeline_CopyFromIndirectUniformUnmasked, r) {
             }
 
             // Verify that the destination has been overwritten in each slot.
-            float expectedUnchanged = 0.0f;
-            float expectedFromZero = src[0], expectedFromTwo = src[2];
-            float* destPtr = dst;
+            int expectedUnchanged = 0;
+            int expectedFromZero = src[0], expectedFromTwo = src[2];
+            int* destPtr = dst;
             for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
                 for (int checkLane = 0; checkLane < N; ++checkLane) {
                     if (checkSlot < copySize) {
@@ -621,10 +627,10 @@ DEF_TEST(SkRasterPipeline_CopyFromIndirectUniformUnmasked, r) {
                     }
 
                     ++destPtr;
-                    expectedUnchanged += 1.0f;
+                    expectedUnchanged += 1;
                 }
-                expectedFromZero += 1.0f;
-                expectedFromTwo += 1.0f;
+                expectedFromZero += 1;
+                expectedFromTwo += 1;
             }
         }
     }
@@ -632,8 +638,8 @@ DEF_TEST(SkRasterPipeline_CopyFromIndirectUniformUnmasked, r) {
 
 DEF_TEST(SkRasterPipeline_CopyToIndirectMasked, r) {
     // Allocate space for 5 source slots, and 5 dest slots.
-    alignas(64) float src[5 * SkRasterPipeline_kMaxStride_highp];
-    alignas(64) float dst[5 * SkRasterPipeline_kMaxStride_highp];
+    alignas(64) int src[5 * SkRasterPipeline_kMaxStride_highp];
+    alignas(64) int dst[5 * SkRasterPipeline_kMaxStride_highp];
 
     // Test with various mixes of indirect offsets.
     static_assert(SkRasterPipeline_kMaxStride_highp == 8);
@@ -653,10 +659,9 @@ DEF_TEST(SkRasterPipeline_CopyToIndirectMasked, r) {
     for (const int32_t* mask : {kMask1, kMask2, kMask3, kMask4}) {
         for (const uint32_t* offsets : {kOffsets1, kOffsets2, kOffsets3, kOffsets4}) {
             for (int copySize = 1; copySize <= 5; ++copySize) {
-                // Initialize the destination slots to 0,1,2.. and the source slots to
-                // 1000,1001,1002...
-                std::iota(&dst[0], &dst[5 * N], 0.0f);
-                std::iota(&src[0], &src[5 * N], 1000.0f);
+                // Initialize the destination slots to 0,1,2.. and the source slots to various NaNs
+                std::iota(&dst[0], &dst[5 * N], 0);
+                std::iota(&src[0], &src[5 * N], kLastSignalingNaN);
 
                 // Run `copy_to_indirect_masked` over our data.
                 SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
@@ -685,9 +690,9 @@ DEF_TEST(SkRasterPipeline_CopyToIndirectMasked, r) {
 
                 // Verify that the destination has been overwritten in the mask-on fields, and has
                 // not been overwritten in the mask-off fields, for each destination slot.
-                float expectedUnchanged = 0.0f;
-                float expectedFromZero = src[0], expectedFromTwo = src[0] - (2 * N);
-                float* destPtr = dst;
+                int expectedUnchanged = 0;
+                int expectedFromZero = src[0], expectedFromTwo = src[0] - (2 * N);
+                int* destPtr = dst;
                 int pos = 0;
                 for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
                     for (int checkLane = 0; checkLane < N; ++checkLane) {
@@ -707,9 +712,9 @@ DEF_TEST(SkRasterPipeline_CopyToIndirectMasked, r) {
 
                         ++pos;
                         ++destPtr;
-                        expectedUnchanged += 1.0f;
-                        expectedFromZero += 1.0f;
-                        expectedFromTwo += 1.0f;
+                        expectedUnchanged += 1;
+                        expectedFromZero += 1;
+                        expectedFromTwo += 1;
                     }
                 }
             }
@@ -719,8 +724,8 @@ DEF_TEST(SkRasterPipeline_CopyToIndirectMasked, r) {
 
 DEF_TEST(SkRasterPipeline_SwizzleCopyToIndirectMasked, r) {
     // Allocate space for 5 source slots, and 5 dest slots.
-    alignas(64) float src[5 * SkRasterPipeline_kMaxStride_highp];
-    alignas(64) float dst[5 * SkRasterPipeline_kMaxStride_highp];
+    alignas(64) int src[5 * SkRasterPipeline_kMaxStride_highp];
+    alignas(64) int dst[5 * SkRasterPipeline_kMaxStride_highp];
 
     // Test with various mixes of indirect offsets.
     static_assert(SkRasterPipeline_kMaxStride_highp == 8);
@@ -779,10 +784,9 @@ DEF_TEST(SkRasterPipeline_SwizzleCopyToIndirectMasked, r) {
             for (size_t patternIndex = 0; patternIndex < std::size(kPatterns); ++patternIndex) {
                 const TestPattern& pattern = kPatterns[patternIndex];
 
-                // Initialize the destination slots to 0,1,2.. and the source slots to
-                // 1000,1001,1002...
-                std::iota(&dst[0], &dst[5 * N], 0.0f);
-                std::iota(&src[0], &src[5 * N], 1000.0f);
+                // Initialize the destination slots to 0,1,2.. and the source slots to various NaNs
+                std::iota(&dst[0], &dst[5 * N], 0);
+                std::iota(&src[0], &src[5 * N], kLastSignalingNaN);
 
                 // Run `swizzle_copy_to_indirect_masked` over our data.
                 SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
@@ -815,8 +819,8 @@ DEF_TEST(SkRasterPipeline_SwizzleCopyToIndirectMasked, r) {
 
                 // Verify that the destination has been overwritten in the mask-on fields, and has
                 // not been overwritten in the mask-off fields, for each destination slot.
-                float expectedUnchanged = 0.0f;
-                float* destPtr = dst;
+                int expectedUnchanged = 0;
+                int* destPtr = dst;
                 for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
                     for (int checkLane = 0; checkLane < N; ++checkLane) {
                         Result expectedType = kUnchanged;
@@ -852,7 +856,7 @@ DEF_TEST(SkRasterPipeline_SwizzleCopyToIndirectMasked, r) {
                         }
 
                         ++destPtr;
-                        expectedUnchanged += 1.0f;
+                        expectedUnchanged += 1;
                     }
                 }
             }
@@ -2355,6 +2359,73 @@ DEF_TEST(SkRasterPipeline_MixTest, r) {
                 fromValue += 1.0f;
                 toValue += 1.0f;
                 weightValue += 1.0f;
+            }
+        }
+    }
+}
+
+DEF_TEST(SkRasterPipeline_MixIntTest, r) {
+    // Allocate space for 5 dest and 10 source slots.
+    alignas(64) int slots[15 * SkRasterPipeline_kMaxStride_highp];
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    struct MixOp {
+        int numSlotsAffected;
+        std::function<void(SkRasterPipeline*, SkArenaAlloc*)> append;
+    };
+
+    static const MixOp kMixOps[] = {
+        {1, [&](SkRasterPipeline* p, SkArenaAlloc* alloc) {
+                p->append(SkRasterPipelineOp::mix_int, slots);
+            }},
+        {2, [&](SkRasterPipeline* p, SkArenaAlloc* alloc) {
+                p->append(SkRasterPipelineOp::mix_2_ints, slots);
+            }},
+        {3, [&](SkRasterPipeline* p, SkArenaAlloc* alloc) {
+                p->append(SkRasterPipelineOp::mix_3_ints, slots);
+            }},
+        {4, [&](SkRasterPipeline* p, SkArenaAlloc* alloc) {
+                p->append(SkRasterPipelineOp::mix_4_ints, slots);
+            }},
+        {5, [&](SkRasterPipeline* p, SkArenaAlloc* alloc) {
+                SkRasterPipeline_TernaryOpCtx ctx;
+                ctx.dst = 0;
+                ctx.delta = 5 * N * sizeof(int);
+                p->append(SkRasterPipelineOp::mix_n_ints, SkRPCtxUtils::Pack(ctx, alloc));
+            }},
+    };
+
+    for (const MixOp& op : kMixOps) {
+        // Initialize the selector ("weight") values to alternating masks
+        for (int idx = 0; idx < 1 * op.numSlotsAffected * N; ++idx) {
+            slots[idx] = (idx & 1) ? ~0 : 0;
+        }
+
+        // Initialize the other values to various NaNs
+        std::iota(&slots[1 * op.numSlotsAffected * N], &slots[15 * N], kLastSignalingNaN);
+
+        int weightValue = slots[0];
+        int fromValue   = slots[1 * op.numSlotsAffected * N];
+        int toValue     = slots[2 * op.numSlotsAffected * N];
+
+        // Run the mix op over our data.
+        SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+        SkRasterPipeline p(&alloc);
+        p.append(SkRasterPipelineOp::set_base_pointer, &slots[0]);
+        op.append(&p, &alloc);
+        p.run(0,0,1,1);
+
+        // Verify that the affected slots now equal either fromValue or toValue, correctly
+        int* destPtr = &slots[0];
+        for (int checkSlot = 0; checkSlot < op.numSlotsAffected; ++checkSlot) {
+            for (int checkLane = 0; checkLane < N; ++checkLane) {
+                int checkValue = weightValue ? toValue : fromValue;
+                REPORTER_ASSERT(r, *destPtr == checkValue);
+
+                ++destPtr;
+                fromValue += 1;
+                toValue += 1;
+                weightValue = ~weightValue;
             }
         }
     }
