@@ -29,6 +29,7 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -43,18 +44,14 @@ public:
     Xfermodes3GM() { this->setBGColor(ToolUtils::color_to_565(0xFF70D0E0)); }
 
 protected:
-    SkString onShortName() override {
-        return SkString("xfermodes3");
-    }
+    SkString getName() const override { return SkString("xfermodes3"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(630, 1215);
-    }
+    SkISize getISize() override { return SkISize::Make(630, 1215); }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
 
-        SkFont  font(ToolUtils::create_portable_typeface());
+        SkFont  font = ToolUtils::DefaultPortableFont();
         SkPaint labelP;
 
         constexpr SkColor kSolidColors[] = {

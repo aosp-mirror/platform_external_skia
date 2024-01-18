@@ -12,16 +12,18 @@ void draw(SkCanvas* canvas) {
     struct {
         const char* name;
         sk_sp<SkImage> image;
-    } tests[] = {
-        { "image", image },
-        { "bitmap", source.asImage() },
-        { "texture", SkImage::MakeFromTexture(dContext, backEndTexture, kTopLeft_GrSurfaceOrigin,
-                                              kRGBA_8888_SkColorType, kOpaque_SkAlphaType,
-                                              nullptr) }
-    };
+    } tests[] = {{"image", image},
+                 {"bitmap", source.asImage()},
+                 {"texture",
+                  SkImages::BorrowTextureFrom(dContext,
+                                              backEndTexture,
+                                              kTopLeft_GrSurfaceOrigin,
+                                              kRGBA_8888_SkColorType,
+                                              kOpaque_SkAlphaType,
+                                              nullptr)}};
     SkString string;
     SkPaint paint;
-    SkFont font;
+    SkFont font = SkFont(fontMgr->matchFamilyStyle(nullptr, {}));
 
     for (const auto& test : tests ) {
         if (!test.image) {

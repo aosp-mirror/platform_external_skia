@@ -22,7 +22,14 @@
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/UploadBufferManager.h"
 
+using namespace skia_private;
+
 namespace skgpu::graphite {
+
+UploadInstance::UploadInstance() = default;
+UploadInstance::UploadInstance(UploadInstance&&) = default;
+UploadInstance& UploadInstance::operator=(UploadInstance&&) = default;
+UploadInstance::~UploadInstance() = default;
 
 UploadInstance::UploadInstance(const Buffer* buffer,
                                size_t bytesPerPixel,
@@ -43,7 +50,7 @@ std::pair<size_t, size_t> compute_combined_buffer_size(
         int mipLevelCount,
         size_t bytesPerPixel,
         const SkISize& baseDimensions,
-        SkTArray<std::pair<size_t, size_t>>* levelOffsetsAndRowBytes) {
+        TArray<std::pair<size_t, size_t>>* levelOffsetsAndRowBytes) {
     SkASSERT(levelOffsetsAndRowBytes && !levelOffsetsAndRowBytes->size());
     SkASSERT(mipLevelCount >= 1);
 
@@ -118,14 +125,14 @@ UploadInstance UploadInstance::Make(Recorder* recorder,
     }
 
     const size_t bpp = dstColorInfo.bytesPerPixel();
-    SkTArray<std::pair<size_t, size_t>> levelOffsetsAndRowBytes(mipLevelCount);
+    TArray<std::pair<size_t, size_t>> levelOffsetsAndRowBytes(mipLevelCount);
 
     auto [combinedBufferSize, minAlignment] = compute_combined_buffer_size(
             caps, mipLevelCount, bpp, dstRect.size(), &levelOffsetsAndRowBytes);
     SkASSERT(combinedBufferSize);
 
     UploadBufferManager* bufferMgr = recorder->priv().uploadBufferManager();
-    auto [writer, bufferInfo] = bufferMgr->getUploadWriter(combinedBufferSize, minAlignment);
+    auto [writer, bufferInfo] = bufferMgr->getTextureUploadWriter(combinedBufferSize, minAlignment);
 
     std::vector<BufferTextureCopyData> copyData(mipLevelCount);
 
@@ -222,6 +229,10 @@ void UploadInstance::addCommand(Context* context,
 
         commandBuffer->copyBufferToTexture(
                 fBuffer, fTextureProxy->refTexture(), &transformedCopyData, 1);
+    }
+
+    if (fConditionalContext) {
+        fConditionalContext->uploadSubmitted();
     }
 }
 

@@ -20,6 +20,7 @@
 
 #define SKICU_EMIT_FUNCS              \
     SKICU_FUNC(u_errorName)           \
+    SKICU_FUNC(u_hasBinaryProperty)   \
     SKICU_FUNC(u_getIntPropertyValue) \
     SKICU_FUNC(u_iscntrl)             \
     SKICU_FUNC(u_isspace)             \
@@ -42,6 +43,7 @@
     SKICU_FUNC(ubrk_preceding)        \
     SKICU_FUNC(ubrk_setText)          \
     SKICU_FUNC(ubrk_setUText)         \
+    SKICU_FUNC(uloc_forLanguageTag)   \
     SKICU_FUNC(uloc_getDefault)       \
     SKICU_FUNC(uscript_getScript)     \
     SKICU_FUNC(utext_close)           \
@@ -56,10 +58,16 @@ struct SkICULib {
     // ubrk_safeClone deprecated in ICU69 and not exposed by Android.
     UBreakIterator* (*f_ubrk_clone_)(const UBreakIterator*, UErrorCode*);
     UBreakIterator* (*f_ubrk_safeClone_)(const UBreakIterator*, void*, int32_t*, UErrorCode*);
+
+    // ubrk_getLocaleByType not exposed by Android.
+    const char* (*f_ubrk_getLocaleByType)(const UBreakIterator*, ULocDataLocaleType, UErrorCode*);
 };
 #undef SKICU_FUNC
 
 // Platform/config specific ICU factory.
 std::unique_ptr<SkICULib> SkLoadICULib();
+
+// Get cached already loaded ICU library.
+const SkICULib* SkGetICULib();
 
 #endif // SkUnicode_icu_DEFINED

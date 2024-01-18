@@ -1,5 +1,9 @@
 # This is the official list of Skia authors for copyright purposes.
 #
+# Before adding your name to this file make sure you have signed the CLA.
+# Follow the instructions at https://skia.org/docs/dev/contrib on how to
+# sign the CLA.
+#
 # Names should be added to this file with one of the following patterns:
 #
 # For individual contributors:
@@ -18,11 +22,14 @@ Adobe Systems Incorporated <*@adobe.com>
 Alexander Khovansky <alx.khovansky@gmail.com>
 Amazon, Inc <*@amazon.com>
 Anthony Catel <paraboul@gmail.com>
+Andrew Kurushin <ajax16384@gmail.com>
 Bharat Ahuja <ahujabharat93@gmail.com>
 Biswapriyo Nath <nathbappai@gmail.com>
+Brian Salomon <briansalomon@gmail.com>
 Callum Moffat <smartercallum@gmail.com>
 Cary Clark <cclark2@gmail.com>
 Casey Banner <kcbanner@gmail.com>
+ChengYang <chengyangyang-hf@loongson.cn>
 Christian Plesner Hansen <plesner@t.undra.org>
 ColdPaleLight <coldpalelight@gmail.com>
 Dawson Coleman <dawsonmcoleman@gmail.com>
@@ -33,6 +40,7 @@ George Wright <george@mozilla.com>
 GiWan Go <gogil@stealien.com>
 Google Inc. <*@google.com>
 Herb Derby <herbderby@gmail.com>
+Ho Cheung <uioptt24@gmail.com>
 Igalia <*@igalia.com>
 Intel <*@intel.com>
 Ion Rosca <rosca@adobe.com>
@@ -40,6 +48,7 @@ Jacek Caban <cjacek@gmail.com>
 James Clarke <james@clarkezone.io>
 Jeff Muizelaar <jmuizelaar@mozilla.com>
 JetBrains <*@jetbrains.com>
+Joey Bevilacqua <bevilacquajoey@gmail.com>
 Jongdeok Kim <jongdeok.kim@navercorp.com>
 Jordan Williams <jordan@jwillikers.com>
 Jose Mayol <jei.mayol@gmail.com>
@@ -47,6 +56,7 @@ Kaloyan Donev <kdonev@gmail.com>
 LG Electronics <*@lge.com>
 Lee Salzman <lsalzman@mozilla.com>
 Linaro <*@linaro.org>
+Luis Grimaldo <luisgrimaldo@me.com>
 MIPS <*@imgtec.com>
 Mainframe North <*@mainframe.co.uk>
 Marcin Kazmierczak <mar.kazmierczak@gmail.com>
@@ -61,6 +71,7 @@ Nils André-Chang <nils@nilsand.re>
 Ning Liu <ningliu@invisionapp.com>
 Noah Lavine <noah.b.lavine@gmail.com>
 Oliver Dawes <olliedawes@gmail.com>
+Omeid Matten <contact@omeid.me>
 Opera Software ASA <*@opera.com>
 Pavel Krajcevski <pavel@cs.unc.edu>
 Petar Kirov <petar.p.kirov@gmail.com>
@@ -72,19 +83,26 @@ Scene Group Ltd. <*@scenegroup.co>
 Sergey Melnikov <Melnikov.Sergey.V@gmail.com>
 Shachar Langbeheim <nihohit@gmail.com>
 Shekhar Dutta <sherlockdoyle1904@gmail.com>
+Sida Zhu <zhusida@bytedance.com>
 Skia <*@skia.org>
 Skia Buildbots <skia.buildbots@gmail.com>
 Sony Mobile Communications Inc. <*@sonymobile.com>
+Soso Tsertsvadze <sosotsertsvadze2@gmail.com>
 Stan I <stililiev@gmail.com>
+Stepan Mikhailiuk <istepancar@gmail.com>
 Stephan Hartmann <stha09@googlemail.com>
 Steve Singer <steve@ssinger.info>
 Sylvestre Ledru <sylvestre.ledru@gmail.com>
 The Chromium Authors <*@chromium.org>
 Thiago Fransosi Farina <thiago.farina@gmail.com>
 Vibe Inc <*@vibe.us>
+William Candillon <wcandillon@gmail.com>
+Wonmin Park <satcom1600@hanmail.net>
 Yandex LLC <*@yandex-team.ru>
+Yang Guang <yangguang@jwzg.com>
 Yong-Hwan Baek <meisterdevhwan@gmail.com>
 Zhuo Qingliang <zhuo.dev@gmail.com>
+Zoho Corporation Private Limited <*@zohocorp.com>
 
 # Trusted service accounts.
 GitHub Dependabot <(\d+)\+dependabot\[bot\]@users.noreply.github.com>

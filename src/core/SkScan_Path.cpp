@@ -346,10 +346,6 @@ public:
     void blitMask(const SkMask&, const SkIRect& clip) override {
         SkDEBUGFAIL("blitMask unexpected");
     }
-    const SkPixmap* justAnOpaqueColor(uint32_t* value) override {
-        SkDEBUGFAIL("justAnOpaqueColor unexpected");
-        return nullptr;
-    }
 
 private:
     SkBlitter*  fBlitter;
@@ -676,7 +672,7 @@ void SkScan::FillPath(const SkPath& path, const SkIRect& ir,
     FillPath(path, rgn, blitter);
 }
 
-bool SkScan::DowngradeClipAA(const SkIRect& bounds) {
+bool SkScan::PathRequiresTiling(const SkIRect& bounds) {
     SkRegion out;  // ignored
     return clip_to_limit(SkRegion(bounds), &out);
 }

@@ -21,12 +21,9 @@
 #include "include/core/SkTypes.h"
 #include "include/core/SkVertices.h"
 #include "include/private/base/SkTArray.h"
+#include "include/private/chromium/Slug.h"
 #include "src/core/SkPictureFlat.h"
 #include "src/core/SkReadBuffer.h"
-
-#if defined(SK_GANESH)
-#include "include/private/chromium/Slug.h"
-#endif
 
 #include <cstdint>
 #include <memory>
@@ -81,7 +78,8 @@ public:
 #define SK_PICT_EOF_TAG     SkSetFourByteTag('e', 'o', 'f', ' ')
 
 template <typename T>
-T* read_index_base_1_or_null(SkReadBuffer* reader, const SkTArray<sk_sp<T>>& array) {
+T* read_index_base_1_or_null(SkReadBuffer* reader,
+                             const skia_private::TArray<sk_sp<T>>& array) {
     int index = reader->readInt();
     return reader->validate(index > 0 && index <= array.size()) ? array[index - 1].get() : nullptr;
 }
@@ -144,11 +142,9 @@ public:
         return read_index_base_1_or_null(reader, fTextBlobs);
     }
 
-#if defined(SK_GANESH)
     const sktext::gpu::Slug* getSlug(SkReadBuffer* reader) const {
         return read_index_base_1_or_null(reader, fSlugs);
     }
-#endif
 
     const SkVertices* getVertices(SkReadBuffer* reader) const {
         return read_index_base_1_or_null(reader, fVertices);
@@ -163,23 +159,20 @@ private:
     void parseBufferTag(SkReadBuffer&, uint32_t tag, uint32_t size);
     void flattenToBuffer(SkWriteBuffer&, bool textBlobsOnly) const;
 
-    SkTArray<SkPaint>  fPaints;
-    SkTArray<SkPath>   fPaths;
+    skia_private::TArray<SkPaint> fPaints;
+    skia_private::TArray<SkPath>  fPaths;
 
-    sk_sp<SkData>   fOpData;    // opcodes and parameters
+    sk_sp<SkData>                 fOpData;    // opcodes and parameters
 
-    const SkPath    fEmptyPath;
-    const SkBitmap  fEmptyBitmap;
+    const SkPath                  fEmptyPath;
+    const SkBitmap                fEmptyBitmap;
 
-    SkTArray<sk_sp<const SkPicture>>   fPictures;
-    SkTArray<sk_sp<SkDrawable>>        fDrawables;
-    SkTArray<sk_sp<const SkTextBlob>>  fTextBlobs;
-    SkTArray<sk_sp<const SkVertices>>  fVertices;
-    SkTArray<sk_sp<const SkImage>>     fImages;
-#if defined(SK_GANESH)
-    SkTArray<sk_sp<const sktext::gpu::Slug>> fSlugs;
-#endif
-
+    skia_private::TArray<sk_sp<const SkPicture>>   fPictures;
+    skia_private::TArray<sk_sp<SkDrawable>>        fDrawables;
+    skia_private::TArray<sk_sp<const SkTextBlob>>  fTextBlobs;
+    skia_private::TArray<sk_sp<const SkVertices>>  fVertices;
+    skia_private::TArray<sk_sp<const SkImage>>     fImages;
+    skia_private::TArray<sk_sp<const sktext::gpu::Slug>> fSlugs;
 
     SkTypefacePlayback                 fTFPlayback;
     std::unique_ptr<SkFactoryPlayback> fFactoryPlayback;

@@ -97,6 +97,12 @@ struct SK_API GrContextOptions {
         deduce the optimal value for this platform. */
     int  fBufferMapThreshold = -1;
 
+    /** Default minimum size to use when allocating buffers for uploading data to textures. The
+        larger the value the more uploads can be packed into one buffer, but at the cost of
+        more gpu memory allocated that may not be used. Uploads larger than the minimum will still
+        work by allocating a dedicated buffer. */
+    size_t fMinimumStagingBufferSize = 64 * 1024;
+
     /**
      * Executor to handle threaded work within Ganesh. If this is nullptr, then all work will be
      * done serially on the main thread. To have worker threads assist with various tasks, set this
@@ -261,13 +267,7 @@ struct SK_API GrContextOptions {
      * If true, then add 1 pixel padding to all glyph masks in the atlas to support bi-lerp
      * rendering of all glyphs. This must be set to true to use Slugs.
      */
-    #if defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG) || \
-        defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG_SERIALIZE) || \
-        defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG_STRIKE_SERIALIZE)
-    bool fSupportBilerpFromGlyphAtlas = true;
-    #else
     bool fSupportBilerpFromGlyphAtlas = false;
-    #endif
 
     /**
      * Uses a reduced variety of shaders. May perform less optimally in steady state but can reduce
@@ -298,7 +298,7 @@ struct SK_API GrContextOptions {
     GrDirectContextDestroyedContext fContextDeleteContext = nullptr;
     GrDirectContextDestroyedProc fContextDeleteProc = nullptr;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     /**
      * Private options that are only meant for testing within Skia's tools.
      */

@@ -22,7 +22,7 @@
 // prepared to rename those identifiers.
 
 #include "include/core/SkRefCnt.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/GpuTypes.h"
 #include <d3d12.h>
 #include <dxgi1_4.h>
 
@@ -134,7 +134,7 @@ public:
      *  The caller must assume ownership of the object, and manage its reference count directly.
      *  No call to Release() will be made.
      */
-    T* SK_WARN_UNUSED_RESULT release() {
+    [[nodiscard]] T* release() {
         T* obj = fObject;
         fObject = nullptr;
         return obj;
@@ -184,7 +184,7 @@ struct GrD3DTextureResourceInfo {
     uint32_t                 fSampleCount          = 1;
     uint32_t                 fLevelCount           = 0;
     unsigned int             fSampleQualityPattern = DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN;
-    GrProtected              fProtected            = GrProtected::kNo;
+    skgpu::Protected         fProtected            = skgpu::Protected::kNo;
 
     GrD3DTextureResourceInfo() = default;
 
@@ -195,7 +195,7 @@ struct GrD3DTextureResourceInfo {
                              uint32_t sampleCount,
                              uint32_t levelCount,
                              unsigned int sampleQualityLevel,
-                             GrProtected isProtected = GrProtected::kNo)
+                             skgpu::Protected isProtected = skgpu::Protected::kNo)
             : fResource(resource)
             , fAlloc(alloc)
             , fResourceState(resourceState)
@@ -216,7 +216,7 @@ struct GrD3DTextureResourceInfo {
             , fSampleQualityPattern(info.fSampleQualityPattern)
             , fProtected(info.fProtected) {}
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     bool operator==(const GrD3DTextureResourceInfo& that) const {
         return fResource == that.fResource && fResourceState == that.fResourceState &&
                fFormat == that.fFormat && fSampleCount == that.fSampleCount &&
@@ -239,7 +239,7 @@ struct GrD3DFenceInfo {
 struct GrD3DSurfaceInfo {
     uint32_t fSampleCount = 1;
     uint32_t fLevelCount = 0;
-    GrProtected fProtected = GrProtected::kNo;
+    skgpu::Protected fProtected = skgpu::Protected::kNo;
 
     DXGI_FORMAT fFormat = DXGI_FORMAT_UNKNOWN;
     unsigned int fSampleQualityPattern = DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN;

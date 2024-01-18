@@ -14,18 +14,21 @@
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Recording.h"
+#include "include/gpu/graphite/Surface.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
 
 namespace skgpu::graphite {
 
 // Tests that a drawing with MSAA will have contents retained between recordings.
 // This is for testing MSAA load from resolve feature.
-DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(MultisampleRetainTest, reporter, context) {
+// TODO(b/296420752): enable in CTS after adding VK support for loading MSAA from Resolve
+DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(MultisampleRetainTest, reporter, context,
+                                   CtsEnforcement::kNever) {
     const SkImageInfo surfaceImageInfo = SkImageInfo::Make(
             16, 16, SkColorType::kRGBA_8888_SkColorType, SkAlphaType::kPremul_SkAlphaType);
 
     std::unique_ptr<Recorder> surfaceRecorder = context->makeRecorder();
-    sk_sp<SkSurface> surface = SkSurface::MakeGraphite(surfaceRecorder.get(), surfaceImageInfo);
+    sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(surfaceRecorder.get(), surfaceImageInfo);
 
     // Clear entire surface to red
     SkCanvas* surfaceCanvas = surface->getCanvas();

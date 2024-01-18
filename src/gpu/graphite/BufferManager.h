@@ -9,11 +9,14 @@
 #define skgpu_graphite_BufferManager_DEFINED
 
 #include "include/core/SkRefCnt.h"
+#include "include/private/base/SkTArray.h"
 #include "src/gpu/BufferWriter.h"
 #include "src/gpu/graphite/DrawTypes.h"
 #include "src/gpu/graphite/ResourceTypes.h"
+#include "src/gpu/graphite/UploadBufferManager.h"
 
 #include <array>
+#include <tuple>
 #include <vector>
 
 namespace skgpu::graphite {
@@ -34,7 +37,7 @@ class ResourceProvider;
 */
 class DrawBufferManager {
 public:
-    DrawBufferManager(ResourceProvider*, const Caps*);
+    DrawBufferManager(ResourceProvider*, const Caps*, UploadBufferManager*);
     ~DrawBufferManager();
 
     std::tuple<VertexWriter, BindBufferInfo> getVertexWriter(size_t requiredBytes);
@@ -42,12 +45,13 @@ public:
     std::tuple<UniformWriter, BindBufferInfo> getUniformWriter(size_t requiredBytes);
     std::tuple<UniformWriter, BindBufferInfo> getSsboWriter(size_t requiredBytes);
 
-    // Returns a pointer to a mapped storage buffer slice without a specific data writer.
-    std::tuple<void*, BindBufferInfo> getMappedStorage(size_t requiredBytes);
+    // Return a pointer to a mapped storage buffer suballocation without a specific data writer.
+    std::tuple<void*, BindBufferInfo> getUniformPointer(size_t requiredBytes);
+    std::tuple<void*, BindBufferInfo> getStoragePointer(size_t requiredBytes);
 
-    // Utilities that return an unmapped buffer slice with a particular usage. These slices are
-    // intended to be only accessed by the GPU and are configured to prioritize GPU reads.
-    BindBufferInfo getStorage(size_t requiredBytes);
+    // Utilities that return an unmapped buffer suballocation for a particular usage. These buffers
+    // are intended to be only accessed by the GPU and are not intended for CPU data uploads.
+    BindBufferInfo getStorage(size_t requiredBytes, ClearBuffer cleared = ClearBuffer::kNo);
     BindBufferInfo getVertexStorage(size_t requiredBytes);
     BindBufferInfo getIndexStorage(size_t requiredBytes);
     BindBufferInfo getIndirectStorage(size_t requiredBytes);
@@ -70,22 +74,23 @@ private:
         const BufferType fType;
         const size_t fStartAlignment;
         const size_t fBlockSize;
-        sk_sp<Buffer> fBuffer{};
+        sk_sp<Buffer> fBuffer;
         // The fTransferBuffer can be null, if draw buffer cannot be mapped,
         // see Caps::drawBufferCanBeMapped() for detail.
-        sk_sp<Buffer> fTransferBuffer{};
+        BindBufferInfo fTransferBuffer{};
+        void* fTransferMapPtr = nullptr;
         size_t fOffset = 0;
-
-        Buffer* getMappableBuffer() {
-            return fTransferBuffer ? fTransferBuffer.get() : fBuffer.get();
-        }
     };
     std::pair<void*, BindBufferInfo> prepareMappedBindBuffer(BufferInfo* info,
                                                              size_t requiredBytes);
-    BindBufferInfo prepareBindBuffer(BufferInfo* info, size_t requiredBytes, bool mappable = false);
+    BindBufferInfo prepareBindBuffer(BufferInfo* info,
+                                     size_t requiredBytes,
+                                     bool supportCpuUpload = false,
+                                     ClearBuffer cleared = ClearBuffer::kNo);
 
     ResourceProvider* const fResourceProvider;
     const Caps* const fCaps;
+    UploadBufferManager* fUploadManager;
 
     static constexpr size_t kVertexBufferIndex          = 0;
     static constexpr size_t kIndexBufferIndex           = 1;
@@ -98,7 +103,10 @@ private:
     std::array<BufferInfo, 8> fCurrentBuffers;
 
     // Vector of buffer and transfer buffer pairs.
-    std::vector<std::pair<sk_sp<Buffer>, sk_sp<Buffer>>> fUsedBuffers;
+    std::vector<std::pair<sk_sp<Buffer>, BindBufferInfo>> fUsedBuffers;
+
+    // List of buffer regions that were requested to be cleared at the time of allocation.
+    skia_private::TArray<ClearBufferInfo> fClearList;
 };
 
 /**
@@ -163,15 +171,13 @@ private:
     void* prepareStaticData(BufferInfo* info, size_t requiredBytes, BindBufferInfo* target);
 
     ResourceProvider* const fResourceProvider;
+    UploadBufferManager fUploadManager;
 
     // The source data that's copied into a final GPU-private buffer
     BufferInfo fVertexBufferInfo;
     BufferInfo fIndexBufferInfo;
 
-    std::vector<sk_sp<Buffer>> fUsedBuffers;
-
-    sk_sp<Buffer> fCurrentTransferBuffer;
-    size_t        fCurrentOffset;
+    const size_t fRequiredTransferAlignment;
 };
 
 } // namespace skgpu::graphite

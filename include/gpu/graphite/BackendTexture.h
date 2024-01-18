@@ -18,44 +18,50 @@
 #endif
 
 #ifdef SK_METAL
-#include "include/gpu/graphite/mtl/MtlTypes.h"
+#include "include/gpu/graphite/mtl/MtlGraphiteTypes.h"
 #endif
 
 #ifdef SK_VULKAN
+#include "include/gpu/vk/VulkanTypes.h"
 #include "include/private/gpu/vk/SkiaVulkan.h"
 #endif
 
 namespace skgpu {
 class MutableTextureState;
-class MutableTextureStateRef;
 }
 
 namespace skgpu::graphite {
 
-class BackendTexture {
+class SK_API BackendTexture {
 public:
     BackendTexture();
 #ifdef SK_DAWN
-    // Create a BackendTexture from a wgpu::Texture. Texture info will be
-    // queried from the texture. Comparing to wgpu::TextureView,
+    // Create a BackendTexture from a WGPUTexture. Texture info will be
+    // queried from the texture. Comparing to WGPUTextureView,
     // SkImage::readPixels(), SkSurface::readPixels() and
     // SkSurface::writePixels() are implemented by direct buffer copy. They
-    // should be more efficient. For wgpu::TextureView, those methods will use
-    // create an intermediate wgpu::Texture, and use it to transfer pixels.
-    // Note: for better performance, using wgpu::Texture IS RECOMMENDED.
-    BackendTexture(wgpu::Texture texture);
-    // Create a BackendTexture from a wgpu::TextureView. Texture dimensions and
-    // info have to be provided.
-    // Note: this method is for importing wgpu::TextureView from wgpu::SwapChain
-    // only.
-    BackendTexture(SkISize dimensions,
-                   const DawnTextureInfo& info,
-                   wgpu::TextureView textureView);
+    // should be more efficient. For WGPUTextureView, those methods will use
+    // create an intermediate WGPUTexture, and use it to transfer pixels.
+    // Note:
+    //  - for better performance, using WGPUTexture IS RECOMMENDED.
+    //  - The BackendTexture will not call retain or release on the passed in
+    //  WGPUTexture. Thus the client must keep the WGPUTexture valid until
+    //  they are no longer using the BackendTexture.
+    BackendTexture(WGPUTexture texture);
+    // Create a BackendTexture from a WGPUTexture. Texture planeDimensions, plane aspect and
+    // info have to be provided. This is intended to be used only when accessing a plane
+    // of a WGPUTexture.
+    // Note:
+    //  - Should be used only when accessing a plane of the WGPUTexture.
+    //  - The BackendTexture will not call retain or release on the passed in
+    //  WGPUTexture. Thus the client must keep the WGPUTexture valid
+    //  until they are no longer using the BackendTexture.
+    BackendTexture(SkISize planeDimensions, const DawnTextureInfo& info, WGPUTexture texture);
 #endif
 #ifdef SK_METAL
-    // The BackendTexture will not call retain or release on the passed in MtlHandle. Thus the
-    // client must keep the MtlHandle valid until they are no longer using the BackendTexture.
-    BackendTexture(SkISize dimensions, MtlHandle mtlTexture);
+    // The BackendTexture will not call retain or release on the passed in CFTypeRef. Thus the
+    // client must keep the CFTypeRef valid until they are no longer using the BackendTexture.
+    BackendTexture(SkISize dimensions, CFTypeRef mtlTexture);
 #endif
 
 #ifdef SK_VULKAN
@@ -63,7 +69,8 @@ public:
                    const VulkanTextureInfo&,
                    VkImageLayout,
                    uint32_t queueFamilyIndex,
-                   VkImage);
+                   VkImage,
+                   VulkanAlloc);
 #endif
 
     BackendTexture(const BackendTexture&);
@@ -90,60 +97,46 @@ public:
     void setMutableState(const skgpu::MutableTextureState&);
 
 #ifdef SK_DAWN
-    wgpu::Texture getDawnTexture() const;
-    wgpu::TextureView getDawnTextureView() const;
+    WGPUTexture getDawnTexturePtr() const;
 #endif
 #ifdef SK_METAL
-    MtlHandle getMtlTexture() const;
+    CFTypeRef getMtlTexture() const;
 #endif
 
 #ifdef SK_VULKAN
     VkImage getVkImage() const;
     VkImageLayout getVkImageLayout() const;
     uint32_t getVkQueueFamilyIndex() const;
+    const VulkanAlloc* getMemoryAlloc() const;
 #endif
 
 private:
-    sk_sp<MutableTextureStateRef> mutableState() const;
+    friend class VulkanResourceProvider;    // for getMutableState
+    sk_sp<MutableTextureState> getMutableState() const;
 
     SkISize fDimensions;
     TextureInfo fInfo;
 
-    sk_sp<MutableTextureStateRef> fMutableState;
+    sk_sp<MutableTextureState> fMutableState;
 
-#ifdef SK_DAWN
-    struct Dawn {
-        Dawn(wgpu::Texture texture) : fTexture(std::move(texture)) {}
-        Dawn(wgpu::TextureView textureView) : fTextureView(std::move(textureView)) {}
-
-        bool operator==(const Dawn& that) const {
-            return fTexture.Get() == that.fTexture.Get() &&
-                   fTextureView.Get() == that.fTextureView.Get();
-        }
-        bool operator!=(const Dawn& that) const {
-            return !this->operator==(that);
-        }
-        Dawn& operator=(const Dawn& that) {
-            fTexture = that.fTexture;
-            fTextureView = that.fTextureView;
-            return *this;
-        }
-
-        wgpu::Texture fTexture;
-        wgpu::TextureView fTextureView;
-    };
+#ifdef SK_VULKAN
+    // fMemoryAlloc == VulkanAlloc() if the client has already created their own VkImage and
+    // will destroy it themselves as opposed to having Skia create/destroy it via
+    // Recorder::createBackendTexture and Context::deleteBackendTexture.
+    VulkanAlloc fMemoryAlloc = VulkanAlloc();
 #endif
 
     union {
 #ifdef SK_DAWN
-        Dawn fDawn;
+        WGPUTexture fDawnTexture;
 #endif
 #ifdef SK_METAL
-        MtlHandle fMtlTexture;
+        CFTypeRef fMtlTexture;
 #endif
 #ifdef SK_VULKAN
-        VkImage fVkImage;
+        VkImage fVkImage = VK_NULL_HANDLE;
 #endif
+        void* fEnsureUnionNonEmpty;
     };
 };
 

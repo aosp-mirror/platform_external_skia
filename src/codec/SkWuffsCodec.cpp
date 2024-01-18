@@ -5,19 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "src/codec/SkWuffsCodec.h"
-
+#include "include/codec/SkCodec.h"
 #include "include/codec/SkCodecAnimation.h"
+#include "include/codec/SkEncodedImageFormat.h"
+#include "include/codec/SkGifDecoder.h"
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkColorType.h"
-#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkData.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
@@ -31,13 +33,13 @@
 #include "src/codec/SkSampler.h"
 #include "src/codec/SkScalingCodec.h"
 #include "src/core/SkDraw.h"
-#include "src/core/SkMatrixProvider.h"
 #include "src/core/SkRasterClip.h"
 #include "src/core/SkStreamPriv.h"
 
 #include <climits>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -55,7 +57,7 @@
 #if defined(WUFFS_IMPLEMENTATION)
 #error "SkWuffsCodec should not #define WUFFS_IMPLEMENTATION"
 #endif
-#include "wuffs-v0.3.c"
+#include "wuffs-v0.3.c"  // NO_G3_REWRITE
 // Commit count 2514 is Wuffs 0.3.0-alpha.4.
 #if WUFFS_VERSION_BUILD_METADATA_COMMIT_COUNT < 2514
 #error "Wuffs version is too old. Upgrade to the latest version."
@@ -83,7 +85,28 @@ static bool fill_buffer(wuffs_base__io_buffer* b, SkStream* s) {
     b->compact();
     size_t num_read = s->read(b->data.ptr + b->meta.wi, b->data.len - b->meta.wi);
     b->meta.wi += num_read;
-    b->meta.closed = s->isAtEnd();
+    // We hard-code false instead of s->isAtEnd(). In theory, Skia's
+    // SkStream::isAtEnd() method has the same semantics as Wuffs'
+    // wuffs_base__io_buffer_meta::closed field. Specifically, both are false
+    // when reading from a network socket when all bytes *available right now*
+    // have been read but there might be more later.
+    //
+    // However, SkStream is designed around synchronous I/O. The SkStream::read
+    // method does not take a callback and, per its documentation comments, a
+    // read request for N bytes should block until a full N bytes are
+    // available. In practice, Blink's SkStream subclass builds on top of async
+    // I/O and cannot afford to block. While it satisfies "the letter of the
+    // law", in terms of what the C++ compiler needs, it does not satisfy "the
+    // spirit of the law". Its read() can return short without blocking and its
+    // isAtEnd() can return false positives.
+    //
+    // When closed is true, Wuffs treats incomplete input as a fatal error
+    // instead of a recoverable "short read" suspension. We therefore hard-code
+    // false and return kIncompleteInput (instead of kErrorInInput) up the call
+    // stack even if the SkStream isAtEnd. The caller usually has more context
+    // (more than what's in the SkStream) to differentiate the two, like this:
+    // https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/image-decoders/gif/gif_image_decoder.cc;l=115;drc=277dcc4d810ae4c0286d8af96d270ed9b686c5ff
+    b->meta.closed = false;
     return num_read > 0;
 }
 
@@ -704,8 +727,7 @@ SkCodec::Result SkWuffsCodec::onIncrementalDecodeTwoPass() {
         draw.fDst.reset(dstInfo(), fIncrDecDst, fIncrDecRowBytes);
         SkMatrix matrix = SkMatrix::RectToRect(SkRect::Make(this->dimensions()),
                                                SkRect::Make(this->dstInfo().dimensions()));
-        SkMatrixProvider matrixProvider(matrix);
-        draw.fMatrixProvider = &matrixProvider;
+        draw.fCTM = &matrix;
         SkRasterClip rc(SkIRect::MakeSize(this->dstInfo().dimensions()));
         draw.fRC = &rc;
 
@@ -927,16 +949,21 @@ void SkWuffsCodec::updateNumFullyReceivedFrames() {
     }
 }
 
-// -------------------------------- SkWuffsCodec.h functions
+namespace SkGifDecoder {
 
-bool SkWuffsCodec_IsFormat(const void* buf, size_t bytesRead) {
+bool IsGif(const void* buf, size_t bytesRead) {
     constexpr const char* gif_ptr = "GIF8";
     constexpr size_t      gif_len = 4;
     return (bytesRead >= gif_len) && (memcmp(buf, gif_ptr, gif_len) == 0);
 }
 
-std::unique_ptr<SkCodec> SkWuffsCodec_MakeFromStream(std::unique_ptr<SkStream> stream,
-                                                     SkCodec::Result*          result) {
+std::unique_ptr<SkCodec> MakeFromStream(std::unique_ptr<SkStream> stream,
+                                        SkCodec::Result*          result) {
+    SkASSERT(result);
+    if (!stream) {
+        *result = SkCodec::kInvalidInput;
+        return nullptr;
+    }
     // Some clients (e.g. Android) need to be able to seek the stream, but may
     // not provide a seekable stream. Copy the stream to one that can seek.
     if (!stream->hasPosition() || !stream->hasLength()) {
@@ -1020,3 +1047,27 @@ std::unique_ptr<SkCodec> SkWuffsCodec_MakeFromStream(std::unique_ptr<SkStream> s
                                                      std::move(decoder), std::move(workbuf_ptr),
                                                      workbuf_len, imgcfg, iobuf));
 }
+
+std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
+                                SkCodec::Result* outResult,
+                                SkCodecs::DecodeContext) {
+    SkCodec::Result resultStorage;
+    if (!outResult) {
+        outResult = &resultStorage;
+    }
+    return MakeFromStream(std::move(stream), outResult);
+}
+
+std::unique_ptr<SkCodec> Decode(sk_sp<SkData> data,
+                                SkCodec::Result* outResult,
+                                SkCodecs::DecodeContext) {
+    if (!data) {
+        if (outResult) {
+            *outResult = SkCodec::kInvalidInput;
+        }
+        return nullptr;
+    }
+    return Decode(SkMemoryStream::Make(std::move(data)), outResult, nullptr);
+}
+}  // namespace SkGifDecoder
+

@@ -6,12 +6,10 @@
  */
 
 #include "dm/DMSrcSink.h"
-#include "gm/verifiers/gmverifier.h"
 #include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
-#include "include/core/SkDeferredDisplayListRecorder.h"
 #include "include/core/SkDocument.h"
 #include "include/core/SkExecutor.h"
 #include "include/core/SkImageGenerator.h"
@@ -20,14 +18,20 @@
 #include "include/core/SkSerialProcs.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
-#include "include/core/SkSurfaceCharacterization.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/docs/SkMultiPictureDocument.h"
 #include "include/docs/SkPDFDocument.h"
+#include "include/encode/SkPngEncoder.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/ports/SkImageGeneratorCG.h"
 #include "include/ports/SkImageGeneratorNDK.h"
 #include "include/ports/SkImageGeneratorWIC.h"
 #include "include/private/base/SkTLogic.h"
+#include "include/private/chromium/GrDeferredDisplayList.h"
+#include "include/private/chromium/GrSurfaceCharacterization.h"
 #include "include/utils/SkNullCanvas.h"
 #include "include/utils/SkPaintFilterCanvas.h"
 #include "modules/skcms/skcms.h"
@@ -36,29 +40,33 @@
 #include "src/base/SkRandom.h"
 #include "src/base/SkTLazy.h"
 #include "src/codec/SkCodecImageGenerator.h"
-#include "src/codec/SkSwizzler.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "src/core/SkOSFile.h"
-#include "src/core/SkOpts.h"
 #include "src/core/SkPictureData.h"
 #include "src/core/SkPicturePriv.h"
 #include "src/core/SkRecordDraw.h"
 #include "src/core/SkRecorder.h"
+#include "src/core/SkSwizzlePriv.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/image/GrImageUtils.h"
+#include "src/image/SkImage_Base.h"
 #include "src/utils/SkJSONWriter.h"
 #include "src/utils/SkMultiPictureDocumentPriv.h"
 #include "src/utils/SkOSPath.h"
 #include "src/utils/SkTestCanvas.h"
 #include "tools/DDLPromiseImageHelper.h"
 #include "tools/DDLTileHelper.h"
+#include "tools/EncodeUtils.h"
+#include "tools/GpuToolUtils.h"
 #include "tools/Resources.h"
 #include "tools/RuntimeBlendUtils.h"
 #include "tools/ToolUtils.h"
 #include "tools/UrlDataManager.h"
 #include "tools/debugger/DebugCanvas.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/gpu/BackendSurfaceFactory.h"
 #include "tools/gpu/MemoryCache.h"
 
@@ -84,8 +92,11 @@
 
 #if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/ContextOptions.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Recording.h"
+#include "include/gpu/graphite/Surface.h"
+#include "include/private/gpu/graphite/ContextOptionsPriv.h"
 // TODO: Remove this src include once we figure out public readPixels call for Graphite.
 #include "src/gpu/graphite/Surface_Graphite.h"
 #include "tools/graphite/ContextFactory.h"
@@ -100,9 +111,10 @@
 #include <cmath>
 #include <functional>
 
-static DEFINE_bool(multiPage, false,
-                   "For document-type backends, render the source into multiple pages");
+using namespace skia_private;
+
 static DEFINE_bool(RAW_threading, true, "Allow RAW decodes to run on multiple threads?");
+static DEFINE_int(mskpFrame, 0, "Which MSKP frame to draw?");
 
 DECLARE_int(gpuThreads);
 
@@ -113,11 +125,16 @@ namespace DM {
 
 GMSrc::GMSrc(skiagm::GMFactory factory) : fFactory(factory) {}
 
-Result GMSrc::draw(SkCanvas* canvas) const {
+Result GMSrc::draw(SkCanvas* canvas, GraphiteTestContext* testContext) const {
     std::unique_ptr<skiagm::GM> gm(fFactory());
+    if (gm->isBazelOnly()) {
+        // We skip Bazel-only GMs because they might overlap with existing DM functionality. See
+        // comments in the skiagm::GM::isBazelOnly function declaration for context.
+        return Result(Result::Status::Skip, SkString("Bazel-only GM"));
+    }
     SkString msg;
 
-    skiagm::DrawResult gpuSetupResult = gm->gpuSetup(canvas, &msg);
+    skiagm::DrawResult gpuSetupResult = gm->gpuSetup(canvas, &msg, testContext);
     switch (gpuSetupResult) {
         case skiagm::DrawResult::kOk  : break;
         case skiagm::DrawResult::kFail: return Result(Result::Status::Fatal, msg);
@@ -152,10 +169,12 @@ void GMSrc::modifyGrContextOptions(GrContextOptions* options) const {
     gm->modifyGrContextOptions(options);
 }
 
-std::unique_ptr<skiagm::verifiers::VerifierList> GMSrc::getVerifiers() const {
+#if defined(SK_GRAPHITE)
+void GMSrc::modifyGraphiteContextOptions(skgpu::graphite::ContextOptions* options) const {
     std::unique_ptr<skiagm::GM> gm(fFactory());
-    return gm->getVerifiers();
+    gm->modifyGraphiteContextOptions(options);
 }
+#endif
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -192,7 +211,7 @@ static inline void alpha8_to_gray8(SkBitmap* bitmap) {
     }
 }
 
-Result BRDSrc::draw(SkCanvas* canvas) const {
+Result BRDSrc::draw(SkCanvas* canvas, GraphiteTestContext*) const {
     SkColorType colorType = canvas->imageInfo().colorType();
     if (kRGB_565_SkColorType == colorType &&
         CodecSrc::kGetFromCanvas_DstColorType != fDstColorType)
@@ -434,7 +453,7 @@ static void set_bitmap_color_space(SkImageInfo* info) {
     *info = info->makeColorSpace(SkColorSpace::MakeSRGB());
 }
 
-Result CodecSrc::draw(SkCanvas* canvas) const {
+Result CodecSrc::draw(SkCanvas* canvas, GraphiteTestContext*) const {
     sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
     if (!encoded) {
         return Result::Fatal("Couldn't read %s.", fPath.c_str());
@@ -840,7 +859,7 @@ bool AndroidCodecSrc::veto(SinkFlags flags) const {
         || flags.approach != SinkFlags::kDirect;
 }
 
-Result AndroidCodecSrc::draw(SkCanvas* canvas) const {
+Result AndroidCodecSrc::draw(SkCanvas* canvas, GraphiteTestContext*) const {
     sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
     if (!encoded) {
         return Result::Fatal("Couldn't read %s.", fPath.c_str());
@@ -932,7 +951,7 @@ bool ImageGenSrc::veto(SinkFlags flags) const {
     return flags.type != SinkFlags::kRaster || flags.approach != SinkFlags::kDirect;
 }
 
-Result ImageGenSrc::draw(SkCanvas* canvas) const {
+Result ImageGenSrc::draw(SkCanvas* canvas, GraphiteTestContext*) const {
     if (kRGB_565_SkColorType == canvas->imageInfo().colorType()) {
         return Result::Skip("Uninteresting to test image generator to 565.");
     }
@@ -978,7 +997,7 @@ Result ImageGenSrc::draw(SkCanvas* canvas) const {
 
     // Test deferred decoding path on GPU
     if (fIsGpu) {
-        sk_sp<SkImage> image(SkImage::MakeFromGenerator(std::move(gen)));
+        sk_sp<SkImage> image(SkImages::DeferredFromGenerator(std::move(gen)));
         if (!image) {
             return Result::Fatal("Could not create image from codec image generator.");
         }
@@ -1034,7 +1053,7 @@ bool ColorCodecSrc::veto(SinkFlags flags) const {
     return flags.type != SinkFlags::kRaster || flags.approach != SinkFlags::kDirect;
 }
 
-Result ColorCodecSrc::draw(SkCanvas* canvas) const {
+Result ColorCodecSrc::draw(SkCanvas* canvas, GraphiteTestContext*) const {
     sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
     if (!encoded) {
         return Result::Fatal("Couldn't read %s.", fPath.c_str());
@@ -1094,8 +1113,7 @@ static DEFINE_int(skpViewportSize, 1000,
 
 SKPSrc::SKPSrc(Path path) : fPath(path) { }
 
-Result SKPSrc::draw(SkCanvas* canvas) const {
-
+Result SKPSrc::draw(SkCanvas* canvas, GraphiteTestContext*) const {
     struct DeserializationContext {
         GrDirectContext*           fDirectContext = nullptr;
 #if defined(SK_GRAPHITE)
@@ -1111,20 +1129,27 @@ Result SKPSrc::draw(SkCanvas* canvas) const {
     SkDeserialProcs procs;
     procs.fImageProc = [](const void* data, size_t size, void* ctx) -> sk_sp<SkImage> {
         sk_sp<SkData> tmpData = SkData::MakeWithoutCopy(data, size);
-        sk_sp<SkImage> image = SkImage::MakeFromEncoded(std::move(tmpData));
+        sk_sp<SkImage> image = SkImages::DeferredFromEncodedData(std::move(tmpData));
         image = image->makeRasterImage(); // force decoding
 
         if (image) {
             DeserializationContext* context = reinterpret_cast<DeserializationContext*>(ctx);
 
             if (context->fDirectContext) {
-                image = image->makeTextureImage(context->fDirectContext);
+                return SkImages::TextureFromImage(context->fDirectContext, image);
             }
         }
-
         return image;
     };
     procs.fImageCtx = &ctx;
+
+    // SKPs may have typefaces encoded in them (e.g. with FreeType). We can try falling back
+    // to the Test FontMgr (possibly a native one) if we have do not have FreeType built-in.
+    procs.fTypefaceProc = [](const void* data, size_t size, void*) -> sk_sp<SkTypeface> {
+        SkStream** stream = reinterpret_cast<SkStream**>(const_cast<void*>(data));
+        return SkTypeface::MakeDeserialize(*stream, ToolUtils::TestFontMgr());
+    };
+
 
     std::unique_ptr<SkStream> stream = SkStream::MakeFromFile(fPath.c_str());
     if (!stream) {
@@ -1167,7 +1192,7 @@ Name SKPSrc::name() const { return SkOSPath::Basename(fPath.c_str()); }
 
 BisectSrc::BisectSrc(Path path, const char* trail) : INHERITED(path), fTrail(trail) {}
 
-Result BisectSrc::draw(SkCanvas* canvas) const {
+Result BisectSrc::draw(SkCanvas* canvas, GraphiteTestContext* testContext) const {
     struct FoundPath {
         SkPath fPath;
         SkPaint fPaint;
@@ -1178,19 +1203,19 @@ Result BisectSrc::draw(SkCanvas* canvas) const {
     class PathFindingCanvas : public SkCanvas {
     public:
         PathFindingCanvas(int width, int height) : SkCanvas(width, height, nullptr) {}
-        const SkTArray<FoundPath>& foundPaths() const { return fFoundPaths; }
+        const TArray<FoundPath>& foundPaths() const { return fFoundPaths; }
 
     private:
         void onDrawPath(const SkPath& path, const SkPaint& paint) override {
             fFoundPaths.push_back() = {path, paint, this->getTotalMatrix()};
         }
 
-        SkTArray<FoundPath> fFoundPaths;
+        TArray<FoundPath> fFoundPaths;
     };
 
     PathFindingCanvas pathFinder(canvas->getBaseLayerSize().width(),
                                  canvas->getBaseLayerSize().height());
-    Result result = this->INHERITED::draw(&pathFinder);
+    Result result = this->INHERITED::draw(&pathFinder, testContext);
     if (!result.isOk()) {
         return result;
     }
@@ -1223,12 +1248,12 @@ static DEFINE_bool(useLottieGlyphPaths, false,
 
 SkottieSrc::SkottieSrc(Path path) : fPath(std::move(path)) {}
 
-Result SkottieSrc::draw(SkCanvas* canvas) const {
-    auto resource_provider =
-            skresources::DataURIResourceProviderProxy::Make(
-                skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
-                                                        /*predecode=*/true),
-                /*predecode=*/true);
+Result SkottieSrc::draw(SkCanvas* canvas, GraphiteTestContext*) const {
+    auto predecode = skresources::ImageDecodeStrategy::kPreDecode;
+    auto resource_provider = skresources::DataURIResourceProviderProxy::Make(
+            skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()), predecode),
+            predecode,
+            ToolUtils::TestFontMgr());
 
     static constexpr char kInterceptPrefix[] = "__";
     auto precomp_interceptor =
@@ -1240,6 +1265,7 @@ Result SkottieSrc::draw(SkCanvas* canvas) const {
     }
 
     auto animation = skottie::Animation::Builder(flags)
+        .setFontManager(ToolUtils::TestFontMgr())
         .setResourceProvider(std::move(resource_provider))
         .setPrecompInterceptor(std::move(precomp_interceptor))
         .makeFromFile(fPath.c_str());
@@ -1312,11 +1338,14 @@ SVGSrc::SVGSrc(Path path)
         return;
     }
 
+    auto predecode = skresources::ImageDecodeStrategy::kPreDecode;
     auto rp = skresources::DataURIResourceProviderProxy::Make(
-                  skresources::FileResourceProvider::Make(SkOSPath::Dirname(path.c_str()),
-                                                          /*predecode=*/true),
-                  /*predecode=*/true);
+            skresources::FileResourceProvider::Make(SkOSPath::Dirname(path.c_str()), predecode),
+            predecode,
+            ToolUtils::TestFontMgr());
+
     fDom = SkSVGDOM::Builder().setResourceProvider(std::move(rp))
+                              .setFontManager(ToolUtils::TestFontMgr())
                               .make(*stream);
     if (!fDom) {
         return;
@@ -1328,11 +1357,11 @@ SVGSrc::SVGSrc(Path path)
         fDom->setContainerSize(kDefaultSVGSize);
     } else {
         fScale = std::max(1.f, std::max(kMinimumSVGSize.width()  / sz.width(),
-                                    kMinimumSVGSize.height() / sz.height()));
+                                        kMinimumSVGSize.height() / sz.height()));
     }
 }
 
-Result SVGSrc::draw(SkCanvas* canvas) const {
+Result SVGSrc::draw(SkCanvas* canvas, GraphiteTestContext*) const {
     if (!fDom) {
         return Result::Fatal("Unable to parse file: %s", fName.c_str());
     }
@@ -1370,24 +1399,25 @@ bool SVGSrc::veto(SinkFlags flags) const {
 
 MSKPSrc::MSKPSrc(Path path) : fPath(path) {
     std::unique_ptr<SkStreamAsset> stream = SkStream::MakeFromFile(fPath.c_str());
-    int count = SkMultiPictureDocumentReadPageCount(stream.get());
+    int count = SkMultiPictureDocument::ReadPageCount(stream.get());
     if (count > 0) {
         fPages.reset(count);
-        (void)SkMultiPictureDocumentReadPageSizes(stream.get(), &fPages[0], fPages.size());
+        SkASSERT_RELEASE(SkMultiPictureDocument::ReadPageSizes(stream.get(), &fPages[0],
+                                                               fPages.size()));
     }
 }
 
 int MSKPSrc::pageCount() const { return fPages.size(); }
 
-SkISize MSKPSrc::size() const { return this->size(0); }
+SkISize MSKPSrc::size() const { return this->size(FLAGS_mskpFrame); }
 SkISize MSKPSrc::size(int i) const {
     return i >= 0 && i < fPages.size() ? fPages[i].fSize.toCeil() : SkISize{0, 0};
 }
 
-Result MSKPSrc::draw(SkCanvas* c) const {
-    return this->draw(0, c);
+Result MSKPSrc::draw(SkCanvas* c, GraphiteTestContext* testContext) const {
+    return this->draw(FLAGS_mskpFrame, c, testContext);
 }
-Result MSKPSrc::draw(int i, SkCanvas* canvas) const {
+Result MSKPSrc::draw(int i, SkCanvas* canvas, GraphiteTestContext*) const {
     if (this->pageCount() == 0) {
         return Result::Fatal("Unable to parse MultiPictureDocument file: %s", fPath.c_str());
     }
@@ -1400,7 +1430,7 @@ Result MSKPSrc::draw(int i, SkCanvas* canvas) const {
         if (!stream) {
             return Result::Fatal("Unable to open file: %s", fPath.c_str());
         }
-        if (!SkMultiPictureDocumentRead(stream.get(), &fPages[0], fPages.size())) {
+        if (!SkMultiPictureDocument::Read(stream.get(), &fPages[0], fPages.size())) {
             return Result::Fatal("SkMultiPictureDocument reader failed on page %d: %s", i,
                                  fPath.c_str());
         }
@@ -1415,7 +1445,7 @@ Name MSKPSrc::name() const { return SkOSPath::Basename(fPath.c_str()); }
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 Result NullSink::draw(const Src& src, SkBitmap*, SkWStream*, SkString*) const {
-    return src.draw(SkMakeNullCanvas().get());
+    return src.draw(SkMakeNullCanvas().get(), /*GraphiteTestContext=*/nullptr);
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -1430,14 +1460,14 @@ static Result compare_bitmaps(const SkBitmap& reference, const SkBitmap& bitmap)
     if (0 != memcmp(reference.getPixels(), bitmap.getPixels(), reference.computeByteSize())) {
         SkString encoded;
         SkString errString("Pixels don't match reference");
-        if (BipmapToBase64DataURI(reference, &encoded)) {
+        if (ToolUtils::BitmapToBase64DataURI(reference, &encoded)) {
             errString.append("\nExpected: ");
             errString.append(encoded);
         } else {
             errString.append("\nExpected image failed to encode: ");
             errString.append(encoded);
         }
-        if (BipmapToBase64DataURI(bitmap, &encoded)) {
+        if (ToolUtils::BitmapToBase64DataURI(bitmap, &encoded)) {
             errString.append("\nActual: ");
             errString.append(encoded);
         } else {
@@ -1489,7 +1519,7 @@ sk_sp<SkSurface> GPUSink::createDstSurface(GrDirectContext* context, SkISize siz
 
     switch (fSurfType) {
         case SkCommandLineConfigGpu::SurfType::kDefault:
-            surface = SkSurface::MakeRenderTarget(
+            surface = SkSurfaces::RenderTarget(
                     context, skgpu::Budgeted::kNo, info, fSampleCount, &props);
             break;
         case SkCommandLineConfigGpu::SurfType::kBackendTexture:
@@ -1497,7 +1527,7 @@ sk_sp<SkSurface> GPUSink::createDstSurface(GrDirectContext* context, SkISize siz
                                                              info,
                                                              kTopLeft_GrSurfaceOrigin,
                                                              fSampleCount,
-                                                             GrMipmapped::kNo,
+                                                             skgpu::Mipmapped::kNo,
                                                              GrProtected::kNo,
                                                              &props);
             break;
@@ -1560,11 +1590,11 @@ Result GPUSink::onDraw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log,
         canvas = wrapCanvas(canvas);
     }
 
-    Result result = src.draw(canvas);
+    Result result = src.draw(canvas, /*GraphiteTestContext=*/nullptr);
     if (!result.isOk()) {
         return result;
     }
-    surface->flushAndSubmit();
+    direct->flushAndSubmit(surface.get(), GrSyncCpu::kNo);
     if (FLAGS_gpuStats) {
         direct->priv().dumpCacheStats(log);
         direct->priv().dumpGpuStats(log);
@@ -1644,41 +1674,6 @@ Result GPURemoteSlugSink::draw(
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-GPUThreadTestingSink::GPUThreadTestingSink(const SkCommandLineConfigGpu* config,
-                                           const GrContextOptions& grCtxOptions)
-        : INHERITED(config, grCtxOptions)
-        , fExecutor(SkExecutor::MakeFIFOThreadPool(FLAGS_gpuThreads)) {
-    SkASSERT(fExecutor);
-}
-
-Result GPUThreadTestingSink::draw(const Src& src, SkBitmap* dst, SkWStream* wStream,
-                                 SkString* log) const {
-    // Draw twice, once with worker threads, and once without. Verify that we get the same result.
-    // Also, force us to only use the software path renderer, so we really stress-test the threaded
-    // version of that code.
-    GrContextOptions contextOptions = this->baseContextOptions();
-    contextOptions.fGpuPathRenderers = GpuPathRenderers::kNone;
-    contextOptions.fExecutor = fExecutor.get();
-
-    Result result = this->onDraw(src, dst, wStream, log, contextOptions);
-    if (!result.isOk() || !dst) {
-        return result;
-    }
-
-    SkBitmap reference;
-    SkString refLog;
-    SkDynamicMemoryWStream refStream;
-    contextOptions.fExecutor = nullptr;
-    Result refResult = this->onDraw(src, &reference, &refStream, &refLog, contextOptions);
-    if (!refResult.isOk()) {
-        return refResult;
-    }
-
-    return compare_bitmaps(reference, *dst);
-}
-
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
 GPUPersistentCacheTestingSink::GPUPersistentCacheTestingSink(const SkCommandLineConfigGpu* config,
                                                              const GrContextOptions& grCtxOptions)
     : INHERITED(config, grCtxOptions)
@@ -1782,13 +1777,14 @@ Result GPUDDLSink::ddlDraw(const Src& src,
     // We have to do this here bc characterization can hit the SkGpuDevice's thread guard (i.e.,
     // leaving it until the DDLTileHelper ctor will result in multiple threads trying to use the
     // same context (this thread and the gpuThread - which will be uploading textures)).
-    SkSurfaceCharacterization dstCharacterization;
+    GrSurfaceCharacterization dstCharacterization;
     SkAssertResult(dstSurface->characterize(&dstCharacterization));
 
     auto size = src.size();
     SkPictureRecorder recorder;
     Result result = src.draw(recorder.beginRecording(SkIntToScalar(size.width()),
-                                                     SkIntToScalar(size.height())));
+                                                     SkIntToScalar(size.height())),
+                             /*GraphiteTestContext=*/nullptr);
     if (!result.isOk()) {
         return result;
     }
@@ -1797,7 +1793,7 @@ Result GPUDDLSink::ddlDraw(const Src& src,
     // this is our ultimate final drawing area/rect
     SkIRect viewport = SkIRect::MakeWH(size.fWidth, size.fHeight);
 
-    SkYUVAPixmapInfo::SupportedDataTypes supportedYUVADataTypes(*dContext);
+    auto supportedYUVADataTypes = skgpu::ganesh::SupportedTextureFormats(*dContext);
     DDLPromiseImageHelper promiseImageHelper(supportedYUVADataTypes);
     sk_sp<SkPicture> newSKP = promiseImageHelper.recreateSKP(dContext, inputPicture.get());
     if (!newSKP) {
@@ -1842,7 +1838,7 @@ Result GPUDDLSink::ddlDraw(const Src& src,
     // the tiles' rendering. Additionally, bc we're aliasing the tiles' backend textures,
     // there is nothing in the DAG to automatically force the required order.
     gpuTaskGroup->add([dstSurface, ddl = tiles.composeDDL()]() {
-                          dstSurface->draw(ddl);
+                          skgpu::ganesh::DrawDDL(dstSurface, ddl);
                       });
 
     // This should be the only explicit flush for the entire DDL draw.
@@ -1854,7 +1850,7 @@ Result GPUDDLSink::ddlDraw(const Src& src,
                                            // to free the backendTextures. This is complicated a
                                            // bit by which thread possesses the direct context.
                                            dContext->flush();
-                                           dContext->submit(true);
+                                           dContext->submit(GrSyncCpu::kYes);
                                        });
 
     // The backend textures are created on the gpuThread by the 'uploadAllToGPU' call.
@@ -1958,7 +1954,7 @@ static Result draw_skdocument(const Src& src, SkDocument* doc, SkWStream* dst) {
         if (!canvas) {
             return Result::Fatal("SkDocument::beginPage(w,h) returned nullptr");
         }
-        Result result = src.draw(i, canvas);
+        Result result = src.draw(i, canvas, /*GraphiteTestContext=*/nullptr);
         if (!result.isOk()) {
             return result;
         }
@@ -2022,6 +2018,14 @@ Result XPSSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const
 }
 #endif
 
+static SkSerialProcs serial_procs_using_png() {
+    static SkSerialProcs procs;
+    procs.fImageProc = [](SkImage* img, void*) -> sk_sp<SkData> {
+        return SkPngEncoder::Encode(as_IB(img)->directContext(), img, SkPngEncoder::Options{});
+    };
+    return procs;
+}
+
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 SKPSink::SKPSink() {}
@@ -2029,11 +2033,13 @@ SKPSink::SKPSink() {}
 Result SKPSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
     auto size = SkSize::Make(src.size());
     SkPictureRecorder recorder;
-    Result result = src.draw(recorder.beginRecording(size.width(), size.height()));
+    Result result = src.draw(recorder.beginRecording(size.width(), size.height()),
+                             /*GraphiteTestContext=*/nullptr);
     if (!result.isOk()) {
         return result;
     }
-    recorder.finishRecordingAsPicture()->serialize(dst);
+    SkSerialProcs procs = serial_procs_using_png();
+    recorder.finishRecordingAsPicture()->serialize(dst, &procs);
     return Result::Ok();
 }
 
@@ -2041,7 +2047,7 @@ Result SKPSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const
 
 Result DebugSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
     DebugCanvas debugCanvas(src.size().width(), src.size().height());
-    Result result = src.draw(&debugCanvas);
+    Result result = src.draw(&debugCanvas, /*GraphiteTestContext=*/nullptr);
     if (!result.isOk()) {
         return result;
     }
@@ -2072,7 +2078,8 @@ Result SVGSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const
                     SkSVGCanvas::Make(SkRect::MakeWH(SkIntToScalar(src.size().width()),
                                                      SkIntToScalar(src.size().height())),
                                       dst)
-                            .get());
+                            .get(),
+                    /*GraphiteTestContext=*/nullptr);
 #else
     (void)fPageIndex;
     return Result::Fatal("SVG sink is disabled.");
@@ -2090,8 +2097,9 @@ Result RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) co
     dst->allocPixelsFlags(SkImageInfo::Make(size, this->colorInfo()),
                           SkBitmap::kZeroPixels_AllocFlag);
 
-    SkCanvas canvas(*dst, SkSurfaceProps(0, kRGB_H_SkPixelGeometry));
-    return src.draw(&canvas);
+    SkSurfaceProps props(/*flags=*/0, kRGB_H_SkPixelGeometry);
+    auto surface = SkSurfaces::WrapPixels(dst->pixmap(), &props);
+    return src.draw(surface->getCanvas(), /*GraphiteTestContext=*/nullptr);
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -2099,19 +2107,29 @@ Result RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) co
 #if defined(SK_GRAPHITE)
 
 GraphiteSink::GraphiteSink(const SkCommandLineConfigGraphite* config)
-        : fContextType(config->getContextType())
+        : fOptions(config->getOptions())
+        , fContextType(config->getContextType())
         , fColorType(config->getColorType())
-        , fAlphaType(config->getAlphaType()) {
-}
+        , fAlphaType(config->getAlphaType()) {}
 
 Result GraphiteSink::draw(const Src& src,
                           SkBitmap* dst,
                           SkWStream* dstStream,
                           SkString* log) const {
+    skiatest::graphite::TestOptions options = fOptions;
+    // If we've copied context options from an external source we can't trust that the
+    // priv pointer is still in scope, so assume it should be NULL and set our own up.
+    SkASSERT(!options.fContextOptions.fOptionsPriv);
+    skgpu::graphite::ContextOptionsPriv optionsPriv;
+    options.fContextOptions.fOptionsPriv = &optionsPriv;
+
+    src.modifyGraphiteContextOptions(&options.fContextOptions);
+
     SkImageInfo ii = SkImageInfo::Make(src.size(), this->colorInfo());
 
-    skiatest::graphite::ContextFactory factory;
-    auto [_, context] = factory.getContextInfo(fContextType);
+    skiatest::graphite::ContextFactory factory(options);
+    skiatest::graphite::ContextInfo ctxInfo = factory.getContextInfo(fContextType);
+    skgpu::graphite::Context* context = ctxInfo.fContext;
     if (!context) {
         return Result::Fatal("Could not create a context.");
     }
@@ -2125,11 +2143,13 @@ Result GraphiteSink::draw(const Src& src,
     dst->allocPixels(ii);
 
     {
-        sk_sp<SkSurface> surface = SkSurface::MakeGraphite(recorder.get(), ii);
+        SkSurfaceProps props(0, kRGB_H_SkPixelGeometry);
+        sk_sp<SkSurface> surface =
+                SkSurfaces::RenderTarget(recorder.get(), ii, skgpu::Mipmapped::kNo, &props);
         if (!surface) {
             return Result::Fatal("Could not create a surface.");
         }
-        Result result = src.draw(surface->getCanvas());
+        Result result = src.draw(surface->getCanvas(), ctxInfo.fTestContext);
         if (!result.isOk()) {
             return result;
         }
@@ -2151,7 +2171,7 @@ Result GraphiteSink::draw(const Src& src,
     if (!context->insertRecording(info)) {
         return Result::Fatal("Context::insertRecording failed.");
     }
-    context->submit(skgpu::graphite::SyncToCpu::kYes);
+    ctxInfo.fTestContext->syncedSubmit(context);
 
     return Result::Ok();
 }
@@ -2163,15 +2183,15 @@ Result GraphiteSink::draw(const Src& src,
 // passing the Sink draw() arguments, a size, and a function draws into an SkCanvas.
 // Several examples below.
 
-using DrawToCanvasFn = std::function<DM::Result(SkCanvas*)>;
+using DrawToCanvasFn = std::function<DM::Result(SkCanvas*, Src::GraphiteTestContext*)>;
 
 static Result draw_to_canvas(Sink* sink, SkBitmap* bitmap, SkWStream* stream,
                              SkString* log, SkISize size, const DrawToCanvasFn& draw) {
     class ProxySrc : public Src {
     public:
         ProxySrc(SkISize size, const DrawToCanvasFn& draw) : fSize(size), fDraw(draw) {}
-        Result draw(SkCanvas* canvas) const override {
-            return fDraw(canvas);
+        Result draw(SkCanvas* canvas, GraphiteTestContext* testContext) const override {
+            return fDraw(canvas, testContext);
         }
         Name    name() const override { return "ProxySrc"; }
         SkISize size() const override { return fSize; }
@@ -2220,9 +2240,10 @@ Result ViaMatrix::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkSt
     SkMatrix matrix = fMatrix;
     SkISize size = auto_compute_translate(&matrix, src.size().width(), src.size().height());
     return draw_to_canvas(fSink.get(), bitmap, stream, log, size,
-                          [&](SkCanvas* canvas) {
+                          [&](SkCanvas* canvas,
+                              Src::GraphiteTestContext* testContext) {
                               canvas->concat(matrix);
-                              return src.draw(canvas);
+                              return src.draw(canvas, testContext);
                           });
 }
 
@@ -2268,17 +2289,19 @@ Result ViaSerialization::draw(
     auto size = src.size();
     SkPictureRecorder recorder;
     Result result = src.draw(recorder.beginRecording(SkIntToScalar(size.width()),
-                                                     SkIntToScalar(size.height())));
+                                                     SkIntToScalar(size.height())),
+                             /*GraphiteTestContext=*/nullptr);
     if (!result.isOk()) {
         return result;
     }
     sk_sp<SkPicture> pic(recorder.finishRecordingAsPicture());
 
+    SkSerialProcs procs = serial_procs_using_png();
     // Serialize it and then deserialize it.
-    sk_sp<SkPicture> deserialized(SkPicture::MakeFromData(pic->serialize().get()));
+    sk_sp<SkPicture> deserialized = SkPicture::MakeFromData(pic->serialize(&procs).get());
 
     result = draw_to_canvas(fSink.get(), bitmap, stream, log, size,
-                            [&](SkCanvas* canvas) {
+                            [&](SkCanvas* canvas, Src::GraphiteTestContext*) {
                                 canvas->drawPicture(deserialized);
                                 return Result::Ok();
                             });
@@ -2294,11 +2317,12 @@ Result ViaSerialization::draw(
 Result ViaPicture::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     auto size = src.size();
     Result result = draw_to_canvas(fSink.get(), bitmap, stream, log, size,
-                                   [&](SkCanvas* canvas) {
+                                   [&](SkCanvas* canvas, Src::GraphiteTestContext* testContext) {
         SkPictureRecorder recorder;
         sk_sp<SkPicture> pic;
         Result result = src.draw(recorder.beginRecording(SkIntToScalar(size.width()),
-                                                         SkIntToScalar(size.height())));
+                                                         SkIntToScalar(size.height())),
+                                 testContext);
         if (!result.isOk()) {
             return result;
         }
@@ -2336,9 +2360,9 @@ Result ViaRuntimeBlend::draw(const Src& src,
     };
 
     return draw_to_canvas(fSink.get(), bitmap, stream, log, src.size(),
-                          [&](SkCanvas* canvas) {
+                          [&](SkCanvas* canvas, Src::GraphiteTestContext* testContext) {
         RuntimeBlendFilterCanvas runtimeBlendCanvas{canvas};
-        return src.draw(&runtimeBlendCanvas);
+        return src.draw(&runtimeBlendCanvas, testContext);
     });
 }
 
@@ -2352,15 +2376,17 @@ Result ViaRuntimeBlend::draw(const Src& src,
 Result ViaSVG::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     auto size = src.size();
     return draw_to_canvas(fSink.get(), bitmap, stream, log, size,
-                          [&](SkCanvas* canvas) -> Result {
+                          [&](SkCanvas* canvas, Src::GraphiteTestContext* testContext) -> Result {
         SkDynamicMemoryWStream wstream;
         SkXMLStreamWriter writer(&wstream);
-        Result result = src.draw(SkSVGCanvas::Make(SkRect::Make(size), &writer).get());
+        Result result = src.draw(SkSVGCanvas::Make(SkRect::Make(size), &writer).get(),
+                                 testContext);
         if (!result.isOk()) {
             return result;
         }
         std::unique_ptr<SkStream> rstream(wstream.detachAsStream());
-        auto dom = SkSVGDOM::MakeFromStream(*rstream);
+        sk_sp<SkSVGDOM> dom =
+                SkSVGDOM::Builder().setFontManager(ToolUtils::TestFontMgr()).make(*rstream);
         if (dom) {
             dom->setContainerSize(SkSize::Make(size));
             dom->render(canvas);

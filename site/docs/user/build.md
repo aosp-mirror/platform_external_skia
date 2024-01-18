@@ -50,9 +50,12 @@ thus requires a C++17 compatible compiler. Clang 5 and later implement all of
 the features of the c++17 standard. Older compilers that lack C++17 support may
 produce non-obvious compilation errors. You can configure your build to use
 specific executables for `cc` and `cxx` invocations using e.g.
-`--args='cc="clang-6.0" cxx="clang++6.0"'` GN build arguments, as illustrated in
-[Quickstart](#quick). This can be useful for building Skia without needing to
+`--args='cc="clang" cxx="clang++"'` GN build arguments, as illustrated in
+[Quickstart](#quickstart). This can be useful for building Skia without needing to
 modify your machine's default compiler toolchain.
+
+If you do not specify `cc` and `cxx` in your gn arguments, Skia will default to
+`cc` and `c++`. This is often GCC by default on many platforms, not Clang.
 
 ## Quickstart
 
@@ -265,6 +268,14 @@ bin/gn gen out/AppleSilicon --args='target_cpu="arm64"'
 
 Googlers should see [go/skia-corp-xcode](http://go/skia-corp-xcode) for
 instructions on setting up Xcode on a corp machine.
+
+### Python
+
+The version of Python supplied by Apple is a few versions out of date,
+and it is known to interact poorly with our build system. We recommend
+installing the latest official version of Python from
+https://www.python.org/downloads/. Then run
+"Applications/Python 3.11/Install Certificates.command".
 
 ## iOS
 

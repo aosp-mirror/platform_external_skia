@@ -18,17 +18,15 @@
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkTArray.h"
 
+using namespace skia_private;
+
 namespace skiagm {
 
 class HairlinesGM : public GM {
 protected:
+    SkString getName() const override { return SkString("hairlines"); }
 
-
-    SkString onShortName() override {
-        return SkString("hairlines");
-    }
-
-    SkISize onISize() override { return SkISize::Make(1250, 1250); }
+    SkISize getISize() override { return SkISize::Make(1250, 1250); }
 
     void onOnceBeforeDraw() override {
         {
@@ -191,7 +189,7 @@ protected:
     }
 
 private:
-    SkTArray<SkPath> fPaths;
+    TArray<SkPath> fPaths;
     using INHERITED = GM;
 };
 

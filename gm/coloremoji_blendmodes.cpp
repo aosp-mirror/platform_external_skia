@@ -29,6 +29,7 @@
 #include "include/utils/SkTextUtils.h"
 #include "src/base/SkUTF.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -55,23 +56,17 @@ protected:
         paint.setShader(SkGradientShader::MakeSweep(0, 0, colors, nullptr, std::size(colors),
                                                     0, &local));
 
-        sk_sp<SkTypeface> orig(ToolUtils::create_portable_typeface("serif", SkFontStyle::Bold()));
-        if (nullptr == orig) {
-            orig = SkTypeface::MakeDefault();
-        }
-        fColorType = ToolUtils::emoji_typeface();
+        sk_sp<SkTypeface> orig(ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Bold()));
+        SkASSERT(orig);
+        fColorType = ToolUtils::EmojiTypeface();
 
         fBG.installPixels(SkImageInfo::Make(2, 2, kARGB_4444_SkColorType,
                                             kOpaque_SkAlphaType), gData, 4);
     }
 
-    SkString onShortName() override {
-        return SkString("coloremoji_blendmodes");
-    }
+    SkString getName() const override { return SkString("coloremoji_blendmodes"); }
 
-    SkISize onISize() override {
-        return {400, 640};
-    }
+    SkISize getISize() override { return {400, 640}; }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
@@ -115,7 +110,7 @@ protected:
         m.setScale(SkIntToScalar(6), SkIntToScalar(6));
         auto s = fBG.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, SkSamplingOptions(), m);
 
-        SkFont labelFont(ToolUtils::create_portable_typeface());
+        SkFont labelFont(ToolUtils::DefaultPortableTypeface());
 
         SkPaint textP;
         textP.setAntiAlias(true);
@@ -144,7 +139,7 @@ protected:
                 SkAutoCanvasRestore arc(canvas, true);
                 canvas->clipRect(r);
                 textP.setBlendMode(gModes[i]);
-                const char* text    = ToolUtils::emoji_sample_text();
+                const char* text    = ToolUtils::EmojiSampleText();
                 SkUnichar unichar = SkUTF::NextUTF8(&text, text + strlen(text));
                 SkASSERT(unichar >= 0);
                 canvas->drawSimpleText(&unichar, 4, SkTextEncoding::kUTF32,

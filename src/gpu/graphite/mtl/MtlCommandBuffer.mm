@@ -7,8 +7,10 @@
 
 #include "src/gpu/graphite/mtl/MtlCommandBuffer.h"
 
+#include "include/gpu/graphite/BackendSemaphore.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/TextureProxy.h"
+#include "src/gpu/graphite/compute/DispatchGroup.h"
 #include "src/gpu/graphite/mtl/MtlBlitCommandEncoder.h"
 #include "src/gpu/graphite/mtl/MtlBuffer.h"
 #include "src/gpu/graphite/mtl/MtlCaps.h"
@@ -20,7 +22,7 @@
 #include "src/gpu/graphite/mtl/MtlSampler.h"
 #include "src/gpu/graphite/mtl/MtlSharedContext.h"
 #include "src/gpu/graphite/mtl/MtlTexture.h"
-#include "src/gpu/graphite/mtl/MtlUtilsPriv.h"
+#include "src/gpu/mtl/MtlUtilsPriv.h"
 
 namespace skgpu::graphite {
 
@@ -102,36 +104,102 @@ void MtlCommandBuffer::onResetCommandBuffer() {
     fCurrentIndexBufferOffset = 0;
 }
 
+void MtlCommandBuffer::addWaitSemaphores(size_t numWaitSemaphores,
+                                         const BackendSemaphore* waitSemaphores) {
+    if (!waitSemaphores) {
+        SkASSERT(numWaitSemaphores == 0);
+        return;
+    }
+
+    // Can only insert events with no active encoder
+    SkASSERT(!fActiveRenderCommandEncoder);
+    SkASSERT(!fActiveComputeCommandEncoder);
+    this->endBlitCommandEncoder();
+    if (@available(macOS 10.14, iOS 12.0, tvOS 12.0, *)) {
+        for (size_t i = 0; i < numWaitSemaphores; ++i) {
+            auto semaphore = waitSemaphores[i];
+            if (semaphore.isValid() && semaphore.backend() == BackendApi::kMetal) {
+                id<MTLEvent> mtlEvent = (__bridge id<MTLEvent>)semaphore.getMtlEvent();
+                [(*fCommandBuffer) encodeWaitForEvent: mtlEvent
+                                                value: semaphore.getMtlValue()];
+            }
+        }
+    }
+}
+
+void MtlCommandBuffer::addSignalSemaphores(size_t numSignalSemaphores,
+                                           const BackendSemaphore* signalSemaphores) {
+    if (!signalSemaphores) {
+        SkASSERT(numSignalSemaphores == 0);
+        return;
+    }
+
+    // Can only insert events with no active encoder
+    SkASSERT(!fActiveRenderCommandEncoder);
+    SkASSERT(!fActiveComputeCommandEncoder);
+    this->endBlitCommandEncoder();
+
+    if (@available(macOS 10.14, iOS 12.0, tvOS 12.0, *)) {
+        for (size_t i = 0; i < numSignalSemaphores; ++i) {
+            auto semaphore = signalSemaphores[i];
+            if (semaphore.isValid() && semaphore.backend() == BackendApi::kMetal) {
+                id<MTLEvent> mtlEvent = (__bridge id<MTLEvent>)semaphore.getMtlEvent();
+                [(*fCommandBuffer) encodeSignalEvent: mtlEvent
+                                               value: semaphore.getMtlValue()];
+            }
+        }
+    }
+}
+
 bool MtlCommandBuffer::onAddRenderPass(const RenderPassDesc& renderPassDesc,
                                        const Texture* colorTexture,
                                        const Texture* resolveTexture,
                                        const Texture* depthStencilTexture,
                                        SkRect viewport,
-                                       const std::vector<std::unique_ptr<DrawPass>>& drawPasses) {
+                                       const DrawPassList& drawPasses) {
     if (!this->beginRenderPass(renderPassDesc, colorTexture, resolveTexture, depthStencilTexture)) {
         return false;
     }
 
     this->setViewport(viewport.x(), viewport.y(), viewport.width(), viewport.height(), 0, 1);
 
-    for (size_t i = 0; i < drawPasses.size(); ++i) {
-        this->addDrawPass(drawPasses[i].get());
+    for (const auto& drawPass : drawPasses) {
+        this->addDrawPass(drawPass.get());
     }
 
     this->endRenderPass();
     return true;
 }
 
-bool MtlCommandBuffer::onAddComputePass(const ComputePassDesc& computePassDesc,
-                                        const ComputePipeline* pipeline,
-                                        const std::vector<ResourceBinding>& bindings) {
+bool MtlCommandBuffer::onAddComputePass(const DispatchGroupList& groups) {
     this->beginComputePass();
-    this->bindComputePipeline(pipeline);
-    for (const ResourceBinding& binding : bindings) {
-        this->bindBuffer(binding.fBuffer.fBuffer, binding.fBuffer.fOffset, binding.fIndex);
+    for (const auto& group : groups) {
+        group->addResourceRefs(this);
+        for (const auto& dispatch : group->dispatches()) {
+            this->bindComputePipeline(group->getPipeline(dispatch.fPipelineIndex));
+            for (const ResourceBinding& binding : dispatch.fBindings) {
+                if (const BufferView* buffer = std::get_if<BufferView>(&binding.fResource)) {
+                    this->bindBuffer(buffer->fInfo.fBuffer, buffer->fInfo.fOffset, binding.fIndex);
+                } else if (const TextureIndex* texIdx =
+                                   std::get_if<TextureIndex>(&binding.fResource)) {
+                    SkASSERT(texIdx);
+                    this->bindTexture(group->getTexture(texIdx->fValue), binding.fIndex);
+                } else {
+                    const SamplerIndex* samplerIdx = std::get_if<SamplerIndex>(&binding.fResource);
+                    SkASSERT(samplerIdx);
+                    this->bindSampler(group->getSampler(samplerIdx->fValue), binding.fIndex);
+                }
+            }
+            SkASSERT(fActiveComputeCommandEncoder);
+            for (const ComputeStep::WorkgroupBufferDesc& wgBuf : dispatch.fWorkgroupBuffers) {
+                fActiveComputeCommandEncoder->setThreadgroupMemoryLength(
+                        SkAlignTo(wgBuf.size, 16),
+                        wgBuf.index);
+            }
+            this->dispatchThreadgroups(dispatch.fParams.fGlobalDispatchSize,
+                                       dispatch.fParams.fLocalDispatchSize);
+        }
     }
-    this->dispatchThreadgroups(computePassDesc.fGlobalDispatchSize,
-                               computePassDesc.fLocalDispatchSize);
     this->endComputePass();
     return true;
 }
@@ -175,7 +243,7 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
     if (colorTexture) {
         // TODO: check Texture matches RenderPassDesc
         auto colorAttachment = (*descriptor).colorAttachments[0];
-        colorAttachment.texture = ((MtlTexture*)colorTexture)->mtlTexture();
+        colorAttachment.texture = ((const MtlTexture*)colorTexture)->mtlTexture();
         const std::array<float, 4>& clearColor = renderPassDesc.fClearColor;
         colorAttachment.clearColor =
                 MTLClearColorMake(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
@@ -185,10 +253,10 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
         if (resolveTexture) {
             SkASSERT(renderPassDesc.fColorResolveAttachment.fStoreOp == StoreOp::kStore);
             // TODO: check Texture matches RenderPassDesc
-            colorAttachment.resolveTexture = ((MtlTexture*)resolveTexture)->mtlTexture();
+            colorAttachment.resolveTexture = ((const MtlTexture*)resolveTexture)->mtlTexture();
             // Inclusion of a resolve texture implies the client wants to finish the
             // renderpass with a resolve.
-            if (@available(macOS 10.12, iOS 10.0, *)) {
+            if (@available(macOS 10.12, iOS 10.0, tvOS 10.0, *)) {
                 SkASSERT(colorAttachment.storeAction == MTLStoreActionDontCare);
                 colorAttachment.storeAction = MTLStoreActionMultisampleResolve;
             } else {
@@ -208,7 +276,7 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
     auto& depthStencilInfo = renderPassDesc.fDepthStencilAttachment;
     if (depthStencilTexture) {
         // TODO: check Texture matches RenderPassDesc
-        id<MTLTexture> mtlTexture = ((MtlTexture*)depthStencilTexture)->mtlTexture();
+        id<MTLTexture> mtlTexture = ((const MtlTexture*)depthStencilTexture)->mtlTexture();
         if (MtlFormatIsDepth(mtlTexture.pixelFormat)) {
             auto depthAttachment = (*descriptor).depthAttachment;
             depthAttachment.texture = mtlTexture;
@@ -249,7 +317,7 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
         // The load msaa pipeline takes no uniforms, no vertex/instance attributes and only uses
         // one texture that does not require a sampler.
         fActiveRenderCommandEncoder->setFragmentTexture(
-                ((MtlTexture*) resolveTexture)->mtlTexture(), 0);
+                ((const MtlTexture*) resolveTexture)->mtlTexture(), 0);
         this->draw(PrimitiveType::kTriangleStrip, 0, 4);
     }
 
@@ -492,6 +560,7 @@ void MtlCommandBuffer::bindTextureAndSampler(const Texture* texture,
                                              const Sampler* sampler,
                                              unsigned int bindIndex) {
     SkASSERT(texture && sampler);
+    SkASSERT(fActiveRenderCommandEncoder);
 
     id<MTLTexture> mtlTexture = ((const MtlTexture*)texture)->mtlTexture();
     id<MTLSamplerState> mtlSamplerState = ((const MtlSampler*)sampler)->mtlSamplerState();
@@ -572,7 +641,7 @@ void MtlCommandBuffer::drawIndexed(PrimitiveType type, unsigned int baseIndex,
                                    unsigned int indexCount, unsigned int baseVertex) {
     SkASSERT(fActiveRenderCommandEncoder);
 
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         auto mtlPrimitiveType = graphite_to_mtl_primitive(type);
         size_t indexOffset =  fCurrentIndexBufferOffset + sizeof(uint16_t )* baseIndex;
         // Use the "instance" variant witha count of 1 so that we can pass in a base vertex
@@ -606,7 +675,7 @@ void MtlCommandBuffer::drawIndexedInstanced(PrimitiveType type,
                                             unsigned int instanceCount) {
     SkASSERT(fActiveRenderCommandEncoder);
 
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         auto mtlPrimitiveType = graphite_to_mtl_primitive(type);
         size_t indexOffset =  fCurrentIndexBufferOffset + sizeof(uint16_t) * baseIndex;
         fActiveRenderCommandEncoder->drawIndexedPrimitives(mtlPrimitiveType, indexCount,
@@ -622,7 +691,7 @@ void MtlCommandBuffer::drawIndirect(PrimitiveType type) {
     SkASSERT(fActiveRenderCommandEncoder);
     SkASSERT(fCurrentIndirectBuffer);
 
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         auto mtlPrimitiveType = graphite_to_mtl_primitive(type);
         fActiveRenderCommandEncoder->drawPrimitives(
                 mtlPrimitiveType, fCurrentIndirectBuffer, fCurrentIndirectBufferOffset);
@@ -635,7 +704,7 @@ void MtlCommandBuffer::drawIndexedIndirect(PrimitiveType type) {
     SkASSERT(fActiveRenderCommandEncoder);
     SkASSERT(fCurrentIndirectBuffer);
 
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         auto mtlPrimitiveType = graphite_to_mtl_primitive(type);
         fActiveRenderCommandEncoder->drawIndexedPrimitives(mtlPrimitiveType,
                                                            MTLIndexTypeUInt32,
@@ -666,8 +735,24 @@ void MtlCommandBuffer::bindComputePipeline(const ComputePipeline* computePipelin
 void MtlCommandBuffer::bindBuffer(const Buffer* buffer, unsigned int offset, unsigned int index) {
     SkASSERT(fActiveComputeCommandEncoder);
 
-    id<MTLBuffer> mtlBuffer = buffer ? static_cast<const MtlBuffer*>(buffer)->mtlBuffer() : nullptr;
+    id<MTLBuffer> mtlBuffer = buffer ? static_cast<const MtlBuffer*>(buffer)->mtlBuffer() : nil;
     fActiveComputeCommandEncoder->setBuffer(mtlBuffer, offset, index);
+}
+
+void MtlCommandBuffer::bindTexture(const Texture* texture, unsigned int index) {
+    SkASSERT(fActiveComputeCommandEncoder);
+
+    id<MTLTexture> mtlTexture =
+            texture ? static_cast<const MtlTexture*>(texture)->mtlTexture() : nil;
+    fActiveComputeCommandEncoder->setTexture(mtlTexture, index);
+}
+
+void MtlCommandBuffer::bindSampler(const Sampler* sampler, unsigned int index) {
+    SkASSERT(fActiveComputeCommandEncoder);
+
+    id<MTLSamplerState> mtlSamplerState =
+            sampler ? static_cast<const MtlSampler*>(sampler)->mtlSamplerState() : nil;
+    fActiveComputeCommandEncoder->setSamplerState(mtlSamplerState, index);
 }
 
 void MtlCommandBuffer::dispatchThreadgroups(const WorkgroupSize& globalSize,
@@ -786,7 +871,8 @@ bool MtlCommandBuffer::onCopyBufferToTexture(const Buffer* buffer,
 bool MtlCommandBuffer::onCopyTextureToTexture(const Texture* src,
                                               SkIRect srcRect,
                                               const Texture* dst,
-                                              SkIPoint dstPoint) {
+                                              SkIPoint dstPoint,
+                                              int mipLevel) {
     SkASSERT(!fActiveRenderCommandEncoder);
     SkASSERT(!fActiveComputeCommandEncoder);
 
@@ -802,7 +888,7 @@ bool MtlCommandBuffer::onCopyTextureToTexture(const Texture* src,
     blitCmdEncoder->pushDebugGroup(@"copyTextureToTexture");
 #endif
 
-    blitCmdEncoder->copyTextureToTexture(srcMtlTexture, srcRect, dstMtlTexture, dstPoint);
+    blitCmdEncoder->copyTextureToTexture(srcMtlTexture, srcRect, dstMtlTexture, dstPoint, mipLevel);
 
 #ifdef SK_ENABLE_MTL_DEBUG_INFO
     blitCmdEncoder->popDebugGroup();
@@ -858,18 +944,5 @@ bool MtlCommandBuffer::onClearBuffer(const Buffer* buffer, size_t offset, size_t
 
     return true;
 }
-
-#ifdef SK_ENABLE_PIET_GPU
-void MtlCommandBuffer::onRenderPietScene(const skgpu::piet::Scene& scene, const Texture* target) {
-    SkASSERT(!fActiveRenderCommandEncoder);
-    SkASSERT(!fActiveComputeCommandEncoder);
-    this->endBlitCommandEncoder();
-
-    SkASSERT(fPietRenderer);
-
-    id<MTLTexture> mtlTexture = static_cast<const MtlTexture*>(target)->mtlTexture();
-    fPietRenderer->render(scene, mtlTexture, fCommandBuffer.get());
-}
-#endif
 
 } // namespace skgpu::graphite

@@ -15,6 +15,7 @@
 #import <Metal/Metal.h>
 
 class GrMtlRenderTarget;
+enum class SkTextureCompressionType;
 
 /**
  * Stores some capabilities of a Mtl backend.
@@ -69,7 +70,7 @@ public:
                           const SkIPoint& dstPoint,
                           bool areDstSrcSameObj) const;
 
-    GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
+    GrBackendFormat getBackendFormatFromCompressionType(SkTextureCompressionType) const override;
 
     MTLPixelFormat getFormatFromColorType(GrColorType colorType) const {
         int idx = static_cast<int>(colorType);
@@ -83,7 +84,7 @@ public:
     GrProgramDesc makeDesc(GrRenderTarget*,
                            const GrProgramInfo&,
                            ProgramDescOverrideFlags) const override;
-    MTLPixelFormat getStencilPixelFormat(const GrProgramDesc& desc);
+    MTLPixelFormat getStencilPixelFormat(const GrProgramDesc& desc) const;
 
     bool isMac() const { return fGPUFamily == GPUFamily::kMac; }
     bool isApple() const { return fGPUFamily == GPUFamily::kApple; }
@@ -95,7 +96,7 @@ public:
 
     bool renderTargetSupportsDiscardableMSAA(const GrMtlRenderTarget*) const;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     std::vector<GrTest::TestFormatColorTypeCombination> getTestingCombinations() const override;
 #endif
     void onDumpJSON(SkJSONWriter*) const override;

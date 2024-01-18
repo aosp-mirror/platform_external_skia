@@ -132,7 +132,7 @@ static void serialize_footer(const SkPDFOffsetMap& offsetMap,
     trailerDict.emitObject(wStream);
     wStream->writeText("\nstartxref\n");
     wStream->writeBigDecAsText(xRefFileOffset);
-    wStream->writeText("\n%%EOF");
+    wStream->writeText("\n%%EOF\n");
 }
 
 static SkPDFIndirectReference generate_page_tree(
@@ -217,7 +217,7 @@ SkPDFDocument::SkPDFDocument(SkWStream* stream,
         fRasterScale        = fMetadata.fRasterDPI / kDpiForRasterScaleOne;
     }
     if (fMetadata.fStructureElementTreeRoot) {
-        fTagTree.init(fMetadata.fStructureElementTreeRoot);
+        fTagTree.init(fMetadata.fStructureElementTreeRoot, fMetadata.fOutline);
     }
     fExecutor = fMetadata.fExecutor;
 }
@@ -527,8 +527,12 @@ const SkMatrix& SkPDFDocument::currentPageTransform() const {
     return fPageDevice->initialTransform();
 }
 
-int SkPDFDocument::createMarkIdForNodeId(int nodeId) {
-    return fTagTree.createMarkIdForNodeId(nodeId, SkToUInt(this->currentPageIndex()));
+SkPDFTagTree::Mark SkPDFDocument::createMarkIdForNodeId(int nodeId, SkPoint p) {
+    return fTagTree.createMarkIdForNodeId(nodeId, SkToUInt(this->currentPageIndex()), p);
+}
+
+void SkPDFDocument::addNodeTitle(int nodeId, SkSpan<const char> title) {
+    fTagTree.addNodeTitle(nodeId, std::move(title));
 }
 
 int SkPDFDocument::createStructParentKeyForNodeId(int nodeId) {
@@ -594,6 +598,10 @@ void SkPDFDocument::onClose(SkWStream* stream) {
         markInfo->insertBool("Marked", true);
         docCatalog->insertObject("MarkInfo", std::move(markInfo));
         docCatalog->insertRef("StructTreeRoot", root);
+
+        if (SkPDFIndirectReference outline = fTagTree.makeOutline(this)) {
+            docCatalog->insertRef("Outlines", outline);
+        }
     }
 
     auto docCatalogRef = this->emit(*docCatalog);
@@ -638,4 +646,20 @@ sk_sp<SkDocument> SkPDF::MakeDocument(SkWStream* stream, const SkPDF::Metadata& 
         meta.fEncodingQuality = 0;
     }
     return stream ? sk_make_sp<SkPDFDocument>(stream, std::move(meta)) : nullptr;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void SkPDF::DateTime::toISO8601(SkString* dst) const {
+    if (dst) {
+        int timeZoneMinutes = SkToInt(fTimeZoneMinutes);
+        char timezoneSign = timeZoneMinutes >= 0 ? '+' : '-';
+        int timeZoneHours = SkTAbs(timeZoneMinutes) / 60;
+        timeZoneMinutes = SkTAbs(timeZoneMinutes) % 60;
+        dst->printf("%04u-%02u-%02uT%02u:%02u:%02u%c%02d:%02d",
+                    static_cast<unsigned>(fYear), static_cast<unsigned>(fMonth),
+                    static_cast<unsigned>(fDay), static_cast<unsigned>(fHour),
+                    static_cast<unsigned>(fMinute),
+                    static_cast<unsigned>(fSecond), timezoneSign, timeZoneHours,
+                    timeZoneMinutes);
+    }
 }

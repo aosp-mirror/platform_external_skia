@@ -10,17 +10,18 @@
 
 #include "include/core/SkDrawable.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPicture.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkChecksum.h"
-#include "include/private/base/SkFixed.h"
 #include "include/private/base/SkDebug.h"
+#include "include/private/base/SkFixed.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkVx.h"
+#include "src/core/SkChecksum.h"
 #include "src/core/SkMask.h"
 
 #include <algorithm>
@@ -28,10 +29,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 class SkArenaAlloc;
+class SkCanvas;
 class SkGlyph;
+class SkReadBuffer;
 class SkScalerContext;
+class SkWriteBuffer;
 namespace sktext {
 class StrikeForGPU;
 }  // namespace sktext
@@ -360,31 +365,54 @@ public:
 
     static bool FitsInAtlas(const SkGlyph& glyph);
 
+    // GetKey and Hash implement the required methods for THashTable.
+    static SkPackedGlyphID GetKey(SkGlyphDigest digest) {
+        return SkPackedGlyphID{SkTo<uint32_t>(digest.fPackedID)};
+    }
+    static uint32_t Hash(SkPackedGlyphID packedID) {
+        return packedID.hash();
+    }
+
 private:
     void setAction(skglyph::ActionType actionType, skglyph::GlyphAction action) {
         using namespace skglyph;
         SkASSERT(action != GlyphAction::kUnset);
         SkASSERT(this->actionFor(actionType) == GlyphAction::kUnset);
-        const uint32_t mask = 0b11 << actionType;
+        const uint64_t mask = 0b11 << actionType;
         fActions &= ~mask;
-        fActions |= SkTo<uint32_t>(action) << actionType;
+        fActions |= SkTo<uint64_t>(action) << actionType;
     }
 
     static_assert(SkPackedGlyphID::kEndData == 20);
     static_assert(SkMask::kCountMaskFormats <= 8);
     static_assert(SkTo<int>(skglyph::GlyphAction::kSize) <= 4);
     struct {
-        uint32_t fIndex            : SkPackedGlyphID::kEndData;
-        uint16_t fIsEmpty          : 1;
-        uint32_t fFormat           : 3;
-        uint32_t fActions          : skglyph::ActionTypeSize::kTotalBits;
+        uint64_t fPackedID : SkPackedGlyphID::kEndData;
+        uint64_t fIndex    : SkPackedGlyphID::kEndData;
+        uint64_t fIsEmpty  : 1;
+        uint64_t fFormat   : 3;
+        uint64_t fActions  : skglyph::ActionTypeSize::kTotalBits;
     };
     int16_t fLeft, fTop;
     uint16_t fWidth, fHeight;
 };
 
+class SkPictureBackedGlyphDrawable final : public SkDrawable {
+public:
+    static sk_sp<SkPictureBackedGlyphDrawable>MakeFromBuffer(SkReadBuffer& buffer);
+    static void FlattenDrawable(SkWriteBuffer& buffer, SkDrawable* drawable);
+    SkPictureBackedGlyphDrawable(sk_sp<SkPicture> self);
+
+private:
+    sk_sp<SkPicture> fPicture;
+    SkRect onGetBounds() override;
+    size_t onApproximateBytesUsed() override;
+    void onDraw(SkCanvas* canvas) override;
+};
+
 class SkGlyph {
 public:
+    static std::optional<SkGlyph> MakeFromBuffer(SkReadBuffer&);
     // SkGlyph() is used for testing.
     constexpr SkGlyph() : SkGlyph{SkPackedGlyphID()} { }
     SkGlyph(const SkGlyph&);
@@ -429,7 +457,8 @@ public:
 
     // Returns true if the image has been set.
     bool setImageHasBeenCalled() const {
-        return fImage != nullptr || this->isEmpty() || this->imageTooLarge();
+        // Check for empty bounds first to guard against fImage somehow being set.
+        return this->isEmpty() || fImage != nullptr || this->imageTooLarge();
     }
 
     // Return a pointer to the path if the image exists, otherwise return nullptr.
@@ -483,42 +512,53 @@ public:
     int width()  const { return fWidth;  }
     int height() const { return fHeight; }
     bool isEmpty() const {
-        // fHeight == 0 -> fWidth == 0;
-        SkASSERT(fHeight != 0 || fWidth == 0);
-        return fWidth == 0;
+        return fWidth == 0 || fHeight == 0;
     }
     bool imageTooLarge() const { return fWidth >= kMaxGlyphWidth; }
 
+    uint16_t extraBits() const { return fScalerContextBits; }
+
     // Make sure that the intercept information is on the glyph and return it, or return it if it
     // already exists.
-    // * bounds - either end of the gap for the character.
+    // * bounds - [0] - top of underline; [1] - bottom of underline.
     // * scale, xPos - information about how wide the gap is.
     // * array - accumulated gaps for many characters if not null.
     // * count - the number of gaps.
     void ensureIntercepts(const SkScalar bounds[2], SkScalar scale, SkScalar xPos,
                           SkScalar* array, int* count, SkArenaAlloc* alloc);
 
+    // Deprecated. Do not use. The last use is in SkChromeRemoteCache, and will be deleted soon.
     void setImage(void* image) { fImage = image; }
+
+    // Serialize/deserialize functions.
+    // Flatten the metrics portions, but no drawing data.
+    void flattenMetrics(SkWriteBuffer&) const;
+
+    // Flatten just the the mask data.
+    void flattenImage(SkWriteBuffer&) const;
+
+    // Read the image data, store it in the alloc, and add it to the glyph.
+    size_t addImageFromBuffer(SkReadBuffer&, SkArenaAlloc*);
+
+    // Flatten just the path data.
+    void flattenPath(SkWriteBuffer&) const;
+
+    // Read the path data, create the glyph's path data in the alloc, and add it to the glyph.
+    size_t addPathFromBuffer(SkReadBuffer&, SkArenaAlloc*);
+
+    // Flatten just the drawable data.
+    void flattenDrawable(SkWriteBuffer&) const;
+
+    // Read the drawable data, create the glyph's drawable data in the alloc, and add it to the
+    // glyph.
+    size_t addDrawableFromBuffer(SkReadBuffer&, SkArenaAlloc*);
 
 private:
     // There are two sides to an SkGlyph, the scaler side (things that create glyph data) have
     // access to all the fields. Scalers are assumed to maintain all the SkGlyph invariants. The
     // consumer side has a tighter interface.
-    friend class RandomScalerContext;
     friend class SkScalerContext;
-    friend class SkScalerContextProxy;
-    friend class SkScalerContext_Empty;
-    friend class SkScalerContext_FreeType;
-    friend class SkScalerContext_FreeType_Base;
-    friend class SkScalerContext_DW;
-    friend class SkScalerContext_GDI;
-    friend class SkScalerContext_Mac;
-    friend class SkStrikeClientImpl;
-    friend class SkTestScalerContext;
-    friend class SkTestSVGScalerContext;
-    friend class SkUserScalerContext;
-    friend class TestSVGTypeface;
-    friend class TestTypeface;
+    friend class SkGlyphTestPeer;
 
     inline static constexpr uint16_t kMaxGlyphWidth = 1u << 13u;
 
@@ -551,6 +591,11 @@ private:
     };
 
     size_t allocImage(SkArenaAlloc* alloc);
+
+    void installImage(void* imageData) {
+        SkASSERT(!this->setImageHasBeenCalled());
+        fImage = imageData;
+    }
 
     // path == nullptr indicates that there is no path.
     void installPath(SkArenaAlloc* alloc, const SkPath* path, bool hairline);
