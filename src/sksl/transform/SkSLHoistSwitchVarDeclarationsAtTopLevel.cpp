@@ -18,7 +18,6 @@
 #include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
-#include "src/sksl/ir/SkSLSymbol.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
@@ -90,7 +89,8 @@ std::unique_ptr<Statement> Transform::HoistSwitchVarDeclarationsAtTopLevel(
     }
 
     // Move all of the var-declaration statements into a separate block.
-    std::unique_ptr<SymbolTable> blockSymbols = stmt->symbols()->insertNewParent();
+    SymbolTable* switchSymbols = stmt->caseBlock()->as<Block>().symbolTable();
+    std::unique_ptr<SymbolTable> blockSymbols = switchSymbols->insertNewParent();
 
     StatementArray blockStmts;
     blockStmts.reserve_exact(visitor.fVarDeclarations.size() + 1);
@@ -128,13 +128,8 @@ std::unique_ptr<Statement> Transform::HoistSwitchVarDeclarationsAtTopLevel(
         *innerDeclaration = std::move(replacementStmt);
 
         // Hoist the variable's symbol outside of the switch's symbol table, and into the enclosing
-        // block's symbol table. If the switch's symbol table originally had ownership, transfer it.
-        // (If the variable was owned elsewhere, it can keep its current owner.)
-        if (std::unique_ptr<Symbol> variableSymbol = stmt->symbols()->removeSymbol(var)) {
-            blockSymbols->add(context, std::move(variableSymbol));
-        } else {
-            blockSymbols->addWithoutOwnership(context, var);
-        }
+        // block's symbol table.
+        switchSymbols->moveSymbolTo(blockSymbols.get(), var, context);
     }
 
     // Return a scoped Block holding the switch.
