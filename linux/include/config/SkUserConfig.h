@@ -27,6 +27,10 @@
 #define SK_ENABLE_ANDROID_UTILS
 #endif
 
+#ifndef SK_ENABLE_AVX512_OPTS
+#define SK_ENABLE_AVX512_OPTS
+#endif
+
 #ifndef SK_ENABLE_PRECOMPILE
 #define SK_ENABLE_PRECOMPILE
 #endif

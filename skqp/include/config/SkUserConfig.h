@@ -39,6 +39,10 @@
 #define SK_CODEC_DECODES_WEBP
 #endif
 
+#ifndef SK_ENABLE_AVX512_OPTS
+#define SK_ENABLE_AVX512_OPTS
+#endif
+
 #ifndef SK_ENABLE_DISCRETE_GPU
 #define SK_ENABLE_DISCRETE_GPU
 #endif
