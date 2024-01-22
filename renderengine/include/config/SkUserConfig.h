@@ -11,6 +11,10 @@
 #define SK_ANDROID_FRAMEWORK_USE_PERFETTO
 #endif
 
+#ifndef SK_DISABLE_TRACING
+#define SK_DISABLE_TRACING
+#endif
+
 #ifndef SK_ENABLE_AVX512_OPTS
 #define SK_ENABLE_AVX512_OPTS
 #endif
