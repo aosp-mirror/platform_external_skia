@@ -71,12 +71,14 @@ cc_defaults {
         x86: {
             srcs: [
                 "src/opts/SkOpts_hsw.cpp",
+                "src/opts/SkOpts_skx.cpp",
             ],
         },
 
         x86_64: {
             srcs: [
                 "src/opts/SkOpts_hsw.cpp",
+                "src/opts/SkOpts_skx.cpp",
             ],
         },
     },
