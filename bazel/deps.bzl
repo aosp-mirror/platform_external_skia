@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "a62b04845e6d2e190590083a456f6db4e65c632e",
+        commit = "18030a03d5092f5d86f1447bae377676ebda106d",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -168,19 +168,19 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "spirv_cross",
         build_file = ws + "//bazel/external/spirv_cross:BUILD.bazel",
-        commit = "b82536766d1b81631b126d1ddbe49baf42929bd3",
+        commit = "03b485dc47c6e84a15936601e8b121d84d8ddadf",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross",
     )
 
     git_repository(
         name = "spirv_headers",
-        commit = "7b0309708da5126b89e4ce6f19835f36dc912f2f",
+        commit = "23d4a398c2ccca05fc623cca8785ce7741c5345d",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git",
     )
 
     git_repository(
         name = "spirv_tools",
-        commit = "359012927808c5aeb447b52d46cc0971b3b7e107",
+        commit = "14000ad47a4d758166a320be5c399cae5ba00839",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
