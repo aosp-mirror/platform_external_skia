@@ -61,6 +61,18 @@ rust::Box<fontations_ffi::BridgeNormalizedCoords> make_normalized_coords(
     return resolve_into_normalized_coords(bridgeFontRef, coordinates);
 }
 
+SkMatrix SkMatrixFromFontationsTransform(const fontations_ffi::Transform& transformArg) {
+    return SkMatrix::MakeAll(transformArg.xx,
+                             -transformArg.xy,
+                             transformArg.dx,
+                             -transformArg.yx,
+                             transformArg.yy,
+                             -transformArg.dy,
+                             0.f,
+                             0.f,
+                             1.0f);
+}
+
 }  // namespace
 
 SK_API sk_sp<SkTypeface> SkTypeface_Make_Fontations(std::unique_ptr<SkStreamAsset> fontData,
@@ -74,6 +86,7 @@ SkTypeface_Fontations::SkTypeface_Fontations(sk_sp<SkData> fontData, const SkFon
         , fTtcIndex(args.getCollectionIndex())
         , fBridgeFontRef(make_bridge_font_ref(fFontData, fTtcIndex))
         , fBridgeNormalizedCoords(make_normalized_coords(*fBridgeFontRef, args))
+        , fOutlines(fontations_ffi::get_outline_collection(*fBridgeFontRef))
         , fPalette(resolve_palette(
                   *fBridgeFontRef,
                   args.getPalette().index,
@@ -248,6 +261,7 @@ public:
                       static_cast<SkTypeface_Fontations*>(this->getTypeface())->getBridgeFontRef())
             , fBridgeNormalizedCoords(static_cast<SkTypeface_Fontations*>(this->getTypeface())
                                               ->getBridgeNormalizedCoords())
+            , fOutlines(static_cast<SkTypeface_Fontations*>(this->getTypeface())->getOutlines())
             , fPalette(static_cast<SkTypeface_Fontations*>(this->getTypeface())->getPalette()) {
         fRec.getSingleMatrix(&fMatrix);
     }
@@ -257,7 +271,7 @@ public:
         sk_fontations::PathGeometrySink pathWrapper;
         fontations_ffi::BridgeScalerMetrics scalerMetrics;
 
-        if (!fontations_ffi::get_path(fBridgeFontRef,
+        if (!fontations_ffi::get_path(fOutlines,
                                       glyphId,
                                       yScale,
                                       fBridgeNormalizedCoords,
@@ -494,6 +508,7 @@ private:
     sk_sp<SkData> fFontData = nullptr;
     const fontations_ffi::BridgeFontRef& fBridgeFontRef;
     const fontations_ffi::BridgeNormalizedCoords& fBridgeNormalizedCoords;
+    const fontations_ffi::BridgeOutlineCollection& fOutlines;
     const SkSpan<SkColor> fPalette;
     friend class sk_fontations::ColorPainter;
 };
@@ -732,10 +747,9 @@ ColorPainter::ColorPainter(SkFontationsScalerContext& scaler_context,
         , fForegroundColor(foregroundColor)
         , fUpem(upem) {}
 
-void ColorPainter::push_transform(float xx, float xy, float yx, float yy, float dx, float dy) {
+void ColorPainter::push_transform(const fontations_ffi::Transform& transform_arg) {
     fCanvas.save();
-    SkMatrix transform = SkMatrix::MakeAll(xx, -xy, dx, -yx, yy, -dy, 0.f, 0.f, 1.0f);
-    fCanvas.concat(transform);
+    fCanvas.concat(SkMatrixFromFontationsTransform(transform_arg));
 }
 
 void ColorPainter::pop_transform() { fCanvas.restore(); }
@@ -755,8 +769,7 @@ void ColorPainter::push_clip_rectangle(float x_min, float y_min, float x_max, fl
 
 void ColorPainter::pop_clip() { fCanvas.restore(); }
 
-void ColorPainter::fill_solid(uint16_t palette_index, float alpha) {
-    SkPaint paint;
+void ColorPainter::configure_solid_paint(uint16_t palette_index, float alpha, SkPaint& paint) {
     SkColor4f color;
     if (palette_index == kForegroundColorPaletteIndex) {
         color = SkColor4f::FromColor(fForegroundColor);
@@ -766,17 +779,28 @@ void ColorPainter::fill_solid(uint16_t palette_index, float alpha) {
     color.fA *= alpha;
     paint.setShader(nullptr);
     paint.setColor(color);
+}
+
+void ColorPainter::fill_solid(uint16_t palette_index, float alpha) {
+    SkPaint paint;
+    configure_solid_paint(palette_index, alpha, paint);
     fCanvas.drawPaint(paint);
 }
 
-void ColorPainter::fill_linear(float x0,
-                               float y0,
-                               float x1,
-                               float y1,
-                               fontations_ffi::BridgeColorStops& bridge_stops,
-                               uint8_t extend_mode) {
-    SkPaint paint;
+void ColorPainter::fill_glyph_solid(uint16_t glyph_id, uint16_t palette_index, float alpha) {
+    SkPath path;
+    fScalerContext.generateYScalePathForGlyphId(glyph_id, &path, fUpem);
 
+    SkPaint paint;
+    configure_solid_paint(palette_index, alpha, paint);
+    fCanvas.drawPath(path, paint);
+}
+
+void ColorPainter::configure_linear_paint(const fontations_ffi::FillLinearParams& linear_params,
+                                          fontations_ffi::BridgeColorStops& bridge_stops,
+                                          uint8_t extend_mode,
+                                          SkPaint& paint,
+                                          SkMatrix* paintTransform) {
     std::vector<SkScalar> stops;
     std::vector<SkColor4f> colors;
 
@@ -787,8 +811,9 @@ void ColorPainter::fill_linear(float x0,
         return;
     }
 
-    SkPoint linePositions[2] = {SkPoint::Make(SkFloatToScalar(x0), -SkFloatToScalar(y0)),
-                                SkPoint::Make(SkFloatToScalar(x1), -SkFloatToScalar(y1))};
+    SkPoint linePositions[2] = {
+            SkPoint::Make(SkFloatToScalar(linear_params.x0), -SkFloatToScalar(linear_params.y0)),
+            SkPoint::Make(SkFloatToScalar(linear_params.x1), -SkFloatToScalar(linear_params.y1))};
     SkTileMode tileMode = ToSkTileMode(extend_mode);
 
     sk_sp<SkShader> shader(SkGradientShader::MakeLinear(
@@ -801,27 +826,49 @@ void ColorPainter::fill_linear(float x0,
             SkGradientShader::Interpolation{SkGradientShader::Interpolation::InPremul::kNo,
                                             SkGradientShader::Interpolation::ColorSpace::kSRGB,
                                             SkGradientShader::Interpolation::HueMethod::kShorter},
-            nullptr));
+            paintTransform));
 
     SkASSERT(shader);
     // An opaque color is needed to ensure the gradient is not modulated by alpha.
     paint.setColor(SK_ColorBLACK);
     paint.setShader(shader);
-    fCanvas.drawPaint(paint);
 }
 
-void ColorPainter::fill_radial(float x0,
-                               float y0,
-                               float startRadius,
-                               float x1,
-                               float y1,
-                               float endRadius,
+void ColorPainter::fill_linear(const fontations_ffi::FillLinearParams& linear_params,
                                fontations_ffi::BridgeColorStops& bridge_stops,
                                uint8_t extend_mode) {
     SkPaint paint;
 
-    SkPoint start = SkPoint::Make(x0, -y0);
-    SkPoint end = SkPoint::Make(x1, -y1);
+    configure_linear_paint(linear_params, bridge_stops, extend_mode, paint);
+
+    fCanvas.drawPaint(paint);
+}
+
+void ColorPainter::fill_glyph_linear(uint16_t glyph_id,
+                                     const fontations_ffi::Transform& transform,
+                                     const fontations_ffi::FillLinearParams& linear_params,
+                                     fontations_ffi::BridgeColorStops& bridge_stops,
+                                     uint8_t extend_mode) {
+    SkPath path;
+    fScalerContext.generateYScalePathForGlyphId(glyph_id, &path, fUpem);
+
+    SkPaint paint;
+    SkMatrix paintTransform = SkMatrixFromFontationsTransform(transform);
+    configure_linear_paint(linear_params, bridge_stops, extend_mode, paint, &paintTransform);
+    fCanvas.drawPath(path, paint);
+}
+
+void ColorPainter::configure_radial_paint(
+        const fontations_ffi::FillRadialParams& fill_radial_params,
+        fontations_ffi::BridgeColorStops& bridge_stops,
+        uint8_t extend_mode,
+        SkPaint& paint,
+        SkMatrix* paintTransform) {
+    SkPoint start = SkPoint::Make(fill_radial_params.x0, -fill_radial_params.y0);
+    SkPoint end = SkPoint::Make(fill_radial_params.x1, -fill_radial_params.y1);
+
+    float startRadius = fill_radial_params.r0;
+    float endRadius = fill_radial_params.r1;
 
     std::vector<SkScalar> stops;
     std::vector<SkColor4f> colors;
@@ -939,20 +986,39 @@ void ColorPainter::fill_radial(float x0,
             SkGradientShader::Interpolation{SkGradientShader::Interpolation::InPremul::kNo,
                                             SkGradientShader::Interpolation::ColorSpace::kSRGB,
                                             SkGradientShader::Interpolation::HueMethod::kShorter},
-            nullptr));
+            paintTransform));
+}
+
+void ColorPainter::fill_radial(const fontations_ffi::FillRadialParams& fill_radial_params,
+                               fontations_ffi::BridgeColorStops& bridge_stops,
+                               uint8_t extend_mode) {
+    SkPaint paint;
+
+    configure_radial_paint(fill_radial_params, bridge_stops, extend_mode, paint);
 
     fCanvas.drawPaint(paint);
 }
 
-void ColorPainter::fill_sweep(float x0,
-                              float y0,
-                              float startAngle,
-                              float endAngle,
-                              fontations_ffi::BridgeColorStops& bridge_stops,
-                              uint8_t extend_mode) {
-    SkPaint paint;
+void ColorPainter::fill_glyph_radial(uint16_t glyph_id,
+                                     const fontations_ffi::Transform& transform,
+                                     const fontations_ffi::FillRadialParams& fill_radial_params,
+                                     fontations_ffi::BridgeColorStops& bridge_stops,
+                                     uint8_t extend_mode) {
+    SkPath path;
+    fScalerContext.generateYScalePathForGlyphId(glyph_id, &path, fUpem);
 
-    SkPoint center = SkPoint::Make(x0, -y0);
+    SkPaint paint;
+    SkMatrix paintTransform = SkMatrixFromFontationsTransform(transform);
+    configure_radial_paint(fill_radial_params, bridge_stops, extend_mode, paint, &paintTransform);
+    fCanvas.drawPath(path, paint);
+}
+
+void ColorPainter::configure_sweep_paint(const fontations_ffi::FillSweepParams& sweep_params,
+                                         fontations_ffi::BridgeColorStops& bridge_stops,
+                                         uint8_t extend_mode,
+                                         SkPaint& paint,
+                                         SkMatrix* paintTransform) {
+    SkPoint center = SkPoint::Make(sweep_params.x0, -sweep_params.y0);
 
     std::vector<SkScalar> stops;
     std::vector<SkColor4f> colors;
@@ -978,14 +1044,36 @@ void ColorPainter::fill_sweep(float x0,
             stops.data(),
             stops.size(),
             tileMode,
-            startAngle,
-            endAngle,
+            sweep_params.start_angle,
+            sweep_params.end_angle,
             SkGradientShader::Interpolation{SkGradientShader::Interpolation::InPremul::kNo,
                                             SkGradientShader::Interpolation::ColorSpace::kSRGB,
                                             SkGradientShader::Interpolation::HueMethod::kShorter},
-            nullptr));
+            paintTransform));
+}
+
+void ColorPainter::fill_sweep(const fontations_ffi::FillSweepParams& sweep_params,
+                              fontations_ffi::BridgeColorStops& bridge_stops,
+                              uint8_t extend_mode) {
+    SkPaint paint;
+
+    configure_sweep_paint(sweep_params, bridge_stops, extend_mode, paint);
 
     fCanvas.drawPaint(paint);
+}
+
+void ColorPainter::fill_glyph_sweep(uint16_t glyph_id,
+                                    const fontations_ffi::Transform& transform,
+                                    const fontations_ffi::FillSweepParams& sweep_params,
+                                    fontations_ffi::BridgeColorStops& bridge_stops,
+                                    uint8_t extend_mode) {
+    SkPath path;
+    fScalerContext.generateYScalePathForGlyphId(glyph_id, &path, fUpem);
+
+    SkPaint paint;
+    SkMatrix paintTransform = SkMatrixFromFontationsTransform(transform);
+    configure_sweep_paint(sweep_params, bridge_stops, extend_mode, paint, &paintTransform);
+    fCanvas.drawPath(path, paint);
 }
 
 void ColorPainter::push_layer(uint8_t compositeMode) {
@@ -1007,8 +1095,16 @@ BoundsPainter::BoundsPainter(SkFontationsScalerContext& scaler_context,
 SkRect BoundsPainter::getBoundingBox() { return fBounds; }
 
 // fontations_ffi::ColorPainter interface.
-void BoundsPainter::push_transform(float xx, float xy, float yx, float yy, float dx, float dy) {
-    SkMatrix transform = SkMatrix::MakeAll(xx, -xy, dx, -yx, yy, -dy, 0.f, 0.f, 1.0f);
+void BoundsPainter::push_transform(const fontations_ffi::Transform& transform_arg) {
+    SkMatrix transform = SkMatrix::MakeAll(transform_arg.xx,
+                                           -transform_arg.xy,
+                                           transform_arg.dx,
+                                           -transform_arg.yx,
+                                           transform_arg.yy,
+                                           -transform_arg.dy,
+                                           0.f,
+                                           0.f,
+                                           1.0f);
     fCurrentTransform.preConcat(transform);
     bool invertResult = transform.invert(&fStackTopTransformInverse);
     SkASSERT(invertResult);
@@ -1030,6 +1126,37 @@ void BoundsPainter::push_clip_rectangle(float x_min, float y_min, float x_max, f
     SkPath rectPath = SkPath::Rect(clipRect);
     rectPath.transform(fCurrentTransform);
     fBounds.join(rectPath.getBounds());
+}
+
+void BoundsPainter::fill_glyph_solid(uint16_t glyph_id, uint16_t, float) {
+    push_clip_glyph(glyph_id);
+    pop_clip();
+}
+
+void BoundsPainter::fill_glyph_radial(uint16_t glyph_id,
+                                      const fontations_ffi::Transform&,
+                                      const fontations_ffi::FillRadialParams&,
+                                      fontations_ffi::BridgeColorStops&,
+                                      uint8_t) {
+    push_clip_glyph(glyph_id);
+    pop_clip();
+}
+void BoundsPainter::fill_glyph_linear(uint16_t glyph_id,
+                                      const fontations_ffi::Transform&,
+                                      const fontations_ffi::FillLinearParams&,
+                                      fontations_ffi::BridgeColorStops&,
+                                      uint8_t) {
+    push_clip_glyph(glyph_id);
+    pop_clip();
+}
+
+void BoundsPainter::fill_glyph_sweep(uint16_t glyph_id,
+                                     const fontations_ffi::Transform&,
+                                     const fontations_ffi::FillSweepParams&,
+                                     fontations_ffi::BridgeColorStops&,
+                                     uint8_t) {
+    push_clip_glyph(glyph_id);
+    pop_clip();
 }
 
 }  // namespace sk_fontations
