@@ -47,10 +47,6 @@
 #define SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE
 #endif
 
-#ifndef SK_FORCE_AAA
-#define SK_FORCE_AAA
-#endif
-
 #ifndef SK_GAMMA_APPLY_TO_A8
 #define SK_GAMMA_APPLY_TO_A8
 #endif
