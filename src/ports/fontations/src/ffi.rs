@@ -185,12 +185,7 @@ impl<'a> ColorPainter for ColorPainterImpl<'a> {
         }
     }
 
-    fn fill_glyph(
-        &mut self,
-        glyph: GlyphId,
-        brush_transform: Option<Transform>,
-        brush: Brush,
-    ) {
+    fn fill_glyph(&mut self, glyph: GlyphId, brush_transform: Option<Transform>, brush: Brush) {
         let color_painter = self.color_painter_wrapper.as_mut();
         let brush_transform = brush_transform.unwrap_or_default();
         match brush {
@@ -652,6 +647,20 @@ fn get_outline_collection<'a>(font_ref: &'a BridgeFontRef<'a>) -> Box<BridgeOutl
     )
 }
 
+fn font_or_collection<'a>(font_data: &'a [u8], num_fonts: &mut u32) -> bool {
+    match FileRef::new(font_data) {
+        Ok(FileRef::Collection(collection)) => {
+            *num_fonts = collection.len();
+            true
+        }
+        Ok(FileRef::Font(_)) => {
+            *num_fonts = 0u32;
+            true
+        }
+        _ => false,
+    }
+}
+
 fn resolve_into_normalized_coords(
     font_ref: &BridgeFontRef,
     design_coords: &[SkiaDesignCoordinate],
@@ -828,6 +837,11 @@ mod ffi {
         unsafe fn get_outline_collection<'a>(
             font_ref: &'a BridgeFontRef<'a>,
         ) -> Box<BridgeOutlineCollection<'a>>;
+
+        /// Returns true on a font or collection, sets `num_fonts``
+        /// to 0 if single font file, and to > 0 for a TrueType collection.
+        /// Returns false if the data cannot be interpreted as a font or collection.
+        unsafe fn font_or_collection<'a>(font_data: &'a [u8], num_fonts: &mut u32) -> bool;
 
         fn lookup_glyph_or_zero(font_ref: &BridgeFontRef, codepoint: u32) -> u16;
         fn get_path(
@@ -1026,10 +1040,13 @@ mod ffi {
 #[cfg(test)]
 mod test {
 
-    use crate::{ffi::PaletteOverride, font_ref_is_valid, make_font_ref, resolve_palette};
+    use crate::{
+        ffi::PaletteOverride, font_or_collection, font_ref_is_valid, make_font_ref, resolve_palette,
+    };
     use std::fs;
 
     const TEST_FONT_FILENAME: &str = "resources/fonts/test_glyphs-glyf_colr_1_variable.ttf";
+    const TEST_COLLECTION_FILENAME: &str = "resources/fonts/test.ttc";
 
     #[test]
     fn test_palette_override() {
@@ -1086,5 +1103,27 @@ mod test {
 
         let no_palette = resolve_palette(&font_ref, 10, &out_of_bounds_overrides);
         assert_eq!(no_palette.len(), 0);
+    }
+
+    #[test]
+    fn test_num_fonts_in_collection() {
+        let collection_buffer = fs::read(TEST_COLLECTION_FILENAME)
+            .expect("Unable to open TrueType collection test file.");
+        let font_buffer =
+            fs::read(TEST_FONT_FILENAME).expect("COLRv0/v1 test font could not be opened.");
+        let garbage: [u8; 12] = [
+            b'0', b'a', b'b', b'0', b'a', b'b', b'0', b'a', b'b', b'0', b'a', b'b',
+        ];
+
+        let mut num_fonts = 0;
+        let result_collection = font_or_collection(&collection_buffer, &mut num_fonts);
+        assert!(result_collection && num_fonts == 2);
+
+        let result_font_file = font_or_collection(&font_buffer, &mut num_fonts);
+        assert!(result_font_file);
+        assert!(num_fonts == 0u32);
+
+        let result_garbage = font_or_collection(&garbage, &mut num_fonts);
+        assert!(!result_garbage);
     }
 }
