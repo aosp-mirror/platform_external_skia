@@ -995,7 +995,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"IntelIris540":  "8086:1926-31.0.101.2115",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
 					"IntelIris655":  "8086:3ea5-26.20.100.7463",
-					"IntelIrisXe":   "8086:9a49-31.0.101.4575",
+					"IntelIrisXe":   "8086:9a49-31.0.101.4889",
 					"RadeonHD7770":  "1002:683d-26.20.13031.18002",
 					"RadeonR9M470X": "1002:6646-26.20.13031.18002",
 					"QuadroP400":    "10de:1cb3-30.0.15.1179",
@@ -2200,6 +2200,7 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"png_decoder":       {"//:png_decoder", ""},
 	"shape_text":        {"//:shape_text", ""},
 	"use_ganesh_gl":     {"//:use_ganesh_gl", ""},
+	"use_ganesh_vulkan": {"//:use_ganesh_vulkan", ""},
 	"write_text_to_png": {"//:write_text_to_png", ""},
 
 	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
