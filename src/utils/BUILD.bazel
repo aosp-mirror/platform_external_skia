@@ -20,7 +20,6 @@ split_srcs_and_hdrs(
 )
 
 UTIL_FILES = [
-    "SkAnimCodecPlayer.cpp",
     "SkBitSet.h",
     "SkCallableTraits.h",
     "SkCamera.cpp",
@@ -186,6 +185,7 @@ skia_filegroup(
         "SkShadowTessellator.cpp",
         "SkShadowTessellator.h",
         "SkShadowUtils.cpp",
+        "SkTextUtils.cpp",
     ],
     visibility = ["//src/core:__pkg__"],
 )
