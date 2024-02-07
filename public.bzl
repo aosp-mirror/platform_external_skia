@@ -208,7 +208,6 @@ SKIA_PUBLIC_HDRS = [
     # We do not want clients to directly include our private headers, so we exclude include/private
     "include/sksl/SkSLDebugTrace.h",
     "include/sksl/SkSLVersion.h",
-    "include/utils/SkAnimCodecPlayer.h",
     "include/utils/SkCanvasStateUtils.h",
     "include/utils/SkCustomTypeface.h",
     "include/utils/SkEventTracer.h",
@@ -1717,7 +1716,6 @@ BASE_SRCS_ALL = [
     "src/text/SlugFromBuffer.cpp",
     "src/text/StrikeForGPU.cpp",
     "src/text/StrikeForGPU.h",
-    "src/utils/SkAnimCodecPlayer.cpp",
     "src/utils/SkBitSet.h",
     "src/utils/SkCallableTraits.h",
     "src/utils/SkCanvasStack.cpp",
@@ -2232,8 +2230,6 @@ BASE_DEFINES = [
     "SK_USE_FREETYPE_EMBOLDEN",
     # Turn on a few Google3-specific build fixes.
     "SK_BUILD_FOR_GOOGLE3",
-    # Required for building dm.
-    "GR_TEST_UTILS",
     # Should remove after we update golden images
     "SK_WEBP_ENCODER_USE_DEFAULT_METHOD",
 
@@ -2412,7 +2408,11 @@ SKPARAGRAPH_LIB_SRCS = [
 
 SKRESOURCES_LIB_HDRS = ["modules/skresources/include/SkResources.h"]
 
-SKRESOURCES_LIB_SRCS = ["modules/skresources/src/SkResources.cpp"]
+SKRESOURCES_LIB_SRCS = [
+    "modules/skresources/src/SkResources.cpp",
+    "modules/skresources/src/SkAnimCodecPlayer.cpp",
+    "modules/skresources/src/SkAnimCodecPlayer.h",
+]
 
 ################################################################################
 ## skottie_lib
