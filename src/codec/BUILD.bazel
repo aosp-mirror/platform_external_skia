@@ -341,7 +341,24 @@ skia_cc_library(
     hdrs = [
         "//include/codec:any_codec_hdrs",
     ],
-    visibility = ["//:__pkg__"],
+    visibility = [
+        "//:__pkg__",
+    ],
+    deps = [
+        ":any_decoder",
+    ],
+)
+
+skia_cc_library(
+    name = "codec_support_priv",
+    hdrs = [
+        "SkCodecImageGenerator.h",
+        "//include/codec:any_codec_hdrs",
+    ],
+    visibility = [
+        "//modules/skottie:__pkg__",
+        "//modules/skresources:__pkg__",
+    ],
     deps = [
         ":any_decoder",
     ],
