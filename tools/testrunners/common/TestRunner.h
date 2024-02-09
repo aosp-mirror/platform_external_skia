@@ -10,12 +10,34 @@
 
 #include "tools/flags/CommandLineFlags.h"
 
+#include <map>
+
 namespace TestRunner {
+namespace FlagValidators {
+
+void StringNonEmpty(std::string name, CommandLineFlags::StringArray flag);
+
+void StringAtMostOne(std::string name, CommandLineFlags::StringArray flag);
+
+void StringEven(std::string name, CommandLineFlags::StringArray flag);
+
+void IntGreaterOrEqual(std::string name, int flag, int min);
+
+void AllOrNone(std::map<std::string, bool> flags);
+
+void ExactlyOne(std::map<std::string, bool> flags);
+
+}  // namespace FlagValidators
 
 // Determines whether a test case should be run based on the --match and --skip command-line flags.
 bool ShouldRunTestCase(const char* name,
                        CommandLineFlags::StringArray& matchFlag,
                        CommandLineFlags::StringArray& skipFlag);
+
+// Logs a message to stdout.
+//
+// It prefixes the message with a timestamp, and suffixes it with a line break ("\n").
+void Log(const char* format, ...) SK_PRINTF_LIKE(1, 2);
 
 }  // namespace TestRunner
 
