@@ -521,24 +521,7 @@ static void print_benchmark_stats(Stats* stats,
 // Based on
 // https://skia.googlesource.com/skia/+/a063eaeaf1e09e4d6f42e0f44a5723622a46d21c/bench/nanobench.cpp#1337.
 int main(int argc, char** argv) {
-#ifdef SK_BUILD_FOR_ANDROID
-    extern bool gSkDebugToStdOut;  // If true, sends SkDebugf to stdout as well.
-    gSkDebugToStdOut = true;
-#endif
-
-    // Print command-line for debugging purposes.
-    if (argc < 2) {
-        TestRunner::Log("Benchmark runner invoked with no arguments.");
-    } else {
-        std::ostringstream oss;
-        for (int i = 1; i < argc; i++) {
-            if (i > 1) {
-                oss << " ";
-            }
-            oss << argv[i];
-        }
-        TestRunner::Log("Benchmark runner invoked with arguments: %s", oss.str().c_str());
-    }
+    TestRunner::InitAndLogCmdlineArgs(argc, argv);
 
     // When running under Bazel (e.g. "bazel test //path/to:test"), we'll store output files in
     // $TEST_UNDECLARED_OUTPUTS_DIR unless overridden via the --outputDir flag.
@@ -604,6 +587,7 @@ int main(int argc, char** argv) {
     }
 
     int runs = 0;
+    bool missingCpuOrGpuWarningLogged = false;
     for (auto benchmarkFactory : BenchRegistry::Range()) {
         std::unique_ptr<Benchmark> benchmark(benchmarkFactory(nullptr));
 
@@ -618,15 +602,19 @@ int main(int argc, char** argv) {
                 BenchmarkTarget::FromConfig(surfaceConfig, benchmark.get());
 
         // Print warning about missing cpu_or_gpu key if necessary.
-        if (target->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kCPU && cpuName == "") {
+        if (target->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kCPU && cpuName == "" &&
+            !missingCpuOrGpuWarningLogged) {
             TestRunner::Log(
                     "Warning: The surface is CPU-bound, but flag --cpuName was not provided. "
                     "Perf traces will omit keys \"cpu_or_gpu\" and \"cpu_or_gpu_value\".");
+            missingCpuOrGpuWarningLogged = true;
         }
-        if (target->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kGPU && gpuName == "") {
+        if (target->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kGPU && gpuName == "" &&
+            !missingCpuOrGpuWarningLogged) {
             TestRunner::Log(
                     "Warning: The surface is GPU-bound, but flag --gpuName was not provided. "
                     "Perf traces will omit keys \"cpu_or_gpu\" and \"cpu_or_gpu_value\".");
+            missingCpuOrGpuWarningLogged = true;
         }
 
         if (benchmark->isSuitableFor(target->getBackend())) {

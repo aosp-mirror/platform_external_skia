@@ -175,6 +175,8 @@ static int gNumSuccessfulGMs = 0;
 static int gNumFailedGMs = 0;
 static int gNumSkippedGMs = 0;
 
+static bool gMissingCpuOrGpuWarningLogged = false;
+
 // Runs a GM under the given surface config, and saves its output PNG file (and accompanying JSON
 // file with metadata) to the given output directory.
 void run_gm(std::unique_ptr<skiagm::GM> gm,
@@ -193,15 +195,19 @@ void run_gm(std::unique_ptr<skiagm::GM> gm,
     }
 
     // Print warning about missing cpu_or_gpu key if necessary.
-    if ((surfaceManager->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kCPU && cpuName == "")) {
+    if ((surfaceManager->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kCPU && cpuName == "" &&
+         !gMissingCpuOrGpuWarningLogged)) {
         TestRunner::Log(
                 "\tWarning: The surface is CPU-bound, but flag --cpuName was not provided. "
                 "Gold traces will omit keys \"cpu_or_gpu\" and \"cpu_or_gpu_value\".");
+        gMissingCpuOrGpuWarningLogged = true;
     }
-    if ((surfaceManager->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kGPU && gpuName == "")) {
+    if ((surfaceManager->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kGPU && gpuName == "" &&
+         !gMissingCpuOrGpuWarningLogged)) {
         TestRunner::Log(
                 "\tWarning: The surface is GPU-bound, but flag --gpuName was not provided. "
                 "Gold traces will omit keys \"cpu_or_gpu\" and \"cpu_or_gpu_value\".");
+        gMissingCpuOrGpuWarningLogged = true;
     }
 
     // Set up GPU.
@@ -271,24 +277,7 @@ void run_gm(std::unique_ptr<skiagm::GM> gm,
 }
 
 int main(int argc, char** argv) {
-#ifdef SK_BUILD_FOR_ANDROID
-    extern bool gSkDebugToStdOut;  // If true, sends SkDebugf to stdout as well.
-    gSkDebugToStdOut = true;
-#endif
-
-    // Print command-line for debugging purposes.
-    if (argc < 2) {
-        TestRunner::Log("GM runner invoked with no arguments.");
-    } else {
-        std::ostringstream oss;
-        for (int i = 1; i < argc; i++) {
-            if (i > 1) {
-                oss << " ";
-            }
-            oss << argv[i];
-        }
-        TestRunner::Log("GM runner invoked with arguments: %s", oss.str().c_str());
-    }
+    TestRunner::InitAndLogCmdlineArgs(argc, argv);
 
     // When running under Bazel (e.g. "bazel test //path/to:test"), we'll store output files in
     // $TEST_UNDECLARED_OUTPUTS_DIR unless overridden via the --outputDir flag.
