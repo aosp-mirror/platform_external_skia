@@ -11,12 +11,28 @@
 #define SKSL_ENABLE_TRACING
 #endif
 
+#ifndef SK_CODEC_DECODES_BMP
+#define SK_CODEC_DECODES_BMP
+#endif
+
+#ifndef SK_CODEC_DECODES_GIF
+#define SK_CODEC_DECODES_GIF
+#endif
+
+#ifndef SK_CODEC_DECODES_ICO
+#define SK_CODEC_DECODES_ICO
+#endif
+
 #ifndef SK_CODEC_DECODES_JPEG
 #define SK_CODEC_DECODES_JPEG
 #endif
 
 #ifndef SK_CODEC_DECODES_PNG
 #define SK_CODEC_DECODES_PNG
+#endif
+
+#ifndef SK_CODEC_DECODES_WBMP
+#define SK_CODEC_DECODES_WBMP
 #endif
 
 #ifndef SK_CODEC_DECODES_WEBP
