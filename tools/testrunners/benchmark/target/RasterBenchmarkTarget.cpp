@@ -8,6 +8,7 @@
 #include "bench/Benchmark.h"
 #include "tools/flags/CommandLineFlags.h"
 #include "tools/testrunners/benchmark/target/BenchmarkTarget.h"
+#include "tools/testrunners/common/TestRunner.h"
 
 static DEFINE_int(maxCalibrationAttempts,
                   3,
@@ -28,7 +29,7 @@ public:
     RasterBenchmarkTarget(std::unique_ptr<SurfaceManager> surfaceManager, Benchmark* benchmark)
             : BenchmarkTarget(std::move(surfaceManager), benchmark) {}
 
-    Benchmark::Backend getBackend() const override { return Benchmark::kRaster_Backend; }
+    Benchmark::Backend getBackend() const override { return Benchmark::Backend::kRaster; }
 
     // Based on nanobench's setup_cpu_bench():
     // https://skia.googlesource.com/skia/+/a063eaeaf1e09e4d6f42e0f44a5723622a46d21c/bench/nanobench.cpp#466.
@@ -48,10 +49,10 @@ public:
         int round = 0;
         while (bench_plus_overhead < overhead) {
             if (round++ == FLAGS_maxCalibrationAttempts) {
-                SkDebugf("Warning: Cannot estimate loops for %s (%s vs. %s); skipping.\n",
-                         fBenchmark->getUniqueName(),
-                         humanize(bench_plus_overhead).c_str(),
-                         humanize(overhead).c_str());
+                TestRunner::Log("Warning: Cannot estimate loops for %s (%s vs. %s); skipping.",
+                                fBenchmark->getUniqueName(),
+                                humanize(bench_plus_overhead).c_str(),
+                                humanize(overhead).c_str());
                 return std::make_tuple(0, false);
             }
             bench_plus_overhead = time(1);
@@ -85,7 +86,7 @@ class NonRenderingBenchmarkTarget : public RasterBenchmarkTarget {
 public:
     NonRenderingBenchmarkTarget(Benchmark* benchmark) : RasterBenchmarkTarget(nullptr, benchmark) {}
 
-    Benchmark::Backend getBackend() const override { return Benchmark::kNonRendering_Backend; }
+    Benchmark::Backend getBackend() const override { return Benchmark::Backend::kNonRendering; }
 };
 
 std::unique_ptr<BenchmarkTarget> BenchmarkTarget::FromConfig(std::string surfaceConfig,
