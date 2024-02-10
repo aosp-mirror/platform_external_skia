@@ -4330,6 +4330,7 @@ cc_library_shared {
         "src/gpu/graphite/Sampler.cpp",
         "src/gpu/graphite/ShaderCodeDictionary.cpp",
         "src/gpu/graphite/SharedContext.cpp",
+        "src/gpu/graphite/SmallPathAtlas.cpp",
         "src/gpu/graphite/SpecialImage_Graphite.cpp",
         "src/gpu/graphite/Surface_Graphite.cpp",
         "src/gpu/graphite/SynchronizeToCpuTask.cpp",
