@@ -8,7 +8,6 @@
 #ifndef SkUserConfigManual_DEFINED
 #define SkUserConfigManual_DEFINED
   #include <android/log.h>
-  #define GR_TEST_UTILS 1
   #define SK_BUILD_FOR_ANDROID_FRAMEWORK
   #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
   #define SK_DEFAULT_GLOBAL_DISCARDABLE_MEMORY_POOL_SIZE (512 * 1024)
