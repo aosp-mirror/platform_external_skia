@@ -26,6 +26,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/fonts/RandomScalerContext.h"
 
 #include <string.h>
@@ -54,10 +55,8 @@ protected:
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
 
         // Setup our random scaler context
-        auto typeface = ToolUtils::create_portable_typeface("sans-serif", SkFontStyle::Bold());
-        if (!typeface) {
-            typeface = SkTypeface::MakeDefault();
-        }
+        auto typeface = ToolUtils::CreatePortableTypeface("sans-serif", SkFontStyle::Bold());
+        SkASSERT(typeface);
         font.setTypeface(sk_make_sp<SkRandomTypeface>(std::move(typeface), paint, false));
 
         SkScalar y = 0;
@@ -84,9 +83,9 @@ protected:
         y += bounds.fBottom;
 
         // color emoji
-        if (sk_sp<SkTypeface> origEmoji = ToolUtils::emoji_typeface()) {
+        if (sk_sp<SkTypeface> origEmoji = ToolUtils::EmojiTypeface()) {
             font.setTypeface(sk_make_sp<SkRandomTypeface>(origEmoji, paint, false));
-            const char* emojiText = ToolUtils::emoji_sample_text();
+            const char* emojiText = ToolUtils::EmojiSampleText();
             font.measureText(emojiText, strlen(emojiText), SkTextEncoding::kUTF8, &bounds);
             y -= bounds.fTop;
             ToolUtils::add_to_text_blob(&builder, emojiText, font, 0, y);
@@ -97,23 +96,24 @@ protected:
         fBlob = builder.make();
     }
 
-    SkString onShortName() override {
-        return SkString("textblobrandomfont");
-    }
+    SkString getName() const override { return SkString("textblobrandomfont"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(kWidth, kHeight);
-    }
+    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        if (!canvas->recordingContext()) {
-            *errorMsg = "Active context required to create SkSurface";
-            return DrawResult::kSkip;
+        GrDirectContext* dContext = GrAsDirectContext(canvas->recordingContext());
+        bool isGPU = SkToBool(dContext);
+
+#if defined(SK_GRAPHITE)
+        skgpu::graphite::Recorder* recorder = canvas->recorder();
+        isGPU = isGPU || SkToBool(recorder);
+#endif
+
+        if (!isGPU) {
+            *errorMsg = skiagm::GM::kErrorMsg_DrawSkippedGpuOnly;
+            return skiagm::DrawResult::kSkip;
         }
 
-        auto dContext = GrAsDirectContext(canvas->recordingContext());
-
-        // This GM exists to test a specific feature of the GPU backend.
         // This GM uses ToolUtils::makeSurface which doesn't work well with vias.
         // This GM uses SkRandomTypeface which doesn't work well with serialization.
         canvas->drawColor(SK_ColorWHITE);

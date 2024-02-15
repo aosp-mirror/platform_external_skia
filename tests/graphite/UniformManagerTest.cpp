@@ -22,7 +22,6 @@ static constexpr Layout kLayouts[] = {
 
 // This list excludes SkSLTypes that we don't support in uniforms, like Bool, UInt or UShort.
 static constexpr SkSLType kTypes[] = {
-        SkSLType::kShort,    SkSLType::kShort2,   SkSLType::kShort3,   SkSLType::kShort4,   //
         SkSLType::kFloat,    SkSLType::kFloat2,   SkSLType::kFloat3,   SkSLType::kFloat4,   //
         SkSLType::kHalf,     SkSLType::kHalf2,    SkSLType::kHalf3,    SkSLType::kHalf4,    //
         SkSLType::kInt,      SkSLType::kInt2,     SkSLType::kInt3,     SkSLType::kInt4,     //
@@ -40,39 +39,35 @@ static constexpr SkHalf kHalfs[16] = { 0x3C00, 0x4000, 0x4200, 0x4400,
                                        0x4880, 0x4900, 0x4980, 0x4A00,
                                        0x4A80, 0x4B00, 0x4B80, 0x4C00 };
 
-static constexpr int16_t kShorts[16] = { 1,  -2,  3,  -4,
-                                         5,  -6,  7,  -8,
-                                         9, -10, 11, -12,
-                                        13, -14, 15, -16 };
-
 static constexpr int32_t kInts[16] = { 1,  -2,  3,  -4,
                                        5,  -6,  7,  -8,
                                        9, -10, 11, -12,
                                       13, -14, 15, -16 };
 
 static size_t element_size(Layout layout, SkSLType type) {
-    // Metal should encode half-precision uniforms in 16 bits.
-    // Other layouts should always encode uniforms in 32 bit.
+    // Metal encodes half-precision uniforms in 16 bits.
+    // Other layouts are expected to encode uniforms in 32 bits.
     return (layout == Layout::kMetal && !SkSLTypeIsFullPrecisionNumericType(type)) ? 2 : 4;
 }
 
-DEF_TEST(UniformManagerCheckSingleUniform, r) {
+DEF_GRAPHITE_TEST(UniformManagerCheckSingleUniform, r, CtsEnforcement::kNextRelease) {
     // Verify that the uniform manager can hold all the basic uniform types, in every layout.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
 
         for (SkSLType type : kTypes) {
             const Uniform expectations[] = {{"uniform", type}};
-            mgr.setExpectedUniforms(SkSpan(expectations));
-            mgr.write(type, kFloats);
-            mgr.doneWithExpectedUniforms();
-            REPORTER_ASSERT(r, mgr.size() > 0);
+            SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+            mgr.write(expectations[0], kFloats);
+            SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
+            REPORTER_ASSERT(r, mgr.size() > 0, "Layout: %s - Type: %s",
+                            LayoutString(layout), SkSLTypeString(type));
             mgr.reset();
         }
     }
 }
 
-DEF_TEST(UniformManagerCheckFloatEncoding, r) {
+DEF_GRAPHITE_TEST(UniformManagerCheckFloatEncoding, r, CtsEnforcement::kNextRelease) {
     // Verify that the uniform manager encodes float data properly.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -86,9 +81,9 @@ DEF_TEST(UniformManagerCheckFloatEncoding, r) {
 
             // Write our uniform float scalar/vector.
             const Uniform expectations[] = {{"uniform", type}};
-            mgr.setExpectedUniforms(SkSpan(expectations));
-            mgr.write(type, kFloats);
-            mgr.doneWithExpectedUniforms();
+            SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+            mgr.write(expectations[0], kFloats);
+            SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
             // Read back the uniform data.
             UniformDataBlock uniformData = mgr.finishUniformDataBlock();
@@ -96,13 +91,14 @@ DEF_TEST(UniformManagerCheckFloatEncoding, r) {
             const void* validData = (elementSize == 4) ? (const void*)kFloats : (const void*)kHalfs;
             REPORTER_ASSERT(r, uniformData.size() >= vecLength * elementSize);
             REPORTER_ASSERT(r, 0 == memcmp(validData, uniformData.data(), vecLength * elementSize),
-                            "Layout:%d Type:%d float encoding failed", (int)layout, (int)type);
+                            "Layout: %s - Type: %s float encoding failed",
+                            LayoutString(layout), SkSLTypeString(type));
             mgr.reset();
         }
     }
 }
 
-DEF_TEST(UniformManagerCheckIntEncoding, r) {
+DEF_GRAPHITE_TEST(UniformManagerCheckIntEncoding, r, CtsEnforcement::kNextRelease) {
     // Verify that the uniform manager encodes int data properly.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -114,24 +110,24 @@ DEF_TEST(UniformManagerCheckIntEncoding, r) {
 
             // Write our uniform int scalar/vector.
             const Uniform expectations[] = {{"uniform", type}};
-            mgr.setExpectedUniforms(SkSpan(expectations));
-            mgr.write(type, kInts);
-            mgr.doneWithExpectedUniforms();
+            SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+            mgr.write(expectations[0], kInts);
+            SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
             // Read back the uniform data.
             UniformDataBlock uniformData = mgr.finishUniformDataBlock();
             int vecLength = SkSLTypeVecLength(type);
             size_t elementSize = element_size(layout, type);
-            const void* validData = (elementSize == 4) ? (const void*)kInts : (const void*)kShorts;
             REPORTER_ASSERT(r, uniformData.size() >= vecLength * elementSize);
-            REPORTER_ASSERT(r, 0 == memcmp(validData, uniformData.data(), vecLength * elementSize),
-                            "Layout:%d Type:%d int encoding failed", (int)layout, (int)type);
+            REPORTER_ASSERT(r, 0 == memcmp(kInts, uniformData.data(), vecLength * elementSize),
+                            "Layout: %s - Type: %s int encoding failed",
+                            LayoutString(layout), SkSLTypeString(type));
             mgr.reset();
         }
     }
 }
 
-DEF_TEST(UniformManagerCheckScalarVectorPacking, r) {
+DEF_GRAPHITE_TEST(UniformManagerCheckScalarVectorPacking, r, CtsEnforcement::kNextRelease) {
     // Verify that the uniform manager can pack scalars and vectors of identical type correctly.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -144,25 +140,26 @@ DEF_TEST(UniformManagerCheckScalarVectorPacking, r) {
 
             // Write three matching uniforms.
             const Uniform expectations[] = {{"a", type}, {"b", type}, {"c", type}};
-            mgr.setExpectedUniforms(SkSpan(expectations));
-            mgr.write(type, kFloats);
-            mgr.write(type, kFloats);
-            mgr.write(type, kFloats);
-            mgr.doneWithExpectedUniforms();
+            SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+            mgr.write(expectations[0], kFloats);
+            mgr.write(expectations[1], kFloats);
+            mgr.write(expectations[2], kFloats);
+            SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
-            // Verify that the uniform data was packed as tight as it should be.
+            // Verify the uniform data packing.
             UniformDataBlock uniformData = mgr.finishUniformDataBlock();
             size_t elementSize = element_size(layout, type);
-            // Vec3s should be packed as if they were vec4s.
+            // Vec3s must be laid out as if they were vec4s.
             size_t effectiveVecLength = (vecLength == 3) ? 4 : vecLength;
             REPORTER_ASSERT(r, uniformData.size() == elementSize * effectiveVecLength * 3,
-                            "Layout:%d Type:%d tight packing failed", (int)layout, (int)type);
+                            "Layout: %s - Type: %s tight packing failed",
+                            LayoutString(layout), SkSLTypeString(type));
             mgr.reset();
         }
     }
 }
 
-DEF_TEST(UniformManagerCheckMatrixPacking, r) {
+DEF_GRAPHITE_TEST(UniformManagerCheckMatrixPacking, r, CtsEnforcement::kNextRelease) {
     // Verify that the uniform manager can pack matrices correctly.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -175,25 +172,34 @@ DEF_TEST(UniformManagerCheckMatrixPacking, r) {
 
             // Write three matching uniforms.
             const Uniform expectations[] = {{"a", type}, {"b", type}, {"c", type}};
-            mgr.setExpectedUniforms(SkSpan(expectations));
-            mgr.write(type, kFloats);
-            mgr.write(type, kFloats);
-            mgr.write(type, kFloats);
-            mgr.doneWithExpectedUniforms();
+            SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+            mgr.write(expectations[0], kFloats);
+            mgr.write(expectations[1], kFloats);
+            mgr.write(expectations[2], kFloats);
+            SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
-            // Verify that the uniform data was packed as tight as it should be.
+            // Verify the uniform data packing.
             UniformDataBlock uniformData = mgr.finishUniformDataBlock();
             size_t elementSize = element_size(layout, type);
-            // In all layouts, mat3s should burn 12 elements, not 9.
-            size_t numElements = (matrixSize == 3) ? 12 : (matrixSize * matrixSize);
+            // In all layouts, mat3s burn 12 elements, not 9. In std140, mat2s burn 8 elements
+            // instead of 4.
+            size_t numElements;
+            if (matrixSize == 3) {
+                numElements = 12;
+            } else if (matrixSize == 2 && layout == Layout::kStd140) {
+                numElements = 8;
+            } else {
+                numElements = matrixSize * matrixSize;
+            }
             REPORTER_ASSERT(r, uniformData.size() == elementSize * numElements * 3,
-                            "Layout:%d Type:%d matrix packing failed", (int)layout, (int)type);
+                            "Layout: %s - Type: %s matrix packing failed",
+                            LayoutString(layout), SkSLTypeString(type));
             mgr.reset();
         }
     }
 }
 
-DEF_TEST(UniformManagerCheckPaddingScalarVector, r) {
+DEF_GRAPHITE_TEST(UniformManagerCheckPaddingScalarVector, r, CtsEnforcement::kNextRelease) {
     // Verify that the uniform manager properly adds padding between pairs of scalar/vector.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -212,10 +218,10 @@ DEF_TEST(UniformManagerCheckPaddingScalarVector, r) {
 
                 // Write two scalar/vector uniforms.
                 const Uniform expectations[] = {{"a", type1}, {"b", type2}};
-                mgr.setExpectedUniforms(SkSpan(expectations));
-                mgr.write(type1, kFloats);
-                mgr.write(type2, kFloats);
-                mgr.doneWithExpectedUniforms();
+                SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+                mgr.write(expectations[0], kFloats);
+                mgr.write(expectations[1], kFloats);
+                SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
                 // The expected packing varies depending on the bit-widths of each element.
                 const size_t elementSize1 = element_size(layout, type1);
@@ -226,19 +232,28 @@ DEF_TEST(UniformManagerCheckPaddingScalarVector, r) {
                     // A/B: uniform values.
                     // a/b: padding as part of the uniform type (vec3 takes 4 slots)
                     // _  : padding between uniforms for alignment
-                    static constexpr const char* kExpectedLayout[5][5] = {
-                        { "", "",         "",         "",         ""         },
-                        { "", "AB",       "A_BB",     "A___BBBb", "A___BBBB" },
-                        { "", "AAB_",     "AABB",     "AA__BBBb", "AA__BBBB" },
-                        { "", "AAAaB___", "AAAaBB__", "AAAaBBBb", "AAAaBBBB" },
-                        { "", "AAAAB___", "AAAABB__", "AAAABBBb", "AAAABBBB" },
+                    static constexpr const char* kExpectedLayout[2][5][5] = {
+                        // Metal (vec3 consumes vec4 size)
+                        {{ "", "",         "",         "",         ""         },
+                         { "", "AB",       "A_BB",     "A___BBBb", "A___BBBB" },
+                         { "", "AAB_",     "AABB",     "AA__BBBb", "AA__BBBB" },
+                         { "", "AAAaB___", "AAAaBB__", "AAAaBBBb", "AAAaBBBB" },
+                         { "", "AAAAB___", "AAAABB__", "AAAABBBb", "AAAABBBB" }},
+                        // std140 and std430 (vec3 aligns to vec4, but consumes only 3 elements)
+                        {{ "", "",         "",         "",         ""         },
+                         { "", "AB",       "A_BB",     "A___BBBb", "A___BBBB" },
+                         { "", "AAB_",     "AABB",     "AA__BBBb", "AA__BBBB" },
+                         { "", "AAAB",     "AAA_BB__", "AAA_BBBb", "AAA_BBBB" },
+                         { "", "AAAAB___", "AAAABB__", "AAAABBBb", "AAAABBBB" }},
                     };
-                    const size_t size = strlen(kExpectedLayout[vecLength1][vecLength2]) *
+                    int layoutIdx = static_cast<int>(layout != Layout::kMetal);
+                    const size_t size = strlen(kExpectedLayout[layoutIdx][vecLength1][vecLength2]) *
                                         elementSize1;
                     UniformDataBlock uniformData = mgr.finishUniformDataBlock();
                     REPORTER_ASSERT(r, uniformData.size() == size,
-                                    "Layout:%d Types:%d %d padding test failed",
-                                    (int)layout, (int)type1, (int)type2);
+                                    "Layout: %s - Types: %s, %s padding test failed",
+                                    LayoutString(layout),
+                                    SkSLTypeString(type1), SkSLTypeString(type2));
                 } else if (elementSize1 == 2 && elementSize2 == 4) {
                     // Elements in the array below correspond to 16 bits apiece.
                     // The expected uniform layout is listed as strings below.
@@ -255,8 +270,9 @@ DEF_TEST(UniformManagerCheckPaddingScalarVector, r) {
                     const size_t size = strlen(kExpectedLayout[vecLength1][vecLength2]) * 2;
                     UniformDataBlock uniformData = mgr.finishUniformDataBlock();
                     REPORTER_ASSERT(r, uniformData.size() == size,
-                                    "Layout:%d Types:%d %d padding test failed",
-                                    (int)layout, (int)type1, (int)type2);
+                                    "Layout: %s - Types: %s, %s padding test failed",
+                                    LayoutString(layout),
+                                    SkSLTypeString(type1), SkSLTypeString(type2));
                 } else if (elementSize1 == 4 && elementSize2 == 2) {
                     // Elements in the array below correspond to 16 bits apiece.
                     // The expected uniform layout is listed as strings below.
@@ -281,8 +297,9 @@ DEF_TEST(UniformManagerCheckPaddingScalarVector, r) {
                     const size_t size = strlen(kExpectedLayout[vecLength1][vecLength2]) * 2;
                     UniformDataBlock uniformData = mgr.finishUniformDataBlock();
                     REPORTER_ASSERT(r, uniformData.size() == size,
-                                    "Layout:%d Types:%d %d padding test failed",
-                                    (int)layout, (int)type1, (int)type2);
+                                    "Layout: %s - Types: %s, %s padding test failed",
+                                    LayoutString(layout),
+                                    SkSLTypeString(type1), SkSLTypeString(type2));
                 } else {
                     ERRORF(r, "Unexpected element sizes: %zu %zu", elementSize1, elementSize2);
                 }
@@ -292,7 +309,7 @@ DEF_TEST(UniformManagerCheckPaddingScalarVector, r) {
     }
 }
 
-DEF_TEST(UniformManagerCheckPaddingVectorMatrix, r) {
+DEF_GRAPHITE_TEST(UniformManagerCheckPaddingVectorMatrix, r, CtsEnforcement::kNextRelease) {
     // Verify that the uniform manager properly adds padding between vectors and matrices.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -311,10 +328,10 @@ DEF_TEST(UniformManagerCheckPaddingVectorMatrix, r) {
 
                 // Write the scalar/vector and matrix uniforms.
                 const Uniform expectations[] = {{"a", type1}, {"b", type2}};
-                mgr.setExpectedUniforms(SkSpan(expectations));
-                mgr.write(type1, kFloats);
-                mgr.write(type2, kFloats);
-                mgr.doneWithExpectedUniforms();
+                SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+                mgr.write(expectations[0], kFloats);
+                mgr.write(expectations[1], kFloats);
+                SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
                 // The expected packing varies depending on the bit-widths of each element.
                 const size_t elementSize1 = element_size(layout, type1);
@@ -325,19 +342,32 @@ DEF_TEST(UniformManagerCheckPaddingVectorMatrix, r) {
                     // A/B: uniform values.
                     // a/b: padding as part of the uniform type (vec3 takes 4 slots)
                     // _  : padding between uniforms for alignment
-                    static constexpr const char* kExpectedLayout[5][5] = {
-                        { "", "", "",         "",                     "" },
-                        { "", "", "A_BBBB",   "A___BBBbBBBbBBBb", "A___BBBBBBBBBBBBBBBB" },
-                        { "", "", "AABBBB",   "AA__BBBbBBBbBBBb", "AA__BBBBBBBBBBBBBBBB" },
-                        { "", "", "AAAaBBBB", "AAAaBBBbBBBbBBBb", "AAAaBBBBBBBBBBBBBBBB" },
-                        { "", "", "AAAABBBB", "AAAABBBbBBBbBBBb", "AAAABBBBBBBBBBBBBBBB" },
+                    static constexpr const char* kExpectedLayout[2][5][5] = {
+                        // std140 layout
+                        {
+                            { "", "", "",             "",                 "" },
+                            { "", "", "A___BBbbBBbb", "A___BBBbBBBbBBBb", "A___BBBBBBBBBBBBBBBB" },
+                            { "", "", "AA__BBbbBBbb", "AA__BBBbBBBbBBBb", "AA__BBBBBBBBBBBBBBBB" },
+                            { "", "", "AAAaBBbbBBbb", "AAAaBBBbBBBbBBBb", "AAAaBBBBBBBBBBBBBBBB" },
+                            { "", "", "AAAABBbbBBbb", "AAAABBBbBBBbBBBb", "AAAABBBBBBBBBBBBBBBB" },
+                        },
+                        // All other layouts
+                        {
+                            { "", "", "",         "",                 "" },
+                            { "", "", "A_BBBB",   "A___BBBbBBBbBBBb", "A___BBBBBBBBBBBBBBBB" },
+                            { "", "", "AABBBB",   "AA__BBBbBBBbBBBb", "AA__BBBBBBBBBBBBBBBB" },
+                            { "", "", "AAAaBBBB", "AAAaBBBbBBBbBBBb", "AAAaBBBBBBBBBBBBBBBB" },
+                            { "", "", "AAAABBBB", "AAAABBBbBBBbBBBb", "AAAABBBBBBBBBBBBBBBB" },
+                        },
                     };
-                    const size_t size = strlen(kExpectedLayout[vecLength1][matSize2]) *
+                    int layoutIdx = static_cast<int>(layout != Layout::kStd140);
+                    const size_t size = strlen(kExpectedLayout[layoutIdx][vecLength1][matSize2]) *
                                         elementSize1;
                     UniformDataBlock uniformData = mgr.finishUniformDataBlock();
                     REPORTER_ASSERT(r, uniformData.size() == size,
-                                    "Types:%d %d vector-matrix padding test failed",
-                                    (int)type1, (int)type2);
+                                    "Layout: %s - Types: %s, %s vector-matrix padding test failed",
+                                    LayoutString(layout),
+                                    SkSLTypeString(type1), SkSLTypeString(type2));
                 } else if (elementSize1 == 2 && elementSize2 == 4) {
                     // Elements in the array below correspond to 16 bits apiece.
                     // The expected uniform layout is listed as strings below.
@@ -366,8 +396,9 @@ DEF_TEST(UniformManagerCheckPaddingVectorMatrix, r) {
                     const size_t size = strlen(kExpectedLayout[vecLength1][matSize2]) * 2;
                     UniformDataBlock uniformData = mgr.finishUniformDataBlock();
                     REPORTER_ASSERT(r, uniformData.size() == size,
-                                    "Types:%d %d vector-matrix padding test failed",
-                                    (int)type1, (int)type2);
+                                    "Layout: %s - Types: %s, %s vector-matrix padding test failed",
+                                    LayoutString(layout),
+                                    SkSLTypeString(type1), SkSLTypeString(type2));
                 } else if (elementSize1 == 4 && elementSize2 == 2) {
                     // Elements in the array below correspond to 16 bits apiece.
                     // The expected uniform layout is listed as strings below.
@@ -390,8 +421,9 @@ DEF_TEST(UniformManagerCheckPaddingVectorMatrix, r) {
                     const size_t size = strlen(kExpectedLayout[vecLength1][matSize2]) * 2;
                     UniformDataBlock uniformData = mgr.finishUniformDataBlock();
                     REPORTER_ASSERT(r, uniformData.size() == size,
-                                    "Types:%d %d vector-matrix padding test failed",
-                                    (int)type1, (int)type2);
+                                    "Layout: %s - Types: %s, %s vector-matrix padding test failed",
+                                    LayoutString(layout),
+                                    SkSLTypeString(type1), SkSLTypeString(type2));
                 }
                 mgr.reset();
             }
@@ -399,7 +431,7 @@ DEF_TEST(UniformManagerCheckPaddingVectorMatrix, r) {
     }
 }
 
-DEF_TEST(UniformManagerCheckPaddingMatrixVector, r) {
+DEF_GRAPHITE_TEST(UniformManagerCheckPaddingMatrixVector, r, CtsEnforcement::kNextRelease) {
     // Verify that the uniform manager properly adds padding between matrices and vectors.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -418,10 +450,10 @@ DEF_TEST(UniformManagerCheckPaddingMatrixVector, r) {
 
                 // Write the scalar/vector and matrix uniforms.
                 const Uniform expectations[] = {{"a", type1}, {"b", type2}};
-                mgr.setExpectedUniforms(SkSpan(expectations));
-                mgr.write(type1, kFloats);
-                mgr.write(type2, kFloats);
-                mgr.doneWithExpectedUniforms();
+                SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+                mgr.write(expectations[0], kFloats);
+                mgr.write(expectations[1], kFloats);
+                SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
                 // The expected packing varies depending on the bit-widths of each element.
                 const size_t elementSize1 = element_size(layout, type1);
@@ -432,27 +464,48 @@ DEF_TEST(UniformManagerCheckPaddingMatrixVector, r) {
                     // A/B: uniform values.
                     // a/b: padding as part of the uniform type (vec3 takes 4 slots)
                     // _  : padding between uniforms for alignment
-                    static constexpr const char* kExpectedLayout[5][5] = {
-                        { "", "", "", "", "" },
-                        { "", "", "", "", "" },
-                        { "", "AAAAB_", "AAAABB", "AAAABBBb", "AAAABBBB" },
-                        { "",
-                          "AAAaAAAaAAAaB___",
-                          "AAAaAAAaAAAaBB__",
-                          "AAAaAAAaAAAaBBBb",
-                          "AAAaAAAaAAAaBBBB" },
-                        { "",
-                          "AAAAAAAAAAAAAAAAB___",
-                          "AAAAAAAAAAAAAAAABB__",
-                          "AAAAAAAAAAAAAAAABBBb",
-                          "AAAAAAAAAAAAAAAABBBB" },
+                    static constexpr const char* kExpectedLayout[2][5][5] = {
+                        // std140 layout
+                        {
+                            { "", "", "", "", "" },
+                            { "", "", "", "", "" },
+                            { "", "AAaaAAaaB___", "AAaaAAaaBB__", "AAaaAAaaBBBb", "AAaaAAaaBBBB" },
+                            { "",
+                              "AAAaAAAaAAAaB___",
+                              "AAAaAAAaAAAaBB__",
+                              "AAAaAAAaAAAaBBBb",
+                              "AAAaAAAaAAAaBBBB" },
+                            { "",
+                              "AAAAAAAAAAAAAAAAB___",
+                              "AAAAAAAAAAAAAAAABB__",
+                              "AAAAAAAAAAAAAAAABBBb",
+                              "AAAAAAAAAAAAAAAABBBB" },
+                        },
+                        // All other layouts
+                        {
+                            { "", "", "", "", "" },
+                            { "", "", "", "", "" },
+                            { "", "AAAAB_", "AAAABB", "AAAABBBb", "AAAABBBB" },
+                            { "",
+                              "AAAaAAAaAAAaB___",
+                              "AAAaAAAaAAAaBB__",
+                              "AAAaAAAaAAAaBBBb",
+                              "AAAaAAAaAAAaBBBB" },
+                            { "",
+                              "AAAAAAAAAAAAAAAAB___",
+                              "AAAAAAAAAAAAAAAABB__",
+                              "AAAAAAAAAAAAAAAABBBb",
+                              "AAAAAAAAAAAAAAAABBBB" },
+                        },
                     };
-                    const size_t size = strlen(kExpectedLayout[matSize1][vecLength2]) *
+                    int layoutIdx = static_cast<int>(layout != Layout::kStd140);
+                    const size_t size = strlen(kExpectedLayout[layoutIdx][matSize1][vecLength2]) *
                                         elementSize1;
                     UniformDataBlock uniformData = mgr.finishUniformDataBlock();
                     REPORTER_ASSERT(r, uniformData.size() == size,
-                                    "Types:%d %d matrix-vector padding test failed",
-                                    (int)type1, (int)type2);
+                                    "Layout: %s - Types: %s, %s matrix-vector padding test failed",
+                                    LayoutString(layout),
+                                    SkSLTypeString(type1), SkSLTypeString(type2));
                 } else if (elementSize1 == 2 && elementSize2 == 4) {
                     // Elements in the array below correspond to 16 bits apiece.
                     // The expected uniform layout is listed as strings below.
@@ -477,8 +530,9 @@ DEF_TEST(UniformManagerCheckPaddingMatrixVector, r) {
                     const size_t size = strlen(kExpectedLayout[matSize1][vecLength2]) * 2;
                     UniformDataBlock uniformData = mgr.finishUniformDataBlock();
                     REPORTER_ASSERT(r, uniformData.size() == size,
-                                    "Types:%d %d matrix-vector padding test failed",
-                                    (int)type1, (int)type2);
+                                    "Layout: %s - Types: %s, %s matrix-vector padding test failed",
+                                    LayoutString(layout),
+                                    SkSLTypeString(type1), SkSLTypeString(type2));
                 } else if (elementSize1 == 4 && elementSize2 == 2) {
                     // Elements in the array below correspond to 16 bits apiece.
                     // The expected uniform layout is listed as strings below.
@@ -503,8 +557,9 @@ DEF_TEST(UniformManagerCheckPaddingMatrixVector, r) {
                     const size_t size = strlen(kExpectedLayout[matSize1][vecLength2]) * 2;
                     UniformDataBlock uniformData = mgr.finishUniformDataBlock();
                     REPORTER_ASSERT(r, uniformData.size() == size,
-                                    "Types:%d %d matrix-vector padding test failed",
-                                    (int)type1, (int)type2);
+                                    "Layout: %s - Types: %s, %s matrix-vector padding test failed",
+                                    LayoutString(layout),
+                                    SkSLTypeString(type1), SkSLTypeString(type2));
                 }
                 mgr.reset();
             }
@@ -512,7 +567,7 @@ DEF_TEST(UniformManagerCheckPaddingMatrixVector, r) {
     }
 }
 
-DEF_TEST(UniformManagerMetalArrayLayout, r) {
+DEF_GRAPHITE_TEST(UniformManagerMetalArrayLayout, r, CtsEnforcement::kNextRelease) {
     UniformManager mgr(Layout::kMetal);
 
     // Tests set up a uniform block with a single half (to force alignment) and an array of 3
@@ -522,28 +577,24 @@ DEF_TEST(UniformManagerMetalArrayLayout, r) {
     // Buffer large enough to hold a float4x4[3] array.
     static constexpr uint8_t kBuffer[192] = {};
     static const char* kExpectedLayout[] = {
-        // Elements in the array below correspond to 16 bits apiece.
+        // Each letter (A/B/a/b) corresponds to a single byte.
         // The expected uniform layout is listed as strings below.
         // A/B: uniform values.
-        // a/b: padding as part of the uniform type (vec3 takes 4 slots)
+        // a/b: padding as part of the uniform type.
         // _  : padding between uniforms for alignment.
 
-        /* {half, short[3]}  */ "AABBBBBB",
-        /* {half, short2[3]} */ "AA__BBBBBBBBBBBB",
-        /* {half, short3[3]} */ "AA______BBBBBBbbBBBBBBbbBBBBBBbb",
-        /* {half, short4[3]} */ "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, float[3]}  */ "AA__BBBBBBBBBBBB",
-        /* {half, float2[3]} */ "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, float3[3]} */ "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
-        /* {half, float4[3]} */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, half[3]}   */ "AABBBBBB",
-        /* {half, half2[3]}  */ "AA__BBBBBBBBBBBB",
-        /* {half, half3[3]}  */ "AA______BBBBBBbbBBBBBBbbBBBBBBbb",
-        /* {half, half4[3]}  */ "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, int[3]}    */ "AA__BBBBBBBBBBBB",
-        /* {half, int2[3]}   */ "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, int3[3]}   */ "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
-        /* {half, int4[3]}   */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, float[3]}  */  "AA__BBBBBBBBBBBB",
+        /* {half, float2[3]} */  "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, float3[3]} */  "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
+        /* {half, float4[3]} */  "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, half[3]}   */  "AABBBBBB",
+        /* {half, half2[3]}  */  "AA__BBBBBBBBBBBB",
+        /* {half, half3[3]}  */  "AA______BBBBBBbbBBBBBBbbBBBBBBbb",
+        /* {half, half4[3]}  */  "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, int[3]}    */  "AA__BBBBBBBBBBBB",
+        /* {half, int2[3]}   */  "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, int3[3]}   */  "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
+        /* {half, int4[3]}   */  "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 
         /* {half, float2x2[3] */ "AA______BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         /* {half, float3x3[3] */ "AA______________"
@@ -555,12 +606,12 @@ DEF_TEST(UniformManagerMetalArrayLayout, r) {
                                  "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
                                  "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 
-        /* {half, half2x2[3] */ "AA__BBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, half3x3[3] */ "AA______"
+        /* {half, half2x2[3] */  "AA__BBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, half3x3[3] */  "AA______"
                                  "BBBBBBbbBBBBBBbbBBBBBBbb"
                                  "BBBBBBbbBBBBBBbbBBBBBBbb"
                                  "BBBBBBbbBBBBBBbbBBBBBBbb",
-        /* {half, half4x4[3] */ "AA______"
+        /* {half, half4x4[3] */  "AA______"
                                  "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
                                  "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
                                  "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
@@ -569,10 +620,10 @@ DEF_TEST(UniformManagerMetalArrayLayout, r) {
         const SkSLType arrayType = kTypes[i];
         const Uniform expectations[] = {{"a", SkSLType::kHalf}, {"b", arrayType, kArraySize}};
 
-        mgr.setExpectedUniforms(SkSpan(expectations));
-        mgr.write(SkSLType::kHalf, kHalfs);
-        mgr.writeArray(arrayType, kBuffer, kArraySize);
-        mgr.doneWithExpectedUniforms();
+        SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+        mgr.write(expectations[0], kHalfs);
+        mgr.write(expectations[1], kBuffer);
+        SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
         const size_t expectedSize = strlen(kExpectedLayout[i]);
         const UniformDataBlock uniformData = mgr.finishUniformDataBlock();
@@ -584,7 +635,7 @@ DEF_TEST(UniformManagerMetalArrayLayout, r) {
     }
 }
 
-DEF_TEST(UniformManagerStd430ArrayLayout, r) {
+DEF_GRAPHITE_TEST(UniformManagerStd430ArrayLayout, r, CtsEnforcement::kNextRelease) {
     UniformManager mgr(Layout::kStd430);
 
     // Tests set up a uniform block with a single half (to force alignment) and an array of 3
@@ -594,28 +645,24 @@ DEF_TEST(UniformManagerStd430ArrayLayout, r) {
     // Buffer large enough to hold a float4x4[3] array.
     static constexpr uint8_t kBuffer[192] = {};
     static const char* kExpectedLayout[] = {
-        // Elements in the array below correspond to 16 bits apiece.
+        // Each letter (A/B/a/b) corresponds to a single byte.
         // The expected uniform layout is listed as strings below.
         // A/B: uniform values.
-        // a/b: padding as part of the uniform type (vec3 takes 4 slots)
+        // a/b: padding as part of the uniform type.
         // _  : padding between uniforms for alignment.
 
-        /* {half, short[3]}  */ "AA__BBBBBBBBBBBB",
-        /* {half, short2[3]} */ "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, short3[3]} */ "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
-        /* {half, short4[3]} */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, float[3]}  */ "AA__BBBBBBBBBBBB",
-        /* {half, float2[3]} */ "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, float3[3]} */ "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
-        /* {half, float4[3]} */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, half[3]}   */ "AA__BBBBBBBBBBBB",
-        /* {half, half2[3]}  */ "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, half3[3]}  */ "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
-        /* {half, half4[3]}  */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, int[3]}    */ "AA__BBBBBBBBBBBB",
-        /* {half, int2[3]}   */ "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, int3[3]}   */ "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
-        /* {half, int4[3]}   */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, float[3]}  */  "AA__BBBBBBBBBBBB",
+        /* {half, float2[3]} */  "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, float3[3]} */  "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
+        /* {half, float4[3]} */  "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, half[3]}   */  "AA__BBBBBBBBBBBB",
+        /* {half, half2[3]}  */  "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, half3[3]}  */  "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
+        /* {half, half4[3]}  */  "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, int[3]}    */  "AA__BBBBBBBBBBBB",
+        /* {half, int2[3]}   */  "AA______BBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, int3[3]}   */  "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
+        /* {half, int4[3]}   */  "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 
         /* {half, float2x2[3] */ "AA______BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         /* {half, float3x3[3] */ "AA______________"
@@ -641,10 +688,10 @@ DEF_TEST(UniformManagerStd430ArrayLayout, r) {
         const SkSLType arrayType = kTypes[i];
         const Uniform expectations[] = {{"a", SkSLType::kHalf}, {"b", arrayType, kArraySize}};
 
-        mgr.setExpectedUniforms(SkSpan(expectations));
-        mgr.write(SkSLType::kHalf, kHalfs);
-        mgr.writeArray(arrayType, kBuffer, kArraySize);
-        mgr.doneWithExpectedUniforms();
+        SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+        mgr.write(expectations[0], kHalfs);
+        mgr.write(expectations[1], kBuffer);
+        SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
         const size_t expectedSize = strlen(kExpectedLayout[i]);
         const UniformDataBlock uniformData = mgr.finishUniformDataBlock();
@@ -656,7 +703,7 @@ DEF_TEST(UniformManagerStd430ArrayLayout, r) {
     }
 }
 
-DEF_TEST(UniformManagerStd140ArrayLayout, r) {
+DEF_GRAPHITE_TEST(UniformManagerStd140ArrayLayout, r, CtsEnforcement::kNextRelease) {
     UniformManager mgr(Layout::kStd140);
 
     // Tests set up a uniform block with a single half (to force alignment) and an array of 3
@@ -666,30 +713,29 @@ DEF_TEST(UniformManagerStd140ArrayLayout, r) {
     // Buffer large enough to hold a float4x4[3] array.
     static constexpr uint8_t kBuffer[192] = {};
     static const char* kExpectedLayout[] = {
-        // Elements in the array below correspond to 16 bits apiece.
+        // Each letter (A/B/a/b) corresponds to a single byte.
         // The expected uniform layout is listed as strings below.
         // A/B: uniform values.
-        // a/b: padding as part of the uniform type (vec3 takes 4 slots)
+        // a/b: padding as part of the uniform type.
         // _  : padding between uniforms for alignment.
 
-        /* {half, short[3]}  */ "AA______________BBbbbbbbbbbbbbbbBBbbbbbbbbbbbbbbBBbbbbbbbbbbbbbb",
-        /* {half, short2[3]} */ "AA______________BBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbb",
-        /* {half, short3[3]} */ "AA______________BBBBBBbbbbbbbbbbBBBBBBbbbbbbbbbbBBBBBBbbbbbbbbbb",
-        /* {half, short4[3]} */ "AA______________BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb",
-        /* {half, float[3]}  */ "AA______________BBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbb",
-        /* {half, float2[3]} */ "AA______________BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb",
-        /* {half, float3[3]} */ "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
-        /* {half, float4[3]} */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-        /* {half, half[3]}   */ "AA______________BBbbbbbbbbbbbbbbBBbbbbbbbbbbbbbbBBbbbbbbbbbbbbbb",
-        /* {half, half2[3]}  */ "AA______________BBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbb",
-        /* {half, half3[3]}  */ "AA______________BBBBBBbbbbbbbbbbBBBBBBbbbbbbbbbbBBBBBBbbbbbbbbbb",
-        /* {half, half4[3]}  */ "AA______________BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb",
-        /* {half, int[3]}    */ "AA______________BBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbb",
-        /* {half, int2[3]}   */ "AA______________BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb",
-        /* {half, int3[3]}   */ "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
-        /* {half, int4[3]}   */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, float[3]}  */  "AA______________BBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbb",
+        /* {half, float2[3]} */  "AA______________BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb",
+        /* {half, float3[3]} */  "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
+        /* {half, float4[3]} */  "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, half[3]}   */  "AA______________BBbbbbbbbbbbbbbbBBbbbbbbbbbbbbbbBBbbbbbbbbbbbbbb",
+        /* {half, half2[3]}  */  "AA______________BBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbb",
+        /* {half, half3[3]}  */  "AA______________BBBBBBbbbbbbbbbbBBBBBBbbbbbbbbbbBBBBBBbbbbbbbbbb",
+        /* {half, half4[3]}  */  "AA______________BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb",
+        /* {half, int[3]}    */  "AA______________BBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbbBBBBbbbbbbbbbbbb",
+        /* {half, int2[3]}   */  "AA______________BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb",
+        /* {half, int3[3]}   */  "AA______________BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb",
+        /* {half, int4[3]}   */  "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 
-        /* {half, float2x2[3] */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, float2x2[3] */ "AA______________"
+                                 "BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb"
+                                 "BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb"
+                                 "BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb",
         /* {half, float3x3[3] */ "AA______________"
                                  "BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb"
                                  "BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb"
@@ -699,7 +745,10 @@ DEF_TEST(UniformManagerStd140ArrayLayout, r) {
                                  "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
                                  "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 
-        /* {half, half2x2[3]  */ "AA______________BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        /* {half, half2x2[3]  */ "AA______________"
+                                 "BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb"
+                                 "BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb"
+                                 "BBBBBBBBbbbbbbbbBBBBBBBBbbbbbbbb",
         /* {half, half3x3[3]  */ "AA______________"
                                  "BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb"
                                  "BBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbbBBBBBBBBBBBBbbbb"
@@ -713,10 +762,10 @@ DEF_TEST(UniformManagerStd140ArrayLayout, r) {
         const SkSLType arrayType = kTypes[i];
         const Uniform expectations[] = {{"a", SkSLType::kHalf}, {"b", arrayType, kArraySize}};
 
-        mgr.setExpectedUniforms(SkSpan(expectations));
-        mgr.write(SkSLType::kHalf, kHalfs);
-        mgr.writeArray(arrayType, kBuffer, kArraySize);
-        mgr.doneWithExpectedUniforms();
+        SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+        mgr.write(expectations[0], kHalfs);
+        mgr.write(expectations[1], kBuffer);
+        SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
 
         const size_t expectedSize = strlen(kExpectedLayout[i]);
         const UniformDataBlock uniformData = mgr.finishUniformDataBlock();
@@ -724,6 +773,115 @@ DEF_TEST(UniformManagerStd140ArrayLayout, r) {
                         "array test %d for type %s failed - expected size: %zu, actual size: %zu",
                         (int)i, SkSLTypeString(arrayType), expectedSize, uniformData.size());
 
+        mgr.reset();
+    }
+}
+
+// This test validates that the uniform data for matrix types get written out according to the
+// layout expectations.
+DEF_GRAPHITE_TEST(UniformManagerStd140MatrixLayoutContents, r, CtsEnforcement::kNextRelease) {
+    UniformManager mgr(Layout::kStd140);
+
+    // float2x2, half2x2
+    for (SkSLType type : {SkSLType::kFloat2x2, SkSLType::kHalf2x2}) {
+        const Uniform expectations[] = {{"m", type}};
+        SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+        mgr.write(expectations[0], kFloats);
+        SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
+        const UniformDataBlock uniformData = mgr.finishUniformDataBlock();
+        REPORTER_ASSERT(r, uniformData.size() == 32,
+                        "%s layout size expected 32, got %zu",
+                        SkSLTypeString(type), uniformData.size());
+
+        // The expected offsets of the 4 matrix elements.
+        const int kOffsets[4] = {0, 1, 4, 5};
+        const float* elements = reinterpret_cast<const float*>(uniformData.data());
+        for (size_t i = 0u; i < std::size(kOffsets); ++i) {
+            float expected = kFloats[i];
+            float el = elements[kOffsets[i]];
+            REPORTER_ASSERT(r, el == expected,
+                            "Incorrect %s element %zu - expected %f, got %f",
+                            SkSLTypeString(type), i, expected, el);
+        }
+        mgr.reset();
+    }
+
+    // float3x3, half3x3
+    for (SkSLType type : {SkSLType::kFloat3x3, SkSLType::kHalf3x3}) {
+        const Uniform expectations[] = {{"m", type}};
+        SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+        mgr.write(expectations[0], kFloats);
+        SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
+        const UniformDataBlock uniformData = mgr.finishUniformDataBlock();
+        REPORTER_ASSERT(r, uniformData.size() == 48,
+                        "%s layout size expected 48, got %zu",
+                        SkSLTypeString(type), uniformData.size());
+
+        // The expected offsets of the 9 matrix elements.
+        const int kOffsets[9] = {0, 1, 2, 4, 5, 6, 8, 9, 10};
+        const float* elements = reinterpret_cast<const float*>(uniformData.data());
+        for (size_t i = 0u; i < std::size(kOffsets); ++i) {
+            float expected = kFloats[i];
+            float el = elements[kOffsets[i]];
+            REPORTER_ASSERT(r, el == expected,
+                            "Incorrect %s element %zu - expected %f, got %f",
+                            SkSLTypeString(type), i, expected, el);
+        }
+        mgr.reset();
+    }
+}
+
+// This test validates that the uniform data for matrix types get written out according to the
+// layout expectations.
+DEF_GRAPHITE_TEST(UniformManagerStd430MatrixLayoutContents, r, CtsEnforcement::kNextRelease) {
+    UniformManager mgr(Layout::kStd430);
+
+    // float2x2, half2x2
+    for (SkSLType type : {SkSLType::kFloat2x2, SkSLType::kHalf2x2}) {
+        const Uniform expectations[] = {{"m", type}};
+        SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+        mgr.write(expectations[0], kFloats);
+        SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
+        const UniformDataBlock uniformData = mgr.finishUniformDataBlock();
+        REPORTER_ASSERT(r, uniformData.size() == 16,
+                        "%s layout size expected 16, got %zu",
+                        SkSLTypeString(type), uniformData.size());
+
+        // The expected offsets of the 4 matrix elements. This uses a tighter packing than std140
+        // layout.
+        const int kOffsets[4] = {0, 1, 2, 3};
+        const float* elements = reinterpret_cast<const float*>(uniformData.data());
+        for (size_t i = 0u; i < std::size(kOffsets); ++i) {
+            float expected = kFloats[i];
+            float el = elements[kOffsets[i]];
+            REPORTER_ASSERT(r, el == expected,
+                            "Incorrect %s element %zu - expected %f, got %f",
+                            SkSLTypeString(type), i, expected, el);
+        }
+        mgr.reset();
+    }
+
+    // float3x3, half3x3
+    for (SkSLType type : {SkSLType::kFloat3x3, SkSLType::kHalf3x3}) {
+        const Uniform expectations[] = {{"m", type}};
+        SkDEBUGCODE(mgr.setExpectedUniforms(SkSpan(expectations));)
+        mgr.write(expectations[0], kFloats);
+        SkDEBUGCODE(mgr.doneWithExpectedUniforms();)
+        const UniformDataBlock uniformData = mgr.finishUniformDataBlock();
+        REPORTER_ASSERT(r, uniformData.size() == 48,
+                        "%s layout size expected 48, got %zu",
+                        SkSLTypeString(type), uniformData.size());
+
+        // The expected offsets of the 9 matrix elements. This is the same as std140 layout.
+        const int kOffsets[9] = {0, 1, 2, 4, 5, 6, 8, 9, 10};
+        const float* elements = reinterpret_cast<const float*>(uniformData.data());
+        for (size_t i = 0u; i < std::size(kOffsets); ++i) {
+            float expected = kFloats[i];
+            float el = elements[kOffsets[i]];
+            REPORTER_ASSERT(r, el == expected,
+                            "Incorrect %s element %zu - expected %f, got %f",
+                            SkSLTypeString(type), i, expected, el);
+        }
         mgr.reset();
     }
 }

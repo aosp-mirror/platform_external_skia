@@ -13,7 +13,9 @@
 #include "include/core/SkTextBlob.h"
 #include "src/base/SkRandom.h"
 #include "src/core/SkBlendModePriv.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
 
 namespace {
 enum Type {
@@ -27,7 +29,7 @@ const char* gTypeNames[] = {
     "mask", "rect", "sprite",
 };
 
-// Benchmark that draws non-AA rects or AA text with an SkXfermode::Mode.
+// Benchmark that draws non-AA rects or AA text with an SkBlendMode.
 class XfermodeBench : public Benchmark {
 public:
     XfermodeBench(SkBlendMode mode, Type t) : fBlendMode(mode) {
@@ -40,7 +42,7 @@ protected:
 
     void onDelayedSetup() override {
         if (fType == kSprite) {
-            fImage = GetResourceAsImage("images/color_wheel.png");
+            fImage = ToolUtils::GetResourceAsImage("images/color_wheel.png");
         }
     }
 
@@ -56,7 +58,7 @@ protected:
             switch (fType) {
                 case kText: {
                     // Draw text to exercise AA code paths.
-                    SkFont font;
+                    SkFont font = ToolUtils::DefaultFont();
                     font.setSize(random.nextRangeScalar(12, 96));
                     SkScalar x = random.nextRangeScalar(0, (SkScalar)size.fWidth),
                              y = random.nextRangeScalar(0, (SkScalar)size.fHeight);

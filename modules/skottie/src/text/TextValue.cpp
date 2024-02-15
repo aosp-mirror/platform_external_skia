@@ -37,6 +37,7 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
     v->fTextSize   = **text_size;
     v->fLineHeight = **line_height;
     v->fTypeface   = font->fTypeface;
+    v->fFontFamily = font->fFamily;
     v->fAscent     = font->fAscentPct * -0.01f * v->fTextSize; // negative ascent per SkFontMetrics
     v->fLineShift  = ParseDefault((*jtxt)["ls"], 0.0f);
 
@@ -63,6 +64,13 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
                            ParseDefault<SkScalar>((*jps)[1], 0));
         }
     }
+
+    static constexpr Shaper::Direction gDirectionMap[] = {
+        Shaper::Direction::kLTR,  // 'd': 0
+        Shaper::Direction::kRTL,  // 'd': 1
+    };
+    v->fDirection = gDirectionMap[std::min(ParseDefault<size_t>((*jtxt)["d"], 0),
+                                           std::size(gDirectionMap) - 1)];
 
     static constexpr Shaper::ResizePolicy gResizeMap[] = {
         Shaper::ResizePolicy::kNone,           // 'rs': 0
@@ -154,8 +162,8 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
             return false;
         }
 
-        VectorValue color_vec;
-        if (!skottie::Parse(*jcolor, &color_vec)) {
+        ColorValue color_vec;
+        if (!skottie::Parse(*jcolor, static_cast<VectorValue*>(&color_vec))) {
             return false;
         }
 

@@ -23,6 +23,7 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -67,12 +68,9 @@ public:
     }
 
 protected:
+    SkString getName() const override { return SkString("shadertext3"); }
 
-    SkString onShortName() override {
-        return SkString("shadertext3");
-    }
-
-    SkISize onISize() override { return SkISize::Make(820, 930); }
+    SkISize getISize() override { return SkISize::Make(820, 930); }
 
     void onOnceBeforeDraw() override {
         makebm(&fBmp, kPointSize / 4, kPointSize / 4);
@@ -87,7 +85,7 @@ protected:
 
         canvas->drawImage(fBmp.asImage(), 5.f, 5.f, sampling, &bmpPaint);
 
-        SkFont  font(ToolUtils::create_portable_typeface(), SkIntToScalar(kPointSize));
+        SkFont  font(ToolUtils::DefaultPortableTypeface(), SkIntToScalar(kPointSize));
         SkPaint outlinePaint;
         outlinePaint.setStyle(SkPaint::kStroke_Style);
         outlinePaint.setStrokeWidth(0.f);

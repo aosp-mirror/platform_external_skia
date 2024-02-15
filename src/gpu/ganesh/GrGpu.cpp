@@ -8,6 +8,7 @@
 
 #include "src/gpu/ganesh/GrGpu.h"
 
+#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/GrBackendSemaphore.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
@@ -34,6 +35,8 @@
 #include "src/gpu/ganesh/GrTracing.h"
 #include "src/sksl/SkSLCompiler.h"
 
+using namespace skia_private;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 GrGpu::GrGpu(GrDirectContext* direct) : fResetBits(kAll_GrBackendState), fContext(direct) {}
@@ -42,9 +45,8 @@ GrGpu::~GrGpu() {
     this->callSubmittedProcs(false);
 }
 
-void GrGpu::initCapsAndCompiler(sk_sp<const GrCaps> caps) {
+void GrGpu::initCaps(sk_sp<const GrCaps> caps) {
     fCaps = std::move(caps);
-    fCompiler = std::make_unique<SkSL::Compiler>(fCaps->shaderCaps());
 }
 
 void GrGpu::disconnect(DisconnectType type) {}
@@ -111,7 +113,7 @@ sk_sp<GrTexture> GrGpu::createTextureCommon(SkISize dimensions,
         return nullptr;
     }
 
-    GrMipmapped mipmapped = mipLevelCount > 1 ? GrMipmapped::kYes : GrMipmapped::kNo;
+    skgpu::Mipmapped mipmapped = mipLevelCount > 1 ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
     if (!this->caps()->validateSurfaceParams(dimensions,
                                              format,
                                              renderable,
@@ -157,12 +159,12 @@ sk_sp<GrTexture> GrGpu::createTexture(SkISize dimensions,
                                       GrTextureType textureType,
                                       GrRenderable renderable,
                                       int renderTargetSampleCnt,
-                                      GrMipmapped mipmapped,
+                                      skgpu::Mipmapped mipmapped,
                                       skgpu::Budgeted budgeted,
                                       GrProtected isProtected,
                                       std::string_view label) {
     int mipLevelCount = 1;
-    if (mipmapped == GrMipmapped::kYes) {
+    if (mipmapped == skgpu::Mipmapped::kYes) {
         mipLevelCount =
                 32 - SkCLZ(static_cast<uint32_t>(std::max(dimensions.fWidth, dimensions.fHeight)));
     }
@@ -178,7 +180,7 @@ sk_sp<GrTexture> GrGpu::createTexture(SkISize dimensions,
                                          mipLevelCount,
                                          levelClearMask,
                                          label);
-    if (tex && mipmapped == GrMipmapped::kYes && levelClearMask) {
+    if (tex && mipmapped == skgpu::Mipmapped::kYes && levelClearMask) {
         tex->markMipmapsClean();
     }
 
@@ -259,7 +261,7 @@ sk_sp<GrTexture> GrGpu::createTexture(SkISize dimensions,
 sk_sp<GrTexture> GrGpu::createCompressedTexture(SkISize dimensions,
                                                 const GrBackendFormat& format,
                                                 skgpu::Budgeted budgeted,
-                                                GrMipmapped mipmapped,
+                                                skgpu::Mipmapped mipmapped,
                                                 GrProtected isProtected,
                                                 const void* data,
                                                 size_t dataSize) {
@@ -275,8 +277,8 @@ sk_sp<GrTexture> GrGpu::createCompressedTexture(SkISize dimensions,
     }
 
     // TODO: expand CompressedDataIsCorrect to work here too
-    SkImage::CompressionType compressionType = GrBackendFormatToCompressionType(format);
-    if (compressionType == SkImage::CompressionType::kNone) {
+    SkTextureCompressionType compressionType = GrBackendFormatToCompressionType(format);
+    if (compressionType == SkTextureCompressionType::kNone) {
         return nullptr;
     }
 
@@ -284,8 +286,9 @@ sk_sp<GrTexture> GrGpu::createCompressedTexture(SkISize dimensions,
         return nullptr;
     }
 
-    if (dataSize < SkCompressedDataSize(compressionType, dimensions, nullptr,
-                                        mipmapped == GrMipmapped::kYes)) {
+    if (dataSize <
+        SkCompressedDataSize(
+                compressionType, dimensions, nullptr, mipmapped == skgpu::Mipmapped::kYes)) {
         return nullptr;
     }
     return this->onCreateCompressedTexture(dimensions, format, budgeted, mipmapped, isProtected,
@@ -399,7 +402,7 @@ sk_sp<GrGpuBuffer> GrGpu::createBuffer(size_t size,
         return nullptr;
     }
     sk_sp<GrGpuBuffer> buffer = this->onCreateBuffer(size, intendedType, accessPattern);
-    if (!this->caps()->reuseScratchBuffers()) {
+    if (buffer && !this->caps()->reuseScratchBuffers()) {
         buffer->resourcePriv().removeScratchKey();
     }
     return buffer;
@@ -631,7 +634,7 @@ bool GrGpu::regenerateMipMapLevels(GrTexture* texture) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     SkASSERT(texture);
     SkASSERT(this->caps()->mipmapSupport());
-    SkASSERT(texture->mipmapped() == GrMipmapped::kYes);
+    SkASSERT(texture->mipmapped() == skgpu::Mipmapped::kYes);
     if (!texture->mipmapsAreDirty()) {
         // This can happen when the proxy expects mipmaps to be dirty, but they are not dirty on the
         // actual target. This may be caused by things that the drawingManager could not predict,
@@ -678,7 +681,7 @@ void GrGpu::didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const 
 }
 
 void GrGpu::executeFlushInfo(SkSpan<GrSurfaceProxy*> proxies,
-                             SkSurface::BackendSurfaceAccess access,
+                             SkSurfaces::BackendSurfaceAccess access,
                              const GrFlushInfo& info,
                              const skgpu::MutableTextureState* newState) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
@@ -687,7 +690,7 @@ void GrGpu::executeFlushInfo(SkSpan<GrSurfaceProxy*> proxies,
 
     std::unique_ptr<std::unique_ptr<GrSemaphore>[]> semaphores(
             new std::unique_ptr<GrSemaphore>[info.fNumSemaphores]);
-    if (this->caps()->semaphoreSupport() && info.fNumSemaphores) {
+    if (this->caps()->backendSemaphoreSupport() && info.fNumSemaphores) {
         for (size_t i = 0; i < info.fNumSemaphores; ++i) {
             if (info.fSignalSemaphores[i].isInitialized()) {
                 semaphores[i] = resourceProvider->wrapBackendSemaphore(
@@ -721,7 +724,7 @@ void GrGpu::executeFlushInfo(SkSpan<GrSurfaceProxy*> proxies,
     // time we have multiple proxies is if we are flushing a yuv SkImage which won't have state
     // updates anyways.
     SkASSERT(!newState || proxies.size() == 1);
-    SkASSERT(!newState || access == SkSurface::BackendSurfaceAccess::kNoAccess);
+    SkASSERT(!newState || access == SkSurfaces::BackendSurfaceAccess::kNoAccess);
     this->prepareSurfacesForBackendAccessAndStateUpdates(proxies, access, newState);
 }
 
@@ -733,7 +736,7 @@ GrOpsRenderPass* GrGpu::getOpsRenderPass(
         const SkIRect& bounds,
         const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
         const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
-        const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+        const TArray<GrSurfaceProxy*, true>& sampledProxies,
         GrXferBarrierFlags renderPassXferBarriers) {
 #if SK_HISTOGRAMS_ENABLED
     fCurrentSubmitRenderPassCount++;
@@ -743,7 +746,7 @@ GrOpsRenderPass* GrGpu::getOpsRenderPass(
                                     colorInfo, stencilInfo, sampledProxies, renderPassXferBarriers);
 }
 
-bool GrGpu::submitToGpu(bool syncCpu) {
+bool GrGpu::submitToGpu(GrSyncCpu sync) {
     this->stats()->incNumSubmitToGpus();
 
     if (auto manager = this->stagingBufferManager()) {
@@ -754,7 +757,7 @@ bool GrGpu::submitToGpu(bool syncCpu) {
         uniformsBuffer->startSubmit(this);
     }
 
-    bool submitted = this->onSubmitToGpu(syncCpu);
+    bool submitted = this->onSubmitToGpu(sync);
 
     this->callSubmittedProcs(submitted);
 
@@ -809,7 +812,7 @@ void GrGpu::dumpJSON(SkJSONWriter* writer) const {
 void GrGpu::dumpJSON(SkJSONWriter* writer) const { }
 #endif
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 
 #if GR_GPU_STATS
 
@@ -843,7 +846,7 @@ void GrGpu::Stats::dump(SkString* out) {
 #endif
 }
 
-void GrGpu::Stats::dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) {
+void GrGpu::Stats::dumpKeyValuePairs(TArray<SkString>* keys, TArray<double>* values) {
     keys->push_back(SkString("render_passes"));
     values->push_back(fRenderPasses);
     keys->push_back(SkString("reordered_dags_over_budget"));
@@ -851,24 +854,22 @@ void GrGpu::Stats::dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>*
 }
 
 #endif // GR_GPU_STATS
-#endif // GR_TEST_UTILS
+#endif // defined(GR_TEST_UTILS)
 
 bool GrGpu::CompressedDataIsCorrect(SkISize dimensions,
-                                    SkImage::CompressionType compressionType,
-                                    GrMipmapped mipmapped,
+                                    SkTextureCompressionType compressionType,
+                                    skgpu::Mipmapped mipmapped,
                                     const void* data,
                                     size_t length) {
-    size_t computedSize = SkCompressedDataSize(compressionType,
-                                               dimensions,
-                                               nullptr,
-                                               mipmapped == GrMipmapped::kYes);
+    size_t computedSize = SkCompressedDataSize(
+            compressionType, dimensions, nullptr, mipmapped == skgpu::Mipmapped::kYes);
     return computedSize == length;
 }
 
 GrBackendTexture GrGpu::createBackendTexture(SkISize dimensions,
                                              const GrBackendFormat& format,
                                              GrRenderable renderable,
-                                             GrMipmapped mipmapped,
+                                             skgpu::Mipmapped mipmapped,
                                              GrProtected isProtected,
                                              std::string_view label) {
     const GrCaps* caps = this->caps();
@@ -887,7 +888,7 @@ GrBackendTexture GrGpu::createBackendTexture(SkISize dimensions,
         return {};
     }
 
-    if (mipmapped == GrMipmapped::kYes && !this->caps()->mipmapSupport()) {
+    if (mipmapped == skgpu::Mipmapped::kYes && !this->caps()->mipmapSupport()) {
         return {};
     }
 
@@ -911,7 +912,7 @@ bool GrGpu::clearBackendTexture(const GrBackendTexture& backendTexture,
 
 GrBackendTexture GrGpu::createCompressedBackendTexture(SkISize dimensions,
                                                        const GrBackendFormat& format,
-                                                       GrMipmapped mipmapped,
+                                                       skgpu::Mipmapped mipmapped,
                                                        GrProtected isProtected) {
     const GrCaps* caps = this->caps();
 
@@ -919,8 +920,8 @@ GrBackendTexture GrGpu::createCompressedBackendTexture(SkISize dimensions,
         return {};
     }
 
-    SkImage::CompressionType compressionType = GrBackendFormatToCompressionType(format);
-    if (compressionType == SkImage::CompressionType::kNone) {
+    SkTextureCompressionType compressionType = GrBackendFormatToCompressionType(format);
+    if (compressionType == SkTextureCompressionType::kNone) {
         // Uncompressed formats must go through the createBackendTexture API
         return {};
     }
@@ -931,7 +932,7 @@ GrBackendTexture GrGpu::createCompressedBackendTexture(SkISize dimensions,
         return {};
     }
 
-    if (mipmapped == GrMipmapped::kYes && !this->caps()->mipmapSupport()) {
+    if (mipmapped == skgpu::Mipmapped::kYes && !this->caps()->mipmapSupport()) {
         return {};
     }
 
@@ -950,8 +951,8 @@ bool GrGpu::updateCompressedBackendTexture(const GrBackendTexture& backendTextur
 
     GrBackendFormat format = backendTexture.getBackendFormat();
 
-    SkImage::CompressionType compressionType = GrBackendFormatToCompressionType(format);
-    if (compressionType == SkImage::CompressionType::kNone) {
+    SkTextureCompressionType compressionType = GrBackendFormatToCompressionType(format);
+    if (compressionType == SkTextureCompressionType::kNone) {
         // Uncompressed formats must go through the createBackendTexture API
         return false;
     }
@@ -960,7 +961,8 @@ bool GrGpu::updateCompressedBackendTexture(const GrBackendTexture& backendTextur
         return false;
     }
 
-    GrMipmapped mipmapped = backendTexture.hasMipmaps() ? GrMipmapped::kYes : GrMipmapped::kNo;
+    skgpu::Mipmapped mipmapped =
+            backendTexture.hasMipmaps() ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
 
     if (!CompressedDataIsCorrect(backendTexture.dimensions(),
                                  compressionType,

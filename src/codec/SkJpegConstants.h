@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Google Inc.
+ * Copyright 2023 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -8,6 +8,7 @@
 #ifndef SkJpegConstants_codec_DEFINED
 #define SkJpegConstants_codec_DEFINED
 
+#include <cstddef>
 #include <cstdint>
 
 // The first marker of all JPEG files is StartOfImage.
@@ -59,7 +60,6 @@ static constexpr uint8_t kXMPExtendedSig[] = {
 
 // EXIF segment marker and signature.
 static constexpr uint32_t kExifMarker = kJpegMarkerAPP0 + 1;
-static constexpr uint32_t kExifHeaderSize = 14;
 constexpr uint8_t kExifSig[] = {'E', 'x', 'i', 'f', '\0'};
 
 // MPF segment marker and signature.

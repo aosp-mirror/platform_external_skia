@@ -22,7 +22,9 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkTemplates.h"
+#include "src/core/SkFontPriv.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 #include <utility>
@@ -43,7 +45,7 @@ static void getGlyphPositions(const SkFont& font, const uint16_t glyphs[],
 
 static void applyKerning(SkPoint pos[], const int32_t adjustments[], int count,
                          const SkFont& font) {
-    SkScalar scale = font.getSize() / font.getTypefaceOrDefault()->getUnitsPerEm();
+    SkScalar scale = font.getSize() / font.getTypeface()->getUnitsPerEm();
 
     SkScalar globalAdj = 0;
     for (int i = 0; i < count - 1; ++i) {
@@ -54,7 +56,7 @@ static void applyKerning(SkPoint pos[], const int32_t adjustments[], int count,
 
 static void drawKernText(SkCanvas* canvas, const void* text, size_t len,
                          SkScalar x, SkScalar y, const SkFont& font, const SkPaint& paint) {
-    SkTypeface* face = font.getTypefaceOrDefault();
+    SkTypeface* face = font.getTypeface();
     if (!face) {
         canvas->drawSimpleText(text, len, SkTextEncoding::kUTF8, x, y, font, paint);
         return;
@@ -93,6 +95,7 @@ static constexpr SkFontStyle gStyles[] = {
 
 constexpr int gStylesCount = std::size(gStyles);
 
+// TODO(bungeman) delete this GM, as it is no longer useful.
 class TypefaceStylesGM : public skiagm::GM {
     sk_sp<SkTypeface> fFaces[gStylesCount];
     bool fApplyKerning;
@@ -103,11 +106,11 @@ public:
 protected:
     void onOnceBeforeDraw() override {
         for (int i = 0; i < gStylesCount; i++) {
-            fFaces[i] = SkTypeface::MakeFromName(nullptr, gStyles[i]);
+            fFaces[i] = ToolUtils::CreateTestTypeface(nullptr, gStyles[i]);
         }
     }
 
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString name("typefacestyles");
         if (fApplyKerning) {
             name.append("_kerning");
@@ -115,12 +118,11 @@ protected:
         return name;
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     void onDraw(SkCanvas* canvas) override {
-        SkFont font;
+        // Need to use a font to get dy below.
+        SkFont font = ToolUtils::DefaultFont();
         font.setSize(30);
 
         const char* text = fApplyKerning ? "Type AWAY" : "Hamburgefons";
@@ -128,6 +130,7 @@ protected:
 
         SkScalar x = SkIntToScalar(10);
         SkScalar dy = font.getMetrics(nullptr);
+        SkASSERT(dy > 0);
         SkScalar y = dy;
 
         if (fApplyKerning) {
@@ -138,6 +141,7 @@ protected:
 
         SkPaint paint;
         for (int i = 0; i < gStylesCount; i++) {
+            SkASSERT(fFaces[i]);
             font.setTypeface(fFaces[i]);
             canvas->drawSimpleText(text, textLen, SkTextEncoding::kUTF8, x, y, font, paint);
             if (fApplyKerning) {
@@ -362,7 +366,7 @@ static void draw_typeface_rendering_gm(SkCanvas* canvas, sk_sp<SkTypeface> face,
 }
 
 DEF_SIMPLE_GM_CAN_FAIL(typefacerendering, canvas, errMsg, 640, 840) {
-    sk_sp<SkTypeface> face = MakeResourceAsTypeface("fonts/hintgasp.ttf");
+    sk_sp<SkTypeface> face = ToolUtils::CreateTypefaceFromResource("fonts/hintgasp.ttf");
     if (!face) {
         return skiagm::DrawResult::kSkip;
     }
@@ -377,7 +381,7 @@ DEF_SIMPLE_GM_CAN_FAIL(typefacerendering, canvas, errMsg, 640, 840) {
 #ifndef SK_BUILD_FOR_WIN
 
 DEF_SIMPLE_GM_CAN_FAIL(typefacerendering_pfa, canvas, errMsg, 640, 840) {
-    sk_sp<SkTypeface> face = MakeResourceAsTypeface("fonts/Roboto2-Regular.pfa");
+    sk_sp<SkTypeface> face = ToolUtils::CreateTypefaceFromResource("fonts/Roboto2-Regular.pfa");
     if (!face) {
        return skiagm::DrawResult::kSkip;
     }
@@ -386,7 +390,7 @@ DEF_SIMPLE_GM_CAN_FAIL(typefacerendering_pfa, canvas, errMsg, 640, 840) {
 }
 
 DEF_SIMPLE_GM_CAN_FAIL(typefacerendering_pfb, canvas, errMsg, 640, 840) {
-    sk_sp<SkTypeface> face = MakeResourceAsTypeface("fonts/Roboto2-Regular.pfb");
+    sk_sp<SkTypeface> face = ToolUtils::CreateTypefaceFromResource("fonts/Roboto2-Regular.pfb");
     if (!face) {
         return skiagm::DrawResult::kSkip;
     }
@@ -398,20 +402,19 @@ DEF_SIMPLE_GM_CAN_FAIL(typefacerendering_pfb, canvas, errMsg, 640, 840) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "include/effects/SkStrokeAndFillPathEffect.h"
-
 // Exercise different paint styles and embolden, and compare with strokeandfill patheffect
 DEF_SIMPLE_GM(typeface_styling, canvas, 710, 360) {
-    sk_sp<SkTypeface> face = MakeResourceAsTypeface("fonts/Roboto-Regular.ttf");
-    SkFont font;
-    font.setTypeface(face);
-    font.setSize(100);
+    sk_sp<SkTypeface> face = ToolUtils::CreateTypefaceFromResource("fonts/Roboto-Regular.ttf");
+    if (!face) {
+        face = ToolUtils::DefaultPortableTypeface();
+    }
+    SkFont font(face, 100);
     font.setEdging(SkFont::Edging::kAntiAlias);
 
     uint16_t glyphs[1] = { font.unicharToGlyph('A') };
     SkPoint pos[1] = { {0, 0} };
 
-    auto draw = [&](SkPaint::Style style, float width, sk_sp<SkPathEffect> pe) {
+    auto draw = [&](SkPaint::Style style, float width) {
         // Draws 3 rows:
         //  1. normal
         //  2. emboldened
@@ -420,7 +423,6 @@ DEF_SIMPLE_GM(typeface_styling, canvas, 710, 360) {
         SkPaint paint;
         paint.setStyle(style);
         paint.setStrokeWidth(width);
-        paint.setPathEffect(pe);
 
         font.setEmbolden(true);
         canvas->drawGlyphs(1, glyphs, pos, {20, 120*2}, font, paint);
@@ -435,21 +437,17 @@ DEF_SIMPLE_GM(typeface_styling, canvas, 710, 360) {
     const struct {
         SkPaint::Style  style;
         float           width;
-        bool            usePE;
     } recs[] = {
-        { SkPaint::kFill_Style,             0,  false },
-        { SkPaint::kStroke_Style,           0,  false },
-        { SkPaint::kStroke_Style,           3,  false },
-        { SkPaint::kStrokeAndFill_Style,    0,  false },
-        { SkPaint::kStrokeAndFill_Style,    3,  false },
-        { SkPaint::kStroke_Style,           0,  true },
-        { SkPaint::kStroke_Style,           3,  true },
+        { SkPaint::kFill_Style,             0 },
+        { SkPaint::kStroke_Style,           0 },
+        { SkPaint::kStroke_Style,           3 },
+        { SkPaint::kStrokeAndFill_Style,    0 },
+        { SkPaint::kStrokeAndFill_Style,    3 },
     };
 
     canvas->translate(0, -20);
-    auto pe = SkStrokeAndFillPathEffect::Make();
     for (auto r : recs) {
-        draw(r.style, r.width, r.usePE ? pe : nullptr);
+        draw(r.style, r.width);
         canvas->translate(100, 0);
     }
 }

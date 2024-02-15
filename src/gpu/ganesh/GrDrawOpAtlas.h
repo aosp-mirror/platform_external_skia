@@ -162,10 +162,9 @@ public:
         return fMaxPages;
     }
 
-    int numAllocated_TestingOnly() const;
-    void setMaxPages_TestingOnly(uint32_t maxPages);
-
 private:
+    friend class GrDrawOpAtlasTools;
+
     GrDrawOpAtlas(GrProxyProvider*, const GrBackendFormat& format, SkColorType, size_t bpp,
                   int width, int height, int plotWidth, int plotHeight,
                   skgpu::AtlasGenerationCounter* generationCounter,
@@ -173,7 +172,7 @@ private:
 
     inline bool updatePlot(GrDeferredUploadTarget*, skgpu::AtlasLocator*, skgpu::Plot*);
 
-    inline void makeMRU(skgpu::Plot* plot, int pageIdx) {
+    inline void makeMRU(skgpu::Plot* plot, uint32_t pageIdx) {
         if (fPages[pageIdx].fPlotList.head() == plot) {
             return;
         }

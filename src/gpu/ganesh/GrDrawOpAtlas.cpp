@@ -10,7 +10,6 @@
 #include <memory>
 
 #include "include/private/base/SkTPin.h"
-#include "src/core/SkOpts.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrOnFlushResourceProvider.h"
@@ -21,6 +20,8 @@
 #include "src/gpu/ganesh/GrSurfaceProxyPriv.h"
 #include "src/gpu/ganesh/GrTexture.h"
 #include "src/gpu/ganesh/GrTracing.h"
+
+using namespace skia_private;
 
 using AtlasLocator = skgpu::AtlasLocator;
 using AtlasToken = skgpu::AtlasToken;
@@ -82,7 +83,7 @@ std::unique_ptr<GrDrawOpAtlas> GrDrawOpAtlas::Make(GrProxyProvider* proxyProvide
                                                            width, height, plotWidth, plotHeight,
                                                            generationCounter,
                                                            allowMultitexturing, label));
-    if (!atlas->getViews()[0].proxy()) {
+    if (!atlas->createPages(proxyProvider, generationCounter) || !atlas->getViews()[0].proxy()) {
         return nullptr;
     }
 
@@ -120,8 +121,6 @@ GrDrawOpAtlas::GrDrawOpAtlas(GrProxyProvider* proxyProvider, const GrBackendForm
     SkASSERT(fPlotHeight * numPlotsY == fTextureHeight);
 
     fNumPlots = numPlotsX * numPlotsY;
-
-    this->createPages(proxyProvider, generationCounter);
 }
 
 inline void GrDrawOpAtlas::processEviction(PlotLocator plotLocator) {
@@ -140,7 +139,7 @@ void GrDrawOpAtlas::uploadPlotToTexture(GrDeferredTextureUploadWritePixelsFn& wr
 
     const void* dataPtr;
     SkIRect rect;
-    std::tie(dataPtr, rect) = plot->prepareForUpload(/*useCachedUploads=*/false);
+    std::tie(dataPtr, rect) = plot->prepareForUpload();
 
     writePixels(proxy,
                 rect,
@@ -151,7 +150,10 @@ void GrDrawOpAtlas::uploadPlotToTexture(GrDeferredTextureUploadWritePixelsFn& wr
 
 inline bool GrDrawOpAtlas::updatePlot(GrDeferredUploadTarget* target,
                                       AtlasLocator* atlasLocator, Plot* plot) {
-    int pageIdx = plot->pageIndex();
+    uint32_t pageIdx = plot->pageIndex();
+    if (pageIdx >= fNumActivePages) {
+        return false;
+    }
     this->makeMRU(plot, pageIdx);
 
     // If our most recent upload has already occurred then we have to insert a new
@@ -346,7 +348,7 @@ void GrDrawOpAtlas::compact(AtlasToken startTokenForNextFlush) {
     // This is to handle the case where a lot of text or path rendering has occurred but then just
     // a blinking cursor is drawn.
     if (atlasUsedThisFlush || fFlushesSinceLastUse > kAtlasRecentlyUsedCount) {
-        SkTArray<Plot*> availablePlots;
+        TArray<Plot*> availablePlots;
         uint32_t lastPageIndex = fNumActivePages - 1;
 
         // For all plots but the last one, update number of flushes since used, and check to see
@@ -477,7 +479,7 @@ bool GrDrawOpAtlas::createPages(
                                                                  dims,
                                                                  GrRenderable::kNo,
                                                                  1,
-                                                                 GrMipmapped::kNo,
+                                                                 skgpu::Mipmapped::kNo,
                                                                  SkBackingFit::kExact,
                                                                  skgpu::Budgeted::kYes,
                                                                  GrProtected::kNo,

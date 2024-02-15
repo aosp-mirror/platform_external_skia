@@ -17,6 +17,7 @@ class iOSFlavor(default.DefaultFlavor):
         dm_dir='dm',
         perf_data_dir='perf',
         resource_dir='resources',
+        fonts_dir = 'NOT_SUPPORTED',
         images_dir='images',
         lotties_dir='lotties',
         skp_dir='skps',
@@ -37,10 +38,10 @@ class iOSFlavor(default.DefaultFlavor):
 
   def _run(self, title, *cmd, **kwargs):
     def sleep(attempt):
-      self.m.python.inline('sleep before attempt %d' % attempt, """
-import time
-time.sleep(2)
-""")  # pragma: nocover
+      self.m.step(
+          'sleep before attempt %d' % attempt,
+          cmd=['sleep', '2']) # pragma: nocover
+
     return self.m.run.with_retry(self.m.step, title, 3, cmd=list(cmd),
                                  between_attempts_fn=sleep, **kwargs)
 
@@ -126,9 +127,9 @@ time.sleep(2)
         success = True
       finally:
         if not success:
-          self.m.run(self.m.python, '%s with full debug output' % name,
-                     script=self.module.resource('ios_debug_cmd.py'),
-                     args=args)
+          self.m.run(
+              self.m.step, '%s with full debug output' % name,
+              cmd=['python3', self.module.resource('ios_debug_cmd.py')] + args)
 
   def _run_ios_script(self, script, first, *rest):
     with self.context():

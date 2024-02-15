@@ -10,7 +10,6 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkMatrix.h"
 #include "src/base/SkVx.h"
-#include "src/core/SkMatrixProvider.h"
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkRRectPriv.h"
 #include "src/core/SkRectPriv.h"
@@ -20,6 +19,7 @@
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrFPArgs.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrFragmentProcessors.h"
 #include "src/gpu/ganesh/GrProxyProvider.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
 #include "src/gpu/ganesh/GrSWMaskHelper.h"
@@ -32,6 +32,8 @@
 #include "src/gpu/ganesh/geometry/GrQuadUtils.h"
 #include "src/gpu/ganesh/ops/AtlasPathRenderer.h"
 #include "src/gpu/ganesh/ops/GrDrawOp.h"
+
+using namespace skia_private;
 
 namespace {
 
@@ -143,15 +145,15 @@ bool shape_contains_rect(const GrShape& a, const SkMatrix& aToDevice, const SkMa
     // Test each corner for contains; since a is convex, if all 4 corners of b's bounds are
     // contained, then the entirety of b is within a.
     GrQuad deviceQuad = GrQuad::MakeFromRect(b, bToDevice);
-    if (any(deviceQuad.w4f() < SkPathPriv::kW0PlaneDistance)) {
-        // Something in B actually projects behind the W = 0 plane and would be clipped to infinity,
-        // so it's extremely unlikely that A can contain B.
-        return false;
-    }
     if (mixedAAMode) {
         // Outset it so its edges are 1/2px out, giving us a buffer to avoid cases where a non-AA
         // clip or draw would snap outside an aa element.
         GrQuadUtils::Outset({0.5f, 0.5f, 0.5f, 0.5f}, &deviceQuad);
+    }
+    if (any(deviceQuad.w4f() < SkPathPriv::kW0PlaneDistance)) {
+        // Something in B actually projects behind the W = 0 plane and would be clipped to infinity,
+        // so it's extremely unlikely that A can contain B.
+        return false;
     }
 
     for (int i = 0; i < 4; ++i) {
@@ -211,7 +213,7 @@ uint32_t next_gen_id() {
 //    in parallel.
 static constexpr GrSurfaceOrigin kMaskOrigin = kTopLeft_GrSurfaceOrigin;
 
-GrFPResult analytic_clip_fp(const skgpu::v1::ClipStack::Element& e,
+GrFPResult analytic_clip_fp(const skgpu::ganesh::ClipStack::Element& e,
                             const GrShaderCaps& caps,
                             std::unique_ptr<GrFragmentProcessor> fp) {
     // All analytic clip shape FPs need to be in device space
@@ -239,11 +241,11 @@ GrFPResult analytic_clip_fp(const skgpu::v1::ClipStack::Element& e,
 // TODO: Currently this only works with tessellation because the tessellation path renderer owns and
 // manages the atlas. The high-level concept could be generalized to support any path renderer going
 // into a shared atlas.
-GrFPResult clip_atlas_fp(const skgpu::v1::SurfaceDrawContext* sdc,
+GrFPResult clip_atlas_fp(const skgpu::ganesh::SurfaceDrawContext* sdc,
                          const GrOp* opBeingClipped,
-                         skgpu::v1::AtlasPathRenderer* atlasPathRenderer,
+                         skgpu::ganesh::AtlasPathRenderer* atlasPathRenderer,
                          const SkIRect& scissorBounds,
-                         const skgpu::v1::ClipStack::Element& e,
+                         const skgpu::ganesh::ClipStack::Element& e,
                          std::unique_ptr<GrFragmentProcessor> inputFP) {
     if (e.fAA != GrAA::kYes) {
         return GrFPFailure(std::move(inputFP));
@@ -260,7 +262,7 @@ GrFPResult clip_atlas_fp(const skgpu::v1::SurfaceDrawContext* sdc,
 }
 
 void draw_to_sw_mask(GrSWMaskHelper* helper,
-                     const skgpu::v1::ClipStack::Element& e,
+                     const skgpu::ganesh::ClipStack::Element& e,
                      bool clearMask) {
     // If the first element to draw is an intersect, we clear to 0 and will draw it directly with
     // coverage 1 (subsequent intersect elements will be inverse-filled and draw 0 outside).
@@ -301,15 +303,15 @@ void draw_to_sw_mask(GrSWMaskHelper* helper,
         // the inverse fill type.
         GrShape inverted(e.fShape);
         inverted.setInverted(true);
-        helper->drawShape(inverted, e.fLocalToDevice, SkRegion::kReplace_Op, e.fAA, alpha);
+        helper->drawShape(inverted, e.fLocalToDevice, e.fAA, alpha);
     } else {
-        helper->drawShape(e.fShape, e.fLocalToDevice, SkRegion::kReplace_Op, e.fAA, alpha);
+        helper->drawShape(e.fShape, e.fLocalToDevice, e.fAA, alpha);
     }
 }
 
 GrSurfaceProxyView render_sw_mask(GrRecordingContext* context,
                                   const SkIRect& bounds,
-                                  const skgpu::v1::ClipStack::Element** elements,
+                                  const skgpu::ganesh::ClipStack::Element** elements,
                                   int count) {
     SkASSERT(count > 0);
 
@@ -332,7 +334,7 @@ GrSurfaceProxyView render_sw_mask(GrRecordingContext* context,
                                                 bounds.size(),
                                                 GrRenderable::kNo,
                                                 1,
-                                                GrMipmapped::kNo,
+                                                skgpu::Mipmapped::kNo,
                                                 SkBackingFit::kApprox,
                                                 skgpu::Budgeted::kYes,
                                                 GrProtected::kNo,
@@ -340,7 +342,7 @@ GrSurfaceProxyView render_sw_mask(GrRecordingContext* context,
 
         // Since this will be rendered on another thread, make a copy of the elements in case
         // the clip stack is modified on the main thread
-        using Uploader = GrTDeferredProxyUploader<SkTArray<skgpu::v1::ClipStack::Element>>;
+        using Uploader = GrTDeferredProxyUploader<TArray<skgpu::ganesh::ClipStack::Element>>;
         std::unique_ptr<Uploader> uploader = std::make_unique<Uploader>(count);
         for (int i = 0; i < count; ++i) {
             uploader->data().push_back(*(elements[i]));
@@ -379,19 +381,19 @@ GrSurfaceProxyView render_sw_mask(GrRecordingContext* context,
 }
 
 void render_stencil_mask(GrRecordingContext* rContext,
-                         skgpu::v1::SurfaceDrawContext* sdc,
+                         skgpu::ganesh::SurfaceDrawContext* sdc,
                          uint32_t genID,
                          const SkIRect& bounds,
-                         const skgpu::v1::ClipStack::Element** elements,
+                         const skgpu::ganesh::ClipStack::Element** elements,
                          int count,
                          GrAppliedClip* out) {
-    skgpu::v1::StencilMaskHelper helper(rContext, sdc);
+    skgpu::ganesh::StencilMaskHelper helper(rContext, sdc);
     if (helper.init(bounds, genID, out->windowRectsState().windows(), 0)) {
         // This follows the same logic as in draw_sw_mask
         bool startInside = elements[0]->fOp == SkClipOp::kDifference;
         helper.clear(startInside);
         for (int i = 0; i < count; ++i) {
-            const skgpu::v1::ClipStack::Element& e = *(elements[i]);
+            const skgpu::ganesh::ClipStack::Element& e = *(elements[i]);
             SkRegion::Op op;
             if (e.fOp == SkClipOp::kIntersect) {
                 op = (i == 0) ? SkRegion::kReplace_Op : SkRegion::kIntersect_Op;
@@ -407,7 +409,7 @@ void render_stencil_mask(GrRecordingContext* rContext,
 
 } // anonymous namespace
 
-namespace skgpu::v1 {
+namespace skgpu::ganesh {
 
 class ClipStack::Draw {
 public:
@@ -1142,14 +1144,13 @@ static constexpr int kMaxAnalyticFPs = 4;
 // across our set of GMs, SKPs, and SVGs used for testing.
 static constexpr int kNumStackMasks = 4;
 
-ClipStack::ClipStack(const SkIRect& deviceBounds, const SkMatrixProvider* matrixProvider,
-                     bool forceAA)
+ClipStack::ClipStack(const SkIRect& deviceBounds, const SkMatrix* ctm, bool forceAA)
         : fElements(kElementStackIncrement)
         , fSaves(kSaveStackIncrement)
         , fMasks(kMaskStackIncrement)
         , fProxyProvider(nullptr)
         , fDeviceBounds(deviceBounds)
-        , fMatrixProvider(matrixProvider)
+        , fCTM(ctm)
         , fForceAA(forceAA) {
     // Start with a save record that is wide open
     fSaves.emplace_back(deviceBounds);
@@ -1298,9 +1299,9 @@ GrClip::Effect ClipStack::apply(GrRecordingContext* rContext,
     if (cs.shader()) {
         static const GrColorInfo kCoverageColorInfo{GrColorType::kUnknown, kPremul_SkAlphaType,
                                                     nullptr};
-        GrFPArgs args(rContext, &kCoverageColorInfo, sdc->surfaceProps());
-        clipFP = as_SB(cs.shader())->asRootFragmentProcessor(args,
-                                                             fMatrixProvider->localToDevice());
+        GrFPArgs args(
+                rContext, &kCoverageColorInfo, sdc->surfaceProps(), GrFPArgs::Scope::kDefault);
+        clipFP = GrFragmentProcessors::Make(cs.shader(), args, *fCTM);
         if (clipFP) {
             // The initial input is the coverage from the geometry processor, so this ensures it
             // is multiplied properly with the alpha of the clip shader.
@@ -1362,7 +1363,7 @@ GrClip::Effect ClipStack::apply(GrRecordingContext* rContext,
 
     // Elements not represented as an analytic FP or skipped will be collected here and later
     // applied by using the stencil buffer or a cached SW mask.
-    SkSTArray<kNumStackMasks, const Element*> elementsForMask;
+    STArray<kNumStackMasks, const Element*> elementsForMask;
 
     bool maskRequiresAA = false;
     auto atlasPathRenderer = rContext->priv().drawingManager()->getAtlasPathRenderer();
@@ -1660,4 +1661,4 @@ GrFPResult ClipStack::GetSWMaskFP(GrRecordingContext* context, Mask::Stack* mask
     return GrFPSuccess(std::move(fp));
 }
 
-} // namespace skgpu::v1
+}  // namespace skgpu::ganesh

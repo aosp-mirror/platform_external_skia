@@ -20,11 +20,13 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTileMode.h"
 #include "include/effects/SkGradientShader.h"
-#include "tools/sk_app/DisplayParams.h"
+#include "tools/fonts/FontToolUtils.h"
+#include "tools/window/DisplayParams.h"
 
 #include <string.h>
 
 using namespace sk_app;
+using skwindow::DisplayParams;
 
 Application* Application::Create(int argc, char** argv, void* platformData) {
     return new HelloWorld(argc, argv, platformData);
@@ -35,8 +37,6 @@ HelloWorld::HelloWorld(int argc, char** argv, void* platformData)
         : fBackendType(Window::kNativeGL_BackendType),
 #elif defined(SK_VULKAN)
         : fBackendType(Window::kVulkan_BackendType),
-#elif defined(SK_DAWN)
-        : fBackendType(Window::kDawn_BackendType),
 #else
         : fBackendType(Window::kRaster_BackendType),
 #endif
@@ -50,6 +50,11 @@ HelloWorld::HelloWorld(int argc, char** argv, void* platformData)
     fWindow->pushLayer(this);
 
     fWindow->attach(fBackendType);
+
+    fTypeface = ToolUtils::CreateTypefaceFromResource("fonts/Roboto-Regular.ttf");
+    if (!fTypeface) {
+        fTypeface = ToolUtils::DefaultPortableTypeface();
+    }
 }
 
 HelloWorld::~HelloWorld() {
@@ -114,9 +119,8 @@ void HelloWorld::onPaint(SkSurface* surface) {
     }
 
     // Draw a message with a nice black paint
-    SkFont font;
+    SkFont font(fTypeface, 20);
     font.setSubpixel(true);
-    font.setSize(20);
     paint.setColor(SK_ColorBLACK);
 
     canvas->save();
@@ -148,8 +152,6 @@ bool HelloWorld::onChar(SkUnichar c, skui::ModifierKey modifiers) {
             fBackendType = Window::kNativeGL_BackendType;
 #elif defined(SK_VULKAN)
             fBackendType = Window::kVulkan_BackendType;
-#elif defined(SK_DAWN)
-            fBackendType = Window::kDawn_BackendType;
 #else
             SkDebugf("No GPU backend configured\n");
             return true;

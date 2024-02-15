@@ -16,7 +16,7 @@ class GrBuffer;
 class GrGpuBuffer;
 class GrProgramInfo;
 
-namespace skgpu::v1 {
+namespace skgpu::ganesh {
 
 // Fills a rectangle of pixels with a clip against coverage values from an atlas.
 class DrawAtlasPathOp final : public GrDrawOp {
@@ -42,7 +42,7 @@ public:
     const char* name() const override { return "DrawAtlasPathOp"; }
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
     void visitProxies(const GrVisitProxyFunc& func) const override {
-        func(fAtlasHelper.proxy(), GrMipmapped::kNo);
+        func(fAtlasHelper.proxy(), skgpu::Mipmapped::kNo);
         fProcessors.visitProxies(func);
     }
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*, GrClampType) override;
@@ -95,6 +95,6 @@ private:
     GrProcessorSet fProcessors;
 };
 
-} // namespace skgpu::v1
+}  // namespace skgpu::ganesh
 
 #endif // DrawAtlasPathOp_DEFINED

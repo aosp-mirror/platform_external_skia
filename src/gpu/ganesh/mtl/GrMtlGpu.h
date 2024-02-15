@@ -10,9 +10,8 @@
 
 #include "include/gpu/mtl/GrMtlBackendContext.h"
 #include "include/private/base/SkDeque.h"
-#include "include/private/gpu/ganesh/GrMtlTypesPriv.h"
+#include "src/gpu/ganesh/mtl/GrMtlTypesPriv.h"
 
-#include "src/gpu/ganesh/GrFinishCallbacks.h"
 #include "src/gpu/ganesh/GrGpu.h"
 #include "src/gpu/ganesh/GrRenderTarget.h"
 #include "src/gpu/ganesh/GrRingBuffer.h"
@@ -35,7 +34,9 @@ class GrMtlCommandBuffer;
 
 class GrMtlGpu : public GrGpu {
 public:
-    static sk_sp<GrGpu> Make(const GrMtlBackendContext&, const GrContextOptions&, GrDirectContext*);
+    static std::unique_ptr<GrGpu> Make(const GrMtlBackendContext&,
+                                       const GrContextOptions&,
+                                       GrDirectContext*);
     ~GrMtlGpu() override;
 
     void disconnect(DisconnectType) override;
@@ -43,7 +44,7 @@ public:
     GrThreadSafePipelineBuilder* pipelineBuilder() override;
     sk_sp<GrThreadSafePipelineBuilder> refPipelineBuilder() override;
 
-    const GrMtlCaps& mtlCaps() const { return *fMtlCaps.get(); }
+    const GrMtlCaps& mtlCaps() const { return *fMtlCaps; }
 
     id<MTLDevice> device() const { return fDevice; }
 
@@ -64,7 +65,7 @@ public:
 
     bool precompileShader(const SkData& key, const SkData& data) override;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
     GrBackendRenderTarget createTestingOnlyBackendRenderTarget(SkISize dimensions,
@@ -89,18 +90,14 @@ public:
                        GrSamplerState::Filter) override;
 
 #if GR_METAL_SDK_VERSION >= 230
-    id<MTLBinaryArchive> binaryArchive() const SK_API_AVAILABLE(macos(11.0), ios(14.0)) {
+    id<MTLBinaryArchive> binaryArchive() const SK_API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) {
         return fBinaryArchive;
     }
 #endif
 
     void submit(GrOpsRenderPass* renderPass) override;
 
-    GrFence SK_WARN_UNUSED_RESULT insertFence() override;
-    bool waitFence(GrFence) override;
-    void deleteFence(GrFence) override;
-
-    std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
+    [[nodiscard]] std::unique_ptr<GrSemaphore> makeSemaphore(bool isOwned) override;
     std::unique_ptr<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore&,
                                                       GrSemaphoreWrapType,
                                                       GrWrapOwnership) override;
@@ -139,7 +136,7 @@ private:
     GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
                                             GrRenderable,
-                                            GrMipmapped,
+                                            skgpu::Mipmapped,
                                             GrProtected,
                                             std::string_view label) override;
 
@@ -149,7 +146,7 @@ private:
 
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
-                                                      GrMipmapped,
+                                                      skgpu::Mipmapped,
                                                       GrProtected) override;
 
     bool onUpdateCompressedBackendTexture(const GrBackendTexture&,
@@ -169,7 +166,7 @@ private:
     sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
                                                const GrBackendFormat&,
                                                skgpu::Budgeted,
-                                               GrMipmapped,
+                                               skgpu::Mipmapped,
                                                GrProtected,
                                                const void* data,
                                                size_t dataSize) override;
@@ -238,17 +235,18 @@ private:
                          GrGpuFinishedContext finishedContext) override;
     void addFinishedCallback(sk_sp<skgpu::RefCntedCallback> finishedCallback);
 
-    GrOpsRenderPass* onGetOpsRenderPass(GrRenderTarget*,
-                                        bool useMSAASurface,
-                                        GrAttachment*,
-                                        GrSurfaceOrigin,
-                                        const SkIRect&,
-                                        const GrOpsRenderPass::LoadAndStoreInfo&,
-                                        const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-                                        const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
-                                        GrXferBarrierFlags renderPassXferBarriers) override;
+    GrOpsRenderPass* onGetOpsRenderPass(
+            GrRenderTarget*,
+            bool useMSAASurface,
+            GrAttachment*,
+            GrSurfaceOrigin,
+            const SkIRect&,
+            const GrOpsRenderPass::LoadAndStoreInfo&,
+            const GrOpsRenderPass::StencilLoadAndStoreInfo&,
+            const skia_private::TArray<GrSurfaceProxy*, true>& sampledProxies,
+            GrXferBarrierFlags renderPassXferBarriers) override;
 
-    bool onSubmitToGpu(bool syncCpu) override;
+    bool onSubmitToGpu(GrSyncCpu sync) override;
 
     // Commits the current command buffer to the queue and then creates a new command buffer. If
     // sync is set to kForce_SyncQueue, the function will wait for all work in the committed
@@ -293,10 +291,10 @@ private:
                                            int sampleCnt,
                                            GrTexturable,
                                            GrRenderable,
-                                           GrMipmapped,
+                                           skgpu::Mipmapped,
                                            GrMtlTextureInfo*);
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     void testingOnly_startCapture() override;
     void testingOnly_stopCapture() override;
 #endif
@@ -316,7 +314,7 @@ private:
     SkDeque fOutstandingCommandBuffers;
 
 #if GR_METAL_SDK_VERSION >= 230
-    id<MTLBinaryArchive> fBinaryArchive SK_API_AVAILABLE(macos(11.0), ios(14.0));
+    id<MTLBinaryArchive> fBinaryArchive SK_API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0));
 #endif
 
     GrMtlResourceProvider fResourceProvider;

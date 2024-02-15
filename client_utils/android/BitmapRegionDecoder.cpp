@@ -8,7 +8,7 @@
 #include "client_utils/android/BitmapRegionDecoder.h"
 #include "client_utils/android/BitmapRegionDecoderPriv.h"
 #include "include/codec/SkAndroidCodec.h"
-#include "include/core/SkEncodedImageFormat.h"
+#include "include/codec/SkEncodedImageFormat.h"
 #include "src/codec/SkCodecPriv.h"
 
 namespace android {
@@ -79,14 +79,10 @@ bool BitmapRegionDecoder::decodeRegion(SkBitmap* bitmap, BRDAllocator* allocator
     }
     SkISize scaledSize = fCodec->getSampledSubsetDimensions(sampleSize, subset);
 
-    if (fCodec->getInfo().colorType() == kGray_8_SkColorType) {
-        dstColorType = kGray_8_SkColorType;
-    }
-
     // Create the image info for the decode
     SkAlphaType dstAlphaType = fCodec->computeOutputAlphaType(requireUnpremul);
     SkImageInfo decodeInfo =
-            SkImageInfo::Make(scaledSize, dstColorType, dstAlphaType, dstColorSpace);
+            SkImageInfo::Make(scaledSize, dstColorType, dstAlphaType, std::move(dstColorSpace));
 
     // Initialize the destination bitmap
     int scaledOutX = 0;

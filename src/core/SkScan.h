@@ -23,9 +23,6 @@ class SkPath;
 */
 typedef SkIRect SkXRect;
 
-extern std::atomic<bool> gSkUseAnalyticAA;
-extern std::atomic<bool> gSkForceAnalyticAA;
-
 class AdditiveBlitter;
 
 class SkScan {
@@ -42,9 +39,10 @@ public:
     static void FillPath(const SkPath&, const SkIRect&, SkBlitter*);
 
     // Paths of a certain size cannot be anti-aliased unless externally tiled (handled by SkDraw).
-    // AA clipping doesn't do that, so it's better for the clip stack to adjust AA state early
-    // rather than clip to the internal limits of the blitter.
-    static bool DowngradeClipAA(const SkIRect& bounds);
+    // SkBitmapDevice automatically tiles, SkAAClip does not so SkRasterClipStack converts AA clips
+    // to BW clips if that's the case. SkRegion uses this to know when to tile and union smaller
+    // SkRegions together.
+    static bool PathRequiresTiling(const SkIRect& bounds);
 
     ///////////////////////////////////////////////////////////////////////////
     // rasterclip
@@ -72,7 +70,7 @@ public:
     static void HairRoundPath(const SkPath&, const SkRasterClip&, SkBlitter*);
     static void AntiHairRoundPath(const SkPath&, const SkRasterClip&, SkBlitter*);
 
-    // Needed by do_fill_path in SkScanPriv.h
+    // Needed by SkRegion::setPath
     static void FillPath(const SkPath&, const SkRegion& clip, SkBlitter*);
 
 private:
@@ -92,8 +90,6 @@ private:
     static void HairLineRgn(const SkPoint[], int count, const SkRegion*, SkBlitter*);
     static void AntiHairLineRgn(const SkPoint[], int count, const SkRegion*, SkBlitter*);
     static void AAAFillPath(const SkPath& path, SkBlitter* blitter, const SkIRect& pathIR,
-                            const SkIRect& clipBounds, bool forceRLE);
-    static void SAAFillPath(const SkPath& path, SkBlitter* blitter, const SkIRect& pathIR,
                             const SkIRect& clipBounds, bool forceRLE);
 };
 

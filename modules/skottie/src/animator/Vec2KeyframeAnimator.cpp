@@ -8,6 +8,7 @@
 #include "include/core/SkContourMeasure.h"
 #include "include/core/SkPathBuilder.h"
 #include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/animator/KeyframeAnimator.h"
@@ -83,7 +84,18 @@ private:
             // arc length.
             SkPoint  pos;
             SkVector tan;
-            if (v0.cmeasure->getPosTan(lerp_info.weight * v0.cmeasure->length(), &pos, &tan)) {
+            const float len = v0.cmeasure->length(),
+                   distance = len * lerp_info.weight;
+            if (v0.cmeasure->getPosTan(distance, &pos, &tan)) {
+                // Easing can yield a sub/super normal weight, which in turn can cause the
+                // interpolation position to become negative or larger than the path length.
+                // In those cases the expectation is to extrapolate using the endpoint tangent.
+                if (distance < 0 || distance > len) {
+                    const float overshoot = std::copysign(std::max(-distance, distance - len),
+                                                          distance);
+                    pos += tan * overshoot;
+                }
+
                 return this->update({ pos.fX, pos.fY }, {tan.fX, tan.fY});
             }
         }
@@ -246,6 +258,11 @@ bool AnimatablePropertyContainer::bindAutoOrientable(const AnimationBuilder& abu
                                                      Vec2Value* v, float* orientation) {
     if (!jprop) {
         return false;
+    }
+
+    if (const auto* sid = ParseSlotID(jprop)) {
+        fHasSlotID = true;
+        abuilder.fSlotManager->trackVec2Value(SkString(sid->begin()), v, sk_ref_sp(this));
     }
 
     if (!ParseDefault<bool>((*jprop)["s"], false)) {

@@ -7,6 +7,7 @@
 
 #include "src/gpu/ganesh/GrAttachment.h"
 
+#include "include/core/SkTextureCompressionType.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDataUtils.h"
@@ -23,7 +24,7 @@ size_t GrAttachment::onGpuMemorySize() const {
     // the owned attachments will have no size and be uncached.
     if (!(fSupportedUsages & UsageFlags::kTexture) && fMemoryless == GrMemoryless::kNo) {
         GrBackendFormat format = this->backendFormat();
-        SkImage::CompressionType compression = GrBackendFormatToCompressionType(format);
+        SkTextureCompressionType compression = GrBackendFormatToCompressionType(format);
 
         uint64_t size = GrNumBlocks(compression, this->dimensions());
         size *= GrBackendFormatBytesPerBlock(this->backendFormat());
@@ -39,7 +40,7 @@ static void build_key(skgpu::ResourceKey::Builder* builder,
                       SkISize dimensions,
                       GrAttachment::UsageFlags requiredUsage,
                       int sampleCnt,
-                      GrMipmapped mipmapped,
+                      skgpu::Mipmapped mipmapped,
                       GrProtected isProtected,
                       GrMemoryless memoryless) {
     SkASSERT(!dimensions.isEmpty());
@@ -65,7 +66,7 @@ void GrAttachment::ComputeSharedAttachmentUniqueKey(const GrCaps& caps,
                                                     SkISize dimensions,
                                                     UsageFlags requiredUsage,
                                                     int sampleCnt,
-                                                    GrMipmapped mipmapped,
+                                                    skgpu::Mipmapped mipmapped,
                                                     GrProtected isProtected,
                                                     GrMemoryless memoryless,
                                                     skgpu::UniqueKey* key) {
@@ -81,7 +82,7 @@ void GrAttachment::ComputeScratchKey(const GrCaps& caps,
                                      SkISize dimensions,
                                      UsageFlags requiredUsage,
                                      int sampleCnt,
-                                     GrMipmapped mipmapped,
+                                     skgpu::Mipmapped mipmapped,
                                      GrProtected isProtected,
                                      GrMemoryless memoryless,
                                      skgpu::ScratchKey* key) {

@@ -21,6 +21,7 @@
 #include "include/ports/SkTypeface_mac.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkUTF.h"
+#include "src/core/SkFontPriv.h"
 #include "src/utils/mac/SkCGBase.h"
 #include "src/utils/mac/SkUniqueCFRef.h"
 
@@ -73,8 +74,6 @@ void SkShaper_CoreText::shape(const char* utf8, size_t utf8Bytes,
     if (!font.atEnd()) {
         font.consume();
         skfont = font.currentFont();
-    } else {
-        skfont.setTypeface(sk_ref_sp(skfont.getTypefaceOrDefault()));
     }
     SkASSERT(skfont.getTypeface());
     bool skbidi = 0;
@@ -128,7 +127,7 @@ static void dict_add_double(CFMutableDictionaryRef d, const void* name, double v
 }
 
 static SkUniqueCFRef<CTFontRef> create_ctfont_from_font(const SkFont& font) {
-    auto typeface = font.getTypefaceOrDefault();
+    auto typeface = font.getTypeface();
     auto ctfont = SkTypeface_GetCTFontRef(typeface);
     return SkUniqueCFRef<CTFontRef>(
             CTFontCreateCopyWithAttributes(ctfont, font.getSize(), nullptr, nullptr));

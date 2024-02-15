@@ -10,20 +10,22 @@
 #include <memory>
 
 #include "include/core/SkColorSpace.h"
+#include "include/core/SkStream.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/private/SkColorData.h"
 #include "include/private/base/SkTPin.h"
 
 #include "src/base/SkMathPriv.h"
-#include "src/core/SkOpts.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/AtlasTypes.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandTypes.h"
 #include "src/gpu/graphite/ContextPriv.h"
+#include "src/gpu/graphite/DrawContext.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/TextureProxy.h"
-#include "src/gpu/graphite/UploadTask.h"
+
+using namespace skia_private;
 
 namespace skgpu::graphite {
 
@@ -32,38 +34,6 @@ static const constexpr bool kDumpAtlasData = true;
 #else
 static const constexpr bool kDumpAtlasData = false;
 #endif
-
-class PlotUploadContext : public ConditionalUploadContext {
-public:
-    static std::unique_ptr<ConditionalUploadContext> Make(PlotLocator plotLocator,
-                                                          AtlasToken uploadToken,
-                                                          uint32_t atlasID) {
-        return std::unique_ptr<PlotUploadContext>(new PlotUploadContext(plotLocator,
-                                                                        uploadToken,
-                                                                        atlasID));
-    }
-    ~PlotUploadContext() override {}
-
-    bool needsUpload(Context* context) const override {
-        return context->priv().plotUploadTracker()->needsUpload(fPlotLocator,
-                                                                fUploadToken,
-                                                                fAtlasID);
-    }
-
-private:
-    PlotUploadContext(PlotLocator plotLocator,
-                      AtlasToken uploadToken,
-                      uint32_t atlasID)
-        : ConditionalUploadContext()
-        , fPlotLocator(plotLocator)
-        , fUploadToken(uploadToken)
-        , fAtlasID(atlasID) {}
-
-    // identifiers
-    PlotLocator fPlotLocator; // has plot index, page index, and eviction gen ID
-    AtlasToken fUploadToken;
-    uint32_t fAtlasID;
-};
 
 #ifdef SK_DEBUG
 void DrawAtlas::validate(const AtlasLocator& atlasLocator) const {
@@ -96,9 +66,9 @@ std::unique_ptr<DrawAtlas> DrawAtlas::Make(SkColorType colorType, size_t bpp, in
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-static int32_t next_id() {
-    static std::atomic<int32_t> nextID{1};
-    int32_t id;
+static uint32_t next_id() {
+    static std::atomic<uint32_t> nextID{1};
+    uint32_t id;
     do {
         id = nextID.fetch_add(1, std::memory_order_relaxed);
     } while (id == SK_InvalidGenID);
@@ -169,19 +139,19 @@ bool DrawAtlas::addToPage(unsigned int pageIdx, int width, int height, const voi
     return false;
 }
 
-bool DrawAtlas::recordUploads(UploadList* ul, Recorder* recorder, bool useCachedUploads) {
+bool DrawAtlas::recordUploads(DrawContext* dc, Recorder* recorder) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     for (uint32_t pageIdx = 0; pageIdx < fNumActivePages; ++pageIdx) {
         PlotList::Iter plotIter;
         plotIter.init(fPages[pageIdx].fPlotList, PlotList::Iter::kHead_IterStart);
         for (Plot* plot = plotIter.get(); plot; plot = plotIter.next()) {
-            if (useCachedUploads || plot->needsUpload()) {
+            if (plot->needsUpload()) {
                 TextureProxy* proxy = fProxies[pageIdx].get();
                 SkASSERT(proxy);
 
                 const void* dataPtr;
                 SkIRect dstRect;
-                std::tie(dataPtr, dstRect) = plot->prepareForUpload(useCachedUploads);
+                std::tie(dataPtr, dstRect) = plot->prepareForUpload();
                 if (dstRect.isEmpty()) {
                     continue;
                 }
@@ -189,16 +159,10 @@ bool DrawAtlas::recordUploads(UploadList* ul, Recorder* recorder, bool useCached
                 std::vector<MipLevel> levels;
                 levels.push_back({dataPtr, fBytesPerPixel*fPlotWidth});
 
-                plot->setLastUploadToken(recorder->priv().tokenTracker()->nextFlushToken());
-
-                auto uploadContext = PlotUploadContext::Make(plot->plotLocator(),
-                                                             plot->lastUploadToken(),
-                                                             fAtlasID);
-
                 // Src and dst colorInfo are the same
                 SkColorInfo colorInfo(fColorType, kUnknown_SkAlphaType, nullptr);
-                if (!ul->recordUpload(recorder, sk_ref_sp(proxy), colorInfo, colorInfo, levels,
-                                      dstRect, std::move(uploadContext))) {
+                if (!dc->recordUpload(recorder, sk_ref_sp(proxy), colorInfo, colorInfo, levels,
+                                      dstRect, /*ConditionalUploadContext=*/nullptr)) {
                     return false;
                 }
             }
@@ -310,7 +274,7 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
     // This is to handle the case where a lot of text or path rendering has occurred but then just
     // a blinking cursor is drawn.
     if (atlasUsedThisFlush || fFlushesSinceLastUse > kAtlasRecentlyUsedCount) {
-        SkTArray<Plot*> availablePlots;
+        TArray<Plot*> availablePlots;
         uint32_t lastPageIndex = fNumActivePages - 1;
 
         // For all plots but the last one, update number of flushes since used, and check to see
@@ -456,13 +420,13 @@ bool DrawAtlas::activateNewPage(Recorder* recorder) {
     SkASSERT(fNumActivePages < this->maxPages());
     SkASSERT(!fProxies[fNumActivePages]);
 
-    auto textureInfo = recorder->priv().caps()->getDefaultSampledTextureInfo(
-            fColorType,
-            /*mipmapped=*/Mipmapped::kNo,
-            Protected::kNo,
-            Renderable::kNo);
-    fProxies[fNumActivePages].reset(
-            new TextureProxy({fTextureWidth, fTextureHeight}, textureInfo, skgpu::Budgeted::kYes));
+    const Caps* caps = recorder->priv().caps();
+    auto textureInfo = caps->getDefaultSampledTextureInfo(fColorType,
+                                                          /*mipmapped=*/Mipmapped::kNo,
+                                                          recorder->priv().isProtected(),
+                                                          Renderable::kNo);
+    fProxies[fNumActivePages] = TextureProxy::Make(
+            caps, {fTextureWidth, fTextureHeight}, textureInfo, skgpu::Budgeted::kYes);
     if (!fProxies[fNumActivePages]) {
         return false;
     }
@@ -565,23 +529,6 @@ SkISize DrawAtlasConfig::plotDimensions(MaskFormat type) const {
         // ARGB and LCD always use 256x256 plots -- this has been shown to be faster
         return { 256, 256 };
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////
-
-bool PlotUploadTracker::needsUpload(PlotLocator plotLocator,
-                                    AtlasToken uploadToken,
-                                    uint32_t atlasID) {
-    uint32_t key = plotLocator.pageIndex() << 8 | plotLocator.plotIndex();
-
-    PlotAgeData* ageData = fAtlasData[atlasID].find(key);
-    if (!ageData || ageData->genID != plotLocator.genID() || ageData->uploadToken < uploadToken) {
-        PlotAgeData data{plotLocator.genID(), uploadToken};
-        fAtlasData[atlasID].set(key, data);
-        return true;
-    }
-
-    return false;
 }
 
 }  // namespace skgpu::graphite

@@ -9,7 +9,6 @@
 #define GrCaps_DEFINED
 
 #include "include/core/SkCapabilities.h"
-#include "include/core/SkImage.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrDriverBugWorkarounds.h"
@@ -26,6 +25,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -37,12 +38,14 @@ class GrRenderTarget;
 class GrRenderTargetProxy;
 class GrSurface;
 class SkJSONWriter;
+enum class SkTextureCompressionType;
 struct GrContextOptions;
 struct SkIRect;
 struct SkISize;
 
 namespace skgpu {
     class KeyBuilder;
+    enum class Mipmapped : bool;
 }
 namespace GrTest {
     struct TestFormatColorTypeCombination;
@@ -58,6 +61,10 @@ public:
     void dumpJSON(SkJSONWriter*) const;
 
     const GrShaderCaps* shaderCaps() const { return fShaderCaps.get(); }
+
+#if defined(GR_TEST_UTILS)
+    std::string_view deviceName() const { return fDeviceName; }
+#endif
 
     bool npotTextureTileSupport() const { return fNPOTTextureTileSupport; }
     /** To avoid as-yet-unnecessary complexity we don't allow any partial support of MIP Maps (e.g.
@@ -391,11 +398,15 @@ public:
 
     bool wireframeMode() const { return fWireframeMode; }
 
-    /** Supports using GrFence. */
-    bool fenceSyncSupport() const { return fFenceSyncSupport; }
-
-    /** Supports using GrSemaphore. */
+    /** Supports using GrSemaphores. */
     bool semaphoreSupport() const { return fSemaphoreSupport; }
+
+    /** Supports using GrBackendSemaphore as "signal" semaphores or for waiting. See also
+     *  GrFlushInfo and GrDirectContext. */
+    bool backendSemaphoreSupport() const { return fBackendSemaphoreSupport; }
+
+    /** Supports async callback for finishedProcs */
+    bool finishedProcAsyncCallbackSupport() const { return fFinishedProcAsyncCallbackSupport; }
 
     bool crossContextTextureSupport() const { return fCrossContextTextureSupport; }
     /**
@@ -407,6 +418,8 @@ public:
     bool dynamicStateArrayGeometryProcessorTextureSupport() const {
         return fDynamicStateArrayGeometryProcessorTextureSupport;
     }
+
+    bool supportsProtectedContent() const { return fSupportsProtectedContent; }
 
     // Not all backends support clearing with a scissor test (e.g. Metal), this will always
     // return true if performColorClearsAsDraws() returns true.
@@ -450,15 +463,19 @@ public:
         return {};
     }
 
-    bool validateSurfaceParams(const SkISize&, const GrBackendFormat&, GrRenderable renderable,
-                               int renderTargetSampleCnt, GrMipmapped, GrTextureType) const;
+    bool validateSurfaceParams(const SkISize&,
+                               const GrBackendFormat&,
+                               GrRenderable renderable,
+                               int renderTargetSampleCnt,
+                               skgpu::Mipmapped,
+                               GrTextureType) const;
 
     bool areColorTypeAndFormatCompatible(GrColorType grCT, const GrBackendFormat& format) const;
 
     /** These are used when creating a new texture internally. */
     GrBackendFormat getDefaultBackendFormat(GrColorType, GrRenderable) const;
 
-    virtual GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const = 0;
+    virtual GrBackendFormat getBackendFormatFromCompressionType(SkTextureCompressionType) const = 0;
 
     /**
      * The CLAMP_TO_BORDER wrap mode for texture coordinates was added to desktop GL in 1.3, and
@@ -534,6 +551,9 @@ public:
         return fDisablePerspectiveSDFText;
     }
 
+    // anglebug.com/7796
+    bool avoidLineDraws() const { return fAvoidLineDraws; }
+
     /**
      * Checks whether the passed color type is renderable. If so, the same color type is passed
      * back along with the default format used for the color type. If not, provides an alternative
@@ -543,7 +563,7 @@ public:
     std::tuple<GrColorType, GrBackendFormat> getFallbackColorTypeAndFormat(GrColorType,
                                                                            int sampleCount) const;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     virtual std::vector<GrTest::TestFormatColorTypeCombination> getTestingCombinations() const = 0;
 #endif
 
@@ -552,6 +572,12 @@ protected:
     // the caps (including overrides requested by the client).
     // NOTE: this method will only reduce the caps, never expand them.
     void finishInitialization(const GrContextOptions& options);
+
+#if defined(GR_TEST_UTILS)
+    void setDeviceName(const char* n) {
+        fDeviceName = n;
+    }
+#endif
 
     virtual bool onSupportsDynamicMSAA(const GrRenderTargetProxy*) const { return false; }
 
@@ -604,18 +630,22 @@ protected:
     bool fAvoidReorderingRenderTasks                 : 1;
     bool fAvoidDithering                             : 1;
     bool fDisablePerspectiveSDFText                  : 1;
+    bool fAvoidLineDraws                             : 1;
 
     // ANGLE performance workaround
     bool fPreferVRAMUseOverFlushes                   : 1;
 
-    bool fFenceSyncSupport                           : 1;
     bool fSemaphoreSupport                           : 1;
+    bool fBackendSemaphoreSupport                    : 1;
+    bool fFinishedProcAsyncCallbackSupport           : 1;
 
     // Requires fence sync support in GL.
     bool fCrossContextTextureSupport                 : 1;
 
     // Not (yet) implemented in VK backend.
     bool fDynamicStateArrayGeometryProcessorTextureSupport : 1;
+
+    bool fSupportsProtectedContent                   : 1;
 
     BlendEquationSupport fBlendEquationSupport;
     uint32_t fAdvBlendEqDisableFlags;
@@ -636,6 +666,10 @@ protected:
     size_t fBufferUpdateDataPreserveAlignment = 1;
 
     GrDriverBugWorkarounds fDriverBugWorkarounds;
+
+#if defined(GR_TEST_UTILS)
+    std::string fDeviceName;
+#endif
 
 private:
     void applyOptionsOverrides(const GrContextOptions& options);

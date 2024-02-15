@@ -3,14 +3,17 @@
 
 #include "src/core/SkTextBlobTrace.h"
 
+#include "include/core/SkFontMgr.h"
 #include "include/core/SkTextBlob.h"
+#include "src/base/SkTLazy.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkPtrRecorder.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkTextBlobPriv.h"
 #include "src/core/SkWriteBuffer.h"
 
-std::vector<SkTextBlobTrace::Record> SkTextBlobTrace::CreateBlobTrace(SkStream* stream) {
+std::vector<SkTextBlobTrace::Record> SkTextBlobTrace::CreateBlobTrace(
+        SkStream* stream, sk_sp<SkFontMgr> lastResortMgr) {
     std::vector<SkTextBlobTrace::Record> trace;
 
     uint32_t typefaceCount;
@@ -20,7 +23,7 @@ std::vector<SkTextBlobTrace::Record> SkTextBlobTrace::CreateBlobTrace(SkStream* 
 
     std::vector<sk_sp<SkTypeface>> typefaceArray;
     for (uint32_t i = 0; i < typefaceCount; i++) {
-        typefaceArray.push_back(SkTypeface::MakeDeserialize(stream));
+        typefaceArray.push_back(SkTypeface::MakeDeserialize(stream, lastResortMgr));
     }
 
     uint32_t restOfFile;
@@ -58,7 +61,7 @@ void SkTextBlobTrace::DumpTrace(const std::vector<SkTextBlobTrace::Record>& trac
             SkDebugf("Run %d\n    ", runNumber);
             SkFont font = iter.font();
             SkDebugf("Font %d %g %g %g %d %d %d\n    ",
-                    font.getTypefaceOrDefault()->uniqueID(),
+                    font.getTypeface()->uniqueID(),
                     font.getSize(),
                     font.getScaleX(),
                     font.getSkewX(),
@@ -77,7 +80,7 @@ void SkTextBlobTrace::DumpTrace(const std::vector<SkTextBlobTrace::Record>& trac
     }
 }
 
-SkTextBlobTrace::Capture::Capture() : fTypefaceSet(new SkRefCntSet) {
+SkTextBlobTrace::Capture::Capture() : fTypefaceSet(new SkRefCntSet), fWriteBuffer({}) {
     fWriteBuffer.setTypefaceRecorder(fTypefaceSet);
 }
 
