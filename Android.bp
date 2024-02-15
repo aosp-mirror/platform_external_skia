@@ -4318,6 +4318,7 @@ cc_library_shared {
         "src/gpu/graphite/PublicPrecompile.cpp",
         "src/gpu/graphite/QueueManager.cpp",
         "src/gpu/graphite/RasterPathAtlas.cpp",
+        "src/gpu/graphite/RasterPathUtils.cpp",
         "src/gpu/graphite/Recorder.cpp",
         "src/gpu/graphite/Recording.cpp",
         "src/gpu/graphite/RenderPassTask.cpp",
