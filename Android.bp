@@ -2693,6 +2693,7 @@ cc_defaults {
         "tools/gpu/TestContext.cpp",
         "tools/gpu/TestOps.cpp",
         "tools/gpu/YUVUtils.cpp",
+        "tools/gpu/ganesh/AtlasTextOpTools.cpp",
         "tools/gpu/ganesh/GrAtlasTools.cpp",
         "tools/gpu/gl/GLTestContext.cpp",
         "tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp",
@@ -2701,6 +2702,7 @@ cc_defaults {
         "tools/gpu/vk/VkTestHelper.cpp",
         "tools/gpu/vk/VkTestUtils.cpp",
         "tools/gpu/vk/VkYcbcrSamplerHelper.cpp",
+        "tools/text/gpu/TextBlobTools.cpp",
         "tools/timer/Timer.cpp",
     ],
 }
@@ -5111,6 +5113,7 @@ cc_library_shared {
         "tools/gpu/TestContext.cpp",
         "tools/gpu/TestOps.cpp",
         "tools/gpu/YUVUtils.cpp",
+        "tools/gpu/ganesh/AtlasTextOpTools.cpp",
         "tools/gpu/ganesh/GrAtlasTools.cpp",
         "tools/gpu/gl/GLTestContext.cpp",
         "tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp",
@@ -5126,6 +5129,7 @@ cc_library_shared {
         "tools/skqp/src/jni_skqp.cpp",
         "tools/skqp/src/skqp.cpp",
         "tools/skqp/src/skqp_GpuTestProcs.cpp",
+        "tools/text/gpu/TextBlobTools.cpp",
         "tools/timer/Timer.cpp",
     ],
 
