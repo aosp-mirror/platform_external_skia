@@ -150,6 +150,7 @@ SKIA_PUBLIC_HDRS = [
     "include/gpu/ganesh/gl/GrGLBackendSurface.h",
     "include/gpu/ganesh/gl/GrGLDirectContext.h",
     "include/gpu/ganesh/mtl/SkSurfaceMetal.h",
+    "include/gpu/ganesh/vk/GrBackendDrawableInfo.h",
     "include/gpu/ganesh/vk/GrVkBackendSemaphore.h",
     "include/gpu/ganesh/vk/GrVkBackendSurface.h",
     "include/gpu/ganesh/vk/GrVkDirectContext.h",
@@ -160,7 +161,6 @@ SKIA_PUBLIC_HDRS = [
     "include/gpu/gl/GrGLConfig.h",
     "include/gpu/gl/GrGLConfig_chrome.h",
     "include/gpu/GpuTypes.h",
-    "include/gpu/GrBackendDrawableInfo.h",
     "include/gpu/GrBackendSemaphore.h",
     "include/gpu/GrBackendSurface.h",
     "include/gpu/GrContextOptions.h",
@@ -383,7 +383,6 @@ BASE_SRCS_ALL = [
     "src/core/SkBitmapDevice.h",
     "src/core/SkBitmapProcState.h",  # needed for src/opts/SkBitmapProcState_opts.h
     "src/core/SkBitmapProcState_opts.cpp",
-    "src/core/SkBitmapProcState_opts_hsw.cpp",
     "src/core/SkBitmapProcState_opts_ssse3.cpp",
     "src/core/SkBlendMode.cpp",
     "src/core/SkBlendModeBlender.cpp",
@@ -1852,7 +1851,6 @@ CODEC_SRCS_LIMITED = [
     "src/codec/SkWbmpCodec.cpp",
     "src/codec/SkWbmpCodec.h",
     "src/codec/SkWuffsCodec.cpp",
-    "src/codec/SkWuffsCodec.h",
 ]
 
 CODEC_SRCS_ALL = CODEC_SRCS_LIMITED + [
