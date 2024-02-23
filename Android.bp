@@ -2052,6 +2052,7 @@ cc_defaults {
         "modules/skresources/include/",
         "modules/skshaper/include/",
         "modules/skunicode/include/",
+        "third_party/externals/vulkanmemoryallocator/include/",
     ],
 
     srcs: [
@@ -2698,6 +2699,7 @@ cc_defaults {
         "tools/gpu/mock/MockTestContext.cpp",
         "tools/gpu/vk/VkTestContext.cpp",
         "tools/gpu/vk/VkTestHelper.cpp",
+        "tools/gpu/vk/VkTestMemoryAllocator.cpp",
         "tools/gpu/vk/VkTestUtils.cpp",
         "tools/gpu/vk/VkYcbcrSamplerHelper.cpp",
         "tools/text/gpu/TextBlobTools.cpp",
@@ -5117,6 +5119,7 @@ cc_library_shared {
         "tools/gpu/mock/MockTestContext.cpp",
         "tools/gpu/vk/VkTestContext.cpp",
         "tools/gpu/vk/VkTestHelper.cpp",
+        "tools/gpu/vk/VkTestMemoryAllocator.cpp",
         "tools/gpu/vk/VkTestUtils.cpp",
         "tools/gpu/vk/VkYcbcrSamplerHelper.cpp",
         "tools/graphite/ContextFactory.cpp",
