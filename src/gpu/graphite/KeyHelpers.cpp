@@ -974,7 +974,9 @@ void RuntimeEffectBlock::BeginBlock(const KeyContext& keyContext,
     ShaderCodeDictionary* dict = keyContext.dict();
     int codeSnippetID = dict->findOrCreateRuntimeEffectSnippet(shaderData.fEffect.get());
 
-    keyContext.rtEffectDict()->set(codeSnippetID, shaderData.fEffect);
+    if (codeSnippetID >= SkKnownRuntimeEffects::kUnknownRuntimeEffectIDStart) {
+        keyContext.rtEffectDict()->set(codeSnippetID, shaderData.fEffect);
+    }
 
     const ShaderSnippet* entry = dict->getEntry(codeSnippetID);
     SkASSERT(entry);
@@ -1569,8 +1571,7 @@ static void add_to_key(const KeyContext& keyContext,
     SkASSERT(shader);
     SkASSERT(shader->numOctaves());
 
-    std::unique_ptr<SkPerlinNoiseShader::PaintingData> paintingData =
-            shader->getPaintingData(SkMatrix::I());
+    std::unique_ptr<SkPerlinNoiseShader::PaintingData> paintingData = shader->getPaintingData();
     paintingData->generateBitmaps();
 
     sk_sp<TextureProxy> perm = RecorderPriv::CreateCachedProxy(
