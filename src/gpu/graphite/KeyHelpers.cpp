@@ -63,6 +63,7 @@
 #include "src/shaders/SkImageShader.h"
 #include "src/shaders/SkLocalMatrixShader.h"
 #include "src/shaders/SkPerlinNoiseShaderImpl.h"
+#include "src/shaders/SkPerlinNoiseShaderType.h"
 #include "src/shaders/SkPictureShader.h"
 #include "src/shaders/SkRuntimeShader.h"
 #include "src/shaders/SkShaderBase.h"
@@ -337,7 +338,7 @@ GradientShaderBlocks::GradientData::GradientData(SkShaderBase::GradientType type
 }
 
 void GradientShaderBlocks::AddBlock(const KeyContext& keyContext,
-                                    PaintParamsKeyBuilder *builder,
+                                    PaintParamsKeyBuilder* builder,
                                     PipelineDataGatherer* gatherer,
                                     const GradientData& gradData) {
     auto dict = keyContext.dict();
@@ -1557,9 +1558,9 @@ static void add_to_key(const KeyContext& keyContext,
 
 // If either of these change then the corresponding change must also be made in the SkSL
 // perlin_noise_shader function.
-static_assert((int)SkPerlinNoiseShader::kFractalNoise_Type ==
+static_assert((int)SkPerlinNoiseShaderType::kFractalNoise ==
               (int)PerlinNoiseShaderBlock::Type::kFractalNoise);
-static_assert((int)SkPerlinNoiseShader::kTurbulence_Type ==
+static_assert((int)SkPerlinNoiseShaderType::kTurbulence ==
               (int)PerlinNoiseShaderBlock::Type::kTurbulence);
 static void add_to_key(const KeyContext& keyContext,
                        PaintParamsKeyBuilder* builder,
