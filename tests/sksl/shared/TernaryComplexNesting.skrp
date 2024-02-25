@@ -73,9 +73,9 @@ merge_condition_mask           CondMask = $29 & $30
 copy_4_slots_unmasked          $4..7 = result
 merge_inv_condition_mask       CondMask = $29 & ~$30
 branch_if_no_lanes_active      branch_if_no_lanes_active +7 (label 11 at #80)
-copy_4_uniforms                colorGreen = colorWhite
+copy_4_uniforms                y = colorWhite
 copy_4_slots_unmasked          $8..11 = colorRed
-copy_4_slots_unmasked          $12..15 = colorGreen
+copy_4_slots_unmasked          $12..15 = y
 cmpeq_4_floats                 $8..11 = equal($8..11, $12..15)
 bitwise_and_2_ints             $8..9 &= $10..11
 bitwise_and_int                $8 &= $9
