@@ -4157,6 +4157,8 @@ void WGSLCodeGenerator::writeFields(SkSpan<const Field> fields, const MemoryLayo
 
 void WGSLCodeGenerator::writeEnables() {
     this->writeLine("diagnostic(off, derivative_uniformity);");
+    this->writeLine("diagnostic(off, chromium.unreachable_code);");
+
     if (fRequirements.fPixelLocalExtension) {
         this->writeLine("enable chromium_experimental_pixel_local;");
     }
@@ -4464,7 +4466,7 @@ static bool validate_wgsl(ErrorReporter& reporter, const std::string& wgsl, std:
         // The program isn't valid WGSL. In debug, report the error via SkDEBUGFAIL. We also append
         // the generated program for ease of debugging.
         tint::diag::Formatter diagFormatter;
-        std::string diagOutput = diagFormatter.Format(program.Diagnostics());
+        std::string diagOutput = diagFormatter.Format(program.Diagnostics()).Plain();
         diagOutput += "\n";
         diagOutput += wgsl;
 #if defined(SKSL_STANDALONE)
@@ -4478,7 +4480,7 @@ static bool validate_wgsl(ErrorReporter& reporter, const std::string& wgsl, std:
     if (!program.Diagnostics().empty()) {
         // The program contains warnings. Report them as-is.
         tint::diag::Formatter diagFormatter;
-        *warnings = diagFormatter.Format(program.Diagnostics());
+        *warnings = diagFormatter.Format(program.Diagnostics()).Plain();
     }
     return true;
 }

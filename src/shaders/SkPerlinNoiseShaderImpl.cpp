@@ -7,6 +7,7 @@
 
 #include "src/shaders/SkPerlinNoiseShaderImpl.h"
 
+#include "include/core/SkColor.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkShader.h"
@@ -16,6 +17,15 @@
 #include "src/base/SkArenaAlloc.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/shaders/SkPerlinNoiseShaderType.h"
+
+#ifdef SK_RASTER_PIPELINE_PERLIN_NOISE
+#include "src/core/SkEffectPriv.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineOpContexts.h"
+#include "src/core/SkRasterPipelineOpList.h"
+#include <optional>
+#endif
 
 namespace {
 
@@ -36,7 +46,7 @@ inline SkScalar smoothCurve(SkScalar t) { return t * t * (3 - 2 * t); }
 
 }  // end namespace
 
-SkPerlinNoiseShader::SkPerlinNoiseShader(SkPerlinNoiseShader::Type type,
+SkPerlinNoiseShader::SkPerlinNoiseShader(SkPerlinNoiseShaderType type,
                                          SkScalar baseFrequencyX,
                                          SkScalar baseFrequencyY,
                                          int numOctaves,
@@ -46,7 +56,7 @@ SkPerlinNoiseShader::SkPerlinNoiseShader(SkPerlinNoiseShader::Type type,
         , fBaseFrequencyX(baseFrequencyX)
         , fBaseFrequencyY(baseFrequencyY)
         , fNumOctaves(numOctaves > kMaxOctaves ? kMaxOctaves
-                                               : numOctaves)  //[0,255] octaves allowed
+                                               : numOctaves)  // [0,255] octaves allowed
         , fSeed(seed)
         , fTileSize(nullptr == tileSize ? SkISize::Make(0, 0) : *tileSize)
         , fStitchTiles(!fTileSize.isEmpty()) {
@@ -60,7 +70,7 @@ SkPerlinNoiseShader::SkPerlinNoiseShader(SkPerlinNoiseShader::Type type,
 }
 
 sk_sp<SkFlattenable> SkPerlinNoiseShader::CreateProc(SkReadBuffer& buffer) {
-    Type type = buffer.read32LE(kLast_Type);
+    SkPerlinNoiseShaderType type = buffer.read32LE(SkPerlinNoiseShaderType::kLast);
 
     SkScalar freqX = buffer.readScalar();
     SkScalar freqY = buffer.readScalar();
@@ -72,9 +82,9 @@ sk_sp<SkFlattenable> SkPerlinNoiseShader::CreateProc(SkReadBuffer& buffer) {
     tileSize.fHeight = buffer.readInt();
 
     switch (type) {
-        case kFractalNoise_Type:
+        case SkPerlinNoiseShaderType::kFractalNoise:
             return SkShaders::MakeFractalNoise(freqX, freqY, octaves, seed, &tileSize);
-        case kTurbulence_Type:
+        case SkPerlinNoiseShaderType::kTurbulence:
             return SkShaders::MakeTurbulence(freqX, freqY, octaves, seed, &tileSize);
         default:
             // Really shouldn't get here b.c. of earlier check on type
@@ -166,8 +176,9 @@ SkScalar SkPerlinNoiseShader::PerlinNoiseShaderContext::calculateTurbulenceValue
     SkScalar ratio = SK_Scalar1;
     for (int octave = 0; octave < perlinNoiseShader.fNumOctaves; ++octave) {
         SkScalar noise = noise2D(channel, stitchData, noiseVector);
-        SkScalar numer =
-                (perlinNoiseShader.fType == kFractalNoise_Type) ? noise : SkScalarAbs(noise);
+        SkScalar numer = (perlinNoiseShader.fType == SkPerlinNoiseShaderType::kFractalNoise)
+                                 ? noise
+                                 : SkScalarAbs(noise);
         turbulenceFunctionResult += numer / ratio;
         noiseVector.fX *= 2;
         noiseVector.fY *= 2;
@@ -178,7 +189,7 @@ SkScalar SkPerlinNoiseShader::PerlinNoiseShaderContext::calculateTurbulenceValue
         }
     }
 
-    if (perlinNoiseShader.fType == kFractalNoise_Type) {
+    if (perlinNoiseShader.fType == SkPerlinNoiseShaderType::kFractalNoise) {
         // For kFractalNoise the result is: noise[-1,1] * 0.5 + 0.5
         turbulenceFunctionResult = SkScalarHalf(turbulenceFunctionResult + 1);
     }
@@ -244,6 +255,37 @@ void SkPerlinNoiseShader::PerlinNoiseShaderContext::shadeSpan(int x,
     }
 }
 
+#ifdef SK_RASTER_PIPELINE_PERLIN_NOISE  // TODO(b/40045243): enable in Chromium
+
+bool SkPerlinNoiseShader::appendStages(const SkStageRec& rec,
+                                       const SkShaders::MatrixRec& mRec) const {
+    std::optional<SkShaders::MatrixRec> newMRec = mRec.apply(rec);
+    if (!newMRec.has_value()) {
+        return false;
+    }
+
+    fInitPaintingDataOnce([&] {
+        const_cast<SkPerlinNoiseShader*>(this)->fPaintingData =
+                this->getPaintingData(SkMatrix::I());
+    });
+
+    auto* ctx = rec.fAlloc->make<SkRasterPipeline_PerlinNoiseCtx>();
+    ctx->noiseType = fType;
+    ctx->baseFrequencyX = fBaseFrequencyX;
+    ctx->baseFrequencyY = fBaseFrequencyY;
+    ctx->stitchDataInX = fPaintingData->fStitchDataInit.fWidth;
+    ctx->stitchDataInY = fPaintingData->fStitchDataInit.fHeight;
+    ctx->stitching = fStitchTiles;
+    ctx->numOctaves = fNumOctaves;
+    ctx->latticeSelector = fPaintingData->fLatticeSelector;
+    ctx->noiseData = &fPaintingData->fNoise[0][0][0];
+
+    rec.fPipeline->append(SkRasterPipelineOp::perlin_noise, ctx);
+    return true;
+}
+
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 static bool valid_input(
@@ -287,7 +329,7 @@ sk_sp<SkShader> MakeFractalNoise(SkScalar baseFrequencyX,
         return SkShaders::Color(kTransparentGray, /* colorSpace= */ nullptr);
     }
 
-    return sk_sp<SkShader>(new SkPerlinNoiseShader(SkPerlinNoiseShader::kFractalNoise_Type,
+    return sk_sp<SkShader>(new SkPerlinNoiseShader(SkPerlinNoiseShaderType::kFractalNoise,
                                                    baseFrequencyX,
                                                    baseFrequencyY,
                                                    numOctaves,
@@ -309,7 +351,7 @@ sk_sp<SkShader> MakeTurbulence(SkScalar baseFrequencyX,
         return SkShaders::Color(SkColors::kTransparent, /* colorSpace= */ nullptr);
     }
 
-    return sk_sp<SkShader>(new SkPerlinNoiseShader(SkPerlinNoiseShader::kTurbulence_Type,
+    return sk_sp<SkShader>(new SkPerlinNoiseShader(SkPerlinNoiseShaderType::kTurbulence,
                                                    baseFrequencyX,
                                                    baseFrequencyY,
                                                    numOctaves,

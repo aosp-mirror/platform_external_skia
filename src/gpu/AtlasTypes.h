@@ -448,6 +448,15 @@ public:
     }
     SkDEBUGCODE(size_t bpp() const { return fBytesPerPixel; })
 
+    /**
+     * To add data to the Plot, first call addRect to see if it's possible. If successful,
+     * use the atlasLocator to get a pointer to the location in the atlas via dataAt() and render to
+     * that location, or if you already have data use copySubImage().
+     */
+    bool addRect(int width, int height, AtlasLocator* atlasLocator);
+    void* dataAt(const AtlasLocator& atlasLocator);
+    void copySubImage(const AtlasLocator& atlasLocator, const void* image);
+    // TODO: Utility method for Ganesh, consider removing
     bool addSubImage(int width, int height, const void* image, AtlasLocator* atlasLocator);
 
     /**
@@ -511,7 +520,7 @@ private:
     const SkColorType fColorType;
     const size_t fBytesPerPixel;
     SkIRect fDirtyRect;  // area in the Plot that needs to be uploaded
-    SkDEBUGCODE(bool fDirty);
+    SkDEBUGCODE(bool fDirty;)
 };
 
 typedef SkTInternalLList<Plot> PlotList;

@@ -95,8 +95,10 @@ DrawAtlas::DrawAtlas(SkColorType colorType, size_t bpp, int width, int height,
     int numPlotsX = width/plotWidth;
     int numPlotsY = height/plotHeight;
     SkASSERT(numPlotsX * numPlotsY <= PlotLocator::kMaxPlots);
-    SkASSERT(fPlotWidth * numPlotsX == fTextureWidth);
-    SkASSERT(fPlotHeight * numPlotsY == fTextureHeight);
+    SkASSERTF(fPlotWidth * numPlotsX == fTextureWidth,
+             "Invalid DrawAtlas. Plot width: %d, texture width %d", fPlotWidth, fTextureWidth);
+    SkASSERTF(fPlotHeight * numPlotsY == fTextureHeight,
+              "Invalid DrawAtlas. Plot height: %d, texture height %d", fPlotHeight, fTextureHeight);
 
     fNumPlots = numPlotsX * numPlotsY;
 
@@ -111,7 +113,7 @@ inline void DrawAtlas::processEviction(PlotLocator plotLocator) {
     fAtlasGeneration = fGenerationCounter->next();
 }
 
-inline bool DrawAtlas::updatePlot(AtlasLocator* atlasLocator, Plot* plot) {
+inline bool DrawAtlas::updatePlot(Plot* plot, AtlasLocator* atlasLocator) {
     int pageIdx = plot->pageIndex();
     this->makeMRU(plot, pageIdx);
 
@@ -122,8 +124,8 @@ inline bool DrawAtlas::updatePlot(AtlasLocator* atlasLocator, Plot* plot) {
     return true;
 }
 
-bool DrawAtlas::addToPage(unsigned int pageIdx, int width, int height, const void* image,
-                          AtlasLocator* atlasLocator) {
+bool DrawAtlas::addRectToPage(unsigned int pageIdx, int width, int height,
+                              AtlasLocator* atlasLocator) {
     SkASSERT(fProxies[pageIdx]);
 
     // look through all allocated plots for one we can share, in Most Recently Refed order
@@ -131,8 +133,8 @@ bool DrawAtlas::addToPage(unsigned int pageIdx, int width, int height, const voi
     plotIter.init(fPages[pageIdx].fPlotList, PlotList::Iter::kHead_IterStart);
 
     for (Plot* plot = plotIter.get(); plot; plot = plotIter.next()) {
-        if (plot->addSubImage(width, height, image, atlasLocator)) {
-            return this->updatePlot(atlasLocator, plot);
+        if (plot->addRect(width, height, atlasLocator)) {
+            return this->updatePlot(plot, atlasLocator);
         }
     }
 
@@ -180,9 +182,9 @@ bool DrawAtlas::recordUploads(DrawContext* dc, Recorder* recorder) {
 static constexpr auto kPlotRecentlyUsedCount = 32;
 static constexpr auto kAtlasRecentlyUsedCount = 128;
 
-DrawAtlas::ErrorCode DrawAtlas::addToAtlas(Recorder* recorder,
-                                           int width, int height, const void* image,
-                                           AtlasLocator* atlasLocator) {
+DrawAtlas::ErrorCode DrawAtlas::addRect(Recorder* recorder,
+                                        int width, int height,
+                                        AtlasLocator* atlasLocator) {
     if (width > fPlotWidth || height > fPlotHeight) {
         return ErrorCode::kError;
     }
@@ -191,7 +193,7 @@ DrawAtlas::ErrorCode DrawAtlas::addToAtlas(Recorder* recorder,
     // We prioritize this upload to the first pages, not the most recently used, to make it easier
     // to remove unused pages in reverse page order.
     for (unsigned int pageIdx = 0; pageIdx < fNumActivePages; ++pageIdx) {
-        if (this->addToPage(pageIdx, width, height, image, atlasLocator)) {
+        if (this->addRectToPage(pageIdx, width, height, atlasLocator)) {
             return ErrorCode::kSucceeded;
         }
     }
@@ -207,9 +209,9 @@ DrawAtlas::ErrorCode DrawAtlas::addToAtlas(Recorder* recorder,
             SkASSERT(plot);
             if (plot->lastUseToken() < recorder->priv().tokenTracker()->nextFlushToken()) {
                 this->processEvictionAndResetRects(plot);
-                SkDEBUGCODE(bool verify = )plot->addSubImage(width, height, image, atlasLocator);
+                SkDEBUGCODE(bool verify = )plot->addRect(width, height, atlasLocator);
                 SkASSERT(verify);
-                if (!this->updatePlot(atlasLocator, plot)) {
+                if (!this->updatePlot(plot, atlasLocator)) {
                     return ErrorCode::kError;
                 }
                 return ErrorCode::kSucceeded;
@@ -221,7 +223,7 @@ DrawAtlas::ErrorCode DrawAtlas::addToAtlas(Recorder* recorder,
             return ErrorCode::kError;
         }
 
-        if (this->addToPage(fNumActivePages-1, width, height, image, atlasLocator)) {
+        if (this->addRectToPage(fNumActivePages-1, width, height, atlasLocator)) {
             return ErrorCode::kSucceeded;
         } else {
             // If we fail to upload to a newly activated page then something has gone terribly
@@ -239,6 +241,24 @@ DrawAtlas::ErrorCode DrawAtlas::addToAtlas(Recorder* recorder,
     // token, and call back into this function. The subsequent call will have plots available
     // for fresh uploads.
     return ErrorCode::kTryAgain;
+}
+
+Plot* DrawAtlas::findPlot(const AtlasLocator& atlasLocator) {
+    Page* page = &fPages[atlasLocator.pageIndex()];
+    Plot* plot = page->fPlotArray[atlasLocator.plotIndex()].get();
+    return plot;
+}
+
+DrawAtlas::ErrorCode DrawAtlas::addToAtlas(Recorder* recorder,
+                                           int width, int height, const void* image,
+                                           AtlasLocator* atlasLocator) {
+    ErrorCode ec = this->addRect(recorder, width, height, atlasLocator);
+    if (ec == ErrorCode::kSucceeded) {
+        Plot* plot = this->findPlot(*atlasLocator);
+        plot->copySubImage(*atlasLocator, image);
+    }
+
+    return ec;
 }
 
 void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
