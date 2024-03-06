@@ -13,11 +13,12 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkRegion.h"
 #include "include/core/SkShader.h"
-#include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/utils/SkCamera.h"
+#include "src/base/SkTime.h"
 #include "src/base/SkUTF.h"
+#include "tools/DecodeUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 #include "tools/viewer/Slide.h"
 
@@ -167,11 +168,15 @@ class BackdropSlide : public ClickHandlerSlide {
 
 public:
     BackdropSlide() {
+        fName = "Backdrop";
+    }
+
+protected:
+    void load(SkScalar, SkScalar) override {
         fCenter.set(200, 150);
         fAngle = 0;
-        fImage = GetResourceAsImage("images/mandrill_512.png");
+        fImage = ToolUtils::GetResourceAsImage("images/mandrill_512.png");
         fFilter = SkImageFilters::Dilate(8, 8, nullptr);
-        fName = "Backdrop";
     }
 
     void draw(SkCanvas* canvas) override {

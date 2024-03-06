@@ -17,7 +17,7 @@ namespace {
 
 wgpu::ShaderModule CreateNoopFragment(const wgpu::Device& device) {
     wgpu::ShaderModuleWGSLDescriptor wgslDesc;
-    wgslDesc.source =
+    wgslDesc.code =
             "@fragment\n"
             "fn main() {}\n";
     wgpu::ShaderModuleDescriptor smDesc;
@@ -39,7 +39,7 @@ sk_sp<SharedContext> DawnSharedContext::Make(const DawnBackendContext& backendCo
         return {};
     }
 
-    auto caps = std::make_unique<const DawnCaps>(backendContext.fDevice, options);
+    auto caps = std::make_unique<const DawnCaps>(backendContext, options);
 
     return sk_sp<SharedContext>(new DawnSharedContext(backendContext,
                                                       std::move(caps),
@@ -52,14 +52,22 @@ DawnSharedContext::DawnSharedContext(const DawnBackendContext& backendContext,
         : skgpu::graphite::SharedContext(std::move(caps), BackendApi::kDawn)
         , fDevice(backendContext.fDevice)
         , fQueue(backendContext.fQueue)
+        , fTick(backendContext.fTick)
         , fNoopFragment(std::move(noopFragment)) {}
 
-DawnSharedContext::~DawnSharedContext() = default;
+DawnSharedContext::~DawnSharedContext() {
+    // need to clear out resources before any allocator is removed
+    this->globalCache()->deleteResources();
+}
 
 std::unique_ptr<ResourceProvider> DawnSharedContext::makeResourceProvider(
-        SingleOwner* singleOwner) {
-    return std::unique_ptr<ResourceProvider>(new DawnResourceProvider(this, singleOwner));
+        SingleOwner* singleOwner,
+        uint32_t recorderID,
+        size_t resourceBudget) {
+    return std::unique_ptr<ResourceProvider>(new DawnResourceProvider(this,
+                                                                      singleOwner,
+                                                                      recorderID,
+                                                                      resourceBudget));
 }
 
 } // namespace skgpu::graphite
-

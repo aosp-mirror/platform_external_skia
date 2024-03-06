@@ -16,6 +16,8 @@
 #include "src/gpu/ganesh/glsl/GrGLSLProgramBuilder.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 
+using namespace skia_private;
+
 GrGLSLShaderBuilder::GrGLSLShaderBuilder(GrGLSLProgramBuilder* program)
     : fProgramBuilder(program)
     , fInputs(GrGLSLProgramBuilder::kVarsPerBlock)
@@ -85,7 +87,7 @@ void GrGLSLShaderBuilder::emitFunctionPrototype(SkSLType returnType,
 }
 
 void GrGLSLShaderBuilder::emitFunctionPrototype(const char* declaration) {
-    this->functions().appendf("%s;\n", declaration);
+    this->functions().appendf("%s\n", declaration);
 }
 
 static inline void append_texture_swizzle(SkString* out, skgpu::Swizzle swizzle) {
@@ -279,7 +281,7 @@ void GrGLSLShaderBuilder::compileAndAppendLayoutQualifiers() {
     };
 
     for (int interface = 0; interface <= kLastInterfaceQualifier; ++interface) {
-        const SkTArray<SkString>& params = fLayoutParams[interface];
+        const TArray<SkString>& params = fLayoutParams[interface];
         if (params.empty()) {
             continue;
         }

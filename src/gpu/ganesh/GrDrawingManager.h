@@ -25,6 +25,7 @@
 #define GR_PATH_RENDERER_SPEW 0
 
 class GrArenas;
+class GrDeferredDisplayList;
 class GrGpuBuffer;
 class GrOnFlushCallbackObject;
 class GrOpFlushState;
@@ -35,11 +36,12 @@ class GrResourceAllocator;
 class GrSemaphore;
 class GrSurfaceProxyView;
 class GrTextureResolveRenderTask;
-class SkDeferredDisplayList;
-namespace skgpu { namespace v1 {
-    class OpsTask;
-    class SoftwarePathRenderer;
-}}
+namespace skgpu {
+namespace ganesh {
+class OpsTask;
+class SoftwarePathRenderer;
+}  // namespace ganesh
+}  // namespace skgpu
 
 class GrDrawingManager {
 public:
@@ -48,8 +50,7 @@ public:
     void freeGpuResources();
 
     // OpsTasks created at flush time are stored and handled different from the others.
-    sk_sp<skgpu::v1::OpsTask> newOpsTask(GrSurfaceProxyView,
-                                         sk_sp<GrArenas> arenas);
+    sk_sp<skgpu::ganesh::OpsTask> newOpsTask(GrSurfaceProxyView, sk_sp<GrArenas> arenas);
 
     // Adds 'atlasTask' to the DAG and leaves it open.
     //
@@ -73,7 +74,7 @@ public:
     // work (even to other proxies) that has already been recorded or will be recorded later. The
     // only guarantee is that future work to the passed in proxy will wait on the semaphores to be
     // signaled.
-    void newWaitRenderTask(sk_sp<GrSurfaceProxy> proxy,
+    void newWaitRenderTask(const sk_sp<GrSurfaceProxy>& proxy,
                            std::unique_ptr<std::unique_ptr<GrSemaphore>[]>,
                            int numSemaphores);
 
@@ -82,7 +83,7 @@ public:
     // to be copied. The surfaceColorType says how we should interpret the data when reading back
     // from the source. DstColorType describes how the data should be stored in the dstBuffer.
     // DstOffset is the offset into the dstBuffer where we will start writing data.
-    void newTransferFromRenderTask(sk_sp<GrSurfaceProxy> srcProxy, const SkIRect& srcRect,
+    void newTransferFromRenderTask(const sk_sp<GrSurfaceProxy>& srcProxy, const SkIRect& srcRect,
                                    GrColorType surfaceColorType, GrColorType dstColorType,
                                    sk_sp<GrGpuBuffer> dstBuffer, size_t dstOffset);
 
@@ -97,7 +98,7 @@ public:
     // it skippable if the copy is later deemed unnecessary.
     sk_sp<GrRenderTask> newCopyRenderTask(sk_sp<GrSurfaceProxy> dst,
                                           SkIRect dstRect,
-                                          sk_sp<GrSurfaceProxy> src,
+                                          const sk_sp<GrSurfaceProxy>& src,
                                           SkIRect srcRect,
                                           GrSamplerState::Filter filter,
                                           GrSurfaceOrigin);
@@ -133,8 +134,8 @@ public:
 
     GrRecordingContext* getContext() { return fContext; }
 
-    using PathRenderer = skgpu::v1::PathRenderer;
-    using PathRendererChain = skgpu::v1::PathRendererChain;
+    using PathRenderer = skgpu::ganesh::PathRenderer;
+    using PathRendererChain = skgpu::ganesh::PathRendererChain;
 
     PathRenderer* getPathRenderer(const PathRenderer::CanDrawPathArgs&,
                                   bool allowSW,
@@ -145,7 +146,7 @@ public:
 
     // Returns a direct pointer to the atlas path renderer, or null if it is not supported and
     // turned on.
-    skgpu::v1::AtlasPathRenderer* getAtlasPathRenderer();
+    skgpu::ganesh::AtlasPathRenderer* getAtlasPathRenderer();
 
     // Returns a direct pointer to the tessellation path renderer, or null if it is not supported
     // and turned on.
@@ -156,13 +157,13 @@ public:
     static bool ProgramUnitTest(GrDirectContext*, int maxStages, int maxLevels);
 
     GrSemaphoresSubmitted flushSurfaces(SkSpan<GrSurfaceProxy*>,
-                                        SkSurface::BackendSurfaceAccess,
+                                        SkSurfaces::BackendSurfaceAccess,
                                         const GrFlushInfo&,
                                         const skgpu::MutableTextureState* newState);
 
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     void testingOnly_removeOnFlushCallbackObject(GrOnFlushCallbackObject*);
     PathRendererChain::Options testingOnly_getOptionsForPathRendererChain() {
         return fOptionsForPathRendererChain;
@@ -170,13 +171,19 @@ public:
 #endif
 
     GrRenderTask* getLastRenderTask(const GrSurfaceProxy*) const;
-    skgpu::v1::OpsTask* getLastOpsTask(const GrSurfaceProxy*) const;
+    skgpu::ganesh::OpsTask* getLastOpsTask(const GrSurfaceProxy*) const;
     void setLastRenderTask(const GrSurfaceProxy*, GrRenderTask*);
 
-    void moveRenderTasksToDDL(SkDeferredDisplayList* ddl);
-    void createDDLTask(sk_sp<const SkDeferredDisplayList>,
-                       sk_sp<GrRenderTargetProxy> newDest,
-                       SkIPoint offset);
+    void moveRenderTasksToDDL(GrDeferredDisplayList* ddl);
+    void createDDLTask(sk_sp<const GrDeferredDisplayList>,
+                       sk_sp<GrRenderTargetProxy> newDest);
+
+    // This is public so it can be called by an SkImage factory (in SkImages namespace).
+    // It is not meant to be directly called in other situations.
+    bool flush(SkSpan<GrSurfaceProxy*> proxies,
+               SkSurfaces::BackendSurfaceAccess access,
+               const GrFlushInfo&,
+               const skgpu::MutableTextureState* newState);
 
 private:
     GrDrawingManager(GrRecordingContext*,
@@ -204,43 +211,36 @@ private:
     GrRenderTask* appendTask(sk_sp<GrRenderTask>);
     GrRenderTask* insertTaskBeforeLast(sk_sp<GrRenderTask>);
 
-    bool flush(SkSpan<GrSurfaceProxy*> proxies,
-               SkSurface::BackendSurfaceAccess access,
-               const GrFlushInfo&,
-               const skgpu::MutableTextureState* newState);
-
-    bool submitToGpu(bool syncToCpu);
+    bool submitToGpu(GrSyncCpu sync);
 
     SkDEBUGCODE(void validate() const);
 
     friend class GrDirectContext; // access to: flush & cleanup
-    friend class GrDirectContextPriv; // access to: flush
     friend class GrOnFlushResourceProvider; // this is just a shallow wrapper around this class
     friend class GrRecordingContext;  // access to: ctor
-    friend class SkImage; // for access to: flush
 
     static const int kNumPixelGeometries = 5; // The different pixel geometries
     static const int kNumDFTOptions = 2;      // DFT or no DFT
 
-    GrRecordingContext*                      fContext;
+    GrRecordingContext*                        fContext;
 
     // This cache is used by both the vertex and index pools. It reuses memory across multiple
     // flushes.
-    sk_sp<GrBufferAllocPool::CpuBufferCache> fCpuBufferCache;
+    sk_sp<GrBufferAllocPool::CpuBufferCache>   fCpuBufferCache;
 
-    SkTArray<sk_sp<GrRenderTask>>            fDAG;
-    std::vector<int>                         fReorderBlockerTaskIndices;
-    skgpu::v1::OpsTask*                      fActiveOpsTask = nullptr;
+    skia_private::TArray<sk_sp<GrRenderTask>>  fDAG;
+    std::vector<int>                           fReorderBlockerTaskIndices;
+    skgpu::ganesh::OpsTask*                    fActiveOpsTask = nullptr;
 
-    PathRendererChain::Options               fOptionsForPathRendererChain;
-    std::unique_ptr<PathRendererChain>       fPathRendererChain;
-    sk_sp<skgpu::v1::SoftwarePathRenderer>   fSoftwarePathRenderer;
+    PathRendererChain::Options                 fOptionsForPathRendererChain;
+    std::unique_ptr<PathRendererChain>         fPathRendererChain;
+    sk_sp<skgpu::ganesh::SoftwarePathRenderer> fSoftwarePathRenderer;
 
-    skgpu::TokenTracker                      fTokenTracker;
-    bool                                     fFlushing = false;
-    const bool                               fReduceOpsTaskSplitting;
+    skgpu::TokenTracker                        fTokenTracker;
+    bool                                       fFlushing = false;
+    const bool                                 fReduceOpsTaskSplitting;
 
-    SkTArray<GrOnFlushCallbackObject*>       fOnFlushCBObjects;
+    skia_private::TArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
 
     struct SurfaceIDKeyTraits {
         static uint32_t GetInvalidKey() {

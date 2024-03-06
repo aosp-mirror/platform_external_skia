@@ -30,7 +30,7 @@ class CustomFont final : SkNoncopyable {
 public:
     ~CustomFont();
 
-    using GlyphCompMap = SkTHashMap<SkGlyphID, sk_sp<sksg::RenderNode>>;
+    using GlyphCompMap = skia_private::THashMap<SkGlyphID, sk_sp<sksg::RenderNode>>;
 
     class Builder final : SkNoncopyable {
     public:
@@ -40,7 +40,8 @@ public:
     private:
         static bool ParseGlyphPath(const AnimationBuilder*, const skjson::ObjectValue&, SkPath*);
         static sk_sp<sksg::RenderNode> ParseGlyphComp(const AnimationBuilder*,
-                                                      const skjson::ObjectValue&);
+                                                      const skjson::ObjectValue&,
+                                                      SkSize*);
 
         GlyphCompMap            fGlyphComps;
         SkCustomTypefaceBuilder fCustomBuilder;

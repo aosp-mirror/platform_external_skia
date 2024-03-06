@@ -9,7 +9,6 @@ skia_filegroup(
     srcs = [
         "SkSLRasterPipelineBuilder.cpp",
         "SkSLRasterPipelineCodeGenerator.cpp",
-        "SkSLVMCodeGenerator.cpp",
     ],
 )
 
@@ -52,7 +51,6 @@ skia_filegroup(
     srcs = [
         "SkSLRasterPipelineBuilder.h",
         "SkSLRasterPipelineCodeGenerator.h",
-        "SkSLVMCodeGenerator.h",
     ] + select({
         "//src/sksl:use_sksl_gpu_srcs": [":gpu_hdrs"],
         "//conditions:default": [],
@@ -67,4 +65,22 @@ skia_cc_deps(
         "//src/sksl:use_sksl_gpu_srcs": ["@spirv_cross"],
         "//conditions:default": [],
     }),
+)
+
+skia_filegroup(
+    name = "rasterpipeline_hdrs",
+    srcs = [
+        "SkSLRasterPipelineBuilder.h",
+        "SkSLRasterPipelineCodeGenerator.h",
+    ],
+    visibility = ["//src/core:__pkg__"],
+)
+
+skia_filegroup(
+    name = "rasterpipeline_srcs",
+    srcs = [
+        "SkSLRasterPipelineBuilder.cpp",
+        "SkSLRasterPipelineCodeGenerator.cpp",
+    ],
+    visibility = ["//src/core:__pkg__"],
 )

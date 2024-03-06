@@ -37,7 +37,6 @@ var allSkiaFlags = []string{
 	"--enable_gpu_test_utils",
 	"--enable_pdf_backend",
 	"--enable_sksl_tracing",
-	"--enable_sksl",
 	// "--enable_skslc", // external dependency on spirv-tools/libspirv.hpp
 	"--enable_svg_canvas",
 	"--enable_tracing",
@@ -109,9 +108,9 @@ func (c *BazelQueryCommand) Read() ([]byte, error) {
 	_ = os.Chdir(pwd)
 	data, err := cmd.Output()
 	if err != nil {
-	    if exiterr, ok := err.(*exec.ExitError); ok {
-	        fmt.Printf("Stderr: %s\n", exiterr.Stderr)
-	    }
+		if exiterr, ok := err.(*exec.ExitError); ok {
+			fmt.Printf("Stderr: %s\n", exiterr.Stderr)
+		}
 		return nil, skerr.Wrapf(err, `error running %v`, cmd)
 	}
 	return data, nil

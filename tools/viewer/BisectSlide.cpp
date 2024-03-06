@@ -7,10 +7,14 @@
 
 #include "tools/viewer/BisectSlide.h"
 
+#include "include/core/SkCanvas.h"
 #include "include/core/SkStream.h"
+#include "include/private/base/SkDebug.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/ToolUtils.h"
 
+#include <string>
+#include <functional>
 #include <utility>
 
 sk_sp<BisectSlide> BisectSlide::Create(const char filepath[]) {
@@ -21,9 +25,9 @@ sk_sp<BisectSlide> BisectSlide::Create(const char filepath[]) {
     }
 
     sk_sp<BisectSlide> bisect(new BisectSlide(filepath));
-    ToolUtils::sniff_paths(filepath, [&](const SkMatrix& matrix,
-                                         const SkPath& path,
-                                         const SkPaint& paint) {
+    ToolUtils::ExtractPathsFromSKP(filepath, [&](const SkMatrix& matrix,
+                                                 const SkPath& path,
+                                                 const SkPaint& paint) {
         SkRect bounds;
         SkIRect ibounds;
         matrix.mapRect(&bounds, path.getBounds());

@@ -11,6 +11,7 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkCachedData.h"
 #include "src/image/SkImage_Base.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 #include "tools/gpu/YUVUtils.h"
@@ -18,8 +19,8 @@
 // Modeled on the layout test css3/blending/background-blend-mode-image-image.html to reproduce
 // skbug.com/9619
 DEF_SIMPLE_GM_CAN_FAIL(ducky_yuv_blend, canvas, errorMsg, 560, 1130) {
-    sk_sp<SkImage> duckyBG = GetResourceAsImage("images/ducky.png");
-    sk_sp<SkImage> duckyFG[2] = {GetResourceAsImage("images/ducky.jpg"), nullptr};
+    sk_sp<SkImage> duckyBG = ToolUtils::GetResourceAsImage("images/ducky.png");
+    sk_sp<SkImage> duckyFG[2] = {ToolUtils::GetResourceAsImage("images/ducky.jpg"), nullptr};
     if (!duckyFG[0] || !duckyBG) {
         *errorMsg = "Image(s) failed to load.";
         return skiagm::DrawResult::kFail;
@@ -29,7 +30,7 @@ DEF_SIMPLE_GM_CAN_FAIL(ducky_yuv_blend, canvas, errorMsg, 560, 1130) {
     // Otherwise we just draw the original again,
     if (auto* rContext = canvas->recordingContext(); rContext && !rContext->abandoned()) {
         auto lazyYUV = sk_gpu_test::LazyYUVImage::Make(GetResourceAsData("images/ducky.jpg"),
-                                                       GrMipmapped::kYes);
+                                                       skgpu::Mipmapped::kYes);
         if (lazyYUV) {
             duckyFG[1] = lazyYUV->refImage(rContext, sk_gpu_test::LazyYUVImage::Type::kFromPixmaps);
         }

@@ -38,14 +38,12 @@
 #include "src/core/SkVerticesPriv.h"
 #include "src/utils/SkPatchUtils.h"
 
-#if defined(SK_GANESH)
-#include "include/private/chromium/Slug.h"
-#endif
-
 class SkDrawable;
 class SkPath;
 class SkTextBlob;
 class SkVertices;
+
+namespace sktext { namespace gpu { class Slug; } }
 
 using namespace skia_private;
 
@@ -140,7 +138,6 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             reader->skip(size - 4);
         } break;
         case FLUSH:
-            canvas->flush();
             break;
         case CLIP_PATH: {
             const SkPath& path = fPictureData->getPath(reader);
@@ -336,9 +333,9 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             SkBlendMode blend = reader->read32LE(SkBlendMode::kLastMode);
             BREAK_ON_READ_ERROR(reader);
             bool hasClip = reader->readInt();
-            SkPoint* clip = nullptr;
+            const SkPoint* clip = nullptr;
             if (hasClip) {
-                clip = (SkPoint*) reader->skip(4, sizeof(SkPoint));
+                clip = (const SkPoint*) reader->skip(4, sizeof(SkPoint));
             }
             BREAK_ON_READ_ERROR(reader);
             canvas->experimental_DrawEdgeAAQuad(rect, clip, aaFlags, color, blend);
@@ -391,13 +388,13 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             }
 
             int dstClipCount = reader->readInt();
-            SkPoint* dstClips = nullptr;
+            const SkPoint* dstClips = nullptr;
             if (!reader->validate(dstClipCount >= 0) ||
                 !reader->validate(expectedClips <= dstClipCount)) {
                 // A bad dstClipCount (either negative, or not enough to satisfy entries).
                 break;
             } else if (dstClipCount > 0) {
-                dstClips = (SkPoint*) reader->skip(dstClipCount, sizeof(SkPoint));
+                dstClips = (const SkPoint*) reader->skip(dstClipCount, sizeof(SkPoint));
                 if (dstClips == nullptr) {
                     // Not enough bytes remaining so the reader has been invalidated
                     break;
@@ -412,7 +409,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
                 // there aren't enough bytes to provide that many matrices
                 break;
             }
-            SkTArray<SkMatrix> matrices(matrixCount);
+            TArray<SkMatrix> matrices(matrixCount);
             for (int i = 0; i < matrixCount && reader->isValid(); ++i) {
                 reader->readMatrix(&matrices.push_back());
             }
@@ -633,12 +630,10 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             canvas->drawTextBlob(blob, x, y, paint);
         } break;
         case DRAW_SLUG: {
-#if defined(SK_GANESH)
             const sktext::gpu::Slug* slug = fPictureData->getSlug(reader);
             BREAK_ON_READ_ERROR(reader);
 
-            slug->draw(canvas);
-#endif
+            canvas->drawSlug(slug);
         } break;
         case DRAW_VERTICES_OBJECT: {
             const SkPaint& paint = fPictureData->requiredPaint(reader);

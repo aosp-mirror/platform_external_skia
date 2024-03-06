@@ -1,23 +1,42 @@
 {
-  // TODO (b/242858942): periodically re-enable tests on case-by-case basis when they're fixed.
+  // TODO(b/242858942): periodically re-enable tests on case-by-case basis when they're fixed.
   "presubmit": [
     {
-      "name": "CtsGraphicsTestCases"
+      "name": "CtsGraphicsTestCases",
+      "options": [
+        {
+          "exclude-annotation": "androidx.test.filters.FlakyTest"
+        },
+        // Broken very frequently; provides little value for our presubmit
+        {
+          "exclude-filter": "android.graphics.cts.ColorTest#resourceColor"
+        }
+      ]
+    },
+    {
+      "name": "CtsSkQPTestCases",
+      "options": [
+        // TODO(b/242184599): sync_fd support in SwiftShader
+        {
+          "exclude-filter": "org.skia.skqp.SkQPRunner#UnitTest_VulkanHardwareBuffer_Vulkan_Vulkan_Syncs"
+        }
+      ]
     },
     {
       "name": "hwui_unit_tests"
     },
     {
-      "name": "minikin_tests"
+      "name": "librenderengine_test"
     },
     {
-      "name": "librenderengine_test"
+      "name": "minikin_tests"
     },
     {
       "name": "SurfaceFlinger_test",
       "options": [
+        // TODO(b/302314649): re-enable after presubmit flakiness fixed
         {
-          "exclude-filter": "SurfaceFlinger_test.WindowInfosListenerTest#WindowInfoAddedAndRemoved"
+          "exclude-filter": "*ChildLayerTest*"
         }
       ]
     }

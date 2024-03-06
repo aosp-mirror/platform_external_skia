@@ -8,6 +8,7 @@
 #ifndef GrSPIRVUniformHandler_DEFINED
 #define GrSPIRVUniformHandler_DEFINED
 
+#include "include/private/base/SkTArray.h"
 #include "src/base/SkTBlockList.h"
 #include "src/gpu/ganesh/glsl/GrGLSLUniformHandler.h"
 
@@ -62,11 +63,9 @@ private:
                                           int arrayCount,
                                           const char** outName) override;
 
-    UniformInfoArray    fUniforms;
-    UniformInfoArray    fSamplers;
-    UniformInfoArray    fTextures;
-    SkTArray<skgpu::Swizzle> fSamplerSwizzles;
-    SkTArray<SkString>  fSamplerReferences;
+    UniformInfoArray fUniforms;
+    UniformInfoArray fSamplers;
+    skia_private::TArray<skgpu::Swizzle> fSamplerSwizzles;
 
     uint32_t fCurrentUBOOffset = 0;
     uint32_t fRTFlipOffset = 0;

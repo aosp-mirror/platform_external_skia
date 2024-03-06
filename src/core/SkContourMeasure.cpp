@@ -6,11 +6,19 @@
  */
 
 #include "include/core/SkContourMeasure.h"
+
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
-#include "src/base/SkTSearch.h"
+#include "include/core/SkPathTypes.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkFloatingPoint.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPathMeasurePriv.h"
 #include "src/core/SkPathPriv.h"
+
+#include <algorithm>
+#include <utility>
 
 #define kMaxTValue  0x3FFFFFFF
 
@@ -177,7 +185,7 @@ public:
     Impl(const SkPath& path, bool forceClosed, SkScalar resScale)
         : fPath(path)
         , fIter(SkPathPriv::Iterate(fPath).begin())
-        , fTolerance(CHEAP_DIST_LIMIT * SkScalarInvert(resScale))
+        , fTolerance(CHEAP_DIST_LIMIT * sk_ieee_float_divide(1.0f, resScale))
         , fForceClosed(forceClosed) {}
 
     bool hasNextSegments() const { return fIter != SkPathPriv::Iterate(fPath).end(); }
@@ -480,6 +488,9 @@ SkContourMeasureIter::SkContourMeasureIter(const SkPath& path, bool forceClosed,
 }
 
 SkContourMeasureIter::~SkContourMeasureIter() {}
+
+SkContourMeasureIter::SkContourMeasureIter(SkContourMeasureIter&&) = default;
+SkContourMeasureIter& SkContourMeasureIter::operator=(SkContourMeasureIter&&) = default;
 
 /** Assign a new path, or null to have none.
 */

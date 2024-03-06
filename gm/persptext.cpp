@@ -23,6 +23,7 @@
 #include "include/private/base/SkTo.h"
 #include "src/core/SkMatrixPriv.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -33,16 +34,13 @@ public:
     }
 
 protected:
-
-    SkString onShortName() override {
+    SkString getName() const override {
         return SkString(fMinimal ? "persptext_minimal" : "persptext");
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(1024, 768);
-    }
+    SkISize getISize() override { return SkISize::Make(1024, 768); }
 
-//#define TEST_PERSP_CHECK
+    // #define TEST_PERSP_CHECK
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -51,7 +49,7 @@ protected:
         SkPaint paint;
         paint.setAntiAlias(true);
 
-        SkFont font(ToolUtils::create_portable_typeface("serif", SkFontStyle()));
+        SkFont font(ToolUtils::CreatePortableTypeface("serif", SkFontStyle()));
         font.setSubpixel(true);
         font.setSize(32);
         font.setBaselineSnap(false);

@@ -15,7 +15,10 @@
 #include <cstdint>
 class GrBackendSemaphore;
 
-namespace skgpu { enum class Mipmapped : bool; }
+namespace skgpu {
+enum class Protected : bool;
+enum class Renderable : bool;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -94,12 +97,17 @@ enum class GrBackendApi : unsigned {
     kVulkan,
     kMetal,
     kDirect3D,
-    kDawn,
+
     /**
      * Mock is a backend that does not draw anything. It is used for unit tests
      * and to measure CPU overhead.
      */
     kMock,
+
+    /**
+     * Ganesh doesn't support some context types (e.g. Dawn) and will return Unsupported.
+     */
+    kUnsupported,
 
     /**
      * Added here to support the legacy GrBackend enum value and clients who referenced it using
@@ -120,29 +128,15 @@ static constexpr GrBackendApi kMock_GrBackend = GrBackendApi::kMock;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-/**
- * Used to say whether a texture has mip levels allocated or not.
- */
-/** Deprecated legacy alias of skgpu::Mipmapped. */
-using GrMipmapped = skgpu::Mipmapped;
-/** Deprecated legacy alias of skgpu::Mipmapped. */
-using GrMipMapped = skgpu::Mipmapped;
-
 /*
  * Can a GrBackendObject be rendered to?
  */
-enum class GrRenderable : bool {
-    kNo = false,
-    kYes = true
-};
+using GrRenderable = skgpu::Renderable;
 
 /*
  * Used to say whether texture is backed by protected memory.
  */
-enum class GrProtected : bool {
-    kNo = false,
-    kYes = true
-};
+using GrProtected = skgpu::Protected;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -217,13 +211,7 @@ typedef void (*GrDirectContextDestroyedProc)(GrDirectContextDestroyedContext des
  * The submittedProc is useful to the client to know when semaphores that were sent with the flush
  * have actually been submitted to the GPU so that they can be waited on (or deleted if the submit
  * fails).
- * Note about GL: In GL work gets sent to the driver immediately during the flush call, but we don't
- * really know when the driver sends the work to the GPU. Therefore, we treat the submitted proc as
- * we do in other backends. It will be called when the next GrContext::submit is called after the
- * flush (or possibly during the flush if there is no work to be done for the flush). The main use
- * case for the submittedProc is to know when semaphores have been sent to the GPU and even in GL
- * it is required to call GrContext::submit to flush them. So a client should be able to treat all
- * backend APIs the same in terms of how the submitted procs are treated.
+ * GrBackendSemaphores are not supported for the GL backend and will be ignored if set.
  */
 struct GrFlushInfo {
     size_t fNumSemaphores = 0;
@@ -241,6 +229,16 @@ struct GrFlushInfo {
 enum class GrSemaphoresSubmitted : bool {
     kNo = false,
     kYes = true
+};
+
+enum class GrPurgeResourceOptions {
+    kAllResources,
+    kScratchResourcesOnly,
+};
+
+enum class GrSyncCpu : bool {
+    kNo = false,
+    kYes = true,
 };
 
 #endif

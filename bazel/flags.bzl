@@ -5,9 +5,10 @@ This file contains helpers for defining build flags and options that are used to
 configure the Skia build.
 """
 
+load("@bazel_skylib//lib:selects.bzl", _selects = "selects")
+
 # https://github.com/bazelbuild/bazel-skylib/blob/main/rules/common_settings.bzl
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag", skylib_bool_flag = "bool_flag")
-load("@bazel_skylib//lib:selects.bzl", _selects = "selects")
 
 # Re-export other symbols from bazel_skylib for convenience
 selects = _selects
@@ -86,7 +87,7 @@ def string_flag_with_values(name, values, default = "", multiple = False):
             visibility = ["//:__subpackages__"],
         )
 
-def bool_flag(name, default, public = True):
+def bool_flag(name, default):
     """Create a boolean flag and corresponding config_settings.
 
     bool_flag is a Bazel Macro that defines a boolean flag with the given name two config_settings,
@@ -98,14 +99,10 @@ def bool_flag(name, default, public = True):
     Args:
         name: string, the name of the flag to create and use for the config_settings
         default: boolean, if the flag should default to on or off.
-        public: boolean, if the flag should be usable from other packages or if it is meant to be
-            combined with some other constraint.
     """
 
     skylib_bool_flag(name = name, build_setting_default = default)
     vis = ["//:__subpackages__"]
-    if not public:
-        vis = ["//visibility:private"]
 
     native.config_setting(
         name = name + "_true",

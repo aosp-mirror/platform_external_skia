@@ -7,19 +7,27 @@
 
 #include "src/text/gpu/GlyphVector.h"
 
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkTo.h"
+#include "src/core/SkGlyph.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkStrike.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/text/StrikeForGPU.h"
+#include "src/text/gpu/SubRunAllocator.h"
 
+#include <climits>
 #include <optional>
+#include <utility>
 
 class SkStrikeClient;
 
 using MaskFormat = skgpu::MaskFormat;
 
 namespace sktext::gpu {
+class Glyph;
+
 // -- GlyphVector ----------------------------------------------------------------------------------
 GlyphVector::GlyphVector(SkStrikePromise&& strikePromise, SkSpan<Variant> glyphs)
         : fStrikePromise{std::move(strikePromise)}
@@ -27,20 +35,16 @@ GlyphVector::GlyphVector(SkStrikePromise&& strikePromise, SkSpan<Variant> glyphs
     SkASSERT(fGlyphs.size() > 0);
 }
 
-GlyphVector::Variant*
-GlyphVector::MakeGlyphs(SkSpan<SkPackedGlyphID> glyphs, sktext::gpu::SubRunAllocator* alloc) {
-    Variant* variants = alloc->makePODArray<Variant>(glyphs.size());
-    for (auto [i, gv] : SkMakeEnumerate(glyphs)) {
-        variants[i] = gv;
-    }
-    return variants;
-}
+GlyphVector GlyphVector::Make(SkStrikePromise&& promise,
+                              SkSpan<const SkPackedGlyphID> packedIDs,
+                              SubRunAllocator* alloc) {
+    SkASSERT(packedIDs.size() > 0);
+    auto packedIDToVariant = [] (SkPackedGlyphID packedID) {
+        return Variant{packedID};
+    };
 
-GlyphVector GlyphVector::Make(
-        SkStrikePromise&& promise, SkSpan<SkPackedGlyphID> glyphs, SubRunAllocator* alloc) {
-    SkASSERT(glyphs.size() > 0);
-    Variant* variants = MakeGlyphs(glyphs, alloc);
-    return GlyphVector{std::move(promise), SkSpan(variants, glyphs.size())};
+    return GlyphVector{std::move(promise),
+                       alloc->makePODArray<Variant>(packedIDs, packedIDToVariant)};
 }
 
 std::optional<GlyphVector> GlyphVector::MakeFromBuffer(SkReadBuffer& buffer,

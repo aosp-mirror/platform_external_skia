@@ -7,6 +7,8 @@
 
 #include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
+#include "include/codec/SkEncodedImageFormat.h"
+#include "include/codec/SkPngChunkReader.h"
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
@@ -14,13 +16,11 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
-#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkDataTable.h"
 #include "include/core/SkImage.h"
-#include "include/core/SkImageEncoder.h"
 #include "include/core/SkImageGenerator.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
-#include "include/core/SkPngChunkReader.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
@@ -32,8 +32,8 @@
 #include "include/encode/SkWebpEncoder.h"
 #include "include/private/base/SkAlign.h"
 #include "include/private/base/SkDebug.h"
-#include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkTemplates.h"
 #include "modules/skcms/skcms.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/base/SkRandom.h"
@@ -43,6 +43,7 @@
 #include "src/core/SkStreamPriv.h"
 #include "tests/FakeStreams.h"
 #include "tests/Test.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -788,14 +789,16 @@ DEF_TEST(Codec_pngChunkReader, r) {
                  PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
+#define PNG_BYTES(str) reinterpret_cast<png_byte*>(const_cast<char*>(str))
+
     // Create some chunks that match the Android framework's use.
     static png_unknown_chunk gUnknowns[] = {
-        { "npOl", (png_byte*)"outline", sizeof("outline"), PNG_HAVE_IHDR },
-        { "npLb", (png_byte*)"layoutBounds", sizeof("layoutBounds"), PNG_HAVE_IHDR },
-        { "npTc", (png_byte*)"ninePatchData", sizeof("ninePatchData"), PNG_HAVE_IHDR },
+        { "npOl", PNG_BYTES("outline"), sizeof("outline"), PNG_HAVE_IHDR },
+        { "npLb", PNG_BYTES("layoutBounds"), sizeof("layoutBounds"), PNG_HAVE_IHDR },
+        { "npTc", PNG_BYTES("ninePatchData"), sizeof("ninePatchData"), PNG_HAVE_IHDR },
     };
 
-    png_set_keep_unknown_chunks(png, PNG_HANDLE_CHUNK_ALWAYS, (png_byte*)"npOl\0npLb\0npTc\0", 3);
+    png_set_keep_unknown_chunks(png, PNG_HANDLE_CHUNK_ALWAYS, PNG_BYTES("npOl\0npLb\0npTc\0"), 3);
     png_set_unknown_chunks(png, info, gUnknowns, std::size(gUnknowns));
 #if PNG_LIBPNG_VER < 10600
     /* Deal with unknown chunk location bug in 1.5.x and earlier */
@@ -1125,9 +1128,10 @@ static void check_round_trip(skiatest::Reporter* r, SkCodec* origCodec, const Sk
     REPORTER_ASSERT(r, SkCodec::kSuccess == result);
 
     // Encode the image to png.
-    auto data = SkEncodeBitmap(bm1, SkEncodedImageFormat::kPNG, 100);
+    SkDynamicMemoryWStream stream;
+    SkASSERT_RELEASE(SkPngEncoder::Encode(&stream, bm1.pixmap(), {}));
 
-    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(stream.detachAsData()));
     REPORTER_ASSERT(r, color_type_match(info.colorType(), codec->getInfo().colorType()));
     REPORTER_ASSERT(r, alpha_type_match(info.alphaType(), codec->getInfo().alphaType()));
 
@@ -1740,7 +1744,7 @@ DEF_TEST(Codec_ossfuzz6274, r) {
     }
 
     const char* file = "invalid_images/ossfuzz6274.gif";
-    auto image = GetResourceAsImage(file);
+    auto image = ToolUtils::GetResourceAsImage(file);
 
 #ifdef SK_HAS_WUFFS_LIBRARY
     // We are transitioning from an old GIF implementation to a new (Wuffs) GIF
@@ -1855,7 +1859,7 @@ DEF_TEST(Codec_crbug807324, r) {
     }
 
     const char* file = "images/crbug807324.png";
-    auto image = GetResourceAsImage(file);
+    auto image = ToolUtils::GetResourceAsImage(file);
     if (!image) {
         ERRORF(r, "Missing %s", file);
         return;
@@ -1950,8 +1954,9 @@ DEF_TEST(Codec_kBGR_101010x_XR_SkColorType_supported, r) {
             .makeAlphaType(kOpaque_SkAlphaType);
     SkImageInfo dstInfo = srcInfo.makeColorType(kBGR_101010x_XR_SkColorType);
     srcBm.allocPixels(srcInfo);
-    auto data = SkEncodeBitmap(srcBm, SkEncodedImageFormat::kPNG, 100);
-    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
+    SkDynamicMemoryWStream stream;
+    SkASSERT_RELEASE(SkPngEncoder::Encode(&stream, srcBm.pixmap(), {}));
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(stream.detachAsData()));
     SkBitmap dstBm;
     dstBm.allocPixels(dstInfo);
     bool success = codec->getPixels(dstInfo, dstBm.getPixels(), dstBm.rowBytes());

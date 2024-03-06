@@ -15,11 +15,11 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
-#include "src/core/SkMatrixProvider.h"
 #include "src/gpu/AtlasTypes.h"
 #include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrCaps.h"
@@ -38,6 +38,7 @@
 #include "src/gpu/ganesh/text/GrAtlasManager.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -210,22 +211,24 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrAtlasTextOpPreparation,
     auto gpu = dContext->priv().getGpu();
     auto resourceProvider = dContext->priv().resourceProvider();
 
-    auto sdc = skgpu::v1::SurfaceDrawContext::Make(dContext, GrColorType::kRGBA_8888, nullptr,
-                                                   SkBackingFit::kApprox, {32, 32},
-                                                   SkSurfaceProps(),
-                                                   /*label=*/"AtlasTextOpPreparation");
+    auto sdc = skgpu::ganesh::SurfaceDrawContext::Make(dContext,
+                                                       GrColorType::kRGBA_8888,
+                                                       nullptr,
+                                                       SkBackingFit::kApprox,
+                                                       {32, 32},
+                                                       SkSurfaceProps(),
+                                                       /*label=*/"AtlasTextOpPreparation");
 
     SkPaint paint;
     paint.setColor(SK_ColorRED);
 
-    SkFont font;
+    SkFont font = ToolUtils::DefaultFont();
     font.setEdging(SkFont::Edging::kAlias);
 
     const char* text = "a";
-    SkMatrixProvider matrixProvider(SkMatrix::I());
 
     GrOp::Owner op = AtlasTextOp::CreateOpTestingOnly(sdc.get(), paint,
-                                                      font, matrixProvider,
+                                                      font, SkMatrix::I(),
                                                       text, 16, 16);
     if (!op) {
         return;

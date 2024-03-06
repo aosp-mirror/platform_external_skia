@@ -8,7 +8,6 @@ skia_filegroup(
     name = "public_hdrs",
     srcs = [
         "SkAnimCodecPlayer.h",
-        "SkBase64.h",
         "SkCamera.h",
         "SkCanvasStateUtils.h",
         "SkCustomTypeface.h",
@@ -25,4 +24,20 @@ skia_filegroup(
         "SkTraceEventPhase.h",
     ],  # TODO(kjlubick) add select for mac
     visibility = ["//include:__pkg__"],
+)
+
+skia_filegroup(
+    name = "core_hdrs",
+    srcs = [
+        "SkCustomTypeface.h",
+        "SkEventTracer.h",
+        "SkNWayCanvas.h",
+        "SkNoDrawCanvas.h",
+        "SkPaintFilterCanvas.h",
+        "SkParse.h",
+        "SkParsePath.h",
+        "SkShadowUtils.h",
+        "SkTraceEventPhase.h",
+    ],
+    visibility = ["//src/core:__pkg__"],
 )

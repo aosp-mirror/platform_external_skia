@@ -4,21 +4,29 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "include/core/SkTypeface.h"
 
+#include "include/core/SkData.h"
+#include "include/core/SkFont.h"
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkFontMgr.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkStream.h"
-#include "include/core/SkTypeface.h"
-#include "include/private/base/SkMutex.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkOnce.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/utils/SkCustomTypeface.h"
+#include "src/base/SkBitmaskEnum.h"
+#include "src/base/SkEndian.h"
+#include "src/base/SkNoDestructor.h"
 #include "src/base/SkUTF.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
-#include "src/core/SkEndian.h"
+#include "src/core/SkDescriptor.h"
 #include "src/core/SkFontDescriptor.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkScalerContext.h"
-#include "src/core/SkSurfacePriv.h"
 #include "src/core/SkTypefaceCache.h"
 #include "src/sfnt/SkOTTable_OS_2.h"
 
@@ -33,6 +41,16 @@
 #ifdef SK_TYPEFACE_FACTORY_DIRECTWRITE
 #include "src/ports/SkTypeface_win_dw.h"
 #endif
+
+// TODO(https://crbug.com/skia/14338): This needs to be set by Bazel rules.
+#ifdef SK_TYPEFACE_FACTORY_FONTATIONS
+#include "src/ports/SkTypeface_fontations_priv.h"
+#endif
+
+#include <cstddef>
+#include <cstring>
+#include <utility>
+#include <vector>
 
 using namespace skia_private;
 
@@ -85,6 +103,8 @@ protected:
     void getPostScriptGlyphNames(SkString*) const override {}
     void getGlyphToUnicodeMap(SkUnichar*) const override {}
     int onGetUPEM() const override { return 0; }
+    bool onComputeBounds(SkRect* bounds) const override { return false; }
+
     class EmptyLocalizedStrings : public SkTypeface::LocalizedStrings {
     public:
         bool next(SkTypeface::LocalizedString*) override { return false; }
@@ -128,6 +148,7 @@ SkFontStyle SkTypeface::FromOldStyle(Style oldStyle) {
 }
 
 SkTypeface* SkTypeface::GetDefaultTypeface(Style style) {
+#if !defined(SK_DEFAULT_TYPEFACE_IS_EMPTY) && !defined(SK_DISABLE_LEGACY_FONTMGR_REFDEFAULT)
     static SkOnce once[4];
     static sk_sp<SkTypeface> defaults[4];
 
@@ -138,21 +159,30 @@ SkTypeface* SkTypeface::GetDefaultTypeface(Style style) {
         defaults[style] = t ? t : SkEmptyTypeface::Make();
     });
     return defaults[style].get();
+#else
+    static sk_sp<SkTypeface> empty = SkEmptyTypeface::Make();
+    return empty.get();
+#endif  // !defined(SK_DEFAULT_TYPEFACE_IS_EMPTY)
 }
 
+#if !defined(SK_DISABLE_LEGACY_DEFAULT_TYPEFACE)
 sk_sp<SkTypeface> SkTypeface::MakeDefault() {
     return sk_ref_sp(GetDefaultTypeface());
 }
+#endif
 
-uint32_t SkTypeface::UniqueID(const SkTypeface* face) {
-    if (nullptr == face) {
-        face = GetDefaultTypeface();
-    }
-    return face->uniqueID();
+sk_sp<SkTypeface> SkTypeface::MakeEmpty() {
+    return SkEmptyTypeface::Make();
 }
 
 bool SkTypeface::Equal(const SkTypeface* facea, const SkTypeface* faceb) {
-    return facea == faceb || SkTypeface::UniqueID(facea) == SkTypeface::UniqueID(faceb);
+    if (facea == faceb) {
+        return true;
+    }
+    if (!facea || !faceb) {
+        return false;
+    }
+    return facea->uniqueID() == faceb->uniqueID();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -165,7 +195,7 @@ namespace {
     };
 
     std::vector<DecoderProc>* decoders() {
-        static auto* decoders = new std::vector<DecoderProc> {
+        static SkNoDestructor<std::vector<DecoderProc>> decoders{{
             { SkEmptyTypeface::FactoryId, SkEmptyTypeface::MakeFromStream },
             { SkCustomTypefaceBuilder::FactoryId, SkCustomTypefaceBuilder::MakeFromStream },
 #ifdef SK_TYPEFACE_FACTORY_CORETEXT
@@ -177,12 +207,16 @@ namespace {
 #ifdef SK_TYPEFACE_FACTORY_FREETYPE
             { SkTypeface_FreeType::FactoryId, SkTypeface_FreeType::MakeFromStream },
 #endif
-        };
-        return decoders;
+#ifdef SK_TYPEFACE_FACTORY_FONTATIONS
+            { SkTypeface_Fontations::FactoryId, SkTypeface_Fontations::MakeFromStream },
+#endif
+        }};
+        return decoders.get();
     }
 
 }  // namespace
 
+#if !defined(SK_DISABLE_LEGACY_FONTMGR_REFDEFAULT)
 sk_sp<SkTypeface> SkTypeface::MakeFromName(const char name[],
                                            SkFontStyle fontStyle) {
     if (nullptr == name && (fontStyle.slant() == SkFontStyle::kItalic_Slant ||
@@ -226,6 +260,7 @@ sk_sp<SkTypeface> SkTypeface::MakeFromData(sk_sp<SkData> data, int index) {
 sk_sp<SkTypeface> SkTypeface::MakeFromFile(const char path[], int index) {
     return SkFontMgr::RefDefault()->makeFromFile(path, index);
 }
+#endif  // !defined(SK_DISABLE_LEGACY_FONTMGR_REFDEFAULT)
 
 sk_sp<SkTypeface> SkTypeface::makeClone(const SkFontArguments& args) const {
     return this->onMakeClone(args);
@@ -278,7 +313,13 @@ sk_sp<SkData> SkTypeface::serialize(SerializeBehavior behavior) const {
     return stream.detachAsData();
 }
 
+#if !defined(SK_DISABLE_LEGACY_FONTMGR_REFDEFAULT)
 sk_sp<SkTypeface> SkTypeface::MakeDeserialize(SkStream* stream) {
+    return MakeDeserialize(stream, SkFontMgr::RefDefault());
+}
+#endif
+
+sk_sp<SkTypeface> SkTypeface::MakeDeserialize(SkStream* stream, sk_sp<SkFontMgr> lastResortMgr) {
     SkFontDescriptor desc;
     if (!SkFontDescriptor::Deserialize(stream, &desc)) {
         return nullptr;
@@ -296,15 +337,25 @@ sk_sp<SkTypeface> SkTypeface::MakeDeserialize(SkStream* stream) {
                  (id >> 24) & 0xFF, (id >> 16) & 0xFF, (id >> 8) & 0xFF, (id >> 0) & 0xFF,
                  desc.getFamilyName());
 
-        sk_sp<SkFontMgr> defaultFm = SkFontMgr::RefDefault();
-        sk_sp<SkTypeface> typeface = defaultFm->makeFromStream(desc.detachStream(),
-                                                               desc.getFontArguments());
-        if (typeface) {
-            return typeface;
+        if (lastResortMgr) {
+            // If we've gotten to here, we will try desperately to find something that might match
+            // as a kind of last ditch effort to make something work (and maybe this SkFontMgr knows
+            // something about the serialization and can look up the right thing by name anyway if
+            // the user provides it).
+            // Any time it is used the user will probably get the wrong glyphs drawn (and if they're
+            // right it is totally by accident). But sometimes drawing something or getting lucky
+            // while debugging is better than drawing nothing at all.
+            sk_sp<SkTypeface> typeface = lastResortMgr->makeFromStream(desc.detachStream(),
+                                                                       desc.getFontArguments());
+            if (typeface) {
+                return typeface;
+            }
         }
     }
-
-    return SkTypeface::MakeFromName(desc.getFamilyName(), desc.getStyle());
+    if (lastResortMgr) {
+        return lastResortMgr->legacyMakeTypeface(desc.getFamilyName(), desc.getStyle());
+    }
+    return SkEmptyTypeface::Make();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -527,9 +578,6 @@ std::unique_ptr<SkStreamAsset> SkTypeface::onOpenExistingStream(int* ttcIndex) c
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-#include "include/core/SkPaint.h"
-#include "src/core/SkDescriptor.h"
 
 SkRect SkTypeface::getBounds() const {
     fBoundsOnce([this] {

@@ -13,6 +13,12 @@
 #include "tools/ToolUtils.h"
 #include "tools/flags/CommandLineFlags.h"
 
+#if defined(SK_ENABLE_SVG)
+#include "tools/SvgPathExtractor.h"
+#endif
+
+using namespace skia_private;
+
 static DEFINE_string(boundsManagerFile, "",
                      "svg or skp for the BoundsManager bench to sniff paths from.");
 
@@ -25,7 +31,7 @@ public:
     BoundsManagerBench(std::unique_ptr<BoundsManager> manager) : fManager(std::move(manager)) {}
 
 protected:
-    virtual void gatherRects(SkTArray<SkRect>* rects) = 0;
+    virtual void gatherRects(TArray<SkRect>* rects) = 0;
 
     bool isSuitableFor(Backend backend) override {
         return backend == kNonRendering_Backend;
@@ -34,7 +40,7 @@ protected:
     const char* onGetName() final { return fName.c_str(); }
 
     void onDelayedSetup() final {
-        SkTArray<SkRect> rects;
+        TArray<SkRect> rects;
         this->gatherRects(&rects);
 
         fRectCount = rects.size();
@@ -92,7 +98,7 @@ public:
     }
 
 private:
-    void gatherRects(SkTArray<SkRect>* rects) override {
+    void gatherRects(TArray<SkRect>* rects) override {
         SkRandom rand;
         for (int i = 0; i < fNumRandomRects; ++i) {
             rects->push_back(SkRect::MakeXYWH(rand.nextRangeF(0, 2000),
@@ -129,14 +135,14 @@ private:
         return BoundsManagerBench::isSuitableFor(backend);
     }
 
-    void gatherRects(SkTArray<SkRect>* rects) override {
+    void gatherRects(TArray<SkRect>* rects) override {
         if (FLAGS_boundsManagerFile.isEmpty()) {
             return;
         }
         SkRect fileBounds = SkRect::MakeEmpty();
-        ToolUtils::sniff_paths(FLAGS_boundsManagerFile[0], [&](const SkMatrix& matrix,
-                                                               const SkPath& path,
-                                                               const SkPaint& paint) {
+        auto callback = [&](const SkMatrix& matrix,
+                            const SkPath& path,
+                            const SkPaint& paint) {
             if (!paint.canComputeFastBounds() || path.isInverseFillType()) {
                 // These would pessimistically cover the entire canvas, but we don't have enough
                 // info in the benchmark to handle that, so just skip these draws.
@@ -148,7 +154,18 @@ private:
             rects->push_back(drawBounds);
 
             fileBounds.join(drawBounds);
-        });
+        };
+
+        const char* path = FLAGS_boundsManagerFile[0];
+        if (const char* ext = strrchr(path, '.'); ext && !strcmp(ext, ".svg")) {
+#if defined(SK_ENABLE_SVG)
+            ToolUtils::ExtractPathsFromSVG(path, callback);
+#else
+            SK_ABORT("must compile with svg backend to process svgs");
+#endif
+        } else {
+            ToolUtils::ExtractPathsFromSKP(path, callback);
+        }
 
 #if PRINT_DRAWSET_COUNT
         SkDebugf("%s bounds are [%f %f %f %f]\n",

@@ -15,11 +15,13 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -84,20 +86,20 @@ protected:
         SkFontArguments paletteArguments;
         paletteArguments.setPalette(fPalette);
 
-        fTypefaceDefault = MakeResourceAsTypeface(kColrCpalTestFontPath);
+        fTypefaceDefault = ToolUtils::CreateTypefaceFromResource(kColrCpalTestFontPath);
         fTypefaceCloned =
                 fTypefaceDefault ? fTypefaceDefault->makeClone(paletteArguments) : nullptr;
 
-        fTypefaceFromStream = SkFontMgr::RefDefault()->makeFromStream(
+        fTypefaceFromStream = ToolUtils::TestFontMgr()->makeFromStream(
                 GetResourceAsStream(kColrCpalTestFontPath), paletteArguments);
     }
 
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString gm_name = SkStringPrintf("font_palette_%s", fName.c_str());
         return gm_name;
     }
 
-    SkISize onISize() override { return SkISize::Make(1000, 400); }
+    SkISize getISize() override { return SkISize::Make(1000, 400); }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
         canvas->drawColor(SK_ColorWHITE);

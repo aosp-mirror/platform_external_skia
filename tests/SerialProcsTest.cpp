@@ -8,8 +8,10 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkData.h"
+#include "include/core/SkDataTable.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPicture.h"
 #include "include/core/SkPictureRecorder.h"
@@ -21,19 +23,22 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
+#include "include/encode/SkPngEncoder.h"
 #include "include/private/base/SkTDArray.h"
 #include "tests/Test.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <algorithm>
 #include <cstring>
 #include <functional>
 #include <iterator>
 
-static sk_sp<SkImage> picture_to_image(sk_sp<SkPicture> pic) {
+static sk_sp<SkImage> picture_to_image(const sk_sp<SkPicture>& pic) {
     SkIRect r = pic->cullRect().round();
-    auto surf = SkSurface::MakeRasterN32Premul(r.width(), r.height());
+    auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(r.width(), r.height()));
     surf->getCanvas()->drawPicture(pic);
     return surf->makeImageSnapshot();
 }
@@ -44,28 +49,26 @@ struct State {
 };
 
 DEF_TEST(serial_procs_image, reporter) {
-    auto src_img = GetResourceAsImage("images/mandrill_128.png");
+    auto src_img = ToolUtils::GetResourceAsImage("images/mandrill_128.png");
     const char magic_str[] = "magic signature";
 
     const SkSerialImageProc sprocs[] = {
-        [](SkImage* img, void* ctx) -> sk_sp<SkData> { return nullptr; },
-        [](SkImage* img, void* ctx) { return img->encodeToData(); },
-        [](SkImage* img, void* ctx) { return SkData::MakeWithCString(((State*)ctx)->fStr); },
+            [](SkImage* img, void* ctx) -> sk_sp<SkData> { return nullptr; },
+            [](SkImage* img, void* ctx) { return SkPngEncoder::Encode(nullptr, img, {}); },
+            [](SkImage* img, void* ctx) { return SkData::MakeWithCString(((State*)ctx)->fStr); },
     };
     const SkDeserialImageProc dprocs[] = {
-        [](const void* data, size_t length, void*) -> sk_sp<SkImage> {
-            return nullptr;
-        },
-        [](const void* data, size_t length, void*) {
-            return SkImage::MakeFromEncoded(SkData::MakeWithCopy(data, length));
-        },
-        [](const void* data, size_t length, void* ctx) -> sk_sp<SkImage> {
-            State* state = (State*)ctx;
-            if (length != strlen(state->fStr)+1 || 0 != memcmp(data, state->fStr, length)) {
-                return nullptr;
-            }
-            return sk_ref_sp(state->fImg);
-        },
+            [](const void* data, size_t length, void*) -> sk_sp<SkImage> { return nullptr; },
+            [](const void* data, size_t length, void*) {
+                return SkImages::DeferredFromEncodedData(SkData::MakeWithCopy(data, length));
+            },
+            [](const void* data, size_t length, void* ctx) -> sk_sp<SkImage> {
+                State* state = (State*)ctx;
+                if (length != strlen(state->fStr) + 1 || 0 != memcmp(data, state->fStr, length)) {
+                    return nullptr;
+                }
+                return sk_ref_sp(state->fImg);
+            },
     };
 
     sk_sp<SkPicture> pic;
@@ -196,7 +199,7 @@ DEF_TEST(serial_procs_picture, reporter) {
     test_pictures(reporter, p0, 1, true);
 }
 
-static sk_sp<SkPicture> make_picture(sk_sp<SkTypeface> tf0, sk_sp<SkTypeface> tf1) {
+static sk_sp<SkPicture> make_picture(const sk_sp<SkTypeface>& tf0, const sk_sp<SkTypeface>& tf1) {
     SkPictureRecorder rec;
     SkCanvas* canvas = rec.beginRecording(100, 100);
     SkPaint paint;
@@ -209,8 +212,8 @@ static sk_sp<SkPicture> make_picture(sk_sp<SkTypeface> tf0, sk_sp<SkTypeface> tf
 }
 
 DEF_TEST(serial_typeface, reporter) {
-    auto tf0 = MakeResourceAsTypeface("fonts/hintgasp.ttf");
-    auto tf1 = MakeResourceAsTypeface("fonts/Roboto2-Regular_NoEmbed.ttf");
+    auto tf0 = ToolUtils::CreateTypefaceFromResource("fonts/hintgasp.ttf");
+    auto tf1 = ToolUtils::CreateTypefaceFromResource("fonts/Roboto2-Regular_NoEmbed.ttf");
     if (!tf0 || !tf1 || tf0.get() == tf1.get()) {
         return; // need two different typefaces for this test to make sense.
     }
