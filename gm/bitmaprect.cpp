@@ -10,20 +10,26 @@
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
-#include "include/core/SkShader.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
+#include "tools/GpuToolUtils.h"
 #include "tools/ToolUtils.h"
 
+#include <cstddef>
+#include <iterator>
+
 static sk_sp<SkImage> make_image(SkCanvas* destCanvas) {
-    auto surf = SkSurface::MakeRasterN32Premul(64, 64);
+    auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(64, 64));
     auto tmpCanvas = surf->getCanvas();
 
     tmpCanvas->drawColor(SK_ColorRED);
@@ -44,15 +50,13 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString str;
         str.printf("bitmaprect_%s", fUseIRect ? "i" : "s");
         return str;
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->drawColor(0xFFCCCCCC);
@@ -135,15 +139,13 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString str;
         str.printf("3x3bitmaprect");
         return str;
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -199,15 +201,13 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString str;
         str.printf("bigbitmaprect_%s", fUseIRect ? "i" : "s");
         return str;
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     void onDraw(SkCanvas* canvas) override {
         if (!fBigImage) {
@@ -249,15 +249,13 @@ public:
     BitmapRectRounding() {}
 
 protected:
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString str;
         str.printf("bitmaprect_rounding");
         return str;
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     void onOnceBeforeDraw() override {
         fBM.allocN32Pixels(10, 10);

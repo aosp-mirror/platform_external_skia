@@ -15,12 +15,14 @@
 #include "modules/svg/include/SkSVGDOM.h"
 #include "modules/svg/include/SkSVGNode.h"
 #include "src/utils/SkOSPath.h"
+#include "tools/fonts/FontToolUtils.h"
 
 SvgSlide::SvgSlide(const SkString& name, const SkString& path)
-    : fPath(path)
-{
+    : fPath(path) {
     fName = name;
 }
+
+SvgSlide::~SvgSlide() = default;
 
 void SvgSlide::load(SkScalar w, SkScalar h) {
     auto stream = SkStream::MakeFromFile(fPath.c_str());
@@ -30,11 +32,13 @@ void SvgSlide::load(SkScalar w, SkScalar h) {
         return;
     }
 
+    auto predecode = skresources::ImageDecodeStrategy::kPreDecode;
     auto rp = skresources::DataURIResourceProviderProxy::Make(
-                  skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
-                                                          /*predecode=*/true),
-                  /*predecode=*/true);
-    fDom = SkSVGDOM::Builder().setResourceProvider(std::move(rp)).make(*stream);
+            skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()), predecode),
+            predecode, ToolUtils::TestFontMgr());
+
+    fDom = SkSVGDOM::Builder().setFontManager(ToolUtils::TestFontMgr()).setResourceProvider(std::move(rp)).make(*stream);
+
     if (fDom) {
         fDom->setContainerSize(SkSize::Make(w, h));
     }

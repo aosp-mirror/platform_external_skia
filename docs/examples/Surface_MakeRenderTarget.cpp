@@ -4,7 +4,7 @@
 // HASH=67b6609471a3f1ed0f4b1657004cdecb
 REG_FIDDLE(Surface_MakeRenderTarget, 256, 64, false, 0) {
 void draw(SkCanvas* canvas) {
-    SkFont font(nullptr, 32);
+    SkFont font(fontMgr->matchFamilyStyle(nullptr, {}), 32);
     SkPaint paint;
 
     auto dContext = GrAsDirectContext(canvas->recordingContext());
@@ -14,7 +14,7 @@ void draw(SkCanvas* canvas) {
 
     SkImageInfo info = SkImageInfo::MakeN32(256, 64, kOpaque_SkAlphaType);
     for (auto surfaceOrigin : { kTopLeft_GrSurfaceOrigin, kBottomLeft_GrSurfaceOrigin } ) {
-        auto gpuSurface(SkSurface::MakeRenderTarget(
+        auto gpuSurface(SkSurfaces::RenderTarget(
                 dContext, skgpu::Budgeted::kNo, info, 0, surfaceOrigin, nullptr));
         auto surfaceCanvas = gpuSurface->getCanvas();
         surfaceCanvas->clear(SK_ColorWHITE);

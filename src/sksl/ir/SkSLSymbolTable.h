@@ -9,9 +9,9 @@
 #define SKSL_SYMBOLTABLE
 
 #include "include/core/SkTypes.h"
-#include "include/private/SkOpts_spi.h"
-#include "include/private/SkSLSymbol.h"
+#include "src/core/SkChecksum.h"
 #include "src/core/SkTHash.h"
+#include "src/sksl/ir/SkSLSymbol.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -36,7 +36,7 @@ public:
             : fBuiltin(builtin) {}
 
     explicit SymbolTable(std::shared_ptr<SymbolTable> parent, bool builtin)
-            : fParent(parent)
+            : fParent(std::move(parent))
             , fBuiltin(builtin) {}
 
     /** Replaces the passed-in SymbolTable with a newly-created child symbol table. */
@@ -113,7 +113,8 @@ public:
     void addWithoutOwnership(Symbol* symbol);
 
     /**
-     * Adds a symbol to this symbol table, conferring ownership.
+     * Adds a symbol to this symbol table, conferring ownership; if the symbol already exists, an
+     * error will be reported. The symbol table will always be updated to reference the new symbol.
      */
     template <typename T>
     T* add(std::unique_ptr<T> symbol) {
@@ -156,14 +157,18 @@ public:
      */
     const Type* addArrayDimension(const Type* type, int arraySize);
 
-    // Call fn for every symbol in the table.  You may not mutate anything.
+    // Call fn for every symbol in the table. You may not mutate anything.
     template <typename Fn>
     void foreach(Fn&& fn) const {
         fSymbols.foreach(
                 [&fn](const SymbolKey& key, const Symbol* symbol) { fn(key.fName, symbol); });
     }
 
-    size_t count() {
+    // Checks `this` directly against `other` to see if the two symbol tables have any names in
+    // common. Parent tables are not considered.
+    bool wouldShadowSymbolsFrom(const SymbolTable* other) const;
+
+    size_t count() const {
         return fSymbols.count();
     }
 
@@ -198,7 +203,7 @@ private:
     };
 
     static SymbolKey MakeSymbolKey(std::string_view name) {
-        return SymbolKey{name, SkOpts::hash_fn(name.data(), name.size(), 0)};
+        return SymbolKey{name, SkChecksum::Hash32(name.data(), name.size())};
     }
 
     Symbol* lookup(const SymbolKey& key) const;
@@ -206,7 +211,7 @@ private:
     bool fBuiltin = false;
     bool fAtModuleBoundary = false;
     std::forward_list<std::string> fOwnedStrings;
-    SkTHashMap<SymbolKey, Symbol*, SymbolKey::Hash> fSymbols;
+    skia_private::THashMap<SymbolKey, Symbol*, SymbolKey::Hash> fSymbols;
 };
 
 }  // namespace SkSL

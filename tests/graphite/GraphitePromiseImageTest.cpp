@@ -12,11 +12,14 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/Image.h"
 #include "include/gpu/graphite/Recording.h"
+#include "include/gpu/graphite/Surface.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/RecordingPriv.h"
 #include "tests/Test.h"
+#include "tools/graphite/GraphiteTestContext.h"
 
 using namespace skgpu::graphite;
 
@@ -187,7 +190,7 @@ void setup_test_context(Context* context,
     TextureInfo textureInfo = caps->getDefaultSampledTextureInfo(kRGBA_8888_SkColorType,
                                                                  skgpu::Mipmapped::kNo,
                                                                  skgpu::Protected::kNo,
-                                                                 Renderable::kYes);
+                                                                 skgpu::Renderable::kYes);
 
     if (invalidBackendTex) {
         // Having invalid backend textures will invalidate all the fulfill calls
@@ -219,24 +222,27 @@ void setup_test_context(Context* context,
                                        kRGBA_8888_SkColorType,
                                        kPremul_SkAlphaType);
 
-    testCtx->fImg = SkImage::MakeGraphitePromiseTexture(testCtx->fRecorder.get(),
-                                                        dimensions,
-                                                        textureInfo,
-                                                        ii.colorInfo(),
-                                                        isVolatile,
-                                                        PromiseTextureChecker::Fulfill,
-                                                        PromiseTextureChecker::ImageRelease,
-                                                        PromiseTextureChecker::TextureRelease,
-                                                        &testCtx->fPromiseChecker);
+    testCtx->fImg = SkImages::PromiseTextureFrom(testCtx->fRecorder.get(),
+                                                 dimensions,
+                                                 textureInfo,
+                                                 ii.colorInfo(),
+                                                 isVolatile,
+                                                 PromiseTextureChecker::Fulfill,
+                                                 PromiseTextureChecker::ImageRelease,
+                                                 PromiseTextureChecker::TextureRelease,
+                                                 &testCtx->fPromiseChecker);
 
-    testCtx->fSurface = SkSurface::MakeGraphite(testCtx->fRecorder.get(), ii);
+    testCtx->fSurface = SkSurfaces::RenderTarget(testCtx->fRecorder.get(), ii);
 }
 
 } // anonymous namespace
 
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageTest,
-                                         reporter,
-                                         context) {
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageTest,
+                                                     reporter,
+                                                     context,
+                                                     testGpuContext,
+                                                     true,
+                                                     CtsEnforcement::kNextRelease) {
     constexpr SkISize kDimensions { 16, 16 };
 
     TestCtx testContext;
@@ -262,7 +268,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageTest,
     check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                  /* expectedFulfillCnt= */ 1);
 
-    context->submit(SyncToCpu::kYes);
+    testGpuContext->syncedSubmit(context);
     check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                  /* expectedFulfillCnt= */ 1);
 
@@ -283,7 +289,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageTest,
                                      /* expectedFulfillCnt= */ 1);
     }
 
-    context->submit(SyncToCpu::kYes);
+    testGpuContext->syncedSubmit(context);
     check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                  /* expectedFulfillCnt= */ 1);
 
@@ -311,15 +317,19 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageTest,
     check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                  /* expectedFulfillCnt= */ 1);
 
-    context->submit(SyncToCpu::kYes);
+    testGpuContext->syncedSubmit(context);
 
     // Now TextureRelease should definitely have been called.
     check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 1);
 }
 
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageFulfillFailureTest,
-                                         reporter,
-                                         context) {
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(
+        NonVolatileGraphitePromiseImageFulfillFailureTest,
+        reporter,
+        context,
+        testGpuContext,
+        true,
+        CtsEnforcement::kNextRelease) {
     constexpr SkISize kDimensions { 16, 16 };
 
     TestCtx testContext;
@@ -382,14 +392,18 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageFulfillF
     // Despite fulfill failing 4x, the imageRelease callback still fires
     testContext.fPromiseChecker.checkImageReleased(reporter, /* expectedReleaseCnt= */ 1);
 
-    context->submit(SyncToCpu::kYes);
+    testGpuContext->syncedSubmit(context);
     // fulfill should've been called 4x while release should never have been called
     check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 4);
 }
 
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageCreationFailureTest,
-                                         reporter,
-                                         context) {
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(
+        NonVolatileGraphitePromiseImageCreationFailureTest,
+        reporter,
+        context,
+        testGpuContext,
+        true,
+        CtsEnforcement::kNextRelease) {
     // Note: these dimensions are invalid and will cause MakeGraphitePromiseTexture to fail
     constexpr SkISize kDimensions { 0, 0 };
 
@@ -405,9 +419,12 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageCreation
     REPORTER_ASSERT(reporter, testContext.fPromiseChecker.totalReleaseCount() == 0);
 }
 
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
-                                         reporter,
-                                         context) {
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
+                                                     reporter,
+                                                     context,
+                                                     testGpuContext,
+                                                     true,
+                                                     CtsEnforcement::kNextRelease) {
     constexpr SkISize kDimensions { 16, 16 };
 
     TestCtx testContext;
@@ -434,7 +451,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
                                      /* expectedFulfillCnt= */ 2);
     }
 
-    context->submit(SyncToCpu::kYes);
+    testGpuContext->syncedSubmit(context);
     check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 2);
 
     REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCounts[0] == 1);
@@ -459,7 +476,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
                                      /* expectedFulfillCnt= */ 4);
     }
 
-    context->submit(SyncToCpu::kYes);
+    testGpuContext->syncedSubmit(context);
     check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 4);
 
     REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCounts[0] == 2);
@@ -488,7 +505,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
     check_fulfilled_ahead_by_two(reporter, testContext.fPromiseChecker,
                                  /* expectedFulfillCnt= */ 6);
 
-    context->submit(SyncToCpu::kYes);
+    testGpuContext->syncedSubmit(context);
 
     // Now all Releases should definitely have been called.
     check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 6);
@@ -497,9 +514,12 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
     REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCounts[1] == 3);
 }
 
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageFulfillFailureTest,
-                                         reporter,
-                                         context) {
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageFulfillFailureTest,
+                                                     reporter,
+                                                     context,
+                                                     testGpuContext,
+                                                     true,
+                                                     CtsEnforcement::kNextRelease) {
     constexpr SkISize kDimensions { 16, 16 };
 
     TestCtx testContext;
@@ -563,14 +583,17 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageFulfillFail
     testContext.fSurface.reset();
     testContext.fImg.reset();
 
-    context->submit(SyncToCpu::kYes);
+    testGpuContext->syncedSubmit(context);
     check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 6);
 }
 
 // Test out dropping the Recorder prior to inserting the Recording
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageRecorderLoss,
-                                         reporter,
-                                         context) {
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageRecorderLoss,
+                                                     reporter,
+                                                     context,
+                                                     testGpuContext,
+                                                     true,
+                                                     CtsEnforcement::kNextRelease) {
     constexpr SkISize kDimensions{ 16, 16 };
 
     for (Volatile isVolatile : { Volatile::kNo, Volatile::kYes }) {
@@ -591,7 +614,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageRecorderLoss,
         REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 1);
 
-        context->submit(SyncToCpu::kYes);
+        testGpuContext->syncedSubmit(context);
 
         testContext.fSurface.reset();
         testContext.fImg.reset();
@@ -603,9 +626,12 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageRecorderLoss,
 
 // Test out PromiseImages appearing in multiple Recordings. In particular, test that
 // previous instantiations don't impact the Recording's collection of PromiseImages.
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageMultipleImgUses,
-                                         reporter,
-                                         context) {
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageMultipleImgUses,
+                                                     reporter,
+                                                     context,
+                                                     testGpuContext,
+                                                     true,
+                                                     CtsEnforcement::kNextRelease) {
     constexpr SkISize kDimensions{ 16, 16 };
 
     static constexpr int kNumRecordings = 3;
@@ -655,7 +681,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageMultipleImgUses,
             REPORTER_ASSERT(reporter, recordings[i]->priv().numNonVolatilePromiseImages() == 0);
         }
 
-        context->submit(SyncToCpu::kYes);
+        testGpuContext->syncedSubmit(context);
 
         testContext.fSurface.reset();
         testContext.fImg.reset();

@@ -10,8 +10,8 @@
 #include "include/core/SkM44.h"
 #include "include/core/SkMatrix.h"
 #include "include/private/base/SkAlign.h"
-#include "src/base/SkHalf.h"
 #include "include/private/base/SkTemplates.h"
+#include "src/base/SkHalf.h"
 #include "src/gpu/graphite/DrawTypes.h"
 #include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/Uniform.h"
@@ -79,7 +79,10 @@ struct Rules140 {
         if (Cols != 1) {
             // This is a matrix or array of matrices. We return the stride between columns.
             SkASSERT(RowsOrVecLength > 1);
-            return Rules140<BaseType, RowsOrVecLength>::Stride(Uniform::kNonArray);
+            uint32_t stride = Rules140<BaseType, RowsOrVecLength>::Stride(Uniform::kNonArray);
+
+            // By Rule 4, the stride and alignment of the individual element must always match vec4.
+            return SkAlignTo(stride, tight_vec_size<float>(4));
         }
 
         // Get alignment of a single non-array vector of BaseType by Rule 1, 2, or 3.
@@ -337,6 +340,21 @@ public:
     }
 };
 
+static bool is_matrix(SkSLType type) {
+    switch (type) {
+        case SkSLType::kHalf2x2:
+        case SkSLType::kHalf3x3:
+        case SkSLType::kHalf4x4:
+        case SkSLType::kFloat2x2:
+        case SkSLType::kFloat3x3:
+        case SkSLType::kFloat4x4:
+            return true;
+        default:
+            break;
+    }
+    return false;
+}
+
 // To determine whether a current offset is aligned, we can just 'and' the lowest bits with the
 // alignment mask. A value of 0 means aligned, any other value is how many bytes past alignment we
 // are. This works since all alignments are powers of 2. The mask is always (alignment - 1).
@@ -413,8 +431,8 @@ static uint32_t get_ubo_aligned_offset(Layout layout,
                                        SkSLType type,
                                        bool isArray) {
     uint32_t alignmentMask;
-    if (layout == Layout::kStd140 && isArray) {
-        // std140 array element alignment always equals the base alignment of a vec4.
+    if (layout == Layout::kStd140 && (isArray || is_matrix(type))) {
+        // std140 array and matrix element alignment always equals the base alignment of a vec4.
         alignmentMask = sksltype_to_alignment_mask(SkSLType::kFloat4);
     } else {
         alignmentMask = sksltype_to_alignment_mask(type);
@@ -512,6 +530,7 @@ void UniformManager::reset() {
     fOffset = 0;
     fReqAlignment = 0;
     fStorage.clear();
+    fWrotePaintColor = false;
 }
 
 void UniformManager::checkReset() const {
@@ -539,7 +558,10 @@ void UniformManager::doneWithExpectedUniforms() {
     SkDEBUGCODE(fExpectedUniforms = {};)
 }
 
-void UniformManager::writeInternal(SkSLType type, unsigned int count, const void* src) {
+void UniformManager::writeInternal(SkSLType type,
+                                   CType ctype,
+                                   unsigned int count,
+                                   const void* src) {
     SkSLType revisedType = this->getUniformTypeForLayout(type);
 
     const uint32_t startOffset = fOffset;
@@ -552,30 +574,29 @@ void UniformManager::writeInternal(SkSLType type, unsigned int count, const void
         fStorage.append(alignedStartOffset - startOffset);
     }
     char* dst = fStorage.append(bytesNeeded);
-    [[maybe_unused]] uint32_t bytesWritten =
-            fWriteUniform(revisedType, CType::kDefault, dst, count, src);
+    [[maybe_unused]] uint32_t bytesWritten = fWriteUniform(revisedType, ctype, dst, count, src);
     SkASSERT(bytesNeeded == bytesWritten);
 
     fReqAlignment = std::max(fReqAlignment, sksltype_to_alignment_mask(revisedType) + 1);
 }
 
-void UniformManager::write(SkSLType type, const void* src) {
+void UniformManager::write(SkSLType type, const void* src, CType ctype) {
     this->checkExpected(type, 1);
-    this->writeInternal(type, Uniform::kNonArray, src);
+    this->writeInternal(type, ctype, Uniform::kNonArray, src);
 }
 
-void UniformManager::writeArray(SkSLType type, const void* src, unsigned int count) {
+void UniformManager::writeArray(SkSLType type, const void* src, unsigned int count, CType ctype) {
     // Don't write any elements if count is 0. Since Uniform::kNonArray == 0, passing count
     // directly would cause a one-element non-array write.
     if (count > 0) {
         this->checkExpected(type, count);
-        this->writeInternal(type, count, src);
+        this->writeInternal(type, ctype, count, src);
     }
 }
 
 void UniformManager::write(const Uniform& u, const uint8_t* src) {
     this->checkExpected(u.type(), (u.count() == Uniform::kNonArray) ? 1 : u.count());
-    this->writeInternal(u.type(), u.count(), src);
+    this->writeInternal(u.type(), CType::kDefault, u.count(), src);
 }
 
 void UniformManager::write(const SkM44& mat) {
@@ -583,8 +604,29 @@ void UniformManager::write(const SkM44& mat) {
     this->write(kType, &mat);
 }
 
+void UniformManager::write(const SkMatrix& mat) {
+    static constexpr SkSLType kType = SkSLType::kFloat3x3;
+    this->write(kType, &mat, CType::kSkMatrix);
+}
+
 void UniformManager::write(const SkPMColor4f& color) {
     static constexpr SkSLType kType = SkSLType::kFloat4;
+    this->write(kType, &color);
+}
+
+// This is a specialized uniform writing entry point intended to deduplicate the paint
+// color. If a more general system is required, the deduping logic can be added to the
+// other write methods (and this specialized method would be removed).
+void UniformManager::writePaintColor(const SkPMColor4f& color) {
+    static constexpr SkSLType kType = SkSLType::kFloat4;
+
+    SkASSERT(fExpectedUniforms[fExpectedUniformIndex].isPaintColor());
+    if (fWrotePaintColor) {
+        this->checkExpected(kType, 1);
+        return;
+    }
+
+    fWrotePaintColor = true;
     this->write(kType, &color);
 }
 
@@ -596,6 +638,16 @@ void UniformManager::write(const SkRect& rect) {
 void UniformManager::write(const SkPoint& point) {
     static constexpr SkSLType kType = SkSLType::kFloat2;
     this->write(kType, &point);
+}
+
+void UniformManager::write(const SkSize& size) {
+    static constexpr SkSLType kType = SkSLType::kFloat2;
+    this->write(kType, &size);
+}
+
+void UniformManager::write(const SkPoint3& point3) {
+    static constexpr SkSLType kType = SkSLType::kFloat3;
+    this->write(kType, &point3);
 }
 
 void UniformManager::write(float f) {
@@ -633,9 +685,24 @@ void UniformManager::writeArray(SkSpan<const float> arr) {
     this->writeArray(kType, arr.data(), arr.size());
 }
 
+void UniformManager::writeHalf(float f) {
+    static constexpr SkSLType kType = SkSLType::kHalf;
+    this->write(kType, &f);
+}
+
 void UniformManager::writeHalf(const SkMatrix& mat) {
     static constexpr SkSLType kType = SkSLType::kHalf3x3;
+    this->write(kType, &mat, CType::kSkMatrix);
+}
+
+void UniformManager::writeHalf(const SkM44& mat) {
+    static constexpr SkSLType kType = SkSLType::kHalf4x4;
     this->write(kType, &mat);
+}
+
+void UniformManager::writeHalf(const SkColor4f& unpremulColor) {
+    static constexpr SkSLType kType = SkSLType::kHalf4;
+    this->write(kType, &unpremulColor);
 }
 
 void UniformManager::writeHalfArray(SkSpan<const float> arr) {

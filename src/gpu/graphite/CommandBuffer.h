@@ -12,43 +12,48 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/private/base/SkTArray.h"
+#include "src/gpu/GpuRefCnt.h"
 #include "src/gpu/graphite/AttachmentTypes.h"
 #include "src/gpu/graphite/CommandTypes.h"
-#include "src/gpu/graphite/ComputeTypes.h"
 #include "src/gpu/graphite/DrawTypes.h"
 #include "src/gpu/graphite/DrawWriter.h"
+#include "src/gpu/graphite/Resource.h"
 
 namespace skgpu {
 class RefCntedCallback;
+class MutableTextureState;
 }
-
-#ifdef SK_ENABLE_PIET_GPU
-namespace skgpu::piet {
-class Scene;
-}
-#endif
 
 namespace skgpu::graphite {
 
 class Buffer;
-class ComputePipeline;
+class DispatchGroup;
 class DrawPass;
 class SharedContext;
 class GraphicsPipeline;
-class Resource;
 class Sampler;
 class Texture;
 class TextureProxy;
 
 class CommandBuffer {
 public:
+    using DrawPassList = skia_private::TArray<std::unique_ptr<DrawPass>>;
+    using DispatchGroupList = skia_private::TArray<std::unique_ptr<DispatchGroup>>;
+
     virtual ~CommandBuffer();
 
 #ifdef SK_DEBUG
     bool hasWork() { return fHasWork; }
 #endif
 
+    // Takes a Usage ref on the Resource that will be released when the command buffer has finished
+    // execution.
     void trackResource(sk_sp<Resource> resource);
+    // Takes a CommandBuffer ref on the Resource that will be released when the command buffer has
+    // finished execution. This allows a Resource to be returned to ResourceCache for reuse while
+    // the CommandBuffer is still executing on the GPU. This is most commonly used for Textures or
+    // Buffers which are only accessed via commands on a command buffer.
+    void trackCommandBufferResource(sk_sp<Resource> resource);
     // Release all tracked Resources
     void resetCommandBuffer();
 
@@ -58,21 +63,29 @@ public:
     void addFinishedProc(sk_sp<RefCntedCallback> finishedProc);
     void callFinishedProcs(bool success);
 
+    virtual void addWaitSemaphores(size_t numWaitSemaphores,
+                                   const BackendSemaphore* waitSemaphores) {}
+    virtual void addSignalSemaphores(size_t numWaitSemaphores,
+                                     const BackendSemaphore* signalSemaphores) {}
+    virtual void prepareSurfaceForStateUpdate(SkSurface* targetSurface,
+                                              const MutableTextureState* newState) {}
+
+    void addBuffersToAsyncMapOnSubmit(SkSpan<const sk_sp<Buffer>>);
+    SkSpan<const sk_sp<Buffer>> buffersToAsyncMapOnSubmit() const;
+
     bool addRenderPass(const RenderPassDesc&,
                        sk_sp<Texture> colorTexture,
                        sk_sp<Texture> resolveTexture,
                        sk_sp<Texture> depthStencilTexture,
                        SkRect viewport,
-                       const std::vector<std::unique_ptr<DrawPass>>& drawPasses);
+                       const DrawPassList& drawPasses);
 
-    bool addComputePass(const ComputePassDesc&,
-                        sk_sp<ComputePipeline> pipeline,
-                        const std::vector<ResourceBinding>& bindings);
+    bool addComputePass(const DispatchGroupList& dispatchGroups);
 
     //---------------------------------------------------------------
     // Can only be used outside renderpasses
     //---------------------------------------------------------------
-    bool copyBufferToBuffer(sk_sp<Buffer> srcBuffer,
+    bool copyBufferToBuffer(const Buffer* srcBuffer,
                             size_t srcOffset,
                             sk_sp<Buffer> dstBuffer,
                             size_t dstOffset,
@@ -89,13 +102,10 @@ public:
     bool copyTextureToTexture(sk_sp<Texture> src,
                               SkIRect srcRect,
                               sk_sp<Texture> dst,
-                              SkIPoint dstPoint);
+                              SkIPoint dstPoint,
+                              int mipLevel);
     bool synchronizeBufferToCpu(sk_sp<Buffer>);
     bool clearBuffer(const Buffer* buffer, size_t offset, size_t size);
-
-#ifdef SK_ENABLE_PIET_GPU
-    void renderPietScene(const skgpu::piet::Scene& scene, sk_sp<Texture> target);
-#endif
 
     // This sets a translation to be applied to any subsequently added command, assuming these
     // commands are part of a translated replay of a Graphite recording.
@@ -119,11 +129,9 @@ private:
                                  const Texture* resolveTexture,
                                  const Texture* depthStencilTexture,
                                  SkRect viewport,
-                                 const std::vector<std::unique_ptr<DrawPass>>& drawPasses) = 0;
+                                 const DrawPassList& drawPasses) = 0;
 
-    virtual bool onAddComputePass(const ComputePassDesc&,
-                                  const ComputePipeline*,
-                                  const std::vector<ResourceBinding>& bindings) = 0;
+    virtual bool onAddComputePass(const DispatchGroupList& dispatchGroups) = 0;
 
     virtual bool onCopyBufferToBuffer(const Buffer* srcBuffer,
                                       size_t srcOffset,
@@ -142,21 +150,21 @@ private:
     virtual bool onCopyTextureToTexture(const Texture* src,
                                         SkIRect srcRect,
                                         const Texture* dst,
-                                        SkIPoint dstPoint) = 0;
+                                        SkIPoint dstPoint,
+                                        int mipLevel) = 0;
     virtual bool onSynchronizeBufferToCpu(const Buffer*, bool* outDidResultInWork) = 0;
     virtual bool onClearBuffer(const Buffer*, size_t offset, size_t size) = 0;
-
-#ifdef SK_ENABLE_PIET_GPU
-    virtual void onRenderPietScene(const skgpu::piet::Scene& scene, const Texture* target) = 0;
-#endif
 
 #ifdef SK_DEBUG
     bool fHasWork = false;
 #endif
-
     inline static constexpr int kInitialTrackedResourcesCount = 32;
-    SkSTArray<kInitialTrackedResourcesCount, sk_sp<Resource>> fTrackedResources;
-    SkTArray<sk_sp<RefCntedCallback>> fFinishedProcs;
+    template <typename T>
+    using TrackedResourceArray = skia_private::STArray<kInitialTrackedResourcesCount, T>;
+    TrackedResourceArray<sk_sp<Resource>> fTrackedUsageResources;
+    TrackedResourceArray<gr_cb<Resource>> fCommandBufferResources;
+    skia_private::TArray<sk_sp<RefCntedCallback>> fFinishedProcs;
+    skia_private::TArray<sk_sp<Buffer>> fBuffersToAsyncMap;
 };
 
 } // namespace skgpu::graphite

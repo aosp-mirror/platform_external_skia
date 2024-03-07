@@ -10,6 +10,7 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextOptions.h"
@@ -49,9 +50,11 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fSupportsAHardwareBufferImages = false;
     fFenceSyncSupport = false;
     fSemaphoreSupport = false;
+    fBackendSemaphoreSupport = false;
     fCrossContextTextureSupport = false;
     fHalfFloatVertexAttributeSupport = false;
     fDynamicStateArrayGeometryProcessorTextureSupport = false;
+    fSupportsProtectedContent = false;
     fPerformPartialClearsAsDraws = false;
     fPerformColorClearsAsDraws = false;
     fAvoidLargeIndexBufferDraws = false;
@@ -79,7 +82,7 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fInternalMultisampleCount = 0;
 
     fSuppressPrints = options.fSuppressPrints;
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     fWireframeMode = options.fWireframeMode;
 #else
     fWireframeMode = false;
@@ -90,6 +93,7 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fNativeDrawIndexedIndirectIsBroken = false;
     fAvoidReorderingRenderTasks = false;
     fAvoidDithering = false;
+    fAvoidLineDraws = false;
     fDisablePerspectiveSDFText = false;
 
     fPreferVRAMUseOverFlushes = true;
@@ -139,7 +143,7 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
     }
 
     fMaxTextureSize = std::min(fMaxTextureSize, options.fMaxTextureSizeOverride);
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     if (options.fSuppressAdvancedBlendEquations) {
         fBlendEquationSupport = kBasic_BlendEquationSupport;
     }
@@ -232,10 +236,12 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Supports importing AHardwareBuffers", fSupportsAHardwareBufferImages);
     writer->appendBool("Fence sync support", fFenceSyncSupport);
     writer->appendBool("Semaphore support", fSemaphoreSupport);
+    writer->appendBool("Backend Semaphore support", fBackendSemaphoreSupport);
     writer->appendBool("Cross context texture support", fCrossContextTextureSupport);
     writer->appendBool("Half float vertex attribute support", fHalfFloatVertexAttributeSupport);
     writer->appendBool("Specify GeometryProcessor textures as a dynamic state array",
                        fDynamicStateArrayGeometryProcessorTextureSupport);
+    writer->appendBool("Supports Protected content", fSupportsProtectedContent);
     writer->appendBool("Use draws for partial clears", fPerformPartialClearsAsDraws);
     writer->appendBool("Use draws for color clears", fPerformColorClearsAsDraws);
     writer->appendBool("Avoid Large IndexBuffer Draws", fAvoidLargeIndexBufferDraws);
@@ -425,18 +431,18 @@ bool GrCaps::areColorTypeAndFormatCompatible(GrColorType grCT,
         return false;
     }
 
-    SkImage::CompressionType compression = GrBackendFormatToCompressionType(format);
-    if (compression != SkImage::CompressionType::kNone) {
-        return grCT == (SkCompressionTypeIsOpaque(compression) ? GrColorType::kRGB_888x
-                                                               : GrColorType::kRGBA_8888);
+    SkTextureCompressionType compression = GrBackendFormatToCompressionType(format);
+    if (compression != SkTextureCompressionType::kNone) {
+        return grCT == (SkTextureCompressionTypeIsOpaque(compression) ? GrColorType::kRGB_888x
+                                                                      : GrColorType::kRGBA_8888);
     }
 
     return this->onAreColorTypeAndFormatCompatible(grCT, format);
 }
 
 skgpu::Swizzle GrCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
-    SkImage::CompressionType compression = GrBackendFormatToCompressionType(format);
-    if (compression != SkImage::CompressionType::kNone) {
+    SkTextureCompressionType compression = GrBackendFormatToCompressionType(format);
+    if (compression != SkTextureCompressionType::kNone) {
         if (colorType == GrColorType::kRGB_888x || colorType == GrColorType::kRGBA_8888) {
             return skgpu::Swizzle::RGBA();
         }
@@ -449,7 +455,7 @@ skgpu::Swizzle GrCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType
 }
 
 bool GrCaps::isFormatCompressed(const GrBackendFormat& format) const {
-    return GrBackendFormatToCompressionType(format) != SkImage::CompressionType::kNone;
+    return GrBackendFormatToCompressionType(format) != SkTextureCompressionType::kNone;
 }
 
 GrDstSampleFlags GrCaps::getDstSampleFlagsForProxy(const GrRenderTargetProxy* rt,

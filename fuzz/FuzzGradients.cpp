@@ -68,7 +68,7 @@ static void logOptionalMatrix(const char* label, const SkMatrix* m) {
 
 static void logLinearGradient(const SkPoint pts[2],
                               const std::vector<SkColor>& colors,
-                              const std::vector<SkScalar> pos,
+                              const std::vector<SkScalar>& pos,
                               SkTileMode mode,
                               uint32_t flags,
                               const SkMatrix* localMatrix,
@@ -124,7 +124,7 @@ void fuzzLinearGradient(Fuzz* fuzz) {
     p.setShader(SkGradientShader::MakeLinear(pts, colors.data(), pos.data(),
         colors.size(), mode, flags, localMatrix.getMaybeNull()));
 
-    sk_sp<SkSurface> surface(SkSurface::MakeRasterN32Premul(50, 50));
+    sk_sp<SkSurface> surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(50, 50)));
     if (useGlobalMatrix) {
         SkMatrix gm;
         makeMatrix(fuzz, &gm);
@@ -162,8 +162,7 @@ void fuzzRadialGradient(Fuzz* fuzz) {
     p.setShader(SkGradientShader::MakeRadial(center, radius, colors.data(),
         pos.data(), colors.size(), mode, flags, localMatrix.getMaybeNull()));
 
-
-    sk_sp<SkSurface> surface(SkSurface::MakeRasterN32Premul(50, 50));
+    sk_sp<SkSurface> surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(50, 50)));
     if (useGlobalMatrix) {
         SkMatrix gm;
         makeMatrix(fuzz, &gm);
@@ -201,7 +200,7 @@ void fuzzTwoPointConicalGradient(Fuzz* fuzz) {
         end, endRadius, colors.data(), pos.data(), colors.size(), mode,
         flags, localMatrix.getMaybeNull()));
 
-    sk_sp<SkSurface> surface(SkSurface::MakeRasterN32Premul(50, 50));
+    sk_sp<SkSurface> surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(50, 50)));
     if (useGlobalMatrix) {
         SkMatrix gm;
         makeMatrix(fuzz, &gm);
@@ -237,7 +236,7 @@ void fuzzSweepGradient(Fuzz* fuzz) {
             pos.data(), colors.size()));
     }
 
-    sk_sp<SkSurface> surface(SkSurface::MakeRasterN32Premul(50, 50));
+    sk_sp<SkSurface> surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(50, 50)));
     if (useGlobalMatrix) {
         SkMatrix gm;
         makeMatrix(fuzz, &gm);

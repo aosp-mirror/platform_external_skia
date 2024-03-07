@@ -8,19 +8,26 @@
 #ifndef GrBitmapTextGeoProc_DEFINED
 #define GrBitmapTextGeoProc_DEFINED
 
+#include "include/core/SkMatrix.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/private/SkColorData.h"
 #include "src/base/SkArenaAlloc.h"
-#include "src/gpu/AtlasTypes.h"
 #include "src/gpu/ganesh/GrColorSpaceXform.h"
 #include "src/gpu/ganesh/GrGeometryProcessor.h"
-#include "src/gpu/ganesh/GrProcessor.h"
 #include "src/gpu/ganesh/GrProcessorUnitTest.h"
+#include "src/gpu/ganesh/GrSamplerState.h"
 
+#include <memory>
 #include <utility>
 
-class GrGLBitmapTextGeoProc;
-class GrInvariantOutput;
 class GrSurfaceProxyView;
+struct GrShaderCaps;
+
+namespace skgpu {
+class KeyBuilder;
+enum class MaskFormat : int;
+}
 
 /**
  * The output color of this effect is a modulation of the input color and a sample from a texture.

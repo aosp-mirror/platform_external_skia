@@ -8,9 +8,10 @@
 #ifndef skgpu_graphite_Device_DEFINED
 #define skgpu_graphite_Device_DEFINED
 
+#include "include/core/SkImage.h"
 #include "include/gpu/GpuTypes.h"
+#include "src/base/SkEnumBitMask.h"
 #include "src/core/SkDevice.h"
-#include "src/core/SkEnumBitMask.h"
 #include "src/gpu/graphite/ClipStack_graphite.h"
 #include "src/gpu/graphite/DrawOrder.h"
 #include "src/gpu/graphite/geom/Rect.h"
@@ -18,19 +19,17 @@
 #include "src/text/gpu/SDFTControl.h"
 #include "src/text/gpu/SubRunContainer.h"
 
+enum class SkBackingFit;
 class SkStrokeRec;
-
-namespace sktext::gpu {
-class AtlasSubRun;
-enum class Budgeted : bool;
-}  // namespace sktext::gpu
 
 namespace skgpu::graphite {
 
+class PathAtlas;
 class BoundsManager;
 class Clip;
 class Context;
 class DrawContext;
+enum class DstReadRequirement;
 class Geometry;
 class PaintParams;
 class Recorder;
@@ -40,7 +39,7 @@ class StrokeStyle;
 class TextureProxy;
 class TextureProxyView;
 
-class Device final : public SkBaseDevice  {
+class Device final : public SkDevice {
 public:
     ~Device() override;
 
@@ -48,6 +47,7 @@ public:
                               const SkImageInfo&,
                               skgpu::Budgeted,
                               Mipmapped,
+                              SkBackingFit,
                               const SkSurfaceProps&,
                               bool addInitialClear);
     static sk_sp<Device> Make(Recorder*,
@@ -64,7 +64,7 @@ public:
 
     Device* asGraphiteDevice() override { return this; }
 
-    Recorder* recorder() { return fRecorder; }
+    Recorder* recorder() const override { return fRecorder; }
     // This call is triggered from the Recorder on its registered Devices. It is typically called
     // when the Recorder is abandoned or deleted.
     void abandonRecorder();
@@ -73,23 +73,7 @@ public:
     // from the DrawContext as a RenderPassTask and records it in the Device's recorder.
     void flushPendingWorkToRecorder();
 
-    TextureProxyView createCopy(const SkIRect* subset, Mipmapped);
-
-    void asyncRescaleAndReadPixels(const SkImageInfo& info,
-                                   SkIRect srcRect,
-                                   SkImage::RescaleGamma rescaleGamma,
-                                   SkImage::RescaleMode rescaleMode,
-                                   SkImage::ReadPixelsCallback callback,
-                                   SkImage::ReadPixelsContext context);
-
-    void asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace,
-                                         sk_sp<SkColorSpace> dstColorSpace,
-                                         SkIRect srcRect,
-                                         SkISize dstSize,
-                                         SkImage::RescaleGamma rescaleGamma,
-                                         SkImage::RescaleMode,
-                                         SkImage::ReadPixelsCallback callback,
-                                         SkImage::ReadPixelsContext context);
+    TextureProxyView createCopy(const SkIRect* subset, Mipmapped, SkBackingFit);
 
     const Transform& localToDeviceTransform();
 
@@ -98,28 +82,37 @@ public:
     TextureProxy* target();
     TextureProxyView readSurfaceView() const;
 
-private:
-    class IntersectionTreeSet;
+    // SkCanvas only uses drawCoverageMask w/o this staging flag, so only enable
+    // mask filters in clients that have finished migrating.
+#if !defined(SK_RESOLVE_FILTERS_BEFORE_RESTORE)
+    bool useDrawCoverageMaskForMaskFilters() const override { return true; }
+#endif
 
     // Clipping
-    void onSave() override { fClip.save(); }
-    void onRestore() override { fClip.restore(); }
+    void pushClipStack() override { fClip.save(); }
+    void popClipStack() override { fClip.restore(); }
 
-    bool onClipIsWideOpen() const override {
+    bool isClipWideOpen() const override {
         return fClip.clipState() == ClipStack::ClipState::kWideOpen;
     }
-    bool onClipIsAA() const override;
-    ClipType onGetClipType() const override;
-    SkIRect onDevClipBounds() const override;
-    void onAsRgnClip(SkRegion*) const override;
+    bool isClipEmpty() const override {
+        return fClip.clipState() == ClipStack::ClipState::kEmpty;
+    }
+    bool isClipRect() const override {
+        return fClip.clipState() == ClipStack::ClipState::kDeviceRect ||
+               fClip.clipState() == ClipStack::ClipState::kWideOpen;
+    }
 
-    void onClipRect(const SkRect& rect, SkClipOp, bool aa) override;
-    void onClipRRect(const SkRRect& rrect, SkClipOp, bool aa) override;
-    void onClipPath(const SkPath& path, SkClipOp, bool aa) override;
+    bool isClipAntiAliased() const override;
+    SkIRect devClipBounds() const override;
+    void android_utils_clipAsRgn(SkRegion*) const override;
 
-    void onClipShader(sk_sp<SkShader> shader) override;
-    void onClipRegion(const SkRegion& globalRgn, SkClipOp) override;
-    void onReplaceClip(const SkIRect& rect) override;
+    void clipRect(const SkRect& rect, SkClipOp, bool aa) override;
+    void clipRRect(const SkRRect& rrect, SkClipOp, bool aa) override;
+    void clipPath(const SkPath& path, SkClipOp, bool aa) override;
+
+    void clipRegion(const SkRegion& globalRgn, SkClipOp) override;
+    void replaceClip(const SkIRect& rect) override;
 
     // Drawing
     void drawPaint(const SkPaint& paint) override;
@@ -132,17 +125,6 @@ private:
 
     // No need to specialize drawDRRect, drawArc, drawRegion, drawPatch as the default impls all
     // route to drawPath, drawRect, or drawVertices as desired.
-
-    // Pixel management
-    sk_sp<SkSurface> makeSurface(const SkImageInfo&, const SkSurfaceProps&) override;
-    SkBaseDevice* onCreateDevice(const CreateInfo&, const SkPaint*) override;
-
-    bool onReadPixels(const SkPixmap&, int x, int y) override;
-
-    bool onWritePixels(const SkPixmap&, int x, int y) override;
-
-    void onDrawGlyphRunList(SkCanvas*, const sktext::GlyphRunList&,
-                            const SkPaint&, const SkPaint&) override;
 
     void drawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4],
                         SkCanvas::QuadAAFlags aaFlags, const SkColor4f& color,
@@ -157,6 +139,8 @@ private:
                        const SkSamplingOptions&, const SkPaint&,
                        SkCanvas::SrcRectConstraint) override;
 
+    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) override;
+
     // TODO: Implement these using per-edge AA quads and an inlined image shader program.
     void drawImageLattice(const SkImage*, const SkCanvas::Lattice&,
                           const SkRect& dst, SkFilterMode, const SkPaint&) override {}
@@ -164,17 +148,38 @@ private:
                    const SkPaint&) override {}
 
     void drawDrawable(SkCanvas*, SkDrawable*, const SkMatrix*) override {}
-    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) override;
     void drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) override {}
     void drawShadow(const SkPath&, const SkDrawShadowRec&) override {}
 
-    void drawDevice(SkBaseDevice*, const SkSamplingOptions&, const SkPaint&) override;
+    // Special images and layers
+    sk_sp<SkSurface> makeSurface(const SkImageInfo&, const SkSurfaceProps&) override;
+
+    sk_sp<SkDevice> createDevice(const CreateInfo&, const SkPaint*) override;
+
+    sk_sp<SkSpecialImage> snapSpecial(const SkIRect& subset, bool forceCopy = false) override;
+
     void drawSpecial(SkSpecialImage*, const SkMatrix& localToDevice,
                      const SkSamplingOptions&, const SkPaint&) override;
+    void drawCoverageMask(const SkSpecialImage*, const SkMatrix& localToDevice,
+                          const SkSamplingOptions&, const SkPaint&) override;
+
+private:
+    class IntersectionTreeSet;
 
     sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
     sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
-    sk_sp<SkSpecialImage> snapSpecial(const SkIRect& subset, bool forceCopy = false) override;
+
+    bool onReadPixels(const SkPixmap&, int x, int y) override;
+
+    bool onWritePixels(const SkPixmap&, int x, int y) override;
+
+    void onDrawGlyphRunList(SkCanvas*, const sktext::GlyphRunList&,
+                            const SkPaint&, const SkPaint&) override;
+
+    void onClipShader(sk_sp<SkShader> shader) override;
+
+    sk_sp<skif::Backend> createImageFilteringBackend(const SkSurfaceProps& surfaceProps,
+                                                     SkColorType colorType) const override;
 
     // DrawFlags alters the effects used by drawShape.
     enum class DrawFlags : unsigned {
@@ -209,27 +214,41 @@ private:
     // the transform, clip, and DrawOrder (although Device still tracks stencil buffer usage).
     void drawClipShape(const Transform&, const Shape&, const Clip&, DrawOrder);
 
+    sktext::gpu::AtlasDrawDelegate atlasDelegate();
     // Handles primitive processing for atlas-based text
     void drawAtlasSubRun(const sktext::gpu::AtlasSubRun*,
                          SkPoint drawOrigin,
                          const SkPaint& paint,
-                         sk_sp<SkRefCnt> subRunStorage);
+                         sk_sp<SkRefCnt> subRunStorage,
+                         sktext::gpu::RendererData);
+
+    sk_sp<sktext::gpu::Slug> convertGlyphRunListToSlug(const sktext::GlyphRunList& glyphRunList,
+                                                       const SkPaint& initialPaint,
+                                                       const SkPaint& drawingPaint) override;
+
+    void drawSlug(SkCanvas*, const sktext::gpu::Slug* slug, const SkPaint& drawingPaint) override;
 
     // Returns the Renderer to draw the shape in the given style. If SkStrokeRec is a
     // stroke-and-fill, this returns the Renderer used for the fill portion and it can be assumed
     // that Renderer::TessellatedStrokes() will be used for the stroke portion.
+    //
+    // Depending on the preferred anti-aliasing quality and platform capabilities (such as compute
+    // shader support), an atlas handler for path rendering may be returned alongside the chosen
+    // Renderer. In that case, all fill, stroke, and stroke-and-fill styles should be rendered with
+    // a single recorded CoverageMask draw and the shape data should be added to the provided atlas
+    // handler to be scheduled for a coverage mask render.
     //
     // TODO: Renderers may have fallbacks (e.g. pre-chop large paths, or convert stroke to fill).
     // Are those handled inside ChooseRenderer() where it can modify the shape, stroke? or does it
     // return a retry error code? or does drawGeometry() handle all the fallbacks, knowing that
     // a particular shape type needs to be pre-chopped?
     // TODO: Move this into a RendererSelector object provided by the Context.
-    const Renderer* chooseRenderer(const Geometry&,
-                                   const Clip&,
-                                   const SkStrokeRec&,
-                                   bool requireMSAA) const;
+    std::pair<const Renderer*, PathAtlas*> chooseRenderer(const Transform& localToDevice,
+                                                          const Geometry&,
+                                                          const SkStrokeRec&,
+                                                          bool requireMSAA) const;
 
-    bool needsFlushBeforeDraw(int numNewDraws) const;
+    bool needsFlushBeforeDraw(int numNewDraws, DstReadRequirement) const;
 
     Recorder* fRecorder;
     sk_sp<DrawContext> fDC;
@@ -250,10 +269,7 @@ private:
 
     const sktext::gpu::SDFTControl fSDFTControl;
 
-    bool fDrawsOverlap;
-
     friend class ClipStack; // for recordDraw
-    friend class sktext::gpu::AtlasSubRun; // for drawAtlasSubRun
 };
 
 SK_MAKE_BITMASK_OPS(Device::DrawFlags)

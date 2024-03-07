@@ -3,13 +3,12 @@
 #include "modules/skparagraph/src/Iterators.h"
 #include "modules/skparagraph/src/OneLineShaper.h"
 #include "src/base/SkUTF.h"
+
 #include <algorithm>
+#include <cstdint>
 #include <unordered_set>
 
-static inline SkUnichar nextUtf8Unit(const char** ptr, const char* end) {
-    SkUnichar val = SkUTF::NextUTF8(ptr, end);
-    return val < 0 ? 0xFFFD : val;
-}
+using namespace skia_private;
 
 namespace skia {
 namespace textlayout {
@@ -156,6 +155,7 @@ void OneLineShaper::finish(const Block& block, SkScalar height, SkScalar& advanc
         }
         fResolvedBlocks.emplace_back(unresolved);
         fUnresolvedGlyphs += unresolved.fGlyphs.width();
+        fParagraph->addUnresolvedCodepoints(unresolved.fText);
     }
 
     // Sort all pieces by text
@@ -359,7 +359,7 @@ void OneLineShaper::iterateThroughFontStyles(TextRange textRange,
                                              SkSpan<Block> styleSpan,
                                              const ShapeSingleFontVisitor& visitor) {
     Block combinedBlock;
-    SkTArray<SkShaper::Feature> features;
+    TArray<SkShaper::Feature> features;
 
     auto addFeatures = [&features](const Block& block) {
         for (auto& ff : block.fStyle.getFontFeatures()) {
@@ -433,10 +433,9 @@ void OneLineShaper::matchResolvedFonts(const TextStyle& textStyle,
             const char* ch = unresolvedText.begin();
             // We have the global cache for all already found typefaces for SkUnichar
             // but we still need to keep track of all SkUnichars used in this unresolved block
-            SkTHashSet<SkUnichar> alreadyTriedCodepoints;
-            SkTHashSet<SkTypefaceID> alreadyTriedTypefaces;
+            THashSet<SkUnichar> alreadyTriedCodepoints;
+            THashSet<SkTypefaceID> alreadyTriedTypefaces;
             while (true) {
-
                 if (ch == unresolvedText.end()) {
                     // Not a single codepoint could be resolved but we finished the block
                     hopelessBlocks.push_back(fUnresolvedBlocks.front());
@@ -444,32 +443,57 @@ void OneLineShaper::matchResolvedFonts(const TextStyle& textStyle,
                     break;
                 }
 
-                // See if we can switch to the next DIFFERENT codepoint
-                SkUnichar unicode = -1;
+                // See if we can switch to the next DIFFERENT codepoint/emoji
+                SkUnichar codepoint = -1;
+                SkUnichar emojiStart = -1;
+                // We may loop until we find a new codepoint/emoji run
                 while (ch != unresolvedText.end()) {
-                    unicode = nextUtf8Unit(&ch, unresolvedText.end());
-                    if (!alreadyTriedCodepoints.contains(unicode)) {
-                        alreadyTriedCodepoints.add(unicode);
+                  emojiStart = OneLineShaper::getEmojiSequenceStart(
+                                                fParagraph->fUnicode.get(),
+                                                &ch,
+                                                unresolvedText.end());
+                    if (emojiStart != -1) {
+                        // We do not keep a cache of emoji runs, but we need to move the cursor
                         break;
+                    } else {
+                        codepoint = SkUTF::NextUTF8WithReplacement(&ch, unresolvedText.end());
+                        if (!alreadyTriedCodepoints.contains(codepoint)) {
+                            alreadyTriedCodepoints.add(codepoint);
+                            break;
+                        }
                     }
                 }
-                SkASSERT(unicode != -1);
 
-                // First try to find in in a cache
-                sk_sp<SkTypeface> typeface;
-                FontKey fontKey(unicode, textStyle.getFontStyle(), textStyle.getLocale());
-                auto found = fFallbackFonts.find(fontKey);
-                if (found != nullptr) {
-                    typeface = *found;
-                } else {
-                    typeface = fParagraph->fFontCollection->defaultFallback(
-                            unicode, textStyle.getFontStyle(), textStyle.getLocale());
+                SkASSERT(codepoint != -1 || emojiStart != -1);
 
-                    if (typeface == nullptr) {
-                        // There is no fallback font for this character, so move on to the next character.
-                        continue;
+                sk_sp<SkTypeface> typeface = nullptr;
+                if (emojiStart == -1) {
+                    // First try to find in in a cache
+                    FontKey fontKey(codepoint, textStyle.getFontStyle(), textStyle.getLocale());
+                    auto found = fFallbackFonts.find(fontKey);
+                    if (found != nullptr) {
+                        typeface = *found;
                     }
-                    fFallbackFonts.set(fontKey, typeface);
+                    if (typeface == nullptr) {
+                        typeface = fParagraph->fFontCollection->defaultFallback(
+                                                    codepoint,
+                                                    textStyle.getFontStyle(),
+                                                    textStyle.getLocale());
+                        if (typeface != nullptr) {
+                            fFallbackFonts.set(fontKey, typeface);
+                        }
+                    }
+                } else {
+                    typeface = fParagraph->fFontCollection->defaultEmojiFallback(
+                                                emojiStart,
+                                                textStyle.getFontStyle(),
+                                                textStyle.getLocale());
+                }
+
+                if (typeface == nullptr) {
+                    // There is no fallback font for this character,
+                    // so move on to the next character.
+                    continue;
                 }
 
                 // Check if we already tried this font on this text range
@@ -594,7 +618,8 @@ bool OneLineShaper::shape() {
             (TextRange textRange, SkSpan<Block> styleSpan, SkScalar& advanceX, TextIndex textStart, uint8_t defaultBidiLevel) {
 
         // Set up the shaper and shape the next
-        auto shaper = SkShaper::MakeShapeDontWrapOrReorder(fParagraph->fUnicode->copy());
+        auto shaper = SkShaper::MakeShapeDontWrapOrReorder(fParagraph->fUnicode->copy(),
+                                                           SkFontMgr::RefEmpty()); // no fallback
         if (shaper == nullptr) {
             // For instance, loadICU does not work. We have to stop the process
             return false;
@@ -602,7 +627,7 @@ bool OneLineShaper::shape() {
 
         iterateThroughFontStyles(textRange, styleSpan,
                 [this, &shaper, defaultBidiLevel, limitlessWidth, &advanceX]
-                (Block block, SkTArray<SkShaper::Feature> features) {
+                (Block block, TArray<SkShaper::Feature> features) {
             auto blockSpan = SkSpan<Block>(&block, 1);
 
             // Start from the beginning (hoping that it's a simple case one block - one run)
@@ -655,7 +680,7 @@ bool OneLineShaper::shape() {
                     fCurrentText = unresolvedRange;
 
                     // Map the block's features to subranges within the unresolved range.
-                    SkTArray<SkShaper::Feature> adjustedFeatures(features.size());
+                    TArray<SkShaper::Feature> adjustedFeatures(features.size());
                     for (const SkShaper::Feature& feature : features) {
                         SkRange<size_t> featureRange(feature.start, feature.end);
                         if (unresolvedRange.intersects(featureRange)) {
@@ -754,11 +779,63 @@ bool OneLineShaper::FontKey::operator==(const OneLineShaper::FontKey& other) con
     return fUnicode == other.fUnicode && fFontStyle == other.fFontStyle && fLocale == other.fLocale;
 }
 
-size_t OneLineShaper::FontKey::Hasher::operator()(const OneLineShaper::FontKey& key) const {
-
+uint32_t OneLineShaper::FontKey::Hasher::operator()(const OneLineShaper::FontKey& key) const {
     return SkGoodHash()(key.fUnicode) ^
            SkGoodHash()(key.fFontStyle) ^
-           SkGoodHash()(key.fLocale.c_str());
+           SkGoodHash()(key.fLocale);
+}
+
+
+// By definition any emoji_sequence starts from a codepoint that has
+// UCHAR_EMOJI property.
+// If the first codepoint does not have UCHAR_EMOJI_COMPONENT property,
+// we have an emoji sequence right away.
+// In two (and only two) cases an emoji sequence starts with a codepoint
+// that also has UCHAR_EMOJI_COMPONENT property.
+// emoji_flag_sequence   := regional_indicator regional_indicator
+// emoji_keycap_sequence := [0-9#*] \x{FE0F 20E3}
+// These two cases require additional checks of the next codepoint(s).
+SkUnichar OneLineShaper::getEmojiSequenceStart(SkUnicode* unicode, const char** begin, const char* end) {
+    const char* next = *begin;
+    auto codepoint1 = SkUTF::NextUTF8WithReplacement(&next, end);
+
+    if (!unicode->isEmoji(codepoint1)) {
+        // This is not a basic emoji nor it an emoji sequence
+        return -1;
+    }
+
+    if (!unicode->isEmojiComponent(codepoint1)) {
+        // This is an emoji sequence start
+        *begin = next;
+        return codepoint1;
+    }
+
+    // Now we need to look at the next codepoint to see what is going on
+    const char* last = next;
+    auto codepoint2 = SkUTF::NextUTF8WithReplacement(&last, end);
+
+    // emoji_flag_sequence
+    if (unicode->isRegionalIndicator(codepoint2)) {
+        // We expect a second regional indicator here
+        if (unicode->isRegionalIndicator(codepoint2)) {
+            *begin = next;
+            return codepoint1;
+        } else {
+            // That really should not happen assuming correct UTF8 text
+            return -1;
+        }
+    }
+
+    // emoji_keycap_sequence
+    if (codepoint2 == 0xFE0F) {
+        auto codepoint3 = SkUTF::NextUTF8WithReplacement(&last, end);
+        if (codepoint3 == 0x20E3) {
+            *begin = next;
+            return codepoint1;
+        }
+    }
+
+    return -1;
 }
 
 }  // namespace textlayout

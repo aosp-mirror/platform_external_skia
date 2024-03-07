@@ -8,7 +8,7 @@
 #include "src/gpu/ganesh/text/GrAtlasManager.h"
 
 #include "include/core/SkColorSpace.h"
-#include "include/core/SkEncodedImageFormat.h"
+#include "include/encode/SkPngEncoder.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/codec/SkMasks.h"
 #include "src/core/SkDistanceFieldGen.h"
@@ -130,7 +130,7 @@ static void get_packed_glyph_image(
                                                      masks.getBlue(color565),
                                                      0xFF);
                 memcpy(dst, &colorRGBA, argbBpp);
-                src = (char*)src + a565Bpp;
+                src = (const char*)src + a565Bpp;
                 dst = (char*)dst + argbBpp;
             }
             dstRow += dstRB;
@@ -248,7 +248,6 @@ void GrAtlasManager::addGlyphToBulkAndSetUseToken(skgpu::BulkUsePlotUpdater* upd
 #include "src/gpu/ganesh/SurfaceContext.h"
 
 #include "include/core/SkBitmap.h"
-#include "include/core/SkImageEncoder.h"
 #include "include/core/SkStream.h"
 #include <stdio.h>
 
@@ -291,7 +290,7 @@ static bool save_pixels(GrDirectContext* dContext, GrSurfaceProxyView view, GrCo
         return false;
     }
 
-    if (!SkEncodeImage(&file, bm, SkEncodedImageFormat::kPNG, 100)) {
+    if (!SkPngEncoder::Encode(&file, bm.pixmap(), {})) {
         SkDebugf("------ failed to encode %s\n", filename);
         remove(filename);   // remove any partial file
         return false;
@@ -365,10 +364,8 @@ bool GrAtlasManager::initAtlas(MaskFormat format) {
 
 namespace sktext::gpu {
 
-std::tuple<bool, int> GlyphVector::regenerateAtlas(int begin, int end,
-                                                   MaskFormat maskFormat,
-                                                   int srcPadding,
-                                                   GrMeshDrawTarget* target) {
+std::tuple<bool, int> GlyphVector::regenerateAtlasForGanesh(
+        int begin, int end, MaskFormat maskFormat, int srcPadding, GrMeshDrawTarget* target) {
     GrAtlasManager* atlasManager = target->atlasManager();
     GrDeferredUploadTarget* uploadTarget = target->deferredUploadTarget();
 

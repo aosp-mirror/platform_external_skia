@@ -22,6 +22,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
+#include "tools/fonts/FontToolUtils.h"
 
 static sk_sp<SkShader> make_heatGradient(const SkPoint pts[2]) {
     const SkColor bw[] = { SK_ColorBLACK, SK_ColorWHITE };
@@ -40,13 +41,9 @@ static sk_sp<SkShader> make_heatGradient(const SkPoint pts[2]) {
 
 class GammaTextGM : public skiagm::GM {
 protected:
-    SkString onShortName() override {
-        return SkString("gammatext");
-    }
+    SkString getName() const override { return SkString("gammatext"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(1024, HEIGHT);
-    }
+    SkISize getISize() override { return SkISize::Make(1024, HEIGHT); }
 
     static void drawGrad(SkCanvas* canvas) {
         const SkPoint pts[] = { { 0, 0 }, { 0, SkIntToScalar(HEIGHT) } };
@@ -71,7 +68,8 @@ protected:
         const char* text = "Hamburgefons";
 
         SkPaint paint;
-        SkFont font(nullptr, 16);
+        SkFont font = ToolUtils::DefaultPortableFont();
+        font.setSize(16);
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
 
         SkScalar x = SkIntToScalar(10);
@@ -129,13 +127,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("gammagradienttext");
-    }
+    SkString getName() const override { return SkString("gammagradienttext"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(300, 300);
-    }
+    SkISize getISize() override { return SkISize::Make(300, 300); }
 
     void onOnceBeforeDraw() override {
         for (size_t i = 0; i < std::size(fShaders); ++i) {
@@ -146,7 +140,9 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         paint.setAntiAlias(true);
-        SkFont font(SkTypeface::MakeFromName("serif", SkFontStyle::Italic()), 18);
+        sk_sp<SkTypeface> tf = ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Italic());
+        SkASSERT(tf);
+        SkFont font(tf, 18);
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
 
         for (size_t i = 0; i < std::size(fShaders); ++i) {

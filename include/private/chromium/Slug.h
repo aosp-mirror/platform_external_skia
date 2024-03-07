@@ -8,27 +8,24 @@
 #ifndef sktext_gpu_Slug_DEFINED
 #define sktext_gpu_Slug_DEFINED
 
-#include "include/core/SkData.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkSerialProcs.h"  // IWYU pragma: keep
+#include "include/private/base/SkAPI.h"
+
+#include <cstddef>
+#include <cstdint>
 
 class SkCanvas;
-class SkMatrix;
+class SkData;
 class SkPaint;
-class SkTextBlob;
 class SkReadBuffer;
 class SkStrikeClient;
+class SkTextBlob;
 class SkWriteBuffer;
+struct SkPoint;
 
 namespace sktext::gpu {
-
-// You can use Slug to simulate drawTextBlob by defining the following at compile time.
-//    SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG
-// You can use Slug serialization to simulate drawTextBlob by defining the following:
-//    SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG_SERIALIZE
-// For Skia, add this to your args.gn file.
-//    extra_cflags = ["-D", "SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG"]
-
 // Slug encapsulates an SkTextBlob at a specific origin, using a specific paint. It can be
 // manipulated using matrix and clip changes to the canvas. If the canvas is transformed, then
 // the Slug will also transform with smaller glyphs using bi-linear interpolation to render. You
@@ -41,15 +38,19 @@ public:
             SkCanvas* canvas, const SkTextBlob& blob, SkPoint origin, const SkPaint& paint);
 
     // Serialize the slug.
-    sk_sp<SkData> serialize() const;
-    size_t serialize(void* buffer, size_t size) const;
+    sk_sp<SkData> serialize(const SkSerialProcs& procs = {}) const;
+    size_t serialize(void* buffer, size_t size, const SkSerialProcs& procs = {}) const;
 
     // Set the client parameter to the appropriate SkStrikeClient when typeface ID translation
     // is needed.
-    static sk_sp<Slug> Deserialize(
-            const void* data, size_t size, const SkStrikeClient* client = nullptr);
+    static sk_sp<Slug> Deserialize(const void* data,
+                                   size_t size,
+                                   const SkStrikeClient* client = nullptr,
+                                   const SkDeserialProcs& procs = {});
     static sk_sp<Slug> MakeFromBuffer(SkReadBuffer& buffer);
 
+    // Allows clients to deserialize SkPictures that contain slug data
+    static void AddDeserialProcs(SkDeserialProcs* procs, const SkStrikeClient* client = nullptr);
 
     // Draw the Slug obeying the canvas's mapping and clipping.
     void draw(SkCanvas* canvas) const;
@@ -70,6 +71,7 @@ private:
     static uint32_t NextUniqueID();
     const uint32_t  fUniqueID{NextUniqueID()};
 };
+
 
 }  // namespace sktext::gpu
 

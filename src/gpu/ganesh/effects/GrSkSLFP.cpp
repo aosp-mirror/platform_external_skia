@@ -7,23 +7,45 @@
 
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
 
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkData.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/effects/SkOverdrawColorFilter.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "include/private/SkSLString.h"
-#include "include/private/gpu/ganesh/GrContext_Base.h"
+#include "include/private/SkSLSampleUsage.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkTo.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/base/SkArenaAlloc.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineOpContexts.h"
+#include "src/core/SkRasterPipelineOpList.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/core/SkSLTypeShared.h"
-#include "src/core/SkVM.h"
 #include "src/gpu/KeyBuilder.h"
-#include "src/gpu/ganesh/GrBaseContextPriv.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
-#include "src/gpu/ganesh/GrTexture.h"
+#include "src/gpu/ganesh/GrColorSpaceXform.h"
+#include "src/gpu/ganesh/GrFragmentProcessors.h"
+#include "src/gpu/ganesh/GrShaderVar.h"
 #include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/ganesh/glsl/GrGLSLProgramBuilder.h"
+#include "src/gpu/ganesh/glsl/GrGLSLUniformHandler.h"
+#include "src/sksl/SkSLString.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
+#include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "src/sksl/ir/SkSLProgram.h"
+#include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
+#include "src/sksl/ir/SkSLVariable.h"
+
+#include <algorithm>
+
+namespace SkSL { class Context; }
+struct GrShaderCaps;
 
 class GrSkSLFP::Impl : public ProgramImpl {
 public:
@@ -50,7 +72,7 @@ public:
                 const SkSL::Variable* var = decl->var();
                 if (var->type().isOpaque()) {
                     // Nothing to do. The only opaque types we should see are children, and those
-                    // are handled specially, above.
+                    // are handled specially.
                     SkASSERT(var->type().isEffectChild());
                     return std::string(var->name());
                 }
@@ -139,14 +161,16 @@ public:
                 if (child && child->sampleUsage().isPassThrough()) {
                     coords.clear();
                 }
-                return std::string(fSelf->invokeChild(index, fInputColor, fArgs, coords).c_str());
+                return child ? std::string(fSelf->invokeChild(index, fInputColor, fArgs, coords)
+                                                   .c_str())
+                             : std::string("half4(0)");
             }
 
             std::string sampleColorFilter(int index, std::string color) override {
                 return std::string(fSelf->invokeChild(index,
-                                                 color.empty() ? fInputColor : color.c_str(),
-                                                 fArgs)
-                                      .c_str());
+                                                      color.empty() ? fInputColor : color.c_str(),
+                                                      fArgs)
+                                           .c_str());
             }
 
             std::string sampleBlender(int index, std::string src, std::string dst) override {
@@ -268,7 +292,7 @@ std::unique_ptr<GrSkSLFP> GrSkSLFP::MakeWithData(
         sk_sp<SkColorSpace> dstColorSpace,
         std::unique_ptr<GrFragmentProcessor> inputFP,
         std::unique_ptr<GrFragmentProcessor> destColorFP,
-        sk_sp<const SkData> uniforms,
+        const sk_sp<const SkData>& uniforms,
         SkSpan<std::unique_ptr<GrFragmentProcessor>> childFPs) {
     if (uniforms->size() != effect->uniformSize()) {
         return nullptr;
@@ -288,17 +312,22 @@ std::unique_ptr<GrSkSLFP> GrSkSLFP::MakeWithData(
         fp->setDestColorFP(std::move(destColorFP));
     }
     if (fp->fEffect->usesColorTransform() && dstColorSpace) {
-        fp->addColorTransformChildren(std::move(dstColorSpace));
+        fp->addColorTransformChildren(dstColorSpace.get());
     }
     return fp;
 }
 
+GrFragmentProcessor::OptimizationFlags GrSkSLFP::DetermineOptimizationFlags(
+        OptFlags of, SkRuntimeEffect* effect) {
+    OptimizationFlags optFlags = static_cast<OptimizationFlags>(of);
+    if (SkRuntimeEffectPriv::SupportsConstantOutputForConstantInput(effect)) {
+        optFlags |= kConstantOutputForConstantInput_OptimizationFlag;
+    }
+    return optFlags;
+}
+
 GrSkSLFP::GrSkSLFP(sk_sp<SkRuntimeEffect> effect, const char* name, OptFlags optFlags)
-        : INHERITED(kGrSkSLFP_ClassID,
-                    static_cast<OptimizationFlags>(optFlags) |
-                            (effect->getFilterColorProgram()
-                                     ? kConstantOutputForConstantInput_OptimizationFlag
-                                     : kNone_OptimizationFlags))
+        : INHERITED(kGrSkSLFP_ClassID, DetermineOptimizationFlags(optFlags, effect.get()))
         , fEffect(std::move(effect))
         , fName(name)
         , fUniformSize(SkToU32(fEffect->uniformSize())) {
@@ -332,6 +361,7 @@ void GrSkSLFP::addChild(std::unique_ptr<GrFragmentProcessor> child, bool mergeOp
     if (mergeOptFlags) {
         this->mergeOptimizationFlags(ProcessorOptimizationFlags(child.get()));
     }
+    this->clearConstantOutputForConstantInputFlag();
     this->registerChild(std::move(child), fEffect->fSampleUsages[childIndex]);
 }
 
@@ -352,7 +382,7 @@ void GrSkSLFP::setDestColorFP(std::unique_ptr<GrFragmentProcessor> destColorFP) 
     this->registerChild(std::move(destColorFP), SkSL::SampleUsage::PassThrough());
 }
 
-void GrSkSLFP::addColorTransformChildren(sk_sp<SkColorSpace> dstColorSpace) {
+void GrSkSLFP::addColorTransformChildren(SkColorSpace* dstColorSpace) {
     SkASSERTF(fToLinearSrgbChildIndex == -1 && fFromLinearSrgbChildIndex == -1,
               "addColorTransformChildren should not be called more than once");
 
@@ -360,14 +390,14 @@ void GrSkSLFP::addColorTransformChildren(sk_sp<SkColorSpace> dstColorSpace) {
     // invoked, but each one injects a collection of uniforms and helper functions. Doing it
     // this way leverages per-FP name mangling to avoid conflicts.
     auto workingToLinear = GrColorSpaceXformEffect::Make(nullptr,
-                                                         dstColorSpace.get(),
+                                                         dstColorSpace,
                                                          kUnpremul_SkAlphaType,
                                                          sk_srgb_linear_singleton(),
                                                          kUnpremul_SkAlphaType);
     auto linearToWorking = GrColorSpaceXformEffect::Make(nullptr,
                                                          sk_srgb_linear_singleton(),
                                                          kUnpremul_SkAlphaType,
-                                                         dstColorSpace.get(),
+                                                         dstColorSpace,
                                                          kUnpremul_SkAlphaType);
 
     fToLinearSrgbChildIndex = this->numChildProcessors();
@@ -421,30 +451,54 @@ std::unique_ptr<GrFragmentProcessor> GrSkSLFP::clone() const {
 }
 
 SkPMColor4f GrSkSLFP::constantOutputForConstantInput(const SkPMColor4f& inputColor) const {
-    const SkFilterColorProgram* program = fEffect->getFilterColorProgram();
-    SkASSERT(program);
+    SkPMColor4f color = (fInputChildIndex >= 0)
+            ? ConstantOutputForConstantInput(this->childProcessor(fInputChildIndex), inputColor)
+            : inputColor;
 
-    auto evalChild = [&](int index, SkPMColor4f color) {
-        return ConstantOutputForConstantInput(this->childProcessor(index), color);
+    class ConstantOutputForConstantInput_SkRPCallbacks : public SkSL::RP::Callbacks {
+    public:
+        bool appendShader(int index) override {
+           SkDEBUGFAIL("constant-output-for-constant-input unsupported when child shaders present");
+           return false;
+        }
+        bool appendColorFilter(int index) override {
+           SkDEBUGFAIL("constant-output-for-constant-input unsupported when child shaders present");
+           return false;
+        }
+        bool appendBlender(int index) override {
+           SkDEBUGFAIL("constant-output-for-constant-input unsupported when child shaders present");
+           return false;
+        }
+        void toLinearSrgb(const void* color) override { /* identity color conversion */ }
+        void fromLinearSrgb(const void* color) override { /* identity color conversion */ }
     };
 
-    SkPMColor4f color = (fInputChildIndex >= 0)
-                                ? ConstantOutputForConstantInput(
-                                          this->childProcessor(fInputChildIndex), inputColor)
-                                : inputColor;
-    return program->eval(color, this->uniformData(), evalChild);
+    if (const SkSL::RP::Program* program = fEffect->getRPProgram(/*debugTrace=*/nullptr)) {
+        // No color conversion is happening here, so we can use untransformed uniforms.
+        SkSpan<const float> uniforms{reinterpret_cast<const float*>(this->uniformData()),
+                                     fUniformSize / sizeof(float)};
+        SkSTArenaAlloc<2048> alloc;  // sufficient for a tiny SkSL program
+        SkRasterPipeline pipeline(&alloc);
+        pipeline.appendConstantColor(&alloc, color.vec());
+        ConstantOutputForConstantInput_SkRPCallbacks callbacks;
+        if (program->appendStages(&pipeline, &alloc, &callbacks, uniforms)) {
+            SkPMColor4f outputColor;
+            SkRasterPipeline_MemoryCtx outputCtx = {&outputColor, 0};
+            pipeline.append(SkRasterPipelineOp::store_f32, &outputCtx);
+            pipeline.run(0, 0, 1, 1);
+            return outputColor;
+        }
+    }
+
+    // We weren't able to run the Raster Pipeline program.
+    return color;
 }
 
 /**************************************************************************************************/
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrSkSLFP)
 
-#if GR_TEST_UTILS
-
-#include "include/effects/SkOverdrawColorFilter.h"
-#include "src/core/SkColorFilterBase.h"
-
-extern const char* SKSL_OVERDRAW_SRC;
+#if defined(GR_TEST_UTILS)
 
 std::unique_ptr<GrFragmentProcessor> GrSkSLFP::TestCreate(GrProcessorTestData* d) {
     SkColor colors[SkOverdrawColorFilter::kNumColors];
@@ -453,8 +507,8 @@ std::unique_ptr<GrFragmentProcessor> GrSkSLFP::TestCreate(GrProcessorTestData* d
     }
     auto filter = SkOverdrawColorFilter::MakeWithSkColors(colors);
     SkSurfaceProps props; // default props for testing
-    auto [success, fp] = as_CFB(filter)->asFragmentProcessor(/*inputFP=*/nullptr, d->context(),
-                                                             GrColorInfo{}, props);
+    auto [success, fp] = GrFragmentProcessors::Make(
+            d->context(), filter.get(), /*inputFP=*/nullptr, GrColorInfo{}, props);
     SkASSERT(success);
     return std::move(fp);
 }

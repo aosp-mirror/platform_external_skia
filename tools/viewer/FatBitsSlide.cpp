@@ -8,6 +8,7 @@
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
@@ -23,6 +24,7 @@
 #include "include/core/SkTypes.h"
 #include "src/core/SkPointPriv.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 #include "tools/viewer/Slide.h"
 
@@ -109,9 +111,9 @@ public:
         fShader = fShader0;
 
         SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
-        fMinSurface = SkSurface::MakeRaster(info);
+        fMinSurface = SkSurfaces::Raster(info);
         info = info.makeWH(width * zoom, height * zoom);
-        fMaxSurface = SkSurface::MakeRaster(info);
+        fMaxSurface = SkSurfaces::Raster(info);
     }
 
     void drawBG(SkCanvas*);
@@ -457,7 +459,7 @@ public:
                        fFB.getUseClip() ? "clip" : "noclip");
             SkPaint paint;
             paint.setColor(SK_ColorBLUE);
-            SkFont font(nullptr, 16);
+            SkFont font(ToolUtils::DefaultTypeface(), 16);
             canvas->drawString(str, 10, 16, font, paint);
         }
     }

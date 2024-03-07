@@ -39,7 +39,7 @@ public:
     const Caps* caps() const { return fCaps.get(); }
 
     BackendApi backend() const { return fBackend; }
-    Protected isProtected() const { return fProtected; }
+    Protected isProtected() const;
 
     GlobalCache* globalCache() { return &fGlobalCache; }
     const GlobalCache* globalCache() const { return &fGlobalCache; }
@@ -49,7 +49,9 @@ public:
     ShaderCodeDictionary* shaderCodeDictionary() { return &fShaderDictionary; }
     const ShaderCodeDictionary* shaderCodeDictionary() const { return &fShaderDictionary; }
 
-    virtual std::unique_ptr<ResourceProvider> makeResourceProvider(SingleOwner*) = 0;
+    virtual std::unique_ptr<ResourceProvider> makeResourceProvider(SingleOwner*,
+                                                                   uint32_t recorderID,
+                                                                   size_t resourceBudget) = 0;
 
 protected:
     SharedContext(std::unique_ptr<const Caps>, BackendApi);
@@ -63,7 +65,6 @@ private:
     std::unique_ptr<const Caps> fCaps; // Provided by backend subclass
 
     BackendApi fBackend;
-    Protected fProtected;
     GlobalCache fGlobalCache;
     std::unique_ptr<RendererProvider> fRendererProvider;
     ShaderCodeDictionary fShaderDictionary;

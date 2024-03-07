@@ -18,12 +18,11 @@ import (
 	"go.skia.org/infra/task_driver/go/lib/bazel"
 	"go.skia.org/infra/task_driver/go/lib/os_steps"
 	"go.skia.org/infra/task_driver/go/td"
+	"go.skia.org/skia/infra/bots/task_drivers/common"
 )
 
 var (
 	// Required properties for this task.
-	cachePath = flag.String("cache_path", "/mnt/pd0/bazel_cache", "The path where the Bazel cache should live. This should be able to hold tens of GB at least.")
-	config    = flag.String("test_config", "", "A custom configuration specified in //bazel/buildrc. This configuration potentially encapsulates many features and options.")
 	projectId = flag.String("project_id", "", "ID of the Google Cloud project.")
 	taskId    = flag.String("task_id", "", "ID of this task.")
 	taskName  = flag.String("task_name", "", "Name of the task.")
@@ -34,9 +33,16 @@ var (
 )
 
 func main() {
+	bazelFlags := common.MakeBazelFlags(common.MakeBazelFlagsOpts{
+		Label:  true,
+		Config: true,
+	})
+
 	// StartRun calls flag.Parse()
 	ctx := td.StartRun(projectId, taskId, taskName, output, local)
 	defer td.EndRun(ctx)
+
+	bazelFlags.Validate(ctx)
 
 	wd, err := os_steps.Abs(ctx, *workdir)
 	if err != nil {
@@ -47,16 +53,14 @@ func main() {
 	opts := bazel.BazelOptions{
 		// We want the cache to be on a bigger disk than default. The root disk, where the home
 		// directory (and default Bazel cache) lives, is only 15 GB on our GCE VMs.
-		CachePath: *cachePath,
+		CachePath: *bazelFlags.CacheDir,
 	}
 	if err := bazel.EnsureBazelRCFile(ctx, opts); err != nil {
 		td.Fatal(ctx, err)
 	}
 
-	testLib := "//experimental/bazel_test/client:client_lib"
-
 	// This build should succeed
-	if err := bazelBuild(ctx, skiaDir, testLib, *config); err != nil {
+	if err := bazelBuild(ctx, skiaDir, *bazelFlags.Label, *bazelFlags.Config); err != nil {
 		td.Fatal(ctx, err)
 	}
 
@@ -68,7 +72,13 @@ func main() {
 		"SOURCE_INCLUDES_PRIVATE_HEADER",
 	}
 	for _, define := range definesToIncludeExtraHeaders {
-		if err := expectFailure(ctx, skiaDir, testLib, *config, define); err != nil {
+		if err := expectFailure(ctx, skiaDir, *bazelFlags.Label, *bazelFlags.Config, define); err != nil {
+			td.Fatal(ctx, err)
+		}
+	}
+
+	if !*local {
+		if err := common.BazelCleanIfLowDiskSpace(ctx, *bazelFlags.CacheDir, skiaDir, "bazelisk"); err != nil {
 			td.Fatal(ctx, err)
 		}
 	}

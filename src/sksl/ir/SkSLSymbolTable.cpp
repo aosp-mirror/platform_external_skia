@@ -7,6 +7,7 @@
 
 #include "src/sksl/ir/SkSLSymbolTable.h"
 
+#include "src/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLType.h"
@@ -30,6 +31,29 @@ const Symbol* SymbolTable::findBuiltinSymbol(std::string_view name) const {
         return fParent ? fParent->findBuiltinSymbol(name) : nullptr;
     }
     return this->find(name);
+}
+
+bool SymbolTable::wouldShadowSymbolsFrom(const SymbolTable* other) const {
+    // We are checking two hash maps for overlap; we always iterate over the smaller one to minimize
+    // the total number of checks.
+    const SymbolTable* self = this;
+    if (self->count() > other->count()) {
+        std::swap(self, other);
+    }
+
+    bool foundShadow = false;
+
+    self->fSymbols.foreach([&](const SymbolKey& key, const Symbol* symbol) {
+        if (foundShadow) {
+            // We've already found a shadowed symbol; stop searching.
+            return;
+        }
+        if (other->fSymbols.find(key) != nullptr) {
+            foundShadow = true;
+        }
+    });
+
+    return foundShadow;
 }
 
 Symbol* SymbolTable::lookup(const SymbolKey& key) const {
@@ -64,6 +88,11 @@ const std::string* SymbolTable::takeOwnershipOfString(std::string str) {
 }
 
 void SymbolTable::addWithoutOwnership(Symbol* symbol) {
+    if (symbol->name().empty()) {
+        // We have legitimate use cases of nameless symbols, such as anonymous function parameters.
+        // If we find one here, we don't need to add its name to the symbol table.
+        return;
+    }
     auto key = MakeSymbolKey(symbol->name());
 
     // If this is a function declaration, we need to keep the overload chain in sync.
@@ -79,20 +108,20 @@ void SymbolTable::addWithoutOwnership(Symbol* symbol) {
         }
     }
 
+    Position pos = symbol->fPosition;
     if (fAtModuleBoundary && fParent && fParent->lookup(key)) {
         // We are attempting to declare a symbol at global scope that already exists in a parent
         // module. This is a duplicate symbol and should be rejected.
     } else {
-        Symbol*& refInSymbolTable = fSymbols[key];
-
-        if (refInSymbolTable == nullptr) {
-            refInSymbolTable = symbol;
+        std::swap(symbol, fSymbols[key]);
+        if (symbol == nullptr) {
             return;
         }
+        // There was previously a symbol in the symbol table with this name; report an error.
     }
 
     ThreadContext::ReportError("symbol '" + std::string(symbol->name()) + "' was already defined",
-                               symbol->fPosition);
+                               pos);
 }
 
 void SymbolTable::injectWithoutOwnership(Symbol* symbol) {

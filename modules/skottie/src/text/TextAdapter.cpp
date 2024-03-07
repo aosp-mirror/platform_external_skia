@@ -81,8 +81,9 @@ static float align_factor(SkTextUtils::Align a) {
 
 class TextAdapter::GlyphDecoratorNode final : public sksg::Group {
 public:
-    GlyphDecoratorNode(sk_sp<GlyphDecorator> decorator)
+    GlyphDecoratorNode(sk_sp<GlyphDecorator> decorator, float scale)
         : fDecorator(std::move(decorator))
+        , fScale(scale)
     {}
 
     ~GlyphDecoratorNode() override = default;
@@ -95,7 +96,7 @@ public:
 
         for (size_t i = 0; i < recs.size(); ++i) {
             const auto& rec = recs[i];
-            fFragInfo[i] = {rec.fOrigin, rec.fGlyphs, rec.fMatrixNode};
+            fFragInfo[i] = {rec.fGlyphs, rec.fMatrixNode, rec.fAdvance};
         }
 
         SkASSERT(!fDecoratorInfo);
@@ -112,6 +113,7 @@ public:
             fDecoratorInfo[i].fMatrix = sksg::TransformPriv::As<SkMatrix>(fFragInfo[i].fMatrixNode);
 
             fDecoratorInfo[i].fCluster = glyphs->fClusters.empty() ? 0 : glyphs->fClusters.front();
+            fDecoratorInfo[i].fAdvance = fFragInfo[i].fAdvance;
         }
 
         return child_bounds;
@@ -123,17 +125,22 @@ public:
                                                                        true);
         this->INHERITED::onRender(canvas, local_ctx);
 
-        fDecorator->onDecorate(canvas, fDecoratorInfo.get(), fFragCount);
+        fDecorator->onDecorate(canvas, {
+            SkSpan(fDecoratorInfo.get(), fFragCount),
+            fScale
+        });
     }
 
 private:
     struct FragmentInfo {
-        SkPoint                     fOrigin;
         const Shaper::ShapedGlyphs* fGlyphs;
         sk_sp<sksg::Matrix<SkM44>>  fMatrixNode;
+        float                       fAdvance;
     };
 
     const sk_sp<GlyphDecorator>                  fDecorator;
+    const float                                  fScale;
+
     std::unique_ptr<FragmentInfo[]>              fFragInfo;
     std::unique_ptr<GlyphDecorator::GlyphInfo[]> fDecoratorInfo;
     size_t                                       fFragCount;
@@ -287,7 +294,8 @@ sk_sp<TextAdapter> TextAdapter::Make(const skjson::ObjectValue& jlayer,
     //                },
     //                "t": 0
     //            }
-    //        ]
+    //        ],
+    //        "sid": "optionalSlotID"
     //    },
     //    "m": { // more options
     //           "g": 1,     // Anchor Point Grouping
@@ -389,8 +397,7 @@ sk_sp<TextAdapter> TextAdapter::Make(const skjson::ObjectValue& jlayer,
     };
 
     adapter->fPathInfo = attach_path((*jt)["p"]);
-
-    abuilder->dispatchTextProperty(adapter);
+    abuilder->dispatchTextProperty(adapter, jd);
 
     return adapter;
 }
@@ -411,24 +418,39 @@ TextAdapter::TextAdapter(sk_sp<SkFontMgr> fontmgr,
 TextAdapter::~TextAdapter() = default;
 
 std::vector<sk_sp<sksg::RenderNode>>
-TextAdapter::buildGlyphCompNodes(Shaper::Fragment& frag) const {
+TextAdapter::buildGlyphCompNodes(Shaper::ShapedGlyphs& glyphs) const {
     std::vector<sk_sp<sksg::RenderNode>> draws;
 
     if (fCustomGlyphMapper) {
-        size_t offset = 0;
-        for (const auto& run : frag.fGlyphs.fRuns) {
+        size_t run_offset = 0;
+        for (auto& run : glyphs.fRuns) {
             for (size_t i = 0; i < run.fSize; ++i) {
-                const SkGlyphID gid = frag.fGlyphs.fGlyphIDs[offset + i];
+                const size_t goffset = run_offset + i;
+                const SkGlyphID  gid = glyphs.fGlyphIDs[goffset];
 
                 if (auto gcomp = fCustomGlyphMapper->getGlyphComp(run.fFont.getTypeface(), gid)) {
                     // Position and scale the "glyph".
-                    const auto m = SkMatrix::Translate(frag.fGlyphs.fGlyphPos[offset + i])
-                                 * SkMatrix::Scale(fText->fTextSize, fText->fTextSize);
+                    const auto m = SkMatrix::Translate(glyphs.fGlyphPos[goffset])
+                                 * SkMatrix::Scale(fText->fTextSize*fTextShapingScale,
+                                                   fText->fTextSize*fTextShapingScale);
 
                     draws.push_back(sksg::TransformEffect::Make(std::move(gcomp), m));
+
+                    // Remove all related data from the fragment, so we don't attempt to render
+                    // this as a regular glyph.
+                    SkASSERT(glyphs.fGlyphIDs.size() > goffset);
+                    glyphs.fGlyphIDs.erase(glyphs.fGlyphIDs.begin() + goffset);
+                    SkASSERT(glyphs.fGlyphPos.size() > goffset);
+                    glyphs.fGlyphPos.erase(glyphs.fGlyphPos.begin() + goffset);
+                    if (!glyphs.fClusters.empty()) {
+                        SkASSERT(glyphs.fClusters.size() > goffset);
+                        glyphs.fClusters.erase(glyphs.fClusters.begin() + goffset);
+                    }
+                    i         -= 1;
+                    run.fSize -= 1;
                 }
             }
-            offset += run.fSize;
+            run_offset += run.fSize;
         }
     }
 
@@ -454,11 +476,9 @@ void TextAdapter::addFragment(Shaper::Fragment& frag, sksg::Group* container) {
                                                                  frag.fOrigin.y()));
 
     // Start off substituting existing comp nodes for all composition-based glyphs.
-    std::vector<sk_sp<sksg::RenderNode>> draws = this->buildGlyphCompNodes(frag);
+    std::vector<sk_sp<sksg::RenderNode>> draws = this->buildGlyphCompNodes(frag.fGlyphs);
 
     // Use a regular GlyphTextNode for the remaining glyphs (backed by a real SkTypeface).
-    // Note: comp glyph IDs are still present in the list, but they don't draw anything
-    //       (using empty path in SkCustomTypeface).
     auto text_node = sk_make_sp<GlyphTextNode>(std::move(frag.fGlyphs));
     rec.fGlyphs = text_node->glyphs();
 
@@ -599,7 +619,7 @@ uint32_t TextAdapter::shaperFlags() const {
         flags |= Shaper::Flags::kFragmentGlyphs;
     }
 
-    if (fRequiresAnchorPoint) {
+    if (fRequiresAnchorPoint || fText->fDecorator) {
         flags |= Shaper::Flags::kTrackFragmentAdvanceAscent;
     }
 
@@ -631,6 +651,8 @@ void TextAdapter::reshape() {
         fText->fCapitalization,
         fText->fMaxLines,
         this->shaperFlags(),
+        fText->fLocale.isEmpty()     ? nullptr : fText->fLocale.c_str(),
+        fText->fFontFamily.isEmpty() ? nullptr : fText->fFontFamily.c_str(),
     };
     auto shape_result = Shaper::Shape(fText->fText, text_desc, fText->fBox, fFontMgr);
 
@@ -696,7 +718,7 @@ void TextAdapter::reshape() {
     sksg::Group* container = fRoot.get();
     sk_sp<GlyphDecoratorNode> decorator_node;
     if (fText->fDecorator) {
-        decorator_node = sk_make_sp<GlyphDecoratorNode>(fText->fDecorator);
+        decorator_node = sk_make_sp<GlyphDecoratorNode>(fText->fDecorator, fTextShapingScale);
         container = decorator_node.get();
     }
 

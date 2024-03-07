@@ -11,6 +11,9 @@
 #include "include/core/SkRect.h"
 #include "src/base/SkMathPriv.h"
 
+class SkM44;
+class SkMatrix;
+
 class SkRectPriv {
 public:
     // Returns an irect that is very large, and can be safely round-trip with SkRect and still
@@ -54,18 +57,13 @@ public:
                SkFitsInFixed(r.fRight) && SkFitsInFixed(r.fBottom);
     }
 
-    static bool Is16Bit(const SkIRect& r) {
-        return  SkTFitsIn<int16_t>(r.fLeft)  && SkTFitsIn<int16_t>(r.fTop) &&
-                SkTFitsIn<int16_t>(r.fRight) && SkTFitsIn<int16_t>(r.fBottom);
-    }
-
     // Returns r.width()/2 but divides first to avoid width() overflowing.
-    static SkScalar HalfWidth(const SkRect& r) {
-        return SkScalarHalf(r.fRight) - SkScalarHalf(r.fLeft);
+    static constexpr float HalfWidth(const SkRect& r) {
+        return sk_float_midpoint(-r.fLeft, r.fRight);
     }
     // Returns r.height()/2 but divides first to avoid height() overflowing.
-    static SkScalar HalfHeight(const SkRect& r) {
-        return SkScalarHalf(r.fBottom) - SkScalarHalf(r.fTop);
+    static constexpr float HalfHeight(const SkRect& r) {
+        return sk_float_midpoint(-r.fTop, r.fBottom);
     }
 
     // Evaluate A-B. If the difference shape cannot be represented as a rectangle then false is
@@ -86,6 +84,23 @@ public:
         Subtract(a, b, &diff);
         return diff;
     }
+
+    // Returns true if the quadrilateral formed by transforming the four corners of 'a' contains 'b'
+    // 'tol' is in the same coordinate space as 'b', to treat 'b' as 'tol' units inset.
+    static bool QuadContainsRect(const SkMatrix& m,
+                                 const SkIRect& a,
+                                 const SkIRect& b,
+                                 float tol=0.f);
+    static bool QuadContainsRect(const SkM44& m, const SkRect& a, const SkRect& b, float tol=0.f);
+
+    // Assuming 'src' does not intersect 'dst', returns the edge or corner of 'src' that is closest
+    // to 'dst', e.g. the pixels that would be sampled from 'src' when clamp-tiled into 'dst'.
+    //
+    // The returned rectangle will not be empty if 'src' is not empty and 'dst' is not empty.
+    // At least one of its width or height will be equal to 1 (possibly both if a corner is closest)
+    //
+    // Returns src.intersect(dst) if they do actually intersect.
+    static SkIRect ClosestDisjointEdge(const SkIRect& src, const SkIRect& dst);
 };
 
 
