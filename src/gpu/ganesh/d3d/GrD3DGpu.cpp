@@ -8,13 +8,16 @@
 #include "src/gpu/ganesh/d3d/GrD3DGpu.h"
 
 #include "include/core/SkColorSpace.h"
+#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/d3d/GrD3DBackendContext.h"
+#include "src/base/SkRectMemcpy.h"
 #include "src/core/SkCompressedDataUtils.h"
-#include "src/core/SkConvertPixels.h"
 #include "src/core/SkMipmap.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
 #include "src/gpu/ganesh/GrDataUtils.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrResourceProvider.h"
 #include "src/gpu/ganesh/GrTexture.h"
 #include "src/gpu/ganesh/GrThreadSafePipelineBuilder.h"
 #include "src/gpu/ganesh/d3d/GrD3DAMDMemoryAllocator.h"
@@ -28,7 +31,7 @@
 #include "src/gpu/ganesh/d3d/GrD3DUtil.h"
 #include "src/sksl/SkSLCompiler.h"
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 #include <DXProgrammableCapture.h>
 #endif
 
@@ -43,8 +46,9 @@ sk_sp<GrThreadSafePipelineBuilder> GrD3DGpu::refPipelineBuilder() {
 }
 
 
-sk_sp<GrGpu> GrD3DGpu::Make(const GrD3DBackendContext& backendContext,
-                            const GrContextOptions& contextOptions, GrDirectContext* direct) {
+std::unique_ptr<GrGpu> GrD3DGpu::Make(const GrD3DBackendContext& backendContext,
+                                      const GrContextOptions& contextOptions,
+                                      GrDirectContext* direct) {
     sk_sp<GrD3DMemoryAllocator> memoryAllocator = backendContext.fMemoryAllocator;
     if (!memoryAllocator) {
         // We were not given a memory allocator at creation
@@ -56,7 +60,10 @@ sk_sp<GrGpu> GrD3DGpu::Make(const GrD3DBackendContext& backendContext,
         return nullptr;
     }
 
-    return sk_sp<GrGpu>(new GrD3DGpu(direct, contextOptions, backendContext, memoryAllocator));
+    return std::unique_ptr<GrGpu>(new GrD3DGpu(direct,
+                                               contextOptions,
+                                               backendContext,
+                                               memoryAllocator));
 }
 
 // This constant determines how many OutstandingCommandLists are allocated together as a block in
@@ -79,9 +86,9 @@ GrD3DGpu::GrD3DGpu(GrDirectContext* direct, const GrContextOptions& contextOptio
         , fStagingBufferManager(this)
         , fConstantsRingBuffer(this, 128 * 1024, kConstantAlignment, GrGpuBufferType::kVertex)
         , fOutstandingCommandLists(sizeof(OutstandingCommandList), kDefaultOutstandingAllocCnt) {
-    this->initCapsAndCompiler(sk_make_sp<GrD3DCaps>(contextOptions,
-                                                    backendContext.fAdapter.get(),
-                                                    backendContext.fDevice.get()));
+    this->initCaps(sk_make_sp<GrD3DCaps>(contextOptions,
+                                         backendContext.fAdapter.get(),
+                                         backendContext.fDevice.get()));
 
     fCurrentDirectCommandList = fResourceProvider.findOrCreateDirectCommandList();
     SkASSERT(fCurrentDirectCommandList);
@@ -90,7 +97,7 @@ GrD3DGpu::GrD3DGpu(GrDirectContext* direct, const GrContextOptions& contextOptio
     GR_D3D_CALL_ERRCHECK(fDevice->CreateFence(fCurrentFenceValue, D3D12_FENCE_FLAG_NONE,
                                               IID_PPV_ARGS(&fFence)));
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     HRESULT getAnalysis = DXGIGetDebugInterface1(0, IID_PPV_ARGS(&fGraphicsAnalysis));
     if (FAILED(getAnalysis)) {
         fGraphicsAnalysis = nullptr;
@@ -136,7 +143,7 @@ GrOpsRenderPass* GrD3DGpu::onGetOpsRenderPass(
         const SkIRect& bounds,
         const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
         const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
-        const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+        const TArray<GrSurfaceProxy*, true>& sampledProxies,
         GrXferBarrierFlags renderPassXferBarriers) {
     if (!fCachedOpsRenderPass) {
         fCachedOpsRenderPass.reset(new GrD3DOpsRenderPass(this));
@@ -157,11 +164,11 @@ bool GrD3DGpu::submitDirectCommandList(SyncQueue sync) {
     }
     fMipmapCPUDescriptors.clear();
 
-    GrD3DDirectCommandList::SubmitResult result = fCurrentDirectCommandList->submit(fQueue.get());
-    if (result == GrD3DDirectCommandList::SubmitResult::kFailure) {
+    GrD3DDirectCommandList::SubmitResult sResult = fCurrentDirectCommandList->submit(fQueue.get());
+    if (sResult == GrD3DDirectCommandList::SubmitResult::kFailure) {
         fCurrentDirectCommandList = fResourceProvider.findOrCreateDirectCommandList();
         return false;
-    } else if (result == GrD3DDirectCommandList::SubmitResult::kNoWork) {
+    } else if (sResult == GrD3DDirectCommandList::SubmitResult::kNoWork) {
         if (sync == SyncQueue::kForce) {
             this->waitForQueueCompletion();
             this->checkForFinishedCommandLists();
@@ -173,9 +180,9 @@ bool GrD3DGpu::submitDirectCommandList(SyncQueue sync) {
     // uniform data as dirty.
     fResourceProvider.markPipelineStateUniformsDirty();
 
-    GrFence fence = this->insertFence();
+    GR_D3D_CALL_ERRCHECK(fQueue->Signal(fFence.get(), ++fCurrentFenceValue));
     new (fOutstandingCommandLists.push_back()) OutstandingCommandList(
-            std::move(fCurrentDirectCommandList), fence);
+            std::move(fCurrentDirectCommandList), fCurrentFenceValue);
 
     if (sync == SyncQueue::kForce) {
         this->waitForQueueCompletion();
@@ -350,7 +357,7 @@ static void copy_compressed_data(char* mapPtr, DXGI_FORMAT dxgiFormat,
 sk_sp<GrTexture> GrD3DGpu::onCreateCompressedTexture(SkISize dimensions,
                                                      const GrBackendFormat& format,
                                                      skgpu::Budgeted budgeted,
-                                                     GrMipmapped mipmapped,
+                                                     skgpu::Mipmapped mipmapped,
                                                      GrProtected isProtected,
                                                      const void* data,
                                                      size_t dataSize) {
@@ -358,12 +365,12 @@ sk_sp<GrTexture> GrD3DGpu::onCreateCompressedTexture(SkISize dimensions,
     SkAssertResult(format.asDxgiFormat(&dxgiFormat));
     SkASSERT(GrDxgiFormatIsCompressed(dxgiFormat));
 
-    SkDEBUGCODE(SkImage::CompressionType compression = GrBackendFormatToCompressionType(format));
-    SkASSERT(dataSize == SkCompressedFormatDataSize(compression, dimensions,
-                                                    mipmapped == GrMipmapped::kYes));
+    SkDEBUGCODE(SkTextureCompressionType compression = GrBackendFormatToCompressionType(format));
+    SkASSERT(dataSize == SkCompressedFormatDataSize(
+                                 compression, dimensions, mipmapped == skgpu::Mipmapped::kYes));
 
     int mipLevelCount = 1;
-    if (mipmapped == GrMipmapped::kYes) {
+    if (mipmapped == skgpu::Mipmapped::kYes) {
         mipLevelCount = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
     GrMipmapStatus mipmapStatus = mipLevelCount > 1 ? GrMipmapStatus::kValid
@@ -605,10 +612,16 @@ bool GrD3DGpu::onReadPixels(GrSurface* surface,
     fDevice->GetCopyableFootprints(&desc, 0, 1, 0, &placedFootprint,
                                    nullptr, nullptr, &transferTotalBytes);
     SkASSERT(transferTotalBytes);
-    // TODO: implement some way of reusing buffers instead of making a new one every time.
-    sk_sp<GrGpuBuffer> transferBuffer = this->createBuffer(transferTotalBytes,
-                                                           GrGpuBufferType::kXferGpuToCpu,
-                                                           kDynamic_GrAccessPattern);
+    GrResourceProvider* resourceProvider =
+        this->getContext()->priv().resourceProvider();
+    sk_sp<GrGpuBuffer> transferBuffer = resourceProvider->createBuffer(
+            transferTotalBytes,
+            GrGpuBufferType::kXferGpuToCpu,
+            kDynamic_GrAccessPattern,
+            GrResourceProvider::ZeroInit::kNo);
+    if (!transferBuffer) {
+        return false;
+    }
 
     this->readOrTransferPixels(texResource, rect, transferBuffer, placedFootprint);
     this->submitDirectCommandList(SyncQueue::kForce);
@@ -621,6 +634,9 @@ bool GrD3DGpu::onReadPixels(GrSurface* surface,
     size_t tightRowBytes = bpp * rect.width();
 
     const void* mappedMemory = transferBuffer->map();
+    if (!mappedMemory) {
+        return false;
+    }
 
     SkRectMemcpy(buffer,
                  rowBytes,
@@ -1174,7 +1190,9 @@ bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
 
     // TODO: use linear vs. srgb shader based on texture format
     sk_sp<GrD3DPipeline> pipeline = this->resourceProvider().findOrCreateMipmapPipeline();
-    SkASSERT(pipeline);
+    if (!pipeline) {
+        return false;
+    }
     this->currentCommandList()->setPipelineState(std::move(pipeline));
 
     // set sampler
@@ -1314,7 +1332,7 @@ bool GrD3DGpu::createTextureResourceForBackendSurface(DXGI_FORMAT dxgiFormat,
                                                       SkISize dimensions,
                                                       GrTexturable texturable,
                                                       GrRenderable renderable,
-                                                      GrMipmapped mipmapped,
+                                                      skgpu::Mipmapped mipmapped,
                                                       int sampleCnt,
                                                       GrD3DTextureResourceInfo* info,
                                                       GrProtected isProtected) {
@@ -1333,7 +1351,7 @@ bool GrD3DGpu::createTextureResourceForBackendSurface(DXGI_FORMAT dxgiFormat,
     }
 
     int numMipLevels = 1;
-    if (mipmapped == GrMipmapped::kYes) {
+    if (mipmapped == skgpu::Mipmapped::kYes) {
         numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
 
@@ -1383,7 +1401,7 @@ bool GrD3DGpu::createTextureResourceForBackendSurface(DXGI_FORMAT dxgiFormat,
 GrBackendTexture GrD3DGpu::onCreateBackendTexture(SkISize dimensions,
                                                   const GrBackendFormat& format,
                                                   GrRenderable renderable,
-                                                  GrMipmapped mipmapped,
+                                                  skgpu::Mipmapped mipmapped,
                                                   GrProtected isProtected,
                                                   std::string_view label) {
     const GrD3DCaps& caps = this->d3dCaps();
@@ -1458,7 +1476,7 @@ bool GrD3DGpu::onClearBackendTexture(const GrBackendTexture& backendTexture,
     SkASSERT(d3dResource);
     D3D12_RESOURCE_DESC desc = d3dResource->GetDesc();
     unsigned int mipLevelCount = 1;
-    if (backendTexture.fMipmapped == GrMipmapped::kYes) {
+    if (backendTexture.fMipmapped == skgpu::Mipmapped::kYes) {
         mipLevelCount = SkMipmap::ComputeLevelCount(backendTexture.dimensions()) + 1;
     }
     SkASSERT(mipLevelCount == info.fLevelCount);
@@ -1524,9 +1542,10 @@ bool GrD3DGpu::onClearBackendTexture(const GrBackendTexture& backendTexture,
     return true;
 }
 
-GrBackendTexture GrD3DGpu::onCreateCompressedBackendTexture(
-    SkISize dimensions, const GrBackendFormat& format, GrMipmapped mipmapped,
-    GrProtected isProtected) {
+GrBackendTexture GrD3DGpu::onCreateCompressedBackendTexture(SkISize dimensions,
+                                                            const GrBackendFormat& format,
+                                                            skgpu::Mipmapped mipmapped,
+                                                            GrProtected isProtected) {
     return this->onCreateBackendTexture(dimensions,
                                         format,
                                         GrRenderable::kNo,
@@ -1630,7 +1649,7 @@ bool GrD3DGpu::compile(const GrProgramDesc&, const GrProgramInfo&) {
     return false;
 }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 bool GrD3DGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     SkASSERT(GrBackendApi::kDirect3D == tex.backend());
 
@@ -1657,9 +1676,14 @@ GrBackendRenderTarget GrD3DGpu::createTestingOnlyBackendRenderTarget(SkISize dim
     DXGI_FORMAT dxgiFormat = this->d3dCaps().getFormatFromColorType(colorType);
 
     GrD3DTextureResourceInfo info;
-    if (!this->createTextureResourceForBackendSurface(dxgiFormat, dimensions, GrTexturable::kNo,
-                                                      GrRenderable::kYes, GrMipmapped::kNo,
-                                                      sampleCnt, &info, isProtected)) {
+    if (!this->createTextureResourceForBackendSurface(dxgiFormat,
+                                                      dimensions,
+                                                      GrTexturable::kNo,
+                                                      GrRenderable::kYes,
+                                                      skgpu::Mipmapped::kNo,
+                                                      sampleCnt,
+                                                      &info,
+                                                      isProtected)) {
         return {};
     }
 
@@ -1671,7 +1695,7 @@ void GrD3DGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&
 
     GrD3DTextureResourceInfo info;
     if (rt.getD3DTextureResourceInfo(&info)) {
-        this->submitToGpu(true);
+        this->submitToGpu(GrSyncCpu::kYes);
         // Nothing else to do here, will get cleaned up when the GrBackendRenderTarget
         // is deleted.
     }
@@ -1711,13 +1735,12 @@ void GrD3DGpu::addBufferResourceBarriers(GrD3DBuffer* buffer,
     fCurrentDirectCommandList->addGrBuffer(sk_ref_sp<const GrBuffer>(buffer));
 }
 
-
 void GrD3DGpu::prepareSurfacesForBackendAccessAndStateUpdates(
         SkSpan<GrSurfaceProxy*> proxies,
-        SkSurface::BackendSurfaceAccess access,
+        SkSurfaces::BackendSurfaceAccess access,
         const skgpu::MutableTextureState* newState) {
     // prepare proxies by transitioning to PRESENT renderState
-    if (!proxies.empty() && access == SkSurface::BackendSurfaceAccess::kPresent) {
+    if (!proxies.empty() && access == SkSurfaces::BackendSurfaceAccess::kPresent) {
         GrD3DTextureResource* resource;
         for (GrSurfaceProxy* proxy : proxies) {
             SkASSERT(proxy->isInstantiated());
@@ -1737,21 +1760,21 @@ void GrD3DGpu::takeOwnershipOfBuffer(sk_sp<GrGpuBuffer> buffer) {
     fCurrentDirectCommandList->addGrBuffer(std::move(buffer));
 }
 
-bool GrD3DGpu::onSubmitToGpu(bool syncCpu) {
-    if (syncCpu) {
+bool GrD3DGpu::onSubmitToGpu(GrSyncCpu sync) {
+    if (sync == GrSyncCpu::kYes) {
         return this->submitDirectCommandList(SyncQueue::kForce);
     } else {
         return this->submitDirectCommandList(SyncQueue::kSkip);
     }
 }
 
-std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT GrD3DGpu::makeSemaphore(bool) {
+[[nodiscard]] std::unique_ptr<GrSemaphore> GrD3DGpu::makeSemaphore(bool) {
     return GrD3DSemaphore::Make(this);
 }
 std::unique_ptr<GrSemaphore> GrD3DGpu::wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
                                                             GrSemaphoreWrapType /* wrapType */,
                                                             GrWrapOwnership /* ownership */) {
-    SkASSERT(this->caps()->semaphoreSupport());
+    SkASSERT(this->caps()->backendSemaphoreSupport());
     GrD3DFenceInfo fenceInfo;
     if (!semaphore.getD3DFenceInfo(&fenceInfo)) {
         return nullptr;
@@ -1771,15 +1794,6 @@ void GrD3DGpu::waitSemaphore(GrSemaphore* semaphore) {
     GrD3DSemaphore* d3dSem = static_cast<GrD3DSemaphore*>(semaphore);
     // TODO: Do we need to track the lifetime of this?
     fQueue->Wait(d3dSem->fence(), d3dSem->value());
-}
-
-GrFence SK_WARN_UNUSED_RESULT GrD3DGpu::insertFence() {
-    GR_D3D_CALL_ERRCHECK(fQueue->Signal(fFence.get(), ++fCurrentFenceValue));
-    return fCurrentFenceValue;
-}
-
-bool GrD3DGpu::waitFence(GrFence fence) {
-    return (fFence->GetCompletedValue() >= fence);
 }
 
 void GrD3DGpu::finishOutstandingGpuWork() {

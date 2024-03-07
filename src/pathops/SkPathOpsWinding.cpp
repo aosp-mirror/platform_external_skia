@@ -26,10 +26,10 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkMath.h"
 #include "include/private/base/SkTArray.h"
-#include "include/private/base/SkMalloc.h"
-#include "include/private/base/SkDebug.h"
 #include "src/base/SkArenaAlloc.h"
 #include "src/base/SkTSort.h"
 #include "src/pathops/SkOpContour.h"
@@ -42,6 +42,8 @@
 
 #include <cmath>
 #include <utility>
+
+using namespace skia_private;
 
 enum class SkOpRayDir {
     kLeft,
@@ -273,7 +275,7 @@ bool SkOpSpan::sortableTop(SkOpContour* contourHead) {
         contour->rayCheck(hitBase, dir, &hitHead, &allocator);
     } while ((contour = contour->next()));
     // sort hits
-    SkSTArray<1, SkOpRayHit*> sorted;
+    STArray<1, SkOpRayHit*> sorted;
     SkOpRayHit* hit = hitHead;
     while (hit) {
         sorted.push_back(hit);

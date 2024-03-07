@@ -8,12 +8,14 @@
 #include "src/gpu/ganesh/vk/GrVkUtil.h"
 
 #include "include/gpu/GrDirectContext.h"
-#include "include/private/SkSLProgramKind.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/PipelineUtils.h"
 #include "src/gpu/ganesh/GrDataUtils.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/vk/GrVkGpu.h"
+#include "src/gpu/vk/VulkanUtilsPriv.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLProgramKind.h"
 #include "src/sksl/SkSLProgramSettings.h"
 
 bool GrVkFormatIsSupported(VkFormat format) {
@@ -26,6 +28,7 @@ bool GrVkFormatIsSupported(VkFormat format) {
         case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
         case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
         case VK_FORMAT_R5G6B5_UNORM_PACK16:
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:
         case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
         case VK_FORMAT_R4G4B4A4_UNORM_PACK16:
         case VK_FORMAT_R8_UNORM:
@@ -38,6 +41,7 @@ bool GrVkFormatIsSupported(VkFormat format) {
         case VK_FORMAT_R16G16_UNORM:
         case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
         case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
         case VK_FORMAT_R16G16B16A16_UNORM:
         case VK_FORMAT_R16G16_SFLOAT:
         case VK_FORMAT_S8_UINT:
@@ -64,20 +68,16 @@ bool GrCompileVkShaderModule(GrVkGpu* gpu,
                              VkPipelineShaderStageCreateInfo* stageInfo,
                              const SkSL::ProgramSettings& settings,
                              std::string* outSPIRV,
-                             SkSL::Program::Inputs* outInputs) {
+                             SkSL::Program::Interface* outInterface) {
     TRACE_EVENT0("skia.shaders", "CompileVkShaderModule");
-    auto errorHandler = gpu->getContext()->priv().getShaderErrorHandler();
-    std::unique_ptr<SkSL::Program> program = gpu->shaderCompiler()->convertProgram(
-            vk_shader_stage_to_skiasl_kind(stage), shaderString, settings);
-    if (!program) {
-        errorHandler->compileError(shaderString.c_str(),
-                                   gpu->shaderCompiler()->errorText().c_str());
-        return false;
-    }
-    *outInputs = program->fInputs;
-    if (!gpu->shaderCompiler()->toSPIRV(*program, outSPIRV)) {
-        errorHandler->compileError(shaderString.c_str(),
-                                   gpu->shaderCompiler()->errorText().c_str());
+    skgpu::ShaderErrorHandler* errorHandler = gpu->getContext()->priv().getShaderErrorHandler();
+    if (!skgpu::SkSLToSPIRV(gpu->vkCaps().shaderCaps(),
+                            shaderString,
+                            vk_shader_stage_to_skiasl_kind(stage),
+                            settings,
+                            outSPIRV,
+                            outInterface,
+                            errorHandler)) {
         return false;
     }
 

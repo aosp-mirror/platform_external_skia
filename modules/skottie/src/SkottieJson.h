@@ -8,12 +8,11 @@
 #ifndef SkottieJson_DEFINED
 #define SkottieJson_DEFINED
 
-#include "include/core/SkRefCnt.h"
-#include "src/utils/SkJSON.h"
-
-class SkData;
-class SkStream;
-class SkString;
+namespace skjson {
+class ObjectValue;
+class StringValue;
+class Value;
+}  // namespace skjson
 
 namespace skottie {
 
@@ -28,6 +27,8 @@ T ParseDefault(const skjson::Value& v, const T& defaultValue) {
     }
     return res;
 }
+
+const skjson::StringValue* ParseSlotID(const skjson::ObjectValue* jobj);
 
 } // namespace skottie
 

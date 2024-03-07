@@ -43,7 +43,7 @@ GrTexture::GrTexture(GrGpu* gpu,
                      GrTextureType textureType,
                      GrMipmapStatus mipmapStatus,
                      std::string_view label)
-        : INHERITED(gpu, dimensions, isProtected, label)
+        : GrSurface(gpu, dimensions, isProtected, label)
         , fTextureType(textureType)
         , fMipmapStatus(mipmapStatus) {
     if (fMipmapStatus == GrMipmapStatus::kNotAllocated) {
@@ -58,7 +58,7 @@ GrTexture::GrTexture(GrGpu* gpu,
 
 bool GrTexture::StealBackendTexture(sk_sp<GrTexture> texture,
                                     GrBackendTexture* backendTexture,
-                                    SkImage::BackendTextureReleaseProc* releaseProc) {
+                                    SkImages::BackendTextureReleaseProc* releaseProc) {
     if (!texture->unique()) {
         return false;
     }
@@ -105,7 +105,7 @@ void GrTexture::ComputeScratchKey(const GrCaps& caps,
                                   SkISize dimensions,
                                   GrRenderable renderable,
                                   int sampleCnt,
-                                  GrMipmapped mipmapped,
+                                  skgpu::Mipmapped mipmapped,
                                   GrProtected isProtected,
                                   skgpu::ScratchKey* key) {
     static const skgpu::ScratchKey::ResourceType kType = skgpu::ScratchKey::GenerateResourceType();

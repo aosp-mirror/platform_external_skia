@@ -5,12 +5,30 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkShader.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkTypes.h"
 #include "include/private/SkColorData.h"
+#include "include/private/base/SkCPUTypes.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkUtils.h"
 #include "src/base/SkVx.h"
+#include "src/core/SkBlitMask.h"
+#include "src/core/SkBlitRow.h"
 #include "src/core/SkCoreBlitters.h"
-#include "src/core/SkOpts.h"
-#include "src/core/SkXfermodePriv.h"
+#include "src/core/SkMask.h"
+#include "src/core/SkMemset.h"
+#include "src/shaders/SkShaderBase.h"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 
 static inline int upscale_31_to_32(int value) {
     SkASSERT((unsigned)value <= 31);
@@ -47,13 +65,17 @@ static inline SkPMColor blend_lcd16(int srcA, int srcR, int srcG, int srcB,
     maskG = maskG * srcA >> 8;
     maskB = maskB * srcA >> 8;
 
+    int dstA = SkGetPackedA32(dst);
     int dstR = SkGetPackedR32(dst);
     int dstG = SkGetPackedG32(dst);
     int dstB = SkGetPackedB32(dst);
 
-    // LCD blitting is only supported if the dst is known/required
-    // to be opaque
-    return SkPackARGB32(0xFF,
+    // Subtract 1 from srcA to bring it back to [0-255] to compare against dstA, alpha needs to
+    // use either the min or the max of the LCD coverages. See https:/skbug.com/40037823
+    int maskA = (srcA-1) < dstA ? std::min(maskR, std::min(maskG, maskB))
+                                : std::max(maskR, std::max(maskG, maskB));
+
+    return SkPackARGB32(blend_32(0xFF, dstA, maskA),
                         blend_32(srcR, dstR, maskR),
                         blend_32(srcG, dstG, maskG),
                         blend_32(srcB, dstB, maskB));
@@ -82,13 +104,17 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
     maskG = upscale_31_to_32(maskG);
     maskB = upscale_31_to_32(maskB);
 
+    int dstA = SkGetPackedA32(dst);
     int dstR = SkGetPackedR32(dst);
     int dstG = SkGetPackedG32(dst);
     int dstB = SkGetPackedB32(dst);
 
+    // Opaque src alpha always uses the max of the LCD coverages.
+    int maskA = std::max(maskR, std::max(maskG, maskB));
+
     // LCD blitting is only supported if the dst is known/required
     // to be opaque
-    return SkPackARGB32(0xFF,
+    return SkPackARGB32(blend_32(0xFF, dstA, maskA),
                         blend_32(srcR, dstR, maskR),
                         blend_32(srcG, dstG, maskG),
                         blend_32(srcB, dstB, maskB));
@@ -161,20 +187,35 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
         __m128i b = _mm_and_si128(SkPackedB16x5ToUnmaskedB32x5_SSE2(mask),
                                   _mm_set1_epi32(0x1F << SK_B32_SHIFT));
 
+        // a needs to be either the min or the max of the LCD coverages, depending on srcA < dstA
+        __m128i aMin = _mm_min_epu8(_mm_slli_epi32(r, SK_A32_SHIFT - SK_R32_SHIFT),
+                       _mm_min_epu8(_mm_slli_epi32(g, SK_A32_SHIFT - SK_G32_SHIFT),
+                                    _mm_slli_epi32(b, SK_A32_SHIFT - SK_B32_SHIFT)));
+        __m128i aMax = _mm_max_epu8(_mm_slli_epi32(r, SK_A32_SHIFT - SK_R32_SHIFT),
+                       _mm_max_epu8(_mm_slli_epi32(g, SK_A32_SHIFT - SK_G32_SHIFT),
+                                    _mm_slli_epi32(b, SK_A32_SHIFT - SK_B32_SHIFT)));
+        // srcA has been biased to [0-256], so compare srcA against (dstA+1)
+        __m128i a = _mm_cmplt_epi32(srcA,
+                                    _mm_and_si128(
+                                            _mm_add_epi32(dst, _mm_set1_epi32(1 << SK_A32_SHIFT)),
+                                            _mm_set1_epi32(SK_A32_MASK)));
+        // a = if_then_else(a, aMin, aMax) == (aMin & a) | (aMax & ~a)
+        a = _mm_or_si128(_mm_and_si128(a, aMin), _mm_andnot_si128(a, aMax));
+
         // Pack the 4 16bit mask pixels into 4 32bit pixels, (p0, p1, p2, p3)
         // Each component (m0R, m0G, etc.) is then a 5-bit value aligned to an
         // 8-bit position
-        // mask = (0, m0R, m0G, m0B, 0, m1R, m1G, m1B,
-        //         0, m2R, m2G, m2B, 0, m3R, m3G, m3B)
-        mask = _mm_or_si128(_mm_or_si128(r, g), b);
+        // mask = (m0A, m0R, m0G, m0B, m1A, m1R, m1G, m1B,
+        //         m2A, m2R, m2G, m2B, m3A, m3R, m3G, m3B)
+        mask = _mm_or_si128(_mm_or_si128(a, r), _mm_or_si128(g, b));
 
         // Interleave R,G,B into the lower byte of word.
         // i.e. split the sixteen 8-bit values from mask into two sets of eight
         // 16-bit values, padded by zero.
         __m128i maskLo, maskHi;
-        // maskLo = (0, 0, m0R, 0, m0G, 0, m0B, 0, 0, 0, m1R, 0, m1G, 0, m1B, 0)
+        // maskLo = (m0A, 0, m0R, 0, m0G, 0, m0B, 0, m1A, 0, m1R, 0, m1G, 0, m1B, 0)
         maskLo = _mm_unpacklo_epi8(mask, _mm_setzero_si128());
-        // maskHi = (0, 0, m2R, 0, m2G, 0, m2B, 0, 0, 0, m3R, 0, m3G, 0, m3B, 0)
+        // maskHi = (m2A, 0, m2R, 0, m2G, 0, m2B, 0, m3A, 0, m3R, 0, m3G, 0, m3B, 0)
         maskHi = _mm_unpackhi_epi8(mask, _mm_setzero_si128());
 
         // Upscale from 0..31 to 0..32
@@ -193,9 +234,9 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
         maskHi = _mm_srli_epi16(maskHi, 8);
 
         // Interleave R,G,B into the lower byte of the word
-        // dstLo = (0, 0, d0R, 0, d0G, 0, d0B, 0, 0, 0, d1R, 0, d1G, 0, d1B, 0)
+        // dstLo = (d0A, 0, d0R, 0, d0G, 0, d0B, 0, d1A, 0, d1R, 0, d1G, 0, d1B, 0)
         __m128i dstLo = _mm_unpacklo_epi8(dst, _mm_setzero_si128());
-        // dstLo = (0, 0, d2R, 0, d2G, 0, d2B, 0, 0, 0, d3R, 0, d3G, 0, d3B, 0)
+        // dstLo = (d2A, 0, d2R, 0, d2G, 0, d2B, 0, d3A, 0, d3R, 0, d3G, 0, d3B, 0)
         __m128i dstHi = _mm_unpackhi_epi8(dst, _mm_setzero_si128());
 
         // mask = (src - dst) * mask
@@ -246,20 +287,25 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
         __m128i b = _mm_and_si128(SkPackedB16x5ToUnmaskedB32x5_SSE2(mask),
                                   _mm_set1_epi32(0x1F << SK_B32_SHIFT));
 
+        // a = max(r, g, b) since opaque src alpha uses max of LCD coverages
+        __m128i a = _mm_max_epu8(_mm_slli_epi32(r, SK_A32_SHIFT - SK_R32_SHIFT),
+                    _mm_max_epu8(_mm_slli_epi32(g, SK_A32_SHIFT - SK_G32_SHIFT),
+                                 _mm_slli_epi32(b, SK_A32_SHIFT - SK_B32_SHIFT)));
+
         // Pack the 4 16bit mask pixels into 4 32bit pixels, (p0, p1, p2, p3)
         // Each component (m0R, m0G, etc.) is then a 5-bit value aligned to an
         // 8-bit position
-        // mask = (0, m0R, m0G, m0B, 0, m1R, m1G, m1B,
-        //         0, m2R, m2G, m2B, 0, m3R, m3G, m3B)
-        mask = _mm_or_si128(_mm_or_si128(r, g), b);
+        // mask = (m0A, m0R, m0G, m0B, m1A, m1R, m1G, m1B,
+        //         m2A, m2R, m2G, m2B, m3A, m3R, m3G, m3B)
+        mask = _mm_or_si128(_mm_or_si128(a, r), _mm_or_si128(g, b));
 
         // Interleave R,G,B into the lower byte of word.
         // i.e. split the sixteen 8-bit values from mask into two sets of eight
         // 16-bit values, padded by zero.
         __m128i maskLo, maskHi;
-        // maskLo = (0, 0, m0R, 0, m0G, 0, m0B, 0, 0, 0, m1R, 0, m1G, 0, m1B, 0)
+        // maskLo = (m0A, 0, m0R, 0, m0G, 0, m0B, 0, m1A, 0, m1R, 0, m1G, 0, m1B, 0)
         maskLo = _mm_unpacklo_epi8(mask, _mm_setzero_si128());
-        // maskHi = (0, 0, m2R, 0, m2G, 0, m2B, 0, 0, 0, m3R, 0, m3G, 0, m3B, 0)
+        // maskHi = (m2A, 0, m2R, 0, m2G, 0, m2B, 0, m3A, 0, m3R, 0, m3G, 0, m3B, 0)
         maskHi = _mm_unpackhi_epi8(mask, _mm_setzero_si128());
 
         // Upscale from 0..31 to 0..32
@@ -270,9 +316,9 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
         maskHi = _mm_add_epi16(maskHi, _mm_srli_epi16(maskHi, 4));
 
         // Interleave R,G,B into the lower byte of the word
-        // dstLo = (0, 0, d0R, 0, d0G, 0, d0B, 0, 0, 0, d1R, 0, d1G, 0, d1B, 0)
+        // dstLo = (d0A, 0, d0R, 0, d0G, 0, d0B, 0, d1A, 0, d1R, 0, d1G, 0, d1B, 0)
         __m128i dstLo = _mm_unpacklo_epi8(dst, _mm_setzero_si128());
-        // dstLo = (0, 0, d2R, 0, d2G, 0, d2B, 0, 0, 0, d3R, 0, d3G, 0, d3B, 0)
+        // dstLo = (d2A, 0, d2R, 0, d2G, 0, d2B, 0, d3A, 0, d3R, 0, d3G, 0, d3B, 0)
         __m128i dstHi = _mm_unpackhi_epi8(dst, _mm_setzero_si128());
 
         // mask = (src - dst) * mask
@@ -288,12 +334,9 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
         __m128i resultLo = _mm_add_epi16(dstLo, maskLo);
         __m128i resultHi = _mm_add_epi16(dstHi, maskHi);
 
-        // Pack into 4 32bit dst pixels and force opaque.
-        // resultLo and resultHi contain eight 16-bit components (two pixels) each.
         // Merge into one SSE regsiter with sixteen 8-bit values (four pixels),
-        // clamping to 255 if necessary. Set alpha components to 0xFF.
-        return _mm_or_si128(_mm_packus_epi16(resultLo, resultHi),
-                            _mm_set1_epi32(SK_A32_MASK << SK_A32_SHIFT));
+        // clamping to 255 if necessary.
+        return _mm_packus_epi16(resultLo, resultHi);
     }
 
     void blit_row_lcd16(SkPMColor dst[], const uint16_t mask[], SkColor src, int width, SkPMColor) {
@@ -329,8 +372,7 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
                 // Load four destination pixels into dst_sse.
                 __m128i dst_sse = _mm_load_si128(d);
                 // Load four 16-bit masks into lower half of mask_sse.
-                __m128i mask_sse = _mm_loadl_epi64(
-                                       reinterpret_cast<const __m128i*>(mask));
+                __m128i mask_sse = _mm_loadu_si64(mask);
 
                 // Check whether masks are equal to 0 and get the highest bit
                 // of each byte of result, if masks are all zero, we will get
@@ -396,8 +438,7 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
                 // Load four destination pixels into dst_sse.
                 __m128i dst_sse = _mm_load_si128(d);
                 // Load four 16-bit masks into lower half of mask_sse.
-                __m128i mask_sse = _mm_loadl_epi64(
-                                       reinterpret_cast<const __m128i*>(mask));
+                __m128i mask_sse = _mm_loadu_si64(mask);
 
                 // Check whether masks are equal to 0 and get the highest bit
                 // of each byte of result, if masks are all zero, we will get
@@ -462,26 +503,18 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
         int colG = SkColorGetG(color);
         int colB = SkColorGetB(color);
 
+        uint8x8_t vcolA = vdup_n_u8(0xFF);
         uint8x8_t vcolR = vdup_n_u8(colR);
         uint8x8_t vcolG = vdup_n_u8(colG);
         uint8x8_t vcolB = vdup_n_u8(colB);
-        uint8x8_t vopqDstA = vdup_n_u8(SkGetPackedA32(opaqueDst));
-        uint8x8_t vopqDstR = vdup_n_u8(SkGetPackedR32(opaqueDst));
-        uint8x8_t vopqDstG = vdup_n_u8(SkGetPackedG32(opaqueDst));
-        uint8x8_t vopqDstB = vdup_n_u8(SkGetPackedB32(opaqueDst));
 
         while (width >= 8) {
             uint8x8x4_t vdst;
             uint16x8_t vmask;
-            uint16x8_t vmaskR, vmaskG, vmaskB;
-            uint8x8_t vsel_trans, vsel_opq;
+            uint16x8_t vmaskR, vmaskG, vmaskB, vmaskA;
 
             vdst = vld4_u8((uint8_t*)dst);
             vmask = vld1q_u16(src);
-
-            // Prepare compare masks
-            vsel_trans = vmovn_u16(vceqq_u16(vmask, vdupq_n_u16(0)));
-            vsel_opq = vmovn_u16(vceqq_u16(vmask, vdupq_n_u16(0xFFFF)));
 
             // Get all the color masks on 5 bits
             vmaskR = vshrq_n_u16(vmask, SK_R16_SHIFT);
@@ -493,17 +526,13 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
             vmaskR = vmaskR + vshrq_n_u16(vmaskR, 4);
             vmaskG = vmaskG + vshrq_n_u16(vmaskG, 4);
             vmaskB = vmaskB + vshrq_n_u16(vmaskB, 4);
-
-            vdst.val[NEON_A] = vbsl_u8(vsel_trans, vdst.val[NEON_A], vdup_n_u8(0xFF));
-            vdst.val[NEON_A] = vbsl_u8(vsel_opq, vopqDstA, vdst.val[NEON_A]);
+            // Opaque srcAlpha always uses the max of the 3 LCD coverage values
+            vmaskA = vmaxq_u16(vmaskR, vmaxq_u16(vmaskG, vmaskB));
 
             vdst.val[NEON_R] = blend_32_neon(vcolR, vdst.val[NEON_R], vmaskR);
             vdst.val[NEON_G] = blend_32_neon(vcolG, vdst.val[NEON_G], vmaskG);
             vdst.val[NEON_B] = blend_32_neon(vcolB, vdst.val[NEON_B], vmaskB);
-
-            vdst.val[NEON_R] = vbsl_u8(vsel_opq, vopqDstR, vdst.val[NEON_R]);
-            vdst.val[NEON_G] = vbsl_u8(vsel_opq, vopqDstG, vdst.val[NEON_G]);
-            vdst.val[NEON_B] = vbsl_u8(vsel_opq, vopqDstB, vdst.val[NEON_B]);
+            vdst.val[NEON_A] = blend_32_neon(vcolA, vdst.val[NEON_A], vmaskA);
 
             vst4_u8((uint8_t*)dst, vdst);
 
@@ -525,9 +554,11 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
         int colG = SkColorGetG(color);
         int colB = SkColorGetB(color);
 
+        // srcA in [0-255] to compare vs dstA
+        uint16x8_t vcolACmp = vdupq_n_u16(colA);
         colA = SkAlpha255To256(colA);
 
-        uint16x8_t vcolA = vdupq_n_u16(colA);
+        uint16x8_t vcolA = vdupq_n_u16(colA); // srcA in [0-256] to combine with coverage
         uint8x8_t vcolR = vdup_n_u8(colR);
         uint8x8_t vcolG = vdup_n_u8(colG);
         uint8x8_t vcolB = vdup_n_u8(colB);
@@ -535,7 +566,7 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
         while (width >= 8) {
             uint8x8x4_t vdst;
             uint16x8_t vmask;
-            uint16x8_t vmaskR, vmaskG, vmaskB;
+            uint16x8_t vmaskR, vmaskG, vmaskB, vmaskA;
 
             vdst = vld4_u8((uint8_t*)dst);
             vmask = vld1q_u16(src);
@@ -555,11 +586,17 @@ static inline SkPMColor blend_lcd16_opaque(int srcR, int srcG, int srcB,
             vmaskG = vshrq_n_u16(vmaskG * vcolA, 8);
             vmaskB = vshrq_n_u16(vmaskB * vcolA, 8);
 
-            vdst.val[NEON_A] = vdup_n_u8(0xFF);
+            // Select either the min or the max of the RGB mask values, depending on if the src
+            // alpha is less than the dst alpha.
+            vmaskA = vbslq_u16(vcleq_u16(vcolACmp, vmovl_u8(vdst.val[NEON_A])), // srcA < dstA
+                               vminq_u16(vmaskR, vminq_u16(vmaskG, vmaskB)),    // ? min(r,g,b)
+                               vmaxq_u16(vmaskR, vmaxq_u16(vmaskG, vmaskB)));   // : max(r,g,b)
+
             vdst.val[NEON_R] = blend_32_neon(vcolR, vdst.val[NEON_R], vmaskR);
             vdst.val[NEON_G] = blend_32_neon(vcolG, vdst.val[NEON_G], vmaskG);
             vdst.val[NEON_B] = blend_32_neon(vcolB, vdst.val[NEON_B], vmaskB);
-
+            // vmaskA already includes vcolA so blend against 0xFF
+            vdst.val[NEON_A] = blend_32_neon(vdup_n_u8(0xFF), vdst.val[NEON_A], vmaskA);
             vst4_u8((uint8_t*)dst, vdst);
 
             dst += 8;
@@ -682,14 +719,6 @@ SkARGB32_Blitter::SkARGB32_Blitter(const SkPixmap& device, const SkPaint& paint)
     fPMColor = SkPackARGB32(fSrcA, fSrcR, fSrcG, fSrcB);
 }
 
-const SkPixmap* SkARGB32_Blitter::justAnOpaqueColor(uint32_t* value) {
-    if (255 == fSrcA) {
-        *value = fPMColor;
-        return &fDevice;
-    }
-    return nullptr;
-}
-
 #if defined _WIN32  // disable warning : local variable used without having been initialized
 #pragma warning ( push )
 #pragma warning ( disable : 4701 )
@@ -699,7 +728,7 @@ void SkARGB32_Blitter::blitH(int x, int y, int width) {
     SkASSERT(x >= 0 && y >= 0 && x + width <= fDevice.width());
 
     uint32_t* device = fDevice.writable_addr32(x, y);
-    SkBlitRow::Color32(device, device, width, fPMColor);
+    SkBlitRow::Color32(device, width, fPMColor);
 }
 
 void SkARGB32_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
@@ -724,7 +753,7 @@ void SkARGB32_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
                 SkOpts::memset32(device, color, count);
             } else {
                 uint32_t sc = SkAlphaMulQ(color, SkAlpha255To256(aa));
-                SkBlitRow::Color32(device, device, count, sc);
+                SkBlitRow::Color32(device, count, sc);
             }
         }
         runs += count;
@@ -888,7 +917,7 @@ void SkARGB32_Blitter::blitRect(int x, int y, int width, int height) {
         SkOpts::rect_memset32(device, color, width, rowBytes, height);
     } else {
         while (height --> 0) {
-            SkBlitRow::Color32(device, device, width, color);
+            SkBlitRow::Color32(device, width, color);
             device = (uint32_t*)((char*)device + rowBytes);
         }
     }
@@ -950,24 +979,13 @@ void SkARGB32_Black_Blitter::blitAntiV2(int x, int y, U8CPU a0, U8CPU a1) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Special version of SkBlitRow::Factory32 that knows we're in kSrc_Mode,
-// instead of kSrcOver_Mode
-static void blend_srcmode(SkPMColor* SK_RESTRICT device,
-                          const SkPMColor* SK_RESTRICT span,
-                          int count, U8CPU aa) {
-    int aa256 = SkAlpha255To256(aa);
-    for (int i = 0; i < count; ++i) {
-        device[i] = SkFourByteInterp256(span[i], device[i], aa256);
-    }
-}
-
 SkARGB32_Shader_Blitter::SkARGB32_Shader_Blitter(const SkPixmap& device,
         const SkPaint& paint, SkShaderBase::Context* shaderContext)
     : INHERITED(device, paint, shaderContext)
 {
     fBuffer = (SkPMColor*)sk_malloc_throw(device.width() * (sizeof(SkPMColor)));
 
-    fXfermode = SkXfermode::Peek(paint.getBlendMode_or(SkBlendMode::kSrcOver));
+    SkASSERT(paint.isSrcOver());
 
     int flags = 0;
     if (!(shaderContext->getFlags() & SkShaderBase::kOpaqueAlpha_Flag)) {
@@ -978,19 +996,8 @@ SkARGB32_Shader_Blitter::SkARGB32_Shader_Blitter(const SkPixmap& device,
     // we call this on the output from the shader + alpha from the aa buffer
     fProc32Blend = SkBlitRow::Factory32(flags | SkBlitRow::kGlobalAlpha_Flag32);
 
-    fShadeDirectlyIntoDevice = false;
-    if (fXfermode == nullptr) {
-        if (shaderContext->getFlags() & SkShaderBase::kOpaqueAlpha_Flag) {
-            fShadeDirectlyIntoDevice = true;
-        }
-    } else {
-        if (SkBlendMode::kSrc == paint.asBlendMode()) {
-            fShadeDirectlyIntoDevice = true;
-            fProc32Blend = blend_srcmode;
-        }
-    }
-
-    fConstInY = SkToBool(shaderContext->getFlags() & SkShaderBase::kConstInY32_Flag);
+    fShadeDirectlyIntoDevice =
+            SkToBool(shaderContext->getFlags() & SkShaderBase::kOpaqueAlpha_Flag);
 }
 
 SkARGB32_Shader_Blitter::~SkARGB32_Shader_Blitter() {
@@ -1007,11 +1014,7 @@ void SkARGB32_Shader_Blitter::blitH(int x, int y, int width) {
     } else {
         SkPMColor*  span = fBuffer;
         fShaderContext->shadeSpan(x, y, span, width);
-        if (fXfermode) {
-            fXfermode->xfer32(device, span, width, nullptr);
-        } else {
-            fProc32(device, span, width, 255);
-        }
+        fProc32(device, span, width, 255);
     }
 }
 
@@ -1024,36 +1027,6 @@ void SkARGB32_Shader_Blitter::blitRect(int x, int y, int width, int height) {
     auto*      shaderContext = fShaderContext;
     SkPMColor* span = fBuffer;
 
-    if (fConstInY) {
-        if (fShadeDirectlyIntoDevice) {
-            // shade the first row directly into the device
-            shaderContext->shadeSpan(x, y, device, width);
-            span = device;
-            while (--height > 0) {
-                device = (uint32_t*)((char*)device + deviceRB);
-                memcpy(device, span, width << 2);
-            }
-        } else {
-            shaderContext->shadeSpan(x, y, span, width);
-            SkXfermode* xfer = fXfermode;
-            if (xfer) {
-                do {
-                    xfer->xfer32(device, span, width, nullptr);
-                    y += 1;
-                    device = (uint32_t*)((char*)device + deviceRB);
-                } while (--height > 0);
-            } else {
-                SkBlitRow::Proc32 proc = fProc32;
-                do {
-                    proc(device, span, width, 255);
-                    y += 1;
-                    device = (uint32_t*)((char*)device + deviceRB);
-                } while (--height > 0);
-            }
-        }
-        return;
-    }
-
     if (fShadeDirectlyIntoDevice) {
         do {
             shaderContext->shadeSpan(x, y, device, width);
@@ -1061,23 +1034,13 @@ void SkARGB32_Shader_Blitter::blitRect(int x, int y, int width, int height) {
             device = (uint32_t*)((char*)device + deviceRB);
         } while (--height > 0);
     } else {
-        SkXfermode* xfer = fXfermode;
-        if (xfer) {
-            do {
-                shaderContext->shadeSpan(x, y, span, width);
-                xfer->xfer32(device, span, width, nullptr);
-                y += 1;
-                device = (uint32_t*)((char*)device + deviceRB);
-            } while (--height > 0);
-        } else {
-            SkBlitRow::Proc32 proc = fProc32;
-            do {
-                shaderContext->shadeSpan(x, y, span, width);
-                proc(device, span, width, 255);
-                y += 1;
-                device = (uint32_t*)((char*)device + deviceRB);
-            } while (--height > 0);
-        }
+        SkBlitRow::Proc32 proc = fProc32;
+        do {
+            shaderContext->shadeSpan(x, y, span, width);
+            proc(device, span, width, 255);
+            y += 1;
+            device = (uint32_t*)((char*)device + deviceRB);
+        } while (--height > 0);
     }
 }
 
@@ -1087,32 +1050,7 @@ void SkARGB32_Shader_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
     uint32_t*  device = fDevice.writable_addr32(x, y);
     auto*      shaderContext = fShaderContext;
 
-    if (fXfermode && !fShadeDirectlyIntoDevice) {
-        for (;;) {
-            SkXfermode* xfer = fXfermode;
-
-            int count = *runs;
-            if (count <= 0)
-                break;
-            int aa = *antialias;
-            if (aa) {
-                shaderContext->shadeSpan(x, y, span, count);
-                if (aa == 255) {
-                    xfer->xfer32(device, span, count, nullptr);
-                } else {
-                    // count is almost always 1
-                    for (int i = count - 1; i >= 0; --i) {
-                        xfer->xfer32(&device[i], &span[i], 1, antialias);
-                    }
-                }
-            }
-            device += count;
-            runs += count;
-            antialias += count;
-            x += count;
-        }
-    } else if (fShadeDirectlyIntoDevice ||
-               (shaderContext->getFlags() & SkShaderBase::kOpaqueAlpha_Flag)) {
+    if (fShadeDirectlyIntoDevice || (shaderContext->getFlags() & SkShaderBase::kOpaqueAlpha_Flag)) {
         for (;;) {
             int count = *runs;
             if (count <= 0) {
@@ -1165,9 +1103,9 @@ static void drive(SkPMColor* dst, const SkPMColor* src, const uint8_t* cov, int 
 
     auto apply = [kernel](U32 dst, U32 src, U8 cov) -> U32 {
         U8x4 cov_splat = skvx::shuffle<0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3>(cov);
-        return skvx::bit_pun<U32>(kernel(skvx::bit_pun<U8x4>(dst),
-                                         skvx::bit_pun<U8x4>(src),
-                                         cov_splat));
+        return sk_bit_cast<U32>(kernel(sk_bit_cast<U8x4>(dst),
+                                       sk_bit_cast<U8x4>(src),
+                                       cov_splat));
     };
     while (n >= 4) {
         apply(U32::Load(dst), U32::Load(src), U8::Load(cov)).store(dst);
@@ -1280,31 +1218,23 @@ static void blend_row_LCD16_opaque(SkPMColor* dst, const void* vmask, const SkPM
 }
 
 void SkARGB32_Shader_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) {
-    // we only handle kA8 with an xfermode
-    if (fXfermode && (SkMask::kA8_Format != mask.fFormat)) {
-        this->INHERITED::blitMask(mask, clip);
-        return;
-    }
-
     SkASSERT(mask.fBounds.contains(clip));
 
     void (*blend_row)(SkPMColor*, const void* mask, const SkPMColor*, int) = nullptr;
 
-    if (!fXfermode) {
-        bool opaque = (fShaderContext->getFlags() & SkShaderBase::kOpaqueAlpha_Flag);
+    bool opaque = (fShaderContext->getFlags() & SkShaderBase::kOpaqueAlpha_Flag);
 
-        if (mask.fFormat == SkMask::kA8_Format && opaque) {
-            blend_row = blend_row_A8_opaque;
-        } else if (mask.fFormat == SkMask::kA8_Format) {
-            blend_row = blend_row_A8;
-        } else if (mask.fFormat == SkMask::kLCD16_Format && opaque) {
-            blend_row = blend_row_LCD16_opaque;
-        } else if (mask.fFormat == SkMask::kLCD16_Format) {
-            blend_row = blend_row_lcd16;
-        } else {
-            this->INHERITED::blitMask(mask, clip);
-            return;
-        }
+    if (mask.fFormat == SkMask::kA8_Format && opaque) {
+        blend_row = blend_row_A8_opaque;
+    } else if (mask.fFormat == SkMask::kA8_Format) {
+        blend_row = blend_row_A8;
+    } else if (mask.fFormat == SkMask::kLCD16_Format && opaque) {
+        blend_row = blend_row_LCD16_opaque;
+    } else if (mask.fFormat == SkMask::kLCD16_Format) {
+        blend_row = blend_row_lcd16;
+    } else {
+        this->INHERITED::blitMask(mask, clip);
+        return;
     }
 
     const int x = clip.fLeft;
@@ -1318,27 +1248,14 @@ void SkARGB32_Shader_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) 
     const size_t maskRB = mask.fRowBytes;
 
     SkPMColor* span = fBuffer;
-
-    if (fXfermode) {
-        SkASSERT(SkMask::kA8_Format == mask.fFormat);
-        SkXfermode* xfer = fXfermode;
-        do {
-            fShaderContext->shadeSpan(x, y, span, width);
-            xfer->xfer32(reinterpret_cast<SkPMColor*>(dstRow), span, width, maskRow);
-            dstRow += dstRB;
-            maskRow += maskRB;
-            y += 1;
-        } while (--height > 0);
-    } else {
-        SkASSERT(blend_row);
-        do {
-            fShaderContext->shadeSpan(x, y, span, width);
-            blend_row(reinterpret_cast<SkPMColor*>(dstRow), maskRow, span, width);
-            dstRow += dstRB;
-            maskRow += maskRB;
-            y += 1;
-        } while (--height > 0);
-    }
+    SkASSERT(blend_row);
+    do {
+        fShaderContext->shadeSpan(x, y, span, width);
+        blend_row(reinterpret_cast<SkPMColor*>(dstRow), maskRow, span, width);
+        dstRow += dstRB;
+        maskRow += maskRB;
+        y += 1;
+    } while (--height > 0);
 }
 
 void SkARGB32_Shader_Blitter::blitV(int x, int y, int height, SkAlpha alpha) {
@@ -1346,40 +1263,6 @@ void SkARGB32_Shader_Blitter::blitV(int x, int y, int height, SkAlpha alpha) {
 
     uint32_t* device = fDevice.writable_addr32(x, y);
     size_t    deviceRB = fDevice.rowBytes();
-
-    if (fConstInY) {
-        SkPMColor c;
-        fShaderContext->shadeSpan(x, y, &c, 1);
-
-        if (fShadeDirectlyIntoDevice) {
-            if (255 == alpha) {
-                do {
-                    *device = c;
-                    device = (uint32_t*)((char*)device + deviceRB);
-                } while (--height > 0);
-            } else {
-                do {
-                    *device = SkFourByteInterp(c, *device, alpha);
-                    device = (uint32_t*)((char*)device + deviceRB);
-                } while (--height > 0);
-            }
-        } else {
-            SkXfermode* xfer = fXfermode;
-            if (xfer) {
-                do {
-                    xfer->xfer32(device, &c, 1, &alpha);
-                    device = (uint32_t*)((char*)device + deviceRB);
-                } while (--height > 0);
-            } else {
-                SkBlitRow::Proc32 proc = (255 == alpha) ? fProc32 : fProc32Blend;
-                do {
-                    proc(device, &c, 1, alpha);
-                    device = (uint32_t*)((char*)device + deviceRB);
-                } while (--height > 0);
-            }
-        }
-        return;
-    }
 
     if (fShadeDirectlyIntoDevice) {
         if (255 == alpha) {
@@ -1399,22 +1282,12 @@ void SkARGB32_Shader_Blitter::blitV(int x, int y, int height, SkAlpha alpha) {
         }
     } else {
         SkPMColor* span = fBuffer;
-        SkXfermode* xfer = fXfermode;
-        if (xfer) {
-            do {
-                fShaderContext->shadeSpan(x, y, span, 1);
-                xfer->xfer32(device, span, 1, &alpha);
-                y += 1;
-                device = (uint32_t*)((char*)device + deviceRB);
-            } while (--height > 0);
-        } else {
-            SkBlitRow::Proc32 proc = (255 == alpha) ? fProc32 : fProc32Blend;
-            do {
-                fShaderContext->shadeSpan(x, y, span, 1);
-                proc(device, span, 1, alpha);
-                y += 1;
-                device = (uint32_t*)((char*)device + deviceRB);
-            } while (--height > 0);
-        }
+        SkBlitRow::Proc32 proc = (255 == alpha) ? fProc32 : fProc32Blend;
+        do {
+            fShaderContext->shadeSpan(x, y, span, 1);
+            proc(device, span, 1, alpha);
+            y += 1;
+            device = (uint32_t*)((char*)device + deviceRB);
+        } while (--height > 0);
     }
 }

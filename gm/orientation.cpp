@@ -16,9 +16,11 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
+#include "tools/DecodeUtils.h"
+#include "tools/EncodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
-
+#include "tools/fonts/FontToolUtils.h"
 
 static constexpr int kImgW = 100;
 static constexpr int kImgH =  80;
@@ -50,9 +52,8 @@ static void make_images() {
             swap(size.fWidth, size.fHeight);
         }
         using std::swap;
-        auto surf = SkSurface::MakeRaster(SkImageInfo::Make(size,
-                                                            kRGBA_8888_SkColorType,
-                                                            kPremul_SkAlphaType));
+        auto surf = SkSurfaces::Raster(
+                SkImageInfo::Make(size, kRGBA_8888_SkColorType, kPremul_SkAlphaType));
         auto* canvas = surf->getCanvas();
         SkMatrix m = SkEncodedOriginToMatrix(origin, kImgW, kImgH);
         SkAssertResult(m.invert(&m));
@@ -71,7 +72,7 @@ static void make_images() {
         canvas->drawRect(SkRect::MakeXYWH(1, midY, w, h), paint);
         paint.setColor(SK_ColorYELLOW);
         canvas->drawRect(SkRect::MakeXYWH(midX, midY, w, h), paint);
-        SkFont font(ToolUtils::create_portable_typeface(), kImgH / 4.f);
+        SkFont font(ToolUtils::DefaultPortableTypeface(), kImgH / 4.f);
 
         SkPaint blurPaint;
         blurPaint.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, .75f));
@@ -116,7 +117,7 @@ static void make_images() {
         num.append(".png");
         SkPixmap pm;
         surf->makeImageSnapshot()->peekPixels(&pm);
-        ToolUtils::EncodeImageToFile(num.c_str(), pm, SkEncodedImageFormat::kPNG, 100);
+        ToolUtils::EncodeImageToPngFile(num.c_str(), pm);
     }
 }
 
@@ -133,7 +134,7 @@ static void draw(SkCanvas* canvas, const char* suffix) {
     canvas->save();
     for (char i = '1'; i <= '8'; i++) {
         SkString path = SkStringPrintf("images/orientation/%c%s.jpg", i, suffix);
-        auto image = GetResourceAsImage(path.c_str());
+        auto image = ToolUtils::GetResourceAsImage(path.c_str());
         if (!image) {
             continue;
         }

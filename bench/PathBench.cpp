@@ -12,6 +12,7 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathUtils.h"
+#include "include/core/SkRRect.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkString.h"
 #include "include/private/base/SkTArray.h"
@@ -305,7 +306,7 @@ private:
 class RandomPathBench : public Benchmark {
 public:
     bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
+        return backend == Backend::kNonRendering;
     }
 
 protected:
@@ -842,7 +843,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
+        return backend == Backend::kNonRendering;
     }
 
 private:
@@ -907,7 +908,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
+        return backend == Backend::kNonRendering;
     }
 
 private:
@@ -1032,7 +1033,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
+        return backend == Backend::kNonRendering;
     }
 
 protected:
@@ -1135,7 +1136,7 @@ public:
 
 protected:
     bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
+        return backend == Backend::kNonRendering;
     }
 
     const char* onGetName() override { return fName.c_str(); }

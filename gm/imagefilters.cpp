@@ -28,6 +28,9 @@
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkShaderMaskFilter.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
+#include "src/core/SkCanvasPriv.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -151,8 +154,8 @@ static void draw_set(SkCanvas* canvas, sk_sp<SkImageFilter> filters[], int count
 class SaveLayerWithBackdropGM : public skiagm::GM {
 protected:
     bool runAsBench() const override { return true; }
-    SkString onShortName() override { return SkString("savelayer_with_backdrop"); }
-    SkISize onISize() override { return SkISize::Make(830, 550); }
+    SkString getName() const override { return SkString("savelayer_with_backdrop"); }
+    SkISize getISize() override { return SkISize::Make(830, 550); }
 
     void onDraw(SkCanvas* canvas) override {
         SkColorMatrix cm;
@@ -178,7 +181,7 @@ protected:
 
         SkSamplingOptions sampling(SkFilterMode::kLinear,
                                    SkMipmapMode::kLinear);
-        sk_sp<SkImage> image(GetResourceAsImage("images/mandrill_512.png"));
+        sk_sp<SkImage> image(ToolUtils::GetResourceAsImage("images/mandrill_512.png"));
 
         canvas->translate(20, 20);
         for (const auto& xform : xforms) {
@@ -199,10 +202,10 @@ DEF_GM(return new SaveLayerWithBackdropGM();)
 // Test that color filters and mask filters are applied before the image filter, even if it would
 // normally be a sprite draw that could avoid an auto-saveLayer.
 DEF_SIMPLE_GM(imagefilters_effect_order, canvas, 512, 512) {
-    sk_sp<SkImage> image(GetResourceAsImage("images/mandrill_256.png"));
+    sk_sp<SkImage> image(ToolUtils::GetResourceAsImage("images/mandrill_256.png"));
     auto direct = GrAsDirectContext(canvas->recordingContext());
     if (direct) {
-        if (sk_sp<SkImage> gpuImage = image->makeTextureImage(direct)) {
+        if (sk_sp<SkImage> gpuImage = SkImages::TextureFromImage(direct, image)) {
             image = std::move(gpuImage);
         }
     }
@@ -257,7 +260,7 @@ DEF_SIMPLE_GM(imagefilters_effect_order, canvas, 512, 512) {
     // image; otherwise the mask filter will apply late (incorrectly) and none of the original
     // image will be visible.
     sk_sp<SkImageFilter> edgeBlend = SkImageFilters::Blend(SkBlendMode::kSrcOver,
-            SkImageFilters::Image(image), edgeDetector);
+            SkImageFilters::Image(image, SkFilterMode::kNearest), edgeDetector);
 
     SkPaint testMaskPaint;
     testMaskPaint.setMaskFilter(maskFilter);
@@ -279,4 +282,48 @@ DEF_SIMPLE_GM(imagefilters_effect_order, canvas, 512, 512) {
     canvas->clipRect(crop);
     canvas->drawImage(image, 0, 0, SkSamplingOptions(), &testMaskPaint);
     canvas->restore();
+}
+
+DEF_SIMPLE_GM(multiple_filters, canvas, 415, 210) {
+    ToolUtils::draw_checkerboard(canvas);
+    canvas->translate(5, 5);
+
+    auto drawFilteredLayer = [=](SkCanvas::FilterSpan filters) {
+        SkPaint restorePaint;
+        restorePaint.setAlphaf(0.5f);
+        SkCanvas::SaveLayerRec rec = SkCanvasPriv::ScaledBackdropLayer(
+                /*bounds=*/nullptr,
+                &restorePaint,
+                /*backdrop=*/nullptr,
+                /*backdropScale=*/1,
+                /*saveLayerFlags=*/0,
+                filters);
+        canvas->save();
+        canvas->clipRect({0, 0, 200, 200});
+        canvas->saveLayer(rec);
+
+        SkPaint paint;
+        paint.setStyle(SkPaint::kStroke_Style);
+        paint.setStrokeWidth(20);
+        paint.setColor(SK_ColorGREEN);
+        canvas->drawCircle(100, 100, 70, paint);
+
+        canvas->restore();
+        canvas->restore();
+        canvas->translate(205, 0);
+    };
+
+    {
+        // Test with two non-null filters that each change bounds in a different way:
+        sk_sp<SkImageFilter> filters[2] = {SkImageFilters::Dilate(5, 5, nullptr),
+                                           SkImageFilters::Erode(5, 5, nullptr)};
+        drawFilteredLayer(filters);
+    }
+
+    {
+        // Test with one null filter, to more closely mimic the canvas2D layers use-case:
+        sk_sp<SkImageFilter> filters[2] = {
+                SkImageFilters::DropShadowOnly(7, 7, 5, 5, SK_ColorBLUE, nullptr), nullptr};
+        drawFilteredLayer(filters);
+    }
 }

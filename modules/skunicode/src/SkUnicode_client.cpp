@@ -4,16 +4,16 @@
 * Use of this source code is governed by a BSD-style license that can be
 * found in the LICENSE file.
 */
-
 #include "include/core/SkSpan.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkBitmaskEnum.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTo.h"
 #include "modules/skunicode/include/SkUnicode.h"
 #include "modules/skunicode/src/SkUnicode_client.h"
+#include "modules/skunicode/src/SkUnicode_hardcoded.h"
 #include "modules/skunicode/src/SkUnicode_icu_bidi.h"
+#include "src/base/SkBitmaskEnum.h"
 #include "src/base/SkUTF.h"
 
 #include <algorithm>
@@ -22,43 +22,19 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <array>
+#include <unicode/ubidi.h>
+#include <unicode/ubrk.h>
+#include <unicode/uchar.h>
+#include <unicode/uloc.h>
+#include <unicode/uscript.h>
+#include <unicode/ustring.h>
+#include <unicode/utext.h>
+#include <unicode/utypes.h>
 
+using namespace skia_private;
 
-#ifndef SK_UNICODE_ICU_IMPLEMENTATION
-const char* SkUnicode_IcuBidi::errorName(UErrorCode status) {
-    return cl_u_errorName(status);
-}
-void SkUnicode_IcuBidi::bidi_close(UBiDi* bidi) {
-    cl_ubidi_close(bidi);
-}
-UBiDiDirection SkUnicode_IcuBidi::bidi_getDirection(const UBiDi* bidi) {
-    return cl_ubidi_getDirection(bidi);
-}
-SkBidiIterator::Position SkUnicode_IcuBidi::bidi_getLength(const UBiDi* bidi) {
-    return cl_ubidi_getLength(bidi);
-}
-SkBidiIterator::Level SkUnicode_IcuBidi::bidi_getLevelAt(const UBiDi* bidi, int pos) {
-    return cl_ubidi_getLevelAt(bidi, pos);
-}
-UBiDi* SkUnicode_IcuBidi::bidi_openSized(int32_t maxLength, int32_t maxRunCount, UErrorCode* pErrorCode) {
-    return cl_ubidi_openSized(maxLength, maxRunCount, pErrorCode);
-}
-void SkUnicode_IcuBidi::bidi_setPara(UBiDi* bidi,
-                         const UChar* text,
-                         int32_t length,
-                         UBiDiLevel paraLevel,
-                         UBiDiLevel* embeddingLevels,
-                         UErrorCode* status) {
-    return cl_ubidi_setPara(bidi, text, length, paraLevel, embeddingLevels, status);
-}
-void SkUnicode_IcuBidi::bidi_reorderVisual(const SkUnicode::BidiLevel runLevels[],
-                               int levelsCount,
-                               int32_t logicalFromVisual[]) {
-    cl_ubidi_reorderVisual(runLevels, levelsCount, logicalFromVisual);
-}
-#endif
-
-class SkUnicode_client : public SkUnicode {
+class SkUnicode_client : public SkUnicodeHardCodedCharProperties {
 public:
     struct Data {
         SkSpan<const char> fText8;
@@ -92,7 +68,7 @@ public:
             : fData(std::make_shared<Data>(text,
                                            std::move(words),
                                            std::move(graphemeBreaks),
-                                           std::move(lineBreaks))) {}
+                                           std::move(lineBreaks))) { }
     SkUnicode_client(const SkUnicode_client* origin)
             : fData(origin->fData) {}
 
@@ -118,88 +94,29 @@ public:
                         int utf8Units,
                         TextDirection dir,
                         std::vector<BidiRegion>* results) override {
-        return SkUnicode::extractBidi(utf8, utf8Units, dir, results);
+        return SkUnicode_IcuBidi::ExtractBidi(utf8, utf8Units, dir, results);
     }
 
-    // TODO: Take if from the Client or hard code here?
-    static bool isControl(SkUnichar utf8) {
-        return (utf8 < ' ') || (utf8 >= 0x7f && utf8 <= 0x9f) ||
-               (utf8 >= 0x200D && utf8 <= 0x200F) ||
-               (utf8 >= 0x202A && utf8 <= 0x202E);
+    bool getUtf8Words(const char utf8[],
+                      int utf8Units,
+                      const char* locale,
+                      std::vector<Position>* results) override {
+        SkDEBUGF("Method 'getUtf8Words' is not implemented\n");
+        return false;
     }
 
-    static bool isWhitespace(SkUnichar unichar) {
-        std::u16string whitespaces =
-       u"\u0009" // character tabulation
-        "\u000A" // line feed
-        "\u000B" // line tabulation
-        "\u000C" // form feed
-        "\u000D" // carriage return
-        "\u0020" // space
-      //"\u0085" // next line
-      //"\u00A0" // no-break space
-        "\u1680" // ogham space mark
-        "\u2000" // en quad
-        "\u2001" // em quad
-        "\u2002" // en space
-        "\u2003" // em space
-        "\u2004" // three-per-em space
-        "\u2005" // four-per-em space
-        "\u2006" // six-per-em space
-      //"\u2007" // figure space
-        "\u2008" // punctuation space
-        "\u2009" // thin space
-        "\u200A" // hair space
-        "\u2028" // line separator
-        "\u2029" // paragraph separator
-      //"\u202F" // narrow no-break space
-        "\u205F" // medium mathematical space
-        "\u3000";// ideographic space
-        return whitespaces.find(unichar) != std::u16string::npos;
-    }
-
-    static bool isSpace(SkUnichar unichar) {
-        std::u16string spaces =
-       u"\u0009" // character tabulation
-        "\u000A" // line feed
-        "\u000B" // line tabulation
-        "\u000C" // form feed
-        "\u000D" // carriage return
-        "\u0020" // space
-        "\u0085" // next line
-        "\u00A0" // no-break space
-        "\u1680" // ogham space mark
-        "\u2000" // en quad
-        "\u2001" // em quad
-        "\u2002" // en space
-        "\u2003" // em space
-        "\u2004" // three-per-em space
-        "\u2005" // four-per-em space
-        "\u2006" // six-per-em space
-        "\u2007" // figure space
-        "\u2008" // punctuation space
-        "\u2009" // thin space
-        "\u200A" // hair space
-        "\u2028" // line separator
-        "\u2029" // paragraph separator
-        "\u202F" // narrow no-break space
-        "\u205F" // medium mathematical space
-        "\u3000"; // ideographic space
-        return spaces.find(unichar) != std::u16string::npos;
-    }
-
-    static bool isTabulation(SkUnichar utf8) {
-        return utf8 == '\t';
-    }
-
-    static bool isHardBreak(SkUnichar utf8) {
-        return utf8 == '\n';
+    bool getSentences(const char utf8[],
+                      int utf8Units,
+                      const char* locale,
+                      std::vector<SkUnicode::Position>* results) override {
+        SkDEBUGF("Method 'getSentences' is not implemented\n");
+        return false;
     }
 
     bool computeCodeUnitFlags(char utf8[],
                               int utf8Units,
                               bool replaceTabs,
-                              SkTArray<SkUnicode::CodeUnitFlags, true>* results) override {
+                              TArray<SkUnicode::CodeUnitFlags, true>* results) override {
         results->clear();
         results->push_back_n(utf8Units + 1, CodeUnitFlags::kNoCodeUnitFlag);
         for (auto& lineBreak : fData->fLineBreaks) {
@@ -218,7 +135,7 @@ public:
             SkUnichar unichar = SkUTF::NextUTF8(&current, end);
             if (unichar < 0) unichar = 0xFFFD;
             auto after = current - utf8;
-            if (replaceTabs && SkUnicode_client::isTabulation(unichar)) {
+            if (replaceTabs && this->isTabulation(unichar)) {
                 results->at(before) |= SkUnicode::kTabulation;
                 if (replaceTabs) {
                     unichar = ' ';
@@ -226,13 +143,13 @@ public:
                 }
             }
             for (auto i = before; i < after; ++i) {
-                if (SkUnicode_client::isSpace(unichar)) {
+                if (this->isSpace(unichar)) {
                     results->at(i) |= SkUnicode::kPartOfIntraWordBreak;
                 }
-                if (SkUnicode_client::isWhitespace(unichar)) {
+                if (this->isWhitespace(unichar)) {
                     results->at(i) |= SkUnicode::kPartOfWhiteSpaceBreak;
                 }
-                if (SkUnicode_client::isControl(unichar)) {
+                if (this->isControl(unichar)) {
                     results->at(i) |= SkUnicode::kControl;
                 }
             }
@@ -241,7 +158,7 @@ public:
     }
 
     bool computeCodeUnitFlags(char16_t utf16[], int utf16Units, bool replaceTabs,
-                          SkTArray<SkUnicode::CodeUnitFlags, true>* results) override {
+                          TArray<SkUnicode::CodeUnitFlags, true>* results) override {
         results->clear();
         results->push_back_n(utf16Units + 1, CodeUnitFlags::kNoCodeUnitFlag);
         for (auto& lineBreak : fData->fLineBreaks) {
@@ -316,12 +233,12 @@ public:
 };
 std::unique_ptr<SkBidiIterator> SkUnicode_client::makeBidiIterator(const uint16_t text[], int count,
                                                  SkBidiIterator::Direction dir) {
-    return SkUnicode::makeBidiIterator(text, count, dir);
+    return SkUnicode_IcuBidi::MakeIterator(text, count, dir);
 }
 std::unique_ptr<SkBidiIterator> SkUnicode_client::makeBidiIterator(const char text[],
                                                  int count,
                                                  SkBidiIterator::Direction dir) {
-    return SkUnicode::makeBidiIterator(text, count, dir);
+    return SkUnicode_IcuBidi::MakeIterator(text, count, dir);
 }
 std::unique_ptr<SkBreakIterator> SkUnicode_client::makeBreakIterator(const char locale[],
                                                    BreakType breakType) {
@@ -336,5 +253,7 @@ std::unique_ptr<SkUnicode> SkUnicode::MakeClientBasedUnicode(
         std::vector<SkUnicode::Position> words,
         std::vector<SkUnicode::Position> graphemeBreaks,
         std::vector<SkUnicode::LineBreakBefore> lineBreaks) {
-    return std::make_unique<SkUnicode_client>(text, words, graphemeBreaks, lineBreaks);
+    return std::make_unique<SkUnicode_client>(text, std::move(words), std::move(graphemeBreaks),
+                                              std::move(lineBreaks));
 }
+

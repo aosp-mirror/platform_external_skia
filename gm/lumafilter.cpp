@@ -28,8 +28,10 @@
 #include "include/effects/SkLumaColorFilter.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "src/core/SkColorFilterPriv.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -40,7 +42,7 @@ static SkColor  kColor2 = SkColorSetARGB(0xff, 0x82, 0xff, 0);
 
 static void draw_label(SkCanvas* canvas, const char* label,
                        const SkPoint& offset) {
-    SkFont font(ToolUtils::create_portable_typeface());
+    SkFont font = ToolUtils::DefaultPortableFont();
     font.setEdging(SkFont::Edging::kAlias);
 
     size_t len = strlen(label);
@@ -114,13 +116,9 @@ protected:
                                             SkTileMode::kClamp);
     }
 
-    SkString onShortName() override {
-        return SkString("lumafilter");
-    }
+    SkString getName() const override { return SkString("lumafilter"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(600, 420);
-    }
+    SkISize getISize() override { return SkISize::Make(600, 420); }
 
     void onDraw(SkCanvas* canvas) override {
         SkBlendMode modes[] = {
@@ -171,7 +169,7 @@ private:
 DEF_GM(return new LumaFilterGM;)
 
 DEF_SIMPLE_GM(AlternateLuma, canvas, 384,128) {
-    sk_sp<SkImage> img = GetResourceAsImage("images/mandrill_128.png");
+    sk_sp<SkImage> img = ToolUtils::GetResourceAsImage("images/mandrill_128.png");
     if (!img) {
         return;
     }
@@ -179,7 +177,7 @@ DEF_SIMPLE_GM(AlternateLuma, canvas, 384,128) {
     // Normal luma colorfilter on the left.
     SkPaint paint;
     paint.setColorFilter(SkLumaColorFilter::Make());
-    canvas->drawImage(img, 0,0, SkSamplingOptions{}, &paint);
+    canvas->drawImage(img, 0,0, SkFilterMode::kNearest, &paint);
     canvas->translate(128,0);
 
     // Original image in the middle for reference.
@@ -199,5 +197,5 @@ DEF_SIMPLE_GM(AlternateLuma, canvas, 384,128) {
                                                               &SkNamedTransferFn::kLinear,
                                                               &SkNamedGamut::kXYZ,
                                                               &unpremul));
-    canvas->drawImage(img, 0,0, SkSamplingOptions{}, &paint);
+    canvas->drawImage(img, 0,0, SkFilterMode::kNearest, &paint);
 }

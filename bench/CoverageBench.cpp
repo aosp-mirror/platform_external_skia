@@ -13,7 +13,6 @@
 #include "include/core/SkPath.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkDraw.h"
-#include "src/core/SkMatrixProvider.h"
 #include "src/core/SkRasterClip.h"
 
 class DrawPathBench : public Benchmark {
@@ -22,21 +21,27 @@ class DrawPathBench : public Benchmark {
     SkPath      fPath;
     SkRasterClip fRC;
     SkAutoPixmapStorage fPixmap;
-    SkMatrixProvider fIdentityMatrixProvider;
     SkDraw      fDraw;
     bool        fDrawCoverage;
 public:
-    DrawPathBench(bool drawCoverage)
-            : fIdentityMatrixProvider(SkMatrix::I()), fDrawCoverage(drawCoverage) {
-        fPaint.setAntiAlias(true);
+    DrawPathBench(bool drawCoverage) : fDrawCoverage(drawCoverage) {
         fName.printf("draw_coverage_%s", drawCoverage ? "true" : "false");
+    }
+
+protected:
+    const char* onGetName() override {
+        return fName.c_str();
+    }
+
+    void onDelayedSetup() override {
+        fPaint.setAntiAlias(true);
 
         fPath.moveTo(0, 0);
         fPath.quadTo(500, 0, 500, 500);
         fPath.quadTo(250, 0, 0, 500);
 
         fPixmap.alloc(SkImageInfo::MakeA8(500, 500));
-        if (!drawCoverage) {
+        if (!fDrawCoverage) {
             // drawPathCoverage() goes out of its way to work fine with an uninitialized
             // dst buffer, even in "SrcOver" mode, but ordinary drawing sure doesn't.
             fPixmap.erase(0);
@@ -44,14 +49,9 @@ public:
 
         fRC.setRect(fPath.getBounds().round());
 
-        fDraw.fDst            = fPixmap;
-        fDraw.fMatrixProvider = &fIdentityMatrixProvider;
-        fDraw.fRC             = &fRC;
-    }
-
-protected:
-    const char* onGetName() override {
-        return fName.c_str();
+        fDraw.fDst = fPixmap;
+        fDraw.fCTM = &SkMatrix::I();
+        fDraw.fRC = &fRC;
     }
 
     void onDraw(int loops, SkCanvas* canvas) override {

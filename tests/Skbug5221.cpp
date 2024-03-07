@@ -16,24 +16,26 @@
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
+#include "tools/fonts/FontToolUtils.h"
 
 struct GrContextOptions;
 
 // This passes by not crashing.
 static void test(SkCanvas* canvas) {
     canvas->scale(63, 0);
-    canvas->drawString("A", 50, 50, SkFont(), SkPaint());
+    canvas->drawString("A", 50, 50, ToolUtils::DefaultFont(), SkPaint());
 }
 
 DEF_TEST(skbug5221, r) {
-    sk_sp<SkSurface> surface(SkSurface::MakeRaster(SkImageInfo::MakeN32Premul(256, 256)));
+    sk_sp<SkSurface> surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(256, 256)));
     test(surface->getCanvas());
 }
 
 DEF_GANESH_TEST_FOR_ALL_CONTEXTS(skbug5221_GPU, r, contextInfo, CtsEnforcement::kNever) {
-    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(
+    sk_sp<SkSurface> surface(SkSurfaces::RenderTarget(
             contextInfo.directContext(),
             skgpu::Budgeted::kYes,
             SkImageInfo::Make(256, 256, kRGBA_8888_SkColorType, kPremul_SkAlphaType)));

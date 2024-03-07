@@ -27,6 +27,7 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkPerlinNoiseShader.h"
+#include "tools/DecodeUtils.h"
 #include "tools/ToolUtils.h"
 
 #include <utility>
@@ -38,7 +39,7 @@ static sk_sp<SkImage> make_gradient_circle(int width, int height) {
     SkScalar x = SkIntToScalar(width / 2);
     SkScalar y = SkIntToScalar(height / 2);
     SkScalar radius = std::min(x, y) * 0.8f;
-    auto surface(SkSurface::MakeRasterN32Premul(width, height));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(width, height)));
     SkCanvas* canvas = surface->getCanvas();
     canvas->clear(0x00000000);
     SkColor colors[2];
@@ -78,13 +79,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("imagefiltersclipped");
-    }
+    SkString getName() const override { return SkString("imagefiltersclipped"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(860, 500);
-    }
+    SkISize getISize() override { return SkISize::Make(860, 500); }
 
     void onOnceBeforeDraw() override {
         fCheckerboard =
@@ -95,12 +92,15 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         canvas->clear(SK_ColorBLACK);
 
-        sk_sp<SkImageFilter> gradient(SkImageFilters::Image(fGradientCircle));
-        sk_sp<SkImageFilter> checkerboard(SkImageFilters::Image(fCheckerboard));
+        sk_sp<SkImageFilter> gradient(SkImageFilters::Image(fGradientCircle,
+                                                            SkFilterMode::kLinear));
+        sk_sp<SkImageFilter> checkerboard(SkImageFilters::Image(fCheckerboard,
+                                                                SkFilterMode::kLinear));
         SkMatrix resizeMatrix;
         resizeMatrix.setScale(RESIZE_FACTOR_X, RESIZE_FACTOR_Y);
         SkPoint3 pointLocation = SkPoint3::Make(32, 32, SkIntToScalar(10));
 
+        SkRect r = SkRect::MakeWH(SkIntToScalar(64), SkIntToScalar(64));
         sk_sp<SkImageFilter> filters[] = {
             SkImageFilters::Blur(SkIntToScalar(12), SkIntToScalar(12), nullptr),
             SkImageFilters::DropShadow(SkIntToScalar(10), SkIntToScalar(10),
@@ -111,12 +111,11 @@ protected:
             SkImageFilters::Erode(2, 2, checkerboard),
             SkImageFilters::Offset(SkIntToScalar(-16), SkIntToScalar(32), nullptr),
             SkImageFilters::MatrixTransform(resizeMatrix, SkSamplingOptions(), nullptr),
+            // Crop output of lighting to the checkerboard
             SkImageFilters::PointLitDiffuse(pointLocation, SK_ColorWHITE, SK_Scalar1,
-                                            SkIntToScalar(2), checkerboard),
-
+                                            SkIntToScalar(2), checkerboard, r),
         };
 
-        SkRect r = SkRect::MakeWH(SkIntToScalar(64), SkIntToScalar(64));
         SkScalar margin = SkIntToScalar(16);
         SkRect bounds = r;
         bounds.outset(margin, margin);
@@ -134,8 +133,8 @@ protected:
         }
         canvas->restore();
 
-        sk_sp<SkImageFilter> rectFilter(SkImageFilters::Shader(
-                SkPerlinNoiseShader::MakeFractalNoise(0.1f, 0.05f, 1, 0)));
+        sk_sp<SkImageFilter> rectFilter(
+                SkImageFilters::Shader(SkShaders::MakeFractalNoise(0.1f, 0.05f, 1, 0)));
         canvas->translate(std::size(filters)*(r.width() + margin), 0);
         for (int xOffset = 0; xOffset < 80; xOffset += 16) {
             bounds.fLeft = SkIntToScalar(xOffset);
@@ -154,3 +153,24 @@ private:
 
 DEF_GM(return new ImageFiltersClippedGM;)
 }  // namespace skiagm
+
+DEF_SIMPLE_GM(imagefilter_convolve_subset, canvas, 160, 180) {
+    sk_sp<SkImage> reference = ToolUtils::GetResourceAsImage("images/filter_reference.png");
+    SkRect crop = SkRect::Make(reference->dimensions()).makeInset(10, 10);
+    auto drawFilteredImage = [&](sk_sp<SkImageFilter> filter) {
+        SkPaint p;
+        p.setImageFilter(std::move(filter));
+        canvas->drawImage(reference, 0, 0, {}, &p);
+        canvas->translate(0, reference->height());
+    };
+
+    {
+        float kernel[] = {1.f,  1.f, 1.f,
+                          1.f, -7.f, 1.f,
+                          1.f,  1.f, 1.f};
+        drawFilteredImage(SkImageFilters::MatrixConvolution(
+                {3, 3}, kernel, 1.f, 0.3f, {1, 1}, SkTileMode::kClamp, true, nullptr, crop));
+    }
+
+    drawFilteredImage(SkImageFilters::Blur(10.f, 10.f, SkTileMode::kMirror, nullptr, crop));
+}

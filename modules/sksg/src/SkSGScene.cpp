@@ -5,13 +5,11 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkMatrix.h"
+#include "modules/sksg/include/SkSGRenderNode.h"
 #include "modules/sksg/include/SkSGScene.h"
 
-#include "include/core/SkCanvas.h"
-#include "include/core/SkMatrix.h"
-#include "include/core/SkPaint.h"
-#include "modules/sksg/include/SkSGInvalidationController.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
+#include <utility>
 
 namespace sksg {
 
@@ -24,10 +22,6 @@ Scene::Scene(sk_sp<RenderNode> root) : fRoot(std::move(root)) {}
 Scene::~Scene() = default;
 
 void Scene::render(SkCanvas* canvas) const {
-    // Ensure the SG is revalidated.
-    // Note: this is a no-op if the scene has already been revalidated - e.g. in animate().
-    fRoot->revalidate(nullptr, SkMatrix::I());
-
     fRoot->render(canvas);
 }
 

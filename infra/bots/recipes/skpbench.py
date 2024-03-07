@@ -17,7 +17,6 @@ DEPS = [
   'recipe_engine/path',
   'recipe_engine/platform',
   'recipe_engine/properties',
-  'recipe_engine/python',
   'recipe_engine/raw_io',
   'recipe_engine/step',
   'recipe_engine/time',
@@ -118,12 +117,8 @@ def skpbench_steps(api):
   if api.properties.get('dont_reduce_ops_task_splitting') == 'true':
     skpbench_args += ['--dontReduceOpsTaskSplitting']
 
-  if api.properties.get('gpu_resource_cache_limit'):
-    skpbench_args += ['--gpuResourceCacheLimit', api.properties.get('gpu_resource_cache_limit')]
-
-  api.run(api.python, 'skpbench',
-      script=skpbench_dir.join('skpbench.py'),
-      args=skpbench_args)
+  api.run(api.step, 'skpbench',
+      cmd=['python3', skpbench_dir.join('skpbench.py')] + skpbench_args)
 
   skiaperf_args = [
     table,
@@ -155,9 +150,8 @@ def skpbench_steps(api):
     if not k in ['configuration', 'role', 'is_trybot']:
       skiaperf_args.extend([k, api.vars.builder_cfg[k]])
 
-  api.run(api.python, 'Parse skpbench output into Perf json',
-      script=skpbench_dir.join('skiaperf.py'),
-      args=skiaperf_args)
+  api.run(api.step, 'Parse skpbench output into Perf json',
+      cmd=['python3', skpbench_dir.join('skiaperf.py')] + skiaperf_args)
 
 
 def RunSteps(api):
@@ -219,8 +213,7 @@ def GenTests(api):
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]',
-                   dont_reduce_ops_task_splitting='true',
-                   gpu_resource_cache_limit='16777216') +
+                   dont_reduce_ops_task_splitting='true') +
     api.path.exists(
         api.path['start_dir'].join('skia'),
         api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',

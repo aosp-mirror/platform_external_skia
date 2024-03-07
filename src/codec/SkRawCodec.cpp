@@ -8,6 +8,7 @@
 #include "src/codec/SkRawCodec.h"
 
 #include "include/codec/SkCodec.h"
+#include "include/codec/SkRawDecoder.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkImageInfo.h"
@@ -35,29 +36,29 @@
 #include <utility>
 #include <vector>
 
-#include "dng_area_task.h"
-#include "dng_color_space.h"
-#include "dng_errors.h"
-#include "dng_exceptions.h"
-#include "dng_host.h"
-#include "dng_image.h"
-#include "dng_info.h"
-#include "dng_memory.h"
-#include "dng_mosaic_info.h"
-#include "dng_negative.h"
-#include "dng_pixel_buffer.h"
-#include "dng_point.h"
-#include "dng_rational.h"
-#include "dng_rect.h"
-#include "dng_render.h"
-#include "dng_sdk_limits.h"
-#include "dng_stream.h"
-#include "dng_tag_types.h"
-#include "dng_types.h"
-#include "dng_utils.h"
+#include "dng_area_task.h"  // NO_G3_REWRITE
+#include "dng_color_space.h"  // NO_G3_REWRITE
+#include "dng_errors.h"  // NO_G3_REWRITE
+#include "dng_exceptions.h"  // NO_G3_REWRITE
+#include "dng_host.h"  // NO_G3_REWRITE
+#include "dng_image.h"  // NO_G3_REWRITE
+#include "dng_info.h"  // NO_G3_REWRITE
+#include "dng_memory.h"  // NO_G3_REWRITE
+#include "dng_mosaic_info.h"  // NO_G3_REWRITE
+#include "dng_negative.h"  // NO_G3_REWRITE
+#include "dng_pixel_buffer.h"  // NO_G3_REWRITE
+#include "dng_point.h"  // NO_G3_REWRITE
+#include "dng_rational.h"  // NO_G3_REWRITE
+#include "dng_rect.h"  // NO_G3_REWRITE
+#include "dng_render.h"  // NO_G3_REWRITE
+#include "dng_sdk_limits.h"  // NO_G3_REWRITE
+#include "dng_stream.h"  // NO_G3_REWRITE
+#include "dng_tag_types.h"  // NO_G3_REWRITE
+#include "dng_types.h"  // NO_G3_REWRITE
+#include "dng_utils.h"  // NO_G3_REWRITE
 
-#include "src/piex.h"
-#include "src/piex_types.h"
+#include "src/piex.h"  // NO_G3_REWRITE
+#include "src/piex_types.h"  // NO_G3_REWRITE
 
 using namespace skia_private;
 
@@ -133,7 +134,7 @@ public:
         const int numTasks = static_cast<int>(taskAreas.size());
 
         SkMutex mutex;
-        SkTArray<dng_exception> exceptions;
+        TArray<dng_exception> exceptions;
         task.Start(numTasks, tileSize, &Allocator(), Sniffer());
         for (int taskIndex = 0; taskIndex < numTasks; ++taskIndex) {
             taskGroup.add([&mutex, &exceptions, &task, this, taskIndex, taskAreas, tileSize] {
@@ -647,6 +648,11 @@ private:
  */
 std::unique_ptr<SkCodec> SkRawCodec::MakeFromStream(std::unique_ptr<SkStream> stream,
                                                     Result* result) {
+    SkASSERT(result);
+    if (!stream) {
+        *result = SkCodec::kInvalidInput;
+        return nullptr;
+    }
     std::unique_ptr<SkRawStream> rawStream;
     if (is_asset_stream(*stream)) {
         rawStream = std::make_unique<SkRawAssetStream>(std::move(stream));
@@ -823,3 +829,28 @@ SkRawCodec::SkRawCodec(SkDngImage* dngImage)
                                     SkEncodedInfo::kOpaque_Alpha, 8),
                 skcms_PixelFormat_RGBA_8888, nullptr)
     , fDngImage(dngImage) {}
+
+namespace SkRawDecoder {
+
+std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
+                                SkCodec::Result* outResult,
+                                SkCodecs::DecodeContext) {
+    SkCodec::Result resultStorage;
+    if (!outResult) {
+        outResult = &resultStorage;
+    }
+    return SkRawCodec::MakeFromStream(std::move(stream), outResult);
+}
+
+std::unique_ptr<SkCodec> Decode(sk_sp<SkData> data,
+                                SkCodec::Result* outResult,
+                                SkCodecs::DecodeContext) {
+    if (!data) {
+        if (outResult) {
+            *outResult = SkCodec::kInvalidInput;
+        }
+        return nullptr;
+    }
+    return Decode(SkMemoryStream::Make(std::move(data)), outResult, nullptr);
+}
+}  // namespace SkRawDecoder

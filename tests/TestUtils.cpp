@@ -5,24 +5,20 @@
  * found in the LICENSE file.
  */
 
+#include "tests/TestUtils.h"
+
 #include "include/core/SkAlphaType.h"
-#include "include/core/SkBitmap.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
-#include "include/core/SkData.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkSize.h"
-#include "include/core/SkStream.h"
-#include "include/core/SkString.h"
-#include "include/encode/SkPngEncoder.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
-#include "include/utils/SkBase64.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDataUtils.h"
@@ -35,7 +31,6 @@
 #include "src/gpu/ganesh/SurfaceContext.h"
 #include "src/utils/SkCharToGlyphCache.h"
 #include "tests/Test.h"
-#include "tests/TestUtils.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -43,7 +38,7 @@
 
 void TestReadPixels(skiatest::Reporter* reporter,
                     GrDirectContext* dContext,
-                    skgpu::v1::SurfaceContext* srcContext,
+                    skgpu::ganesh::SurfaceContext* srcContext,
                     uint32_t expectedPixelValues[],
                     const char* testName) {
     int pixelCnt = srcContext->width() * srcContext->height();
@@ -70,7 +65,7 @@ void TestReadPixels(skiatest::Reporter* reporter,
 
 void TestWritePixels(skiatest::Reporter* reporter,
                      GrDirectContext* dContext,
-                     skgpu::v1::SurfaceContext* dstContext,
+                     skgpu::ganesh::SurfaceContext* dstContext,
                      bool expectedToWork,
                      const char* testName) {
     SkImageInfo ii = SkImageInfo::Make(dstContext->dimensions(),
@@ -110,7 +105,7 @@ void TestCopyFromSurface(skiatest::Reporter* reporter,
     auto copy = GrSurfaceProxy::Copy(dContext,
                                      std::move(proxy),
                                      origin,
-                                     GrMipmapped::kNo,
+                                     skgpu::Mipmapped::kNo,
                                      SkBackingFit::kExact,
                                      skgpu::Budgeted::kYes,
                                      /*label=*/"CopyFromSurface_Test");
@@ -122,41 +117,6 @@ void TestCopyFromSurface(skiatest::Reporter* reporter,
     SkASSERT(dstContext);
 
     TestReadPixels(reporter, dContext, dstContext.get(), expectedPixelValues, testName);
-}
-
-bool BipmapToBase64DataURI(const SkBitmap& bitmap, SkString* dst) {
-    SkPixmap pm;
-    if (!bitmap.peekPixels(&pm)) {
-        dst->set("peekPixels failed");
-        return false;
-    }
-
-    // We're going to embed this PNG in a data URI, so make it as small as possible
-    SkPngEncoder::Options options;
-    options.fFilterFlags = SkPngEncoder::FilterFlag::kAll;
-    options.fZLibLevel = 9;
-
-    SkDynamicMemoryWStream wStream;
-    if (!SkPngEncoder::Encode(&wStream, pm, options)) {
-        dst->set("SkPngEncoder::Encode failed");
-        return false;
-    }
-
-    sk_sp<SkData> pngData = wStream.detachAsData();
-    size_t len = SkBase64::Encode(pngData->data(), pngData->size(), nullptr);
-
-    // The PNG can be almost arbitrarily large. We don't want to fill our logs with enormous URLs.
-    // Infra says these can be pretty big, as long as we're only outputting them on failure.
-    static const size_t kMaxBase64Length = 1024 * 1024;
-    if (len > kMaxBase64Length) {
-        dst->printf("Encoded image too large (%u bytes)", static_cast<uint32_t>(len));
-        return false;
-    }
-
-    dst->resize(len);
-    SkBase64::Encode(pngData->data(), pngData->size(), dst->data());
-    dst->prepend("data:image/png;base64,");
-    return true;
 }
 
 static bool compare_colors(int x, int y,
@@ -279,15 +239,15 @@ void CheckSingleThreadedProxyRefs(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, actualBackingRefs == expectedBackingRefs);
 }
 
-std::unique_ptr<skgpu::v1::SurfaceContext> CreateSurfaceContext(GrRecordingContext* rContext,
-                                                                const GrImageInfo& info,
-                                                                SkBackingFit fit,
-                                                                GrSurfaceOrigin origin,
-                                                                GrRenderable renderable,
-                                                                int sampleCount,
-                                                                GrMipmapped mipmapped,
-                                                                GrProtected isProtected,
-                                                                skgpu::Budgeted budgeted) {
+std::unique_ptr<skgpu::ganesh::SurfaceContext> CreateSurfaceContext(GrRecordingContext* rContext,
+                                                                    const GrImageInfo& info,
+                                                                    SkBackingFit fit,
+                                                                    GrSurfaceOrigin origin,
+                                                                    GrRenderable renderable,
+                                                                    int sampleCount,
+                                                                    skgpu::Mipmapped mipmapped,
+                                                                    GrProtected isProtected,
+                                                                    skgpu::Budgeted budgeted) {
     GrBackendFormat format = rContext->priv().caps()->getDefaultBackendFormat(info.colorType(),
                                                                               renderable);
     return rContext->priv().makeSC(info,

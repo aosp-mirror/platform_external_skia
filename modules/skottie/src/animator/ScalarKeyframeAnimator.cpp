@@ -5,10 +5,21 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkCubicMap.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkString.h"
+#include "include/private/base/SkAssert.h"
+#include "modules/skottie/include/Skottie.h"
+#include "modules/skottie/include/SlotManager.h"
 #include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/animator/KeyframeAnimator.h"
+#include "src/utils/SkJSON.h"
+
+#include <utility>
+#include <vector>
 
 namespace skottie::internal {
 
@@ -86,7 +97,7 @@ class ScalarAnimatorBuilder final : public AnimatorBuilder {
 
 
         bool parseValue(const AnimationBuilder&, const skjson::Value& jv) const override {
-            return Parse(jv, fTarget);
+            return ::skottie::Parse(jv, fTarget);
         }
 
     private:
@@ -94,7 +105,7 @@ class ScalarAnimatorBuilder final : public AnimatorBuilder {
                           const skjson::ObjectValue&,
                           const skjson::Value& jv,
                           Keyframe::Value* v) override {
-            return Parse(jv, &v->flt);
+            return ::skottie::Parse(jv, &v->flt);
         }
 
         ScalarValue* fTarget;
@@ -108,6 +119,10 @@ template <>
 bool AnimatablePropertyContainer::bind<ScalarValue>(const AnimationBuilder& abuilder,
                                                     const skjson::ObjectValue* jprop,
                                                     ScalarValue* v) {
+    if (const auto* sid = ParseSlotID(jprop)) {
+        fHasSlotID = true;
+        abuilder.fSlotManager->trackScalarValue(SkString(sid->begin()), v, sk_ref_sp(this));
+    }
     ScalarAnimatorBuilder builder(v);
 
     return this->bindImpl(abuilder, jprop, builder);

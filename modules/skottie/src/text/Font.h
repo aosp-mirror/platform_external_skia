@@ -8,16 +8,20 @@
 #ifndef SkottieFont_DEFINED
 #define SkottieFont_DEFINED
 
-#include "include/core/SkTypeface.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
 #include "include/private/base/SkNoncopyable.h"
 #include "include/utils/SkCustomTypeface.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
 #include "src/core/SkTHash.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 class SkPath;
+class SkTypeface;
+struct SkSize;
 
 namespace skjson { class ObjectValue; }
 
@@ -30,7 +34,7 @@ class CustomFont final : SkNoncopyable {
 public:
     ~CustomFont();
 
-    using GlyphCompMap = SkTHashMap<SkGlyphID, sk_sp<sksg::RenderNode>>;
+    using GlyphCompMap = skia_private::THashMap<SkGlyphID, sk_sp<sksg::RenderNode>>;
 
     class Builder final : SkNoncopyable {
     public:
@@ -40,7 +44,8 @@ public:
     private:
         static bool ParseGlyphPath(const AnimationBuilder*, const skjson::ObjectValue&, SkPath*);
         static sk_sp<sksg::RenderNode> ParseGlyphComp(const AnimationBuilder*,
-                                                      const skjson::ObjectValue&);
+                                                      const skjson::ObjectValue&,
+                                                      SkSize*);
 
         GlyphCompMap            fGlyphComps;
         SkCustomTypefaceBuilder fCustomBuilder;

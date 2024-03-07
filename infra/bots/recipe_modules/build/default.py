@@ -78,6 +78,7 @@ def compile_fn(api, checkout_root, out_dir):
 
   clang_linux      = str(api.vars.workdir.join('clang_linux'))
   win_toolchain    = str(api.vars.workdir.join('win_toolchain'))
+  dwritecore       = str(api.vars.workdir.join('dwritecore'))
 
   cc, cxx, ccache = None, None, None
   extra_cflags = []
@@ -167,7 +168,9 @@ def compile_fn(api, checkout_root, out_dir):
     # Increase ClangTidy code coverage by enabling features.
     args.update({
       'skia_enable_fontmgr_empty':     'true',
+      'skia_enable_graphite':          'true',
       'skia_enable_pdf':               'true',
+      'skia_use_dawn':                 'true',
       'skia_use_expat':                'true',
       'skia_use_freetype':             'true',
       'skia_use_vulkan':               'true',
@@ -215,7 +218,7 @@ def compile_fn(api, checkout_root, out_dir):
   if configuration != 'Debug':
     args['is_debug'] = 'false'
   if 'Dawn' in extra_tokens:
-    util.set_dawn_args_and_env(args, env, api, skia_dir)
+    util.set_dawn_args_and_env(args, env, api, extra_tokens, skia_dir)
   if 'ANGLE' in extra_tokens:
     args['skia_use_angle'] = 'true'
   if 'SwiftShader' in extra_tokens:
@@ -234,6 +237,13 @@ def compile_fn(api, checkout_root, out_dir):
     args['skia_enable_precompile'] = 'false'
   if 'Graphite' in extra_tokens:
     args['skia_enable_graphite'] = 'true'
+  if 'Vello' in extra_tokens:
+    args['skia_enable_vello_shaders'] = 'true'
+  if 'Fontations' in extra_tokens:
+    args['skia_use_fontations'] = 'true'
+    args['skia_use_freetype'] = 'true' # we compare with freetype in tests
+    args['skia_use_system_freetype2'] = 'false'
+
   if 'NoGpu' in extra_tokens:
     args['skia_enable_ganesh'] = 'false'
   if 'NoDEPS' in extra_tokens:
@@ -257,9 +267,18 @@ def compile_fn(api, checkout_root, out_dir):
       'skia_use_wuffs':                'false',
       'skia_use_zlib':                 'false',
     })
+  elif configuration != 'OptimizeForSize':
+    args.update({
+      'skia_use_client_icu': 'true',
+      'skia_use_libgrapheme': 'true',
+    })
+
+  if 'Fontations' in extra_tokens:
+    args['skia_use_icu4x'] = 'true'
+
   if 'Shared' in extra_tokens:
     args['is_component_build'] = 'true'
-  if 'Vulkan' in extra_tokens and not 'Android' in extra_tokens:
+  if 'Vulkan' in extra_tokens and not 'Android' in extra_tokens and not 'Dawn' in extra_tokens:
     args['skia_use_vulkan'] = 'true'
     args['skia_enable_vulkan_debug_layers'] = 'true'
     # When running TSAN with Vulkan on NVidia, we experienced some timeouts. We found
@@ -268,10 +287,10 @@ def compile_fn(api, checkout_root, out_dir):
       args['skia_use_gl'] = 'true'
     else:
       args['skia_use_gl'] = 'false'
-  if 'Direct3D' in extra_tokens:
+  if 'Direct3D' in extra_tokens and not 'Dawn' in extra_tokens:
     args['skia_use_direct3d'] = 'true'
     args['skia_use_gl'] = 'false'
-  if 'Metal' in extra_tokens:
+  if 'Metal' in extra_tokens and not 'Dawn' in extra_tokens:
     args['skia_use_metal'] = 'true'
     args['skia_use_gl'] = 'false'
   if 'iOS' in extra_tokens:
@@ -311,6 +330,7 @@ def compile_fn(api, checkout_root, out_dir):
     'target_os': 'ios' if 'iOS' in extra_tokens else '',
     'win_sdk': win_toolchain + '/win_sdk' if 'Win' in os else '',
     'win_vc': win_toolchain + '/VC' if 'Win' in os else '',
+    'skia_dwritecore_sdk': dwritecore if 'DWriteCore' in extra_tokens else '',
   }.items():
     if v:
       args[k] = '"%s"' % v
@@ -323,9 +343,8 @@ def compile_fn(api, checkout_root, out_dir):
   gn = skia_dir.join('bin', 'gn')
 
   with api.context(cwd=skia_dir):
-    api.run(api.python,
-            'fetch-gn',
-            script=skia_dir.join('bin', 'fetch-gn'),
+    api.run(api.step, 'fetch-gn',
+            cmd=['python3', skia_dir.join('bin', 'fetch-gn')],
             infra_step=True)
 
     with api.env(env):
@@ -333,6 +352,9 @@ def compile_fn(api, checkout_root, out_dir):
         api.run(api.step, 'ccache stats-start', cmd=[ccache, '-s'])
       api.run(api.step, 'gn gen',
               cmd=[gn, 'gen', out_dir, '--args=' + gn_args])
+      if 'Fontations' in extra_tokens:
+        api.run(api.step, 'gn clean',
+              cmd=[gn, 'clean', out_dir])
       api.run(api.step, 'ninja', cmd=['ninja', '-C', out_dir])
       if ccache:
         api.run(api.step, 'ccache stats-end', cmd=[ccache, '-s'])

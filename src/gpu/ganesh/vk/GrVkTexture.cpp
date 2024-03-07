@@ -9,6 +9,7 @@
 #include "src/gpu/ganesh/vk/GrVkTexture.h"
 
 #include "src/gpu/ganesh/GrTexture.h"
+#include "src/gpu/ganesh/vk/GrVkBackendSurfacePriv.h"
 #include "src/gpu/ganesh/vk/GrVkDescriptorSet.h"
 #include "src/gpu/ganesh/vk/GrVkGpu.h"
 #include "src/gpu/ganesh/vk/GrVkImageView.h"
@@ -125,7 +126,7 @@ sk_sp<GrVkTexture> GrVkTexture::MakeNewTexture(GrVkGpu* gpu,
 sk_sp<GrVkTexture> GrVkTexture::MakeWrappedTexture(
         GrVkGpu* gpu, SkISize dimensions, GrWrapOwnership wrapOwnership, GrWrapCacheable cacheable,
         GrIOType ioType, const GrVkImageInfo& info,
-        sk_sp<skgpu::MutableTextureStateRef> mutableState) {
+        sk_sp<skgpu::MutableTextureState> mutableState) {
     // Adopted textures require both image and allocation because we're responsible for freeing
     SkASSERT(VK_NULL_HANDLE != info.fImage &&
              (kBorrow_GrWrapOwnership == wrapOwnership || VK_NULL_HANDLE != info.fAlloc.fMemory));
@@ -193,8 +194,10 @@ void GrVkTexture::onAbandon() {
 }
 
 GrBackendTexture GrVkTexture::getBackendTexture() const {
-    return GrBackendTexture(fTexture->width(), fTexture->height(), fTexture->vkImageInfo(),
-                            fTexture->getMutableState());
+    return GrBackendTextures::MakeVk(fTexture->width(),
+                                     fTexture->height(),
+                                     fTexture->vkImageInfo(),
+                                     fTexture->getMutableState());
 }
 
 GrVkGpu* GrVkTexture::getVkGpu() const {
