@@ -43,6 +43,10 @@
 #define SK_GL
 #endif
 
+#ifndef SK_GRAPHITE
+#define SK_GRAPHITE
+#endif
+
 #ifndef SK_IN_RENDERENGINE
 #define SK_IN_RENDERENGINE
 #endif
