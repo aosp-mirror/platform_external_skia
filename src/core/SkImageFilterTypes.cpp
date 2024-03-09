@@ -32,9 +32,9 @@
 #include "src/core/SkDevice.h"
 #include "src/core/SkImageFilterCache.h"
 #include "src/core/SkImageFilter_Base.h"
+#include "src/core/SkKnownRuntimeEffects.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkRectPriv.h"
-#include "src/core/SkRuntimeEffectPriv.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/effects/colorfilters/SkColorFilterBase.h"
 
@@ -1239,49 +1239,57 @@ void FilterResult::draw(const Context& ctx,
         sampling = {};
     }
 
-    SkPaint paint;
-    if (blender) {
-        paint.setBlender(sk_ref_sp(blender));
-    } else {
-        paint.setBlendMode(SkBlendMode::kSrcOver);
-    }
-
     if (analysis & BoundsAnalysis::kHasLayerFillingEffect ||
         (blendAffectsTransparentBlack && (analysis & BoundsAnalysis::kDstBoundsNotCovered))) {
         // Fill the canvas with the shader, so that the pixels beyond the image dimensions are still
         // covered by the draw and either resolve tiling into the image, color filter transparent
         // black, apply the blend mode to the dst, or any combination thereof.
+        SkPaint paint;
+        paint.setBlender(sk_ref_sp(blender));
         paint.setShader(this->getAnalyzedShaderView(ctx, sampling, analysis));
         device->drawPaint(paint);
     } else {
-        // src's origin is embedded in fTransform. For historical reasons, drawSpecial() does
-        // not automatically use the device's current local-to-device matrix, but that's what preps
-        // it to match the expected layer coordinate system.
-        paint.setColorFilter(fColorFilter);
-        SkMatrix netTransform = SkMatrix::Concat(device->localToDevice(), SkMatrix(fTransform));
-
-        if (this->canClampToTransparentBoundary(analysis) &&
-            (sampling == kDefaultSampling ||
-             (pixelAligned && sampling == SkFilterMode::kNearest))) {
-            SkASSERT(!(analysis & BoundsAnalysis::kRequiresShaderTiling));
-            // Draw non-AA with a 1px outset image so that the transparent boundary filtering is
-            // not multiplied with the AA (which creates a harsher AA transition).
-            netTransform.preTranslate(-1.f, -1.f);
-            device->drawSpecial(fImage->makePixelOutset().get(), netTransform, sampling, paint,
-                                SkCanvas::kFast_SrcRectConstraint);
-        } else {
-            paint.setAntiAlias(true);
-            SkCanvas::SrcRectConstraint constraint = SkCanvas::kFast_SrcRectConstraint;
-            if (analysis & BoundsAnalysis::kRequiresShaderTiling) {
-                constraint = SkCanvas::kStrict_SrcRectConstraint;
-                ctx.markShaderBasedTilingRequired(SkTileMode::kClamp);
-            }
-            device->drawSpecial(fImage.get(), netTransform, sampling, paint, constraint);
-        }
+        this->drawAnalyzedImage(ctx, device, sampling, analysis, blender);
     }
 
     if (preserveDeviceState && (analysis & BoundsAnalysis::kRequiresLayerCrop)) {
         device->popClipStack();
+    }
+}
+
+void FilterResult::drawAnalyzedImage(const Context& ctx,
+                                     SkDevice* device,
+                                     const SkSamplingOptions& finalSampling,
+                                     SkEnumBitMask<BoundsAnalysis> analysis,
+                                     const SkBlender* blender) const {
+    SkASSERT(!(analysis & BoundsAnalysis::kHasLayerFillingEffect));
+
+    SkPaint paint;
+    paint.setBlender(sk_ref_sp(blender));
+    paint.setColorFilter(fColorFilter);
+
+    // src's origin is embedded in fTransform. For historical reasons, drawSpecial() does
+    // not automatically use the device's current local-to-device matrix, but that's what preps
+    // it to match the expected layer coordinate system.
+    SkMatrix netTransform = SkMatrix::Concat(device->localToDevice(), SkMatrix(fTransform));
+
+    // Check fSamplingOptions for linear filtering, not 'finalSampling' since it may have been
+    // reduced to nearest neighbor.
+    if (this->canClampToTransparentBoundary(analysis) && fSamplingOptions == kDefaultSampling) {
+        SkASSERT(!(analysis & BoundsAnalysis::kRequiresShaderTiling));
+        // Draw non-AA with a 1px outset image so that the transparent boundary filtering is
+        // not multiplied with the AA (which creates a harsher AA transition).
+        netTransform.preTranslate(-1.f, -1.f);
+        device->drawSpecial(fImage->makePixelOutset().get(), netTransform, finalSampling, paint,
+                            SkCanvas::kFast_SrcRectConstraint);
+    } else {
+        paint.setAntiAlias(true);
+        SkCanvas::SrcRectConstraint constraint = SkCanvas::kFast_SrcRectConstraint;
+        if (analysis & BoundsAnalysis::kRequiresShaderTiling) {
+            constraint = SkCanvas::kStrict_SrcRectConstraint;
+            ctx.markShaderBasedTilingRequired(SkTileMode::kClamp);
+        }
+        device->drawSpecial(fImage.get(), netTransform, finalSampling, paint, constraint);
     }
 }
 
@@ -1403,17 +1411,10 @@ sk_sp<SkShader> FilterResult::getAnalyzedShaderView(
         // shader-based tiling, and CPU can have raster-pipeline tiling applied more flexibly than
         // at the bitmap level. At that point, this effect is redundant and can be replaced with the
         // decal-subset shader.
-        static const SkRuntimeEffect* effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader,
-            "uniform shader image;"
-            "uniform float4 decalBounds;"
+        const SkRuntimeEffect* decalEffect =
+                GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kDecal);
 
-            "half4 main(float2 coord) {"
-                "half4 d = half4(decalBounds - coord.xyxy) * half4(-1, -1, 1, 1);"
-                "d = saturate(d + 0.5);"
-                "return (d.x*d.y*d.z*d.w) * image.eval(coord);"
-            "}");
-
-        SkRuntimeShaderBuilder builder(sk_ref_sp(effect));
+        SkRuntimeShaderBuilder builder(sk_ref_sp(decalEffect));
         builder.child("image") = std::move(imageShader);
         builder.uniform("decalBounds") = preDecal.mapRect(imageBounds);
 
