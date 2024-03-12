@@ -981,10 +981,8 @@ SI F approx_log2(F x) {
 
     // ... but using the mantissa to refine its error is _much_ better.
     F m = sk_bit_cast<F>((sk_bit_cast<U32>(x) & 0x007fffff) | 0x3f000000);
-    return e
-         - 124.225514990f
-         -   1.498030302f * m
-         -   1.725879990f / (0.3520887068f + m);
+
+    return nmad(m, 1.498030302f, e - 124.225514990f) - 1.725879990f / (0.3520887068f + m);
 }
 
 SI F approx_log(F x) {
@@ -996,8 +994,7 @@ SI F approx_pow2(F x) {
     constexpr float kInfinityBits = 0x7f800000;
 
     F f = fract(x);
-    F approx = x + 121.274057500f;
-      approx -= f * 1.490129070f;
+    F approx = nmad(f, 1.490129070f, x + 121.274057500f);
       approx += 27.728023300f / (4.84252568f - f);
       approx *= 1.0f * (1<<23);
       approx  = min(max(approx, F0), F_(kInfinityBits));  // guard against underflow/overflow
@@ -1874,12 +1871,10 @@ SI void set_sat(F* r, F* g, F* b, F s) {
       sat = mx - mn;
 
     // Map min channel to 0, max channel to s, and scale the middle proportionally.
-    auto scale = [=](F c) {
-        return if_then_else(sat == 0, 0.0f, (c - mn) * s / sat);
-    };
-    *r = scale(*r);
-    *g = scale(*g);
-    *b = scale(*b);
+    s = if_then_else(sat == 0.0f, 0.0f, s * rcp_fast(sat));
+    *r = (*r - mn) * s;
+    *g = (*g - mn) * s;
+    *b = (*b - mn) * s;
 }
 SI void set_lum(F* r, F* g, F* b, F l) {
     F diff = l - lum(*r, *g, *b);
@@ -1887,20 +1882,24 @@ SI void set_lum(F* r, F* g, F* b, F l) {
     *g += diff;
     *b += diff;
 }
+SI F clip_channel(F c, F l, I32 clip_low, I32 clip_high, F mn_scale, F mx_scale) {
+    c = if_then_else(clip_low,  mad(mn_scale, c - l, l), c);
+    c = if_then_else(clip_high, mad(mx_scale, c - l, l), c);
+    c = max(c, 0.0f);  // Sometimes without this we may dip just a little negative.
+    return c;
+}
 SI void clip_color(F* r, F* g, F* b, F a) {
-    F mn = min(*r, min(*g, *b)),
-      mx = max(*r, max(*g, *b)),
-      l  = lum(*r, *g, *b);
+    F   mn        = min(*r, min(*g, *b)),
+        mx        = max(*r, max(*g, *b)),
+        l         = lum(*r, *g, *b),
+        mn_scale  = (    l) * rcp_fast(l - mn),
+        mx_scale  = (a - l) * rcp_fast(mx - l);
+    I32 clip_low  = cond_to_mask(mn < 0 && l != mn),
+        clip_high = cond_to_mask(mx > a && l != mx);
 
-    auto clip = [=](F c) {
-        c = if_then_else(mn < 0 && l != mn, l + (c - l) * (    l) / (l - mn), c);
-        c = if_then_else(mx > a && l != mx, l + (c - l) * (a - l) / (mx - l), c);
-        c = max(c, 0.0f);  // Sometimes without this we may dip just a little negative.
-        return c;
-    };
-    *r = clip(*r);
-    *g = clip(*g);
-    *b = clip(*b);
+    *r = clip_channel(*r, l, clip_low, clip_high, mn_scale, mx_scale);
+    *g = clip_channel(*g, l, clip_low, clip_high, mn_scale, mx_scale);
+    *b = clip_channel(*b, l, clip_low, clip_high, mn_scale, mx_scale);
 }
 
 STAGE(hue, NoCtx) {
@@ -1912,10 +1911,10 @@ STAGE(hue, NoCtx) {
     set_lum(&R, &G, &B, lum(dr,dg,db)*a);
     clip_color(&R,&G,&B, a*da);
 
-    r = r*inv(da) + dr*inv(a) + R;
-    g = g*inv(da) + dg*inv(a) + G;
-    b = b*inv(da) + db*inv(a) + B;
-    a = a + da - a*da;
+    r = mad(r, inv(da), mad(dr, inv(a), R));
+    g = mad(g, inv(da), mad(dg, inv(a), G));
+    b = mad(b, inv(da), mad(db, inv(a), B));
+    a = a + nmad(a, da, da);
 }
 STAGE(saturation, NoCtx) {
     F R = dr*a,
@@ -1926,10 +1925,10 @@ STAGE(saturation, NoCtx) {
     set_lum(&R, &G, &B, lum(dr,dg,db)* a);  // (This is not redundant.)
     clip_color(&R,&G,&B, a*da);
 
-    r = r*inv(da) + dr*inv(a) + R;
-    g = g*inv(da) + dg*inv(a) + G;
-    b = b*inv(da) + db*inv(a) + B;
-    a = a + da - a*da;
+    r = mad(r, inv(da), mad(dr, inv(a), R));
+    g = mad(g, inv(da), mad(dg, inv(a), G));
+    b = mad(b, inv(da), mad(db, inv(a), B));
+    a = a + nmad(a, da, da);
 }
 STAGE(color, NoCtx) {
     F R = r*da,
@@ -1939,10 +1938,10 @@ STAGE(color, NoCtx) {
     set_lum(&R, &G, &B, lum(dr,dg,db)*a);
     clip_color(&R,&G,&B, a*da);
 
-    r = r*inv(da) + dr*inv(a) + R;
-    g = g*inv(da) + dg*inv(a) + G;
-    b = b*inv(da) + db*inv(a) + B;
-    a = a + da - a*da;
+    r = mad(r, inv(da), mad(dr, inv(a), R));
+    g = mad(g, inv(da), mad(dg, inv(a), G));
+    b = mad(b, inv(da), mad(db, inv(a), B));
+    a = a + nmad(a, da, da);
 }
 STAGE(luminosity, NoCtx) {
     F R = dr*a,
@@ -1952,10 +1951,10 @@ STAGE(luminosity, NoCtx) {
     set_lum(&R, &G, &B, lum(r,g,b)*da);
     clip_color(&R,&G,&B, a*da);
 
-    r = r*inv(da) + dr*inv(a) + R;
-    g = g*inv(da) + dg*inv(a) + G;
-    b = b*inv(da) + db*inv(a) + B;
-    a = a + da - a*da;
+    r = mad(r, inv(da), mad(dr, inv(a), R));
+    g = mad(g, inv(da), mad(dg, inv(a), G));
+    b = mad(b, inv(da), mad(db, inv(a), B));
+    a = a + nmad(a, da, da);
 }
 
 STAGE(srcover_rgba_8888, const SkRasterPipeline_MemoryCtx* ctx) {
@@ -3337,18 +3336,18 @@ STAGE(perlin_noise, SkRasterPipeline_PerlinNoiseCtx* ctx) {
             color[channel] = lerp(A, B, smoothY);
         }
 
+        if (ctx->noiseType != SkPerlinNoiseShaderType::kFractalNoise) {
+            // For kTurbulence the result is: abs(noise[-1,1])
+            color[0] = abs_(color[0]);
+            color[1] = abs_(color[1]);
+            color[2] = abs_(color[2]);
+            color[3] = abs_(color[3]);
+        }
+
         r = mad(color[0], ratio, r);
         g = mad(color[1], ratio, g);
         b = mad(color[2], ratio, b);
         a = mad(color[3], ratio, a);
-
-        if (ctx->noiseType != SkPerlinNoiseShaderType::kFractalNoise) {
-            // For kTurbulence the result is: abs(noise[-1,1])
-            r = abs_(r);
-            g = abs_(g);
-            b = abs_(b);
-            a = abs_(a);
-        }
 
         // Scale inputs for the next round.
         noiseVecX *= 2.0f;

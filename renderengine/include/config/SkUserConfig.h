@@ -19,14 +19,6 @@
 #define SK_CODEC_DECODES_WBMP
 #endif
 
-#ifndef SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
-#define SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
-#endif
-
-#ifndef SK_DISABLE_TRACING
-#define SK_DISABLE_TRACING
-#endif
-
 #ifndef SK_ENABLE_AVX512_OPTS
 #define SK_ENABLE_AVX512_OPTS
 #endif
@@ -45,6 +37,10 @@
 
 #ifndef SK_GL
 #define SK_GL
+#endif
+
+#ifndef SK_GRAPHITE
+#define SK_GRAPHITE
 #endif
 
 #ifndef SK_IN_RENDERENGINE

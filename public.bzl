@@ -1298,7 +1298,7 @@ BASE_SRCS_ALL = [
     "src/opts/SkOpts_RestoreTarget.h",
     "src/opts/SkOpts_SetTarget.h",
     "src/opts/SkRasterPipeline_opts.h",
-    "src/opts/SkSwizzler_opts.h",
+    "src/opts/SkSwizzler_opts.inc",
     "src/pathops/SkAddIntersections.cpp",
     "src/pathops/SkAddIntersections.h",
     "src/pathops/SkDConicLineIntersection.cpp",
@@ -2037,6 +2037,8 @@ PORTS_SRCS_IOS = [
     "src/utils/mac/SkCreateCGImageRef.cpp",
     "src/utils/mac/SkCTFont.cpp",
     "src/utils/mac/SkCTFont.h",
+    "src/utils/mac/SkCTFontCreateExactCopy.cpp",
+    "src/utils/mac/SkCTFontCreateExactCopy.h",
     "src/utils/mac/SkUniqueCFRef.h",
 ]
 
@@ -2583,6 +2585,9 @@ SKUNICODE_HDRS = [
 
 SKSHAPER_HDRS = [
     "modules/skshaper/include/SkShaper.h",
+    "modules/skshaper/include/SkShaper_harfbuzz.h",
+    "modules/skshaper/include/SkShaper_coretext.h",
+    "modules/skshaper/include/SkShaper_skunicode.h",
 ]
 
 SKSHAPER_HARFBUZZ_SRCS = [

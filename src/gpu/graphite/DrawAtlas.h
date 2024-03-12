@@ -17,6 +17,8 @@
 #include "src/core/SkTHash.h"
 #include "src/gpu/AtlasTypes.h"
 
+class SkAutoPixmapStorage;
+
 namespace skgpu::graphite {
 
 class DrawContext;
@@ -104,12 +106,18 @@ public:
 
     ErrorCode addToAtlas(Recorder*, int width, int height, const void* image, AtlasLocator*);
     ErrorCode addRect(Recorder*, int width, int height, AtlasLocator*);
+    // Reset Pixmap to point to backing data for the AtlasLocator's Plot.
+    // Return relative location within the Plot, as indicated by the AtlasLocator.
+    SkIPoint prepForRender(const AtlasLocator&, SkAutoPixmapStorage*);
     bool recordUploads(DrawContext*, Recorder*);
 
     const sk_sp<TextureProxy>* getProxies() const { return fProxies; }
 
     uint32_t atlasID() const { return fAtlasID; }
     uint64_t atlasGeneration() const { return fAtlasGeneration; }
+    uint32_t numActivePages() const { return fNumActivePages; }
+    unsigned int numPlots() const { return fNumPlots; }
+    SkISize plotSize() const { return {fPlotWidth, fPlotHeight}; }
 
     bool hasID(const PlotLocator& plotLocator) {
         if (!plotLocator.isValid()) {
@@ -125,18 +133,9 @@ public:
 
     /** To ensure the atlas does not evict a given entry, the client must set the last use token. */
     void setLastUseToken(const AtlasLocator& atlasLocator, AtlasToken token) {
-        SkASSERT(this->hasID(atlasLocator.plotLocator()));
-        uint32_t plotIdx = atlasLocator.plotIndex();
-        SkASSERT(plotIdx < fNumPlots);
-        uint32_t pageIdx = atlasLocator.pageIndex();
-        SkASSERT(pageIdx < fNumActivePages);
-        Plot* plot = fPages[pageIdx].fPlotArray[plotIdx].get();
-        this->makeMRU(plot, pageIdx);
-        plot->setLastUseToken(token);
+        Plot* plot = this->findPlot(atlasLocator);
+        this->internalSetLastUseToken(plot, atlasLocator.pageIndex(), token);
     }
-
-    uint32_t numActivePages() const { return fNumActivePages; }
-    unsigned int numPlots() const { return fNumPlots; }
 
     void setLastUseTokenBulk(const BulkUsePlotUpdater& updater,
                              AtlasToken token) {
@@ -147,8 +146,7 @@ public:
             // was deleted -- so we check to prevent a crash
             if (pd.fPageIndex < fNumActivePages) {
                 Plot* plot = fPages[pd.fPageIndex].fPlotArray[pd.fPlotIndex].get();
-                this->makeMRU(plot, pd.fPageIndex);
-                plot->setLastUseToken(token);
+                this->internalSetLastUseToken(plot, pd.fPageIndex, token);
             }
         }
     }
@@ -169,6 +167,8 @@ private:
               AtlasGenerationCounter* generationCounter,
               AllowMultitexturing allowMultitexturing, std::string_view label);
 
+    bool addRectToPage(unsigned int pageIdx, int width, int height, AtlasLocator*);
+
     bool updatePlot(Plot* plot, AtlasLocator*);
 
     inline void makeMRU(Plot* plot, int pageIdx) {
@@ -183,8 +183,17 @@ private:
         // the front and remove from the back there is no need for MRU.
     }
 
-    bool addRectToPage(unsigned int pageIdx, int width, int height, AtlasLocator*);
-    Plot* findPlot(const AtlasLocator&);
+    Plot* findPlot(const AtlasLocator& atlasLocator) {
+        SkASSERT(this->hasID(atlasLocator.plotLocator()));
+        uint32_t pageIdx = atlasLocator.pageIndex();
+        uint32_t plotIdx = atlasLocator.plotIndex();
+        return fPages[pageIdx].fPlotArray[plotIdx].get();
+    }
+
+    void internalSetLastUseToken(Plot* plot, uint32_t pageIdx, AtlasToken token) {
+        this->makeMRU(plot, pageIdx);
+        plot->setLastUseToken(token);
+    }
 
     bool createPages(AtlasGenerationCounter*);
     bool activateNewPage(Recorder*);
