@@ -21,16 +21,18 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
+#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkMipmap.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDataUtils.h"
 #include "src/gpu/ganesh/GrImageContextPriv.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/image/SkImage_GaneshBase.h"
 #include "src/image/SkImage_Base.h"
-#include "src/image/SkImage_GpuBase.h"
 #include "third_party/etc1/etc1.h"
 #include "tools/gpu/ProxyUtils.h"
 
@@ -103,7 +105,7 @@ static sk_sp<SkImage> make_compressed_image(GrDirectContext* dContext,
                                             const SkISize dimensions,
                                             SkColorType colorType,
                                             bool opaque,
-                                            SkImage::CompressionType compression) {
+                                            SkTextureCompressionType compression) {
     size_t totalSize = SkCompressedDataSize(compression, dimensions, nullptr, true);
 
     sk_sp<SkData> tmp = SkData::MakeUninitialized(totalSize);
@@ -129,7 +131,7 @@ static sk_sp<SkImage> make_compressed_image(GrDirectContext* dContext,
         size_t levelSize = SkCompressedDataSize(compression, levelDims, nullptr, false);
 
         SkBitmap bm = render_level(levelDims, kColors[i%7], colorType, opaque);
-        if (compression == SkImage::CompressionType::kETC2_RGB8_UNORM) {
+        if (compression == SkTextureCompressionType::kETC2_RGB8_UNORM) {
             SkASSERT(bm.colorType() == kRGB_565_SkColorType);
             SkASSERT(opaque);
 
@@ -148,15 +150,15 @@ static sk_sp<SkImage> make_compressed_image(GrDirectContext* dContext,
 
     sk_sp<SkImage> image;
     if (dContext) {
-        image = SkImage::MakeTextureFromCompressed(dContext, std::move(tmp),
-                                                   dimensions.width(),
-                                                   dimensions.height(),
-                                                   compression, GrMipmapped::kYes);
+        image = SkImages::TextureFromCompressedTextureData(dContext,
+                                                           std::move(tmp),
+                                                           dimensions.width(),
+                                                           dimensions.height(),
+                                                           compression,
+                                                           skgpu::Mipmapped::kYes);
     } else {
-        image = SkImage::MakeRasterFromCompressed(std::move(tmp),
-                                                  dimensions.width(),
-                                                  dimensions.height(),
-                                                  compression);
+        image = SkImages::RasterFromCompressedTextureData(
+                std::move(tmp), dimensions.width(), dimensions.height(), compression);
     }
     return image;
 }
@@ -199,7 +201,7 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString name("compressed_textures");
 
         if (fType == Type::kNonPowerOfTwo) {
@@ -211,11 +213,11 @@ protected:
         return name;
     }
 
-    SkISize onISize() override {
+    SkISize getISize() override {
         return SkISize::Make(2*kCellWidth + 3*kPad, 2*kBaseTexHeight + 3*kPad);
     }
 
-    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg, GraphiteTestContext*) override {
         auto dContext = GrAsDirectContext(canvas->recordingContext());
         if (dContext && dContext->abandoned()) {
             // This isn't a GpuGM so a null 'context' is okay but an abandoned context
@@ -231,15 +233,15 @@ protected:
 
         fOpaqueETC2Image = make_compressed_image(dContext, fImgDimensions,
                                                  kRGB_565_SkColorType, true,
-                                                 SkImage::CompressionType::kETC2_RGB8_UNORM);
+                                                 SkTextureCompressionType::kETC2_RGB8_UNORM);
 
         fOpaqueBC1Image = make_compressed_image(dContext, fImgDimensions,
                                                 kRGBA_8888_SkColorType, true,
-                                                SkImage::CompressionType::kBC1_RGB8_UNORM);
+                                                SkTextureCompressionType::kBC1_RGB8_UNORM);
 
         fTransparentBC1Image = make_compressed_image(dContext, fImgDimensions,
                                                      kRGBA_8888_SkColorType, false,
-                                                     SkImage::CompressionType::kBC1_RGBA8_UNORM);
+                                                     SkTextureCompressionType::kBC1_RGBA8_UNORM);
 
         if (!fOpaqueETC2Image || !fOpaqueBC1Image || !fTransparentBC1Image) {
             *errorMsg = "Failed to create compressed images.";

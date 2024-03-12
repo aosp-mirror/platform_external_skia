@@ -10,9 +10,10 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkGraphics.h"
-#include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
 #include "include/ports/SkFontMgr_empty.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkTime.h"
 #include "src/sfnt/SkOTTable_glyf.h"
 #include "src/sfnt/SkOTTable_head.h"
 #include "src/sfnt/SkOTTable_hhea.h"
@@ -21,6 +22,7 @@
 #include "src/sfnt/SkOTTable_maxp.h"
 #include "src/sfnt/SkSFNTHeader.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/timer/TimeUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 
@@ -71,7 +73,7 @@ public:
     SBIXSlide() { fName = "SBIX"; }
 
     void load(SkScalar w, SkScalar h) override {
-        fFontMgr.emplace_back(SkFontMgr::RefDefault());
+        fFontMgr.emplace_back(ToolUtils::TestFontMgr());
         //fFontMgr.emplace_back(SkFontMgr_New_Custom_Empty());
         // GetResourceAsData may be backed by a read only file mapping.
         // For sanity always make a copy.

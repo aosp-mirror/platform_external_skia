@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkData.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkFontArguments.h"
 #include "include/core/SkFontMetrics.h"
@@ -17,25 +18,27 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkBitmaskEnum.h"
-#include "include/private/base/SkTArray.h"
-#include "include/private/base/SkTypeTraits.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkMutex.h"
-#include "include/private/base/SkTFitsIn.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
+#include "include/private/base/SkTypeTraits.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "modules/skunicode/include/SkUnicode.h"
 #include "src/base/SkTDPQueue.h"
 #include "src/base/SkUTF.h"
 #include "src/core/SkLRUCache.h"
 
-#include <hb.h>
 #include <hb-ot.h>
+#include <hb.h>
+
+#include <cstdint>
 #include <cstring>
-#include <locale>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -51,17 +54,12 @@ using namespace skia_private;
 # define HB_FEATURE_GLOBAL_END ((unsigned int) -1)
 #endif
 
-namespace sknonstd {
-template <> struct is_bitmask_enum<hb_buffer_flags_t> : std::true_type {};
-}  // namespace sknonstd
-
 namespace {
 using HBBlob   = std::unique_ptr<hb_blob_t  , SkFunctionObject<hb_blob_destroy>  >;
 using HBFace   = std::unique_ptr<hb_face_t  , SkFunctionObject<hb_face_destroy>  >;
 using HBFont   = std::unique_ptr<hb_font_t  , SkFunctionObject<hb_font_destroy>  >;
 using HBBuffer = std::unique_ptr<hb_buffer_t, SkFunctionObject<hb_buffer_destroy>>;
 
-using SkUnicodeBidi = std::unique_ptr<SkBidiIterator>;
 using SkUnicodeBreak = std::unique_ptr<SkBreakIterator>;
 
 hb_position_t skhb_position(SkScalar value) {
@@ -247,7 +245,7 @@ HBBlob stream_to_blob(std::unique_ptr<SkStreamAsset> asset) {
     size_t size = asset->getLength();
     HBBlob blob;
     if (const void* base = asset->getMemoryBase()) {
-        blob.reset(hb_blob_create((char*)base, SkToUInt(size),
+        blob.reset(hb_blob_create((const char*)base, SkToUInt(size),
                                   HB_MEMORY_MODE_READONLY, asset.release(),
                                   [](void* p) { delete (SkStreamAsset*)p; }));
     } else {
@@ -352,52 +350,6 @@ static inline SkUnichar utf8_next(const char** ptr, const char* end) {
     SkUnichar val = SkUTF::NextUTF8(ptr, end);
     return val < 0 ? 0xFFFD : val;
 }
-
-class SkUnicodeBidiRunIterator final : public SkShaper::BiDiRunIterator {
-public:
-    SkUnicodeBidiRunIterator(const char* utf8, const char* end, SkUnicodeBidi bidi)
-        : fBidi(std::move(bidi))
-        , fEndOfCurrentRun(utf8)
-        , fBegin(utf8)
-        , fEnd(end)
-        , fUTF16LogicalPosition(0)
-        , fLevel(SkBidiIterator::kLTR)
-    {}
-
-    void consume() override {
-        SkASSERT(fUTF16LogicalPosition < fBidi->getLength());
-        int32_t endPosition = fBidi->getLength();
-        fLevel = fBidi->getLevelAt(fUTF16LogicalPosition);
-        SkUnichar u = utf8_next(&fEndOfCurrentRun, fEnd);
-        fUTF16LogicalPosition += SkUTF::ToUTF16(u);
-        SkBidiIterator::Level level;
-        while (fUTF16LogicalPosition < endPosition) {
-            level = fBidi->getLevelAt(fUTF16LogicalPosition);
-            if (level != fLevel) {
-                break;
-            }
-            u = utf8_next(&fEndOfCurrentRun, fEnd);
-
-            fUTF16LogicalPosition += SkUTF::ToUTF16(u);
-        }
-    }
-    size_t endOfCurrentRun() const override {
-        return fEndOfCurrentRun - fBegin;
-    }
-    bool atEnd() const override {
-        return fUTF16LogicalPosition == fBidi->getLength();
-    }
-    SkBidiIterator::Level currentLevel() const override {
-        return fLevel;
-    }
-private:
-    SkUnicodeBidi fBidi;
-    char const * fEndOfCurrentRun;
-    char const * const fBegin;
-    char const * const fEnd;
-    int32_t fUTF16LogicalPosition;
-    SkBidiIterator::Level fLevel;
-};
 
 class SkUnicodeHbScriptRunIterator final: public SkShaper::ScriptRunIterator {
 public:
@@ -537,7 +489,7 @@ struct ShapedRun {
     using sk_is_trivially_relocatable = std::true_type;
 };
 struct ShapedLine {
-    SkTArray<ShapedRun> runs;
+    TArray<ShapedRun> runs;
     SkVector fAdvance = { 0, 0 };
 };
 
@@ -618,7 +570,7 @@ void emit(SkUnicode* unicode, const ShapedLine& line, SkShaper::RunHandler* hand
 }
 
 struct ShapedRunGlyphIterator {
-    ShapedRunGlyphIterator(const SkTArray<ShapedRun>& origRuns)
+    ShapedRunGlyphIterator(const TArray<ShapedRun>& origRuns)
         : fRuns(&origRuns), fRunIndex(0), fGlyphIndex(0)
     { }
 
@@ -636,7 +588,7 @@ struct ShapedRunGlyphIterator {
     }
 
     ShapedGlyph* next() {
-        const SkTArray<ShapedRun>& runs = *fRuns;
+        const TArray<ShapedRun>& runs = *fRuns;
         SkASSERT(fRunIndex < runs.size());
         SkASSERT(fGlyphIndex < runs[fRunIndex].fNumGlyphs);
 
@@ -652,14 +604,14 @@ struct ShapedRunGlyphIterator {
     }
 
     ShapedGlyph* current() {
-        const SkTArray<ShapedRun>& runs = *fRuns;
+        const TArray<ShapedRun>& runs = *fRuns;
         if (fRunIndex >= runs.size()) {
             return nullptr;
         }
         return &runs[fRunIndex].fGlyphs[fGlyphIndex];
     }
 
-    const SkTArray<ShapedRun>* fRuns;
+    const TArray<ShapedRun>* fRuns;
     int fRunIndex;
     size_t fGlyphIndex;
 };
@@ -667,15 +619,11 @@ struct ShapedRunGlyphIterator {
 class ShaperHarfBuzz : public SkShaper {
 public:
     ShaperHarfBuzz(std::unique_ptr<SkUnicode>,
-                   SkUnicodeBreak line,
-                   SkUnicodeBreak grapheme,
                    HBBuffer,
                    sk_sp<SkFontMgr>);
 
 protected:
     std::unique_ptr<SkUnicode> fUnicode;
-    SkUnicodeBreak fLineBreakIterator;
-    SkUnicodeBreak fGraphemeBreakIterator;
 
     ShapedRun shape(const char* utf8, size_t utf8Bytes,
                     const char* utf8Start,
@@ -686,7 +634,7 @@ protected:
                     const FontRunIterator&,
                     const Feature*, size_t featuresSize) const;
 private:
-    const sk_sp<SkFontMgr> fFontMgr;
+    const sk_sp<SkFontMgr> fFontMgr; // for fallback
     HBBuffer               fBuffer;
     hb_language_t          fUndefinedLanguage;
 
@@ -769,7 +717,7 @@ private:
               RunHandler*) const override;
 };
 
-static std::unique_ptr<SkShaper> MakeHarfBuzz(sk_sp<SkFontMgr> fontmgr, bool correct) {
+static std::unique_ptr<SkShaper> MakeHarfBuzz(sk_sp<SkFontMgr> fallback, bool correct) {
     HBBuffer buffer(hb_buffer_create());
     if (!buffer) {
         SkDEBUGF("Could not create hb_buffer");
@@ -781,34 +729,24 @@ static std::unique_ptr<SkShaper> MakeHarfBuzz(sk_sp<SkFontMgr> fontmgr, bool cor
         return nullptr;
     }
 
-    const auto lname = std::locale().name();
-    auto lineIter = unicode->makeBreakIterator(lname.c_str(), SkUnicode::BreakType::kLines);
-    if (!lineIter) {
-        return nullptr;
-    }
-    auto graphIter = unicode->makeBreakIterator(lname.c_str(), SkUnicode::BreakType::kGraphemes);
-    if (!graphIter) {
-        return nullptr;
-    }
-
     if (correct) {
         return std::make_unique<ShaperDrivenWrapper>(std::move(unicode),
-            std::move(lineIter), std::move(graphIter), std::move(buffer), std::move(fontmgr));
-    } else {
-        return std::make_unique<ShapeThenWrap>(std::move(unicode),
-            std::move(lineIter), std::move(graphIter), std::move(buffer), std::move(fontmgr));
+                                                     std::move(buffer),
+                                                     std::move(fallback));
     }
+    return std::make_unique<ShapeThenWrap>(std::move(unicode),
+                                           std::move(buffer),
+                                           std::move(fallback));
 }
 
 ShaperHarfBuzz::ShaperHarfBuzz(std::unique_ptr<SkUnicode> unicode,
-    SkUnicodeBreak lineIter, SkUnicodeBreak graphIter, HBBuffer buffer, sk_sp<SkFontMgr> fontmgr)
+                               HBBuffer buffer,
+                               sk_sp<SkFontMgr> fallback)
     : fUnicode(std::move(unicode))
-    , fLineBreakIterator(std::move(lineIter))
-    , fGraphemeBreakIterator(std::move(graphIter))
-    , fFontMgr(std::move(fontmgr))
+    , fFontMgr(fallback ? std::move(fallback) : SkFontMgr::RefEmpty())
     , fBuffer(std::move(buffer))
-    , fUndefinedLanguage(hb_language_from_string("und", -1))
-{ }
+    , fUndefinedLanguage(hb_language_from_string("und", -1)) {
+}
 
 void ShaperHarfBuzz::shape(const char* utf8, size_t utf8Bytes,
                            const SkFont& srcFont,
@@ -837,8 +775,7 @@ void ShaperHarfBuzz::shape(const char* utf8, size_t utf8Bytes,
     }
 
     std::unique_ptr<FontRunIterator> font(
-                MakeFontMgrRunIterator(utf8, utf8Bytes, srcFont,
-                                       fFontMgr ? fFontMgr : SkFontMgr::RefDefault()));
+                MakeFontMgrRunIterator(utf8, utf8Bytes, srcFont, fFontMgr));
     if (!font) {
         return;
     }
@@ -891,6 +828,8 @@ void ShaperDrivenWrapper::wrap(char const * const utf8, size_t utf8Bytes,
 
     const char* utf8Start = nullptr;
     const char* utf8End = utf8;
+    SkUnicodeBreak lineBreakIterator;
+    SkString currentLanguage;
     while (runSegmenter.advanceRuns()) {  // For each item
         utf8Start = utf8End;
         utf8End = utf8 + runSegmenter.endOfCurrentRun();
@@ -945,10 +884,18 @@ void ShaperDrivenWrapper::wrap(char const * const utf8, size_t utf8Bytes,
 
             // TODO: break iterator per item, but just reset position if needed?
             // Maybe break iterator with model?
-            if (!fLineBreakIterator->setText(utf8Start, utf8runLength)) {
+            if (!lineBreakIterator || !currentLanguage.equals(language.currentLanguage())) {
+                currentLanguage = language.currentLanguage();
+                lineBreakIterator = fUnicode->makeBreakIterator(currentLanguage.c_str(),
+                                                                SkUnicode::BreakType::kLines);
+                if (!lineBreakIterator) {
+                    return;
+                }
+            }
+            if (!lineBreakIterator->setText(utf8Start, utf8runLength)) {
                 return;
             }
-            SkBreakIterator& breakIterator = *fLineBreakIterator;
+            SkBreakIterator& breakIterator = *lineBreakIterator;
 
             ShapedRun best(RunHandler::Range(), SkFont(), 0, nullptr, 0,
                            { SK_ScalarNegativeInfinity, SK_ScalarNegativeInfinity });
@@ -1035,17 +982,12 @@ void ShapeThenWrap::wrap(char const * const utf8, size_t utf8Bytes,
                          SkScalar width,
                          RunHandler* handler) const
 {
-    SkTArray<ShapedRun> runs;
+    TArray<ShapedRun> runs;
 {
-    if (!fLineBreakIterator->setText(utf8, utf8Bytes)) {
-        return;
-    }
-    if (!fGraphemeBreakIterator->setText(utf8, utf8Bytes)) {
-        return;
-    }
-
-    SkBreakIterator& lineBreakIterator = *fLineBreakIterator;
-    SkBreakIterator& graphemeBreakIterator = *fGraphemeBreakIterator;
+    SkString currentLanguage;
+    SkUnicodeBreak lineBreakIterator;
+    SkUnicodeBreak graphemeBreakIterator;
+    bool needIteratorInit = true;
     const char* utf8Start = nullptr;
     const char* utf8End = utf8;
     while (runSegmenter.advanceRuns()) {
@@ -1058,23 +1000,45 @@ void ShapeThenWrap::wrap(char const * const utf8, size_t utf8Bytes,
                                 features, featuresSize));
         ShapedRun& run = runs.back();
 
+        if (needIteratorInit || !currentLanguage.equals(language.currentLanguage())) {
+            currentLanguage = language.currentLanguage();
+            lineBreakIterator = fUnicode->makeBreakIterator(currentLanguage.c_str(),
+                                                            SkUnicode::BreakType::kLines);
+            if (!lineBreakIterator) {
+                return;
+            }
+            graphemeBreakIterator = fUnicode->makeBreakIterator(currentLanguage.c_str(),
+                                                                SkUnicode::BreakType::kGraphemes);
+            if (!graphemeBreakIterator) {
+                return;
+            }
+            needIteratorInit = false;
+        }
+        size_t utf8runLength = utf8End - utf8Start;
+        if (!lineBreakIterator->setText(utf8Start, utf8runLength)) {
+            return;
+        }
+        if (!graphemeBreakIterator->setText(utf8Start, utf8runLength)) {
+            return;
+        }
+
         uint32_t previousCluster = 0xFFFFFFFF;
         for (size_t i = 0; i < run.fNumGlyphs; ++i) {
             ShapedGlyph& glyph = run.fGlyphs[i];
             int32_t glyphCluster = glyph.fCluster;
 
-            int32_t lineBreakIteratorCurrent = lineBreakIterator.current();
-            while (!lineBreakIterator.isDone() && lineBreakIteratorCurrent < glyphCluster)
+            int32_t lineBreakIteratorCurrent = lineBreakIterator->current();
+            while (!lineBreakIterator->isDone() && lineBreakIteratorCurrent < glyphCluster)
             {
-                lineBreakIteratorCurrent = lineBreakIterator.next();
+                lineBreakIteratorCurrent = lineBreakIterator->next();
             }
             glyph.fMayLineBreakBefore = glyph.fCluster != previousCluster &&
                                         lineBreakIteratorCurrent == glyphCluster;
 
-            int32_t graphemeBreakIteratorCurrent = graphemeBreakIterator.current();
-            while (!graphemeBreakIterator.isDone() && graphemeBreakIteratorCurrent < glyphCluster)
+            int32_t graphemeBreakIteratorCurrent = graphemeBreakIterator->current();
+            while (!graphemeBreakIterator->isDone() && graphemeBreakIteratorCurrent < glyphCluster)
             {
-                graphemeBreakIteratorCurrent = graphemeBreakIterator.next();
+                graphemeBreakIteratorCurrent = graphemeBreakIterator->next();
             }
             glyph.fGraphemeBreakBefore = glyph.fCluster != previousCluster &&
                                          graphemeBreakIteratorCurrent == glyphCluster;
@@ -1248,7 +1212,7 @@ void ShapeDontWrapOrReorder::wrap(char const * const utf8, size_t utf8Bytes,
                                   RunHandler* handler) const
 {
     sk_ignore_unused_variable(width);
-    SkTArray<ShapedRun> runs;
+    TArray<ShapedRun> runs;
 
     const char* utf8Start = nullptr;
     const char* utf8End = utf8;
@@ -1392,7 +1356,7 @@ ShapedRun ShaperHarfBuzz::shape(char const * const utf8,
         return run;
     }
 
-    SkSTArray<32, hb_feature_t> hbFeatures;
+    STArray<32, hb_feature_t> hbFeatures;
     for (const auto& feature : SkSpan(features, featuresSize)) {
         if (feature.end < SkTo<size_t>(utf8Start - utf8) ||
                           SkTo<size_t>(utf8End   - utf8)  <= feature.start)
@@ -1466,46 +1430,6 @@ ShapedRun ShaperHarfBuzz::shape(char const * const utf8,
 
 }  // namespace
 
-std::unique_ptr<SkShaper::BiDiRunIterator>
-SkShaper::MakeIcuBiDiRunIterator(const char* utf8, size_t utf8Bytes, uint8_t bidiLevel) {
-    auto unicode = SkUnicode::Make();
-    if (!unicode) {
-        return nullptr;
-    }
-    return SkShaper::MakeSkUnicodeBidiRunIterator(unicode.get(),
-                                                  utf8,
-                                                  utf8Bytes,
-                                                  bidiLevel);
-}
-
-std::unique_ptr<SkShaper::BiDiRunIterator>
-SkShaper::MakeSkUnicodeBidiRunIterator(SkUnicode* unicode, const char* utf8, size_t utf8Bytes, uint8_t bidiLevel) {
-    // ubidi only accepts utf16 (though internally it basically works on utf32 chars).
-    // We want an ubidi_setPara(UBiDi*, UText*, UBiDiLevel, UBiDiLevel*, UErrorCode*);
-    if (!SkTFitsIn<int32_t>(utf8Bytes)) {
-        SkDEBUGF("Bidi error: text too long");
-        return nullptr;
-    }
-
-    int32_t utf16Units = SkUTF::UTF8ToUTF16(nullptr, 0, utf8, utf8Bytes);
-    if (utf16Units < 0) {
-        SkDEBUGF("Invalid utf8 input\n");
-        return nullptr;
-    }
-
-    std::unique_ptr<uint16_t[]> utf16(new uint16_t[utf16Units]);
-    (void)SkUTF::UTF8ToUTF16(utf16.get(), utf16Units, utf8, utf8Bytes);
-
-    auto bidiDir = (bidiLevel % 2 == 0) ? SkBidiIterator::kLTR : SkBidiIterator::kRTL;
-    SkUnicodeBidi bidi = unicode->makeBidiIterator(utf16.get(), utf16Units, bidiDir);
-    if (!bidi) {
-        SkDEBUGF("Bidi error\n");
-        return nullptr;
-    }
-
-    return std::make_unique<SkUnicodeBidiRunIterator>(utf8, utf8 + utf8Bytes, std::move(bidi));
-}
-
 std::unique_ptr<SkShaper::ScriptRunIterator>
 SkShaper::MakeHbIcuScriptRunIterator(const char* utf8, size_t utf8Bytes) {
     return SkShaper::MakeSkUnicodeHbScriptRunIterator(utf8, utf8Bytes);
@@ -1541,7 +1465,7 @@ std::unique_ptr<SkShaper> SkShaper::MakeShapeDontWrapOrReorder(std::unique_ptr<S
     }
 
     return std::make_unique<ShapeDontWrapOrReorder>
-        (std::move(unicode), nullptr, nullptr, std::move(buffer), std::move(fontmgr));
+        (std::move(unicode), std::move(buffer), std::move(fontmgr));
 }
 
 void SkShaper::PurgeHarfBuzzCache() {

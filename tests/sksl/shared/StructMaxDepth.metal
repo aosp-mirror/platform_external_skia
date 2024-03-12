@@ -1,5 +1,8 @@
 #include <metal_stdlib>
 #include <simd/simd.h>
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wall"
+#endif
 using namespace metal;
 struct S1 {
     int x;
@@ -50,8 +53,6 @@ struct SA8 {
     array<SA7, 2> x;
 };
 struct Inputs {
-    S8 s8;
-    array<SA8, 2> sa8;
 };
 struct Outputs {
     half4 sk_FragColor [[color(0)]];

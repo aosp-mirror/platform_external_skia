@@ -5,11 +5,14 @@
 
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkSurface.h"
-#include "include/core/SkTime.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
+#include "include/gpu/ganesh/gl/GrGLDirectContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
 #include "include/gpu/gl/GrGLTypes.h"
+#include "src/base/SkTime.h"
 
 #import <GLKit/GLKit.h>
 #import <UIKit/UIKit.h>
@@ -32,13 +35,13 @@ static sk_sp<SkSurface> make_gl_surface(GrDirectContext* dContext, int width, in
     }
     GLint fboid = 0;
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &fboid);
-    return SkSurface::MakeFromBackendRenderTarget(
+    return SkSurfaces::WrapBackendRenderTarget(
             dContext,
-            GrBackendRenderTarget(width,
-                                  height,
-                                  kSampleCount,
-                                  kStencilBits,
-                                  GrGLFramebufferInfo{(GrGLuint)fboid, GL_RGBA8}),
+            GrBackendRenderTargets::MakeGL(width,
+                                           height,
+                                           kSampleCount,
+                                           kStencilBits,
+                                           GrGLFramebufferInfo{(GrGLuint)fboid, GL_RGBA8}),
             kBottomLeft_GrSurfaceOrigin,
             kRGBA_8888_SkColorType,
             nullptr,
@@ -88,7 +91,7 @@ static sk_sp<SkSurface> make_gl_surface(GrDirectContext* dContext, int width, in
         [viewController draw:rect
                         toCanvas:(surface->getCanvas())
                         atSize:CGSize{(CGFloat)width, (CGFloat)height}];
-        surface->flushAndSubmit();
+        fDContext->flushAndSubmit(surface.get());
     }
     if (next) {
         [NSTimer scheduledTimerWithTimeInterval:std::max(0.0, next - SkTime::GetNSecs() * 1e-9)
@@ -123,10 +126,10 @@ static sk_sp<SkSurface> make_gl_surface(GrDirectContext* dContext, int width, in
     }
     EAGLContext* oldContext = [EAGLContext currentContext];
     [EAGLContext setCurrentContext:[self eaglContext]];
-    fDContext = GrDirectContext::MakeGL(nullptr, GrContextOptions());
+    fDContext = GrDirectContexts::MakeGL(nullptr, GrContextOptions());
     [EAGLContext setCurrentContext:oldContext];
     if (!fDContext) {
-        NSLog(@"GrDirectContext::MakeGL failed");
+        NSLog(@"GrDirectContexts::MakeGL failed");
         return nil;
     }
     return self;

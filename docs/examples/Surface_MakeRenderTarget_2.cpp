@@ -5,7 +5,7 @@
 REG_FIDDLE(Surface_MakeRenderTarget_2, 256, 256, false, 0) {
 void draw(SkCanvas* canvas) {
     auto test_draw = [](SkCanvas* surfaceCanvas) -> void {
-        SkFont font(nullptr, 32);
+        SkFont font(fontMgr->matchFamilyStyle(nullptr, {}), 32);
 
         SkPaint paint;
         paint.setAntiAlias(true);
@@ -23,9 +23,9 @@ void draw(SkCanvas* canvas) {
     for (auto geometry : { kRGB_H_SkPixelGeometry, kBGR_H_SkPixelGeometry,
                            kRGB_V_SkPixelGeometry, kBGR_V_SkPixelGeometry } ) {
         SkSurfaceProps props(0, geometry);
-        sk_sp<SkSurface> surface = context ? SkSurface::MakeRenderTarget(
-                                                     context, skgpu::Budgeted::kNo, info, 0, &props)
-                                           : SkSurface::MakeRaster(info, &props);
+        sk_sp<SkSurface> surface =
+                context ? SkSurfaces::RenderTarget(context, skgpu::Budgeted::kNo, info, 0, &props)
+                        : SkSurfaces::Raster(info, &props);
         test_draw(surface->getCanvas());
         surface->draw(canvas, 0, y);
         sk_sp<SkImage> image(surface->makeImageSnapshot());

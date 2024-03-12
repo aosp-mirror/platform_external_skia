@@ -13,8 +13,15 @@
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/utils/SkottieUtils.h"
+#include "modules/skottie/utils/TextEditor.h"
+#include "modules/skparagraph/include/Paragraph.h"
 #include "modules/skresources/include/SkResources.h"
 #include "modules/sksg/include/SkSGInvalidationController.h"
+#include "modules/skunicode/include/SkUnicode.h"
+#include "src/base/SkUTF.h"
+#include "src/ports/SkFontHost_FreeType_common.h"
+#include "tools/skui/InputState.h"
+#include "tools/skui/ModifierKey.h"
 
 #include <string>
 #include <vector>
@@ -22,8 +29,86 @@
 #include <emscripten/bind.h>
 
 using namespace emscripten;
-
+namespace para = skia::textlayout;
 namespace {
+
+struct SimpleSlottableTextProperty {
+    sk_sp<SkTypeface> typeface;
+    std::string text;
+
+    float textSize;
+    float minTextSize;
+    float maxTextSize;
+    float strokeWidth;
+    float lineHeight;
+    float lineShift;
+    float ascent;
+    float maxLines;
+
+    para::TextAlign horizAlign;
+    skottie::Shaper::VAlign vertAlign;
+    skottie::Shaper::ResizePolicy resize;
+    SkUnicode::LineBreakType lineBreak;
+    para::TextDirection direction;
+    SkPaint::Join strokeJoin;
+
+    WASMPointerF32 boundingBoxPtr;
+    WASMPointerF32 fillColorPtr;
+    WASMPointerF32 strokeColorPtr;
+
+    operator skottie::TextPropertyValue() const {
+        skottie::TextPropertyValue textProperty;
+
+        textProperty.fTypeface = this->typeface;
+        textProperty.fText = SkString(this->text);
+        textProperty.fTextSize = this->textSize;
+        textProperty.fMinTextSize = this->minTextSize;
+        textProperty.fMaxTextSize = this->maxTextSize;
+        textProperty.fStrokeWidth = this->strokeWidth;
+        textProperty.fLineHeight = this->lineHeight;
+        textProperty.fLineShift = this->lineShift;
+        textProperty.fAscent = this->ascent;
+        textProperty.fMaxLines = this->maxLines;
+
+        switch (this->horizAlign) {
+        case para::TextAlign::kLeft:
+            textProperty.fHAlign = SkTextUtils::Align::kLeft_Align;
+            break;
+        case para::TextAlign::kCenter:
+            textProperty.fHAlign = SkTextUtils::Align::kCenter_Align;
+            break;
+        case para::TextAlign::kRight:
+            textProperty.fHAlign = SkTextUtils::Align::kRight_Align;
+            break;
+        default:
+            textProperty.fHAlign = SkTextUtils::Align::kLeft_Align;
+            break;
+        }
+
+        textProperty.fVAlign = this->vertAlign;
+        textProperty.fResize = this->resize;
+
+        if (this->lineBreak == SkUnicode::LineBreakType::kSoftLineBreak) {
+            textProperty.fLineBreak = skottie::Shaper::LinebreakPolicy::kParagraph;
+        } else {
+            textProperty.fLineBreak = skottie::Shaper::LinebreakPolicy::kExplicit;
+        }
+
+        if (this->direction == para::TextDirection::kRtl) {
+            textProperty.fDirection = skottie::Shaper::Direction::kRTL;
+        } else {
+            textProperty.fDirection = skottie::Shaper::Direction::kLTR;
+        }
+
+        textProperty.fStrokeJoin = this->strokeJoin;
+
+        textProperty.fBox = reinterpret_cast<SkRect*>(this->boundingBoxPtr)[0];
+        textProperty.fFillColor = ptrToSkColor4f(this->fillColorPtr).toSkColor();
+        textProperty.fStrokeColor = ptrToSkColor4f(this->strokeColorPtr).toSkColor();
+
+        return textProperty;
+    }
+};
 
 // WebTrack wraps a JS object that has a 'seek' method.
 // Playback logic is kept there.
@@ -76,9 +161,13 @@ public:
         return nullptr;
     }
 
-    sk_sp<SkData> loadFont(const char name[], const char[] /* url */) const override {
-        // Same as images paths, we ignore font URLs.
-        return this->findAsset(name);
+    sk_sp<SkTypeface> loadTypeface(const char name[], const char[] /* url */) const override {
+        sk_sp<SkData> faceData = this->findAsset(name);
+        if (!faceData) {
+            return nullptr;
+        }
+        auto stream = std::make_unique<SkMemoryStream>(faceData);
+        return SkTypeface_FreeType::MakeFromStream(std::move(stream), SkFontArguments());
     }
 
     sk_sp<SkData> load(const char[]/*path*/, const char name[]) const override {
@@ -149,20 +238,22 @@ public:
                                         emscripten::val logger) {
         auto mgr = std::make_unique<skottie_utils::CustomPropertyManager>(
                         skottie_utils::CustomPropertyManager::Mode::kCollapseProperties,
-                        prop_prefix.empty() ? nullptr : prop_prefix.c_str());
+                        prop_prefix.c_str());
         static constexpr char kInterceptPrefix[] = "__";
         auto pinterceptor =
             sk_make_sp<skottie_utils::ExternalAnimationPrecompInterceptor>(rp, kInterceptPrefix);
-        auto animation = skottie::Animation::Builder()
-                            .setMarkerObserver(mgr->getMarkerObserver())
-                            .setPropertyObserver(mgr->getPropertyObserver())
-                            .setResourceProvider(std::move(rp))
-                            .setPrecompInterceptor(std::move(pinterceptor))
-                            .setLogger(JSLogger::Make(std::move(logger)))
-                            .make(json.c_str(), json.size());
+        skottie::Animation::Builder builder;
+        builder.setMarkerObserver(mgr->getMarkerObserver())
+               .setPropertyObserver(mgr->getPropertyObserver())
+               .setResourceProvider(rp)
+               .setPrecompInterceptor(std::move(pinterceptor))
+               .setLogger(JSLogger::Make(std::move(logger)));
+        auto animation = builder.make(json.c_str(), json.size());
+        auto slotManager = builder.getSlotManager();
 
         return animation
-            ? sk_sp<ManagedAnimation>(new ManagedAnimation(std::move(animation), std::move(mgr)))
+            ? sk_sp<ManagedAnimation>(new ManagedAnimation(std::move(animation), std::move(mgr),
+                                                           std::move(slotManager), std::move(rp)))
             : nullptr;
     }
 
@@ -233,6 +324,31 @@ public:
         return props;
     }
 
+    JSArray getTransformProps() const {
+        JSArray props = emscripten::val::array();
+
+        for (const auto& key : fPropMgr->getTransformProps()) {
+            const auto transform = fPropMgr->getTransform(key);
+            JSObject trans_val = emscripten::val::object();
+            const float anchor[] = {transform.fAnchorPoint.fX, transform.fAnchorPoint.fY};
+            const float position[] = {transform.fPosition.fX, transform.fPosition.fY};
+            const float scale[] = {transform.fScale.fX, transform.fScale.fY};
+            trans_val.set("anchor", MakeTypedArray(2, anchor));
+            trans_val.set("position", MakeTypedArray(2, position));
+            trans_val.set("scale", MakeTypedArray(2, scale));
+            trans_val.set("rotation", transform.fRotation);
+            trans_val.set("skew", transform.fSkew);
+            trans_val.set("skew_axis", transform.fSkewAxis);
+
+            JSObject prop = emscripten::val::object();
+            prop.set("key", key);
+            prop.set("value", trans_val);
+            props.call<void>("push", prop);
+        }
+
+        return props;
+    }
+
     bool setColor(const std::string& key, SkColor c) {
         return fPropMgr->setColor(key, c);
     }
@@ -251,6 +367,20 @@ public:
         return fPropMgr->setText(key, t);
     }
 
+    bool setTransform(const std::string& key, SkScalar anchorX, SkScalar anchorY,
+                                              SkScalar posX, SkScalar posY,
+                                              SkScalar scaleX, SkScalar scaleY,
+                                              SkScalar rotation, SkScalar skew, SkScalar skewAxis) {
+        skottie::TransformPropertyValue transform;
+        transform.fAnchorPoint = {anchorX, anchorY};
+        transform.fPosition = {posX, posY};
+        transform.fScale = {scaleX, scaleY};
+        transform.fRotation = rotation;
+        transform.fSkew = skew;
+        transform.fSkewAxis = skewAxis;
+        return fPropMgr->setTransform(key, transform);
+    }
+
     JSArray getMarkers() const {
         JSArray markers = emscripten::val::array();
         for (const auto& m : fPropMgr->markers()) {
@@ -263,15 +393,234 @@ public:
         return markers;
     }
 
+    JSArray copyStringArrayToJSArray(skia_private::TArray<SkString> slotIDs) const {
+        JSArray retVal = emscripten::val::array();
+        for (auto slotID : slotIDs) {
+            retVal.call<void>("push", emscripten::val(slotID.c_str()));
+        }
+        return retVal;
+    }
+
+    // Slot Manager API
+    JSObject getSlotInfo() const {
+        JSObject slotInfoJS = emscripten::val::object();
+        auto slotInfo = fSlotMgr->getSlotInfo();
+
+        slotInfoJS.set("colorSlotIDs", copyStringArrayToJSArray(slotInfo.fColorSlotIDs));
+        slotInfoJS.set("scalarSlotIDs", copyStringArrayToJSArray(slotInfo.fScalarSlotIDs));
+        slotInfoJS.set("vec2SlotIDs", copyStringArrayToJSArray(slotInfo.fVec2SlotIDs));
+        slotInfoJS.set("imageSlotIDs", copyStringArrayToJSArray(slotInfo.fImageSlotIDs));
+        slotInfoJS.set("textSlotIDs", copyStringArrayToJSArray(slotInfo.fTextSlotIDs));
+
+        return slotInfoJS;
+    }
+
+    void getColorSlot(const std::string& slotID, WASMPointerF32 outPtr) {
+        SkColor4f c4f;
+        if (auto c = fSlotMgr->getColorSlot(SkString(slotID))) {
+            c4f = SkColor4f::FromColor(*c);
+        } else {
+            c4f = {-1, -1, -1, -1};
+        }
+        memcpy(reinterpret_cast<float*>(outPtr), &c4f, 4 * sizeof(float));
+    }
+
+    emscripten::val getScalarSlot(const std::string& slotID) {
+        if (auto s = fSlotMgr->getScalarSlot(SkString(slotID))) {
+           return emscripten::val(*s);
+        }
+        return emscripten::val::null();
+    }
+
+    void getVec2Slot(const std::string& slotID, WASMPointerF32 outPtr) {
+        // [x, y, sentinel]
+        SkV3 vec3;
+        if (auto v = fSlotMgr->getVec2Slot(SkString(slotID))) {
+            vec3 = {v->x, v->y, 1};
+        } else {
+            vec3 = {0, 0, -1};
+        }
+        memcpy(reinterpret_cast<float*>(outPtr), vec3.ptr(), 3 * sizeof(float));
+    }
+
+    JSObject getTextSlot(const std::string& slotID) const {
+        if (auto textProp = fSlotMgr->getTextSlot(SkString(slotID))){
+            JSObject text_val = emscripten::val::object();
+
+            text_val.set("typeface", textProp->fTypeface);
+            text_val.set("text", emscripten::val(textProp->fText.c_str()));
+            text_val.set("textSize", textProp->fTextSize);
+            text_val.set("minTextSize", textProp->fMinTextSize);
+            text_val.set("maxTextSize", textProp->fMaxTextSize);
+            text_val.set("strokeWidth", textProp->fStrokeWidth);
+            text_val.set("lineHeight", textProp->fLineHeight);
+            text_val.set("lineShift", textProp->fLineShift);
+            text_val.set("ascent", textProp->fAscent);
+            text_val.set("maxLines", textProp->fMaxLines);
+
+            switch (textProp->fHAlign) {
+            case SkTextUtils::Align::kLeft_Align:
+                text_val.set("horizAlign", para::TextAlign::kLeft);
+                break;
+            case SkTextUtils::Align::kRight_Align:
+                text_val.set("horizAlign", para::TextAlign::kRight);
+                break;
+            case SkTextUtils::Align::kCenter_Align:
+                text_val.set("horizAlign", para::TextAlign::kCenter);
+                break;
+            default:
+                text_val.set("horizAlign", para::TextAlign::kLeft);
+                break;
+            }
+
+            text_val.set("vertAlign", textProp->fVAlign);
+            text_val.set("resize", textProp->fResize);
+
+            if (textProp->fLineBreak == skottie::Shaper::LinebreakPolicy::kParagraph) {
+                text_val.set("linebreak", SkUnicode::LineBreakType::kSoftLineBreak);
+            } else {
+                text_val.set("linebreak", SkUnicode::LineBreakType::kHardLineBreak);
+            }
+
+            if (textProp->fDirection == skottie::Shaper::Direction::kLTR) {
+                text_val.set("direction", para::TextDirection::kLtr);
+            } else {
+                text_val.set("direction", para::TextDirection::kRtl);
+            }
+            text_val.set("strokeJoin", textProp->fStrokeJoin);
+
+            text_val.set("fillColor", MakeTypedArray(4, SkColor4f::FromColor(textProp->fFillColor)
+                                                            .vec()));
+
+            text_val.set("strokeColor", MakeTypedArray(4, SkColor4f::FromColor(textProp->fStrokeColor)
+                                                            .vec()));
+
+            const float box[] = {textProp->fBox.fLeft, textProp->fBox.fTop,
+                                 textProp->fBox.fRight, textProp->fBox.fBottom};
+            text_val.set("boundingBox", MakeTypedArray(4, box));
+            return text_val;
+        }
+        return emscripten::val::null();
+    }
+
+    bool setImageSlot(const std::string& slotID, const std::string& assetName) {
+        // look for resource in preloaded SkottieAssetProvider
+        return fSlotMgr->setImageSlot(SkString(slotID), fResourceProvider->loadImageAsset(nullptr,
+                                                                            assetName.data(),
+                                                                            nullptr));
+    }
+
+    bool setColorSlot(const std::string& slotID, SkColor c) {
+        return fSlotMgr->setColorSlot(SkString(slotID), c);
+    }
+
+    bool setScalarSlot(const std::string& slotID, float s) {
+        return fSlotMgr->setScalarSlot(SkString(slotID), s);
+    }
+
+    bool setVec2Slot(const std::string& slotID, SkV2 v) {
+        return fSlotMgr->setVec2Slot(SkString(slotID), v);
+    }
+
+    bool attachEditor(const std::string& layerID, size_t layerIndex) {
+        if (fTextEditor) {
+            fTextEditor->setEnabled(false);
+            fTextEditor = nullptr;
+        }
+
+        if (layerID.empty()) {
+            return true;
+        }
+
+        auto txt_handle = fPropMgr->getTextHandle(layerID, layerIndex);
+        if (!txt_handle) {
+            return false;
+        }
+
+        std::vector<std::unique_ptr<skottie::TextPropertyHandle>> deps;
+        for (size_t i = 0; ; ++i) {
+            if (i == layerIndex) {
+                continue;
+            }
+
+            auto dep_handle = fPropMgr->getTextHandle(layerID, i);
+            if (!dep_handle) {
+                break;
+            }
+            deps.push_back(std::move(dep_handle));
+        }
+
+        fTextEditor = sk_make_sp<skottie_utils::TextEditor>(std::move(txt_handle),
+                                                            std::move(deps));
+        return true;
+    }
+
+    void enableEditor(bool enable) {
+        if (fTextEditor) {
+            fTextEditor->setEnabled(enable);
+        }
+    }
+
+    bool dispatchEditorKey(const std::string& key) {
+        // Map some useful keys to the current (odd) text editor bindings.
+        // TODO: Add support for custom bindings in the editor.
+        auto key2char = [](const std::string& key) -> SkUnichar {
+            // Special keys.
+            if (key == "ArrowLeft")  return '[';
+            if (key == "ArrowRight") return ']';
+            if (key == "Backspace")  return '\\';
+
+            const char* str = key.c_str();
+            const char* end = str + key.size();
+            const SkUnichar uch = SkUTF::NextUTF8(&str, end);
+
+            // Pass through single code points, ignore everything else.
+            return str == end ? uch : -1;
+        };
+
+        if (fTextEditor) {
+            const auto uch = key2char(key);
+            if (uch != -1) {
+                return fTextEditor->onCharInput(uch);
+            }
+        }
+
+        return false;
+    }
+
+    bool dispatchEditorPointer(float x, float y, skui::InputState state, skui::ModifierKey mod) {
+        return fTextEditor
+                ? fTextEditor->onMouseInput(x, y, state, mod)
+                : false;
+    }
+
+    void setEditorCursorWeight(float w) {
+        if (fTextEditor) {
+            fTextEditor->setCursorWeight(w);
+        }
+    }
+
+    bool setTextSlot(const std::string& slotID, SimpleSlottableTextProperty t) {
+        return fSlotMgr->setTextSlot(SkString(slotID), t);
+    }
+
 private:
     ManagedAnimation(sk_sp<skottie::Animation> animation,
-                     std::unique_ptr<skottie_utils::CustomPropertyManager> propMgr)
+                     std::unique_ptr<skottie_utils::CustomPropertyManager> propMgr,
+                     sk_sp<skottie::SlotManager> slotMgr,
+                     sk_sp<skresources::ResourceProvider> rp)
         : fAnimation(std::move(animation))
         , fPropMgr(std::move(propMgr))
+        , fSlotMgr(std::move(slotMgr))
+        , fResourceProvider(std::move(rp))
     {}
 
     const sk_sp<skottie::Animation>                             fAnimation;
     const std::unique_ptr<skottie_utils::CustomPropertyManager> fPropMgr;
+    const sk_sp<skottie::SlotManager>                           fSlotMgr;
+    const sk_sp<skresources::ResourceProvider>                  fResourceProvider;
+
+    sk_sp<skottie_utils::TextEditor>                            fTextEditor;
 };
 
 } // anonymous ns
@@ -338,12 +687,44 @@ EMSCRIPTEN_BINDINGS(Skottie) {
             SkColor4f color = { fourFloats[0], fourFloats[1], fourFloats[2], fourFloats[3] };
             return self.setColor(key, color.toSkColor());
         }))
-        .function("setOpacity", &ManagedAnimation::setOpacity)
-        .function("getMarkers", &ManagedAnimation::getMarkers)
-        .function("getColorProps"  , &ManagedAnimation::getColorProps)
-        .function("getOpacityProps", &ManagedAnimation::getOpacityProps)
-        .function("getTextProps"   , &ManagedAnimation::getTextProps)
-        .function("setText"        , &ManagedAnimation::setText);
+        .function("_setTransform"  , optional_override([](ManagedAnimation& self,
+                                                          const std::string& key,
+                                                          WASMPointerF32 transformData) {
+            // transform value info is passed in as an array of 9 scalars in the following order:
+            // anchor xy, position xy, scalexy, rotation, skew, skew axis
+            auto transform = reinterpret_cast<SkScalar*>(transformData);
+            return self.setTransform(key, transform[0], transform[1], transform[2], transform[3],
+                                     transform[4], transform[5], transform[6], transform[7], transform[8]);
+                                                          }))
+        .function("getMarkers"       , &ManagedAnimation::getMarkers)
+        .function("getColorProps"    , &ManagedAnimation::getColorProps)
+        .function("getOpacityProps"  , &ManagedAnimation::getOpacityProps)
+        .function("setOpacity"       , &ManagedAnimation::setOpacity)
+        .function("getTextProps"     , &ManagedAnimation::getTextProps)
+        .function("setText"          , &ManagedAnimation::setText)
+        .function("getTransformProps", &ManagedAnimation::getTransformProps)
+        .function("getSlotInfo"      , &ManagedAnimation::getSlotInfo)
+        .function("_getColorSlot"    , &ManagedAnimation::getColorSlot)
+        .function("_setColorSlot"    , optional_override([](ManagedAnimation& self, const std::string& key, WASMPointerF32 cPtr) {
+            SkColor4f color = ptrToSkColor4f(cPtr);
+            return self.setColorSlot(key, color.toSkColor());
+        }))
+        .function("_getVec2Slot"    , &ManagedAnimation::getVec2Slot)
+        .function("_setVec2Slot"    , optional_override([](ManagedAnimation& self, const std::string& key, WASMPointerF32 vPtr) {
+            float* twoFloats = reinterpret_cast<float*>(vPtr);
+            SkV2 vec2 = {twoFloats[0], twoFloats[1]};
+            return self.setVec2Slot(key, vec2);
+        }))
+        .function("getScalarSlot"    , &ManagedAnimation::getScalarSlot)
+        .function("setScalarSlot"    , &ManagedAnimation::setScalarSlot)
+        .function("attachEditor"         , &ManagedAnimation::attachEditor)
+        .function("enableEditor"         , &ManagedAnimation::enableEditor)
+        .function("dispatchEditorKey"    , &ManagedAnimation::dispatchEditorKey)
+        .function("dispatchEditorPointer", &ManagedAnimation::dispatchEditorPointer)
+        .function("setEditorCursorWeight", &ManagedAnimation::setEditorCursorWeight)
+        .function("getTextSlot"      , &ManagedAnimation::getTextSlot)
+        .function("_setTextSlot"     , &ManagedAnimation::setTextSlot)
+        .function("setImageSlot"     , &ManagedAnimation::setImageSlot);
 
     function("_MakeManagedAnimation", optional_override([](std::string json,
                                                            size_t assetCount,
@@ -373,5 +754,54 @@ EMSCRIPTEN_BINDINGS(Skottie) {
                                                                      std::move(soundMap))),
                                       prop_prefix, std::move(logger));
     }));
+
+    enum_<skui::InputState>("InputState")
+        .value("Down",  skui::InputState::kDown)
+        .value("Up",    skui::InputState::kUp)
+        .value("Move",  skui::InputState::kMove)
+        .value("Right", skui::InputState::kRight)
+        .value("Left",  skui::InputState::kLeft);
+
+    enum_<skui::ModifierKey>("ModifierKey")
+        .value("None",       skui::ModifierKey::kNone)
+        .value("Shift",      skui::ModifierKey::kShift)
+        .value("Control",    skui::ModifierKey::kControl)
+        .value("Option",     skui::ModifierKey::kOption)
+        .value("Command",    skui::ModifierKey::kCommand)
+        .value("FirstPress", skui::ModifierKey::kFirstPress);
+
+    enum_<skottie::Shaper::VAlign>("VerticalTextAlign")
+        .value("Top",          skottie::Shaper::VAlign::kTop)
+        .value("TopBaseline",  skottie::Shaper::VAlign::kTopBaseline)
+        .value("VisualTop",    skottie::Shaper::VAlign::kVisualTop)
+        .value("VisualCenter", skottie::Shaper::VAlign::kVisualCenter)
+        .value("VisualBottom", skottie::Shaper::VAlign::kVisualBottom);
+
+    enum_<skottie::Shaper::ResizePolicy>("ResizePolicy")
+        .value("None",           skottie::Shaper::ResizePolicy::kNone)
+        .value("ScaleToFit",     skottie::Shaper::ResizePolicy::kScaleToFit)
+        .value("DownscaleToFit", skottie::Shaper::ResizePolicy::kDownscaleToFit);
+
+    value_object<SimpleSlottableTextProperty>("SlottableTextProperty")
+        .field("typeface",          &SimpleSlottableTextProperty::typeface)
+        .field("text",              &SimpleSlottableTextProperty::text)
+        .field("textSize",          &SimpleSlottableTextProperty::textSize)
+        .field("minTextSize",       &SimpleSlottableTextProperty::minTextSize)
+        .field("maxTextSize",       &SimpleSlottableTextProperty::maxTextSize)
+        .field("strokeWidth",       &SimpleSlottableTextProperty::strokeWidth)
+        .field("lineHeight",        &SimpleSlottableTextProperty::lineHeight)
+        .field("lineShift",         &SimpleSlottableTextProperty::lineShift)
+        .field("ascent",            &SimpleSlottableTextProperty::ascent)
+        .field("maxLines",          &SimpleSlottableTextProperty::maxLines)
+        .field("horizAlign",        &SimpleSlottableTextProperty::horizAlign)
+        .field("vertAlign",         &SimpleSlottableTextProperty::vertAlign)
+        .field("strokeJoin",        &SimpleSlottableTextProperty::strokeJoin)
+        .field("direction",         &SimpleSlottableTextProperty::direction)
+        .field("linebreak",         &SimpleSlottableTextProperty::lineBreak)
+        .field("resize",            &SimpleSlottableTextProperty::resize)
+        .field("_fillColorPtr",     &SimpleSlottableTextProperty::fillColorPtr)
+        .field("_strokeColorPtr",   &SimpleSlottableTextProperty::strokeColorPtr)
+        .field("_boundingBoxPtr",   &SimpleSlottableTextProperty::boundingBoxPtr);
+
     constant("managed_skottie", true);
 }

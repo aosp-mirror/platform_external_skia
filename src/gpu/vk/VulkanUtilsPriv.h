@@ -10,6 +10,14 @@
 
 #include "include/gpu/vk/VulkanTypes.h"
 
+#include "include/core/SkColor.h"
+
+#ifdef SK_BUILD_FOR_ANDROID
+#include <android/hardware_buffer.h>
+#include "include/gpu/vk/VulkanTypes.h"
+#include "src/gpu/vk/VulkanInterface.h"
+#endif
+
 namespace skgpu {
 
 static constexpr uint32_t VkFormatChannels(VkFormat vkFormat) {
@@ -76,6 +84,27 @@ static constexpr size_t VkFormatBytesPerBlock(VkFormat vkFormat) {
     }
 }
 
+static constexpr int VkFormatIsStencil(VkFormat format) {
+    switch (format) {
+        case VK_FORMAT_S8_UINT:
+        case VK_FORMAT_D24_UNORM_S8_UINT:
+        case VK_FORMAT_D32_SFLOAT_S8_UINT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static constexpr int VkFormatIsDepth(VkFormat format) {
+    switch (format) {
+        case VK_FORMAT_D24_UNORM_S8_UINT:
+        case VK_FORMAT_D32_SFLOAT_S8_UINT:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static constexpr int VkFormatStencilBits(VkFormat format) {
     switch (format) {
         case VK_FORMAT_S8_UINT:
@@ -133,8 +162,37 @@ static constexpr bool VkFormatIsCompressed(VkFormat vkFormat) {
     SkUNREACHABLE;
 }
 
+/**
+ * Returns a ptr to the requested extension feature struct or nullptr if it is not present.
+*/
+template<typename T> T* GetExtensionFeatureStruct(const VkPhysicalDeviceFeatures2& features,
+                                                  VkStructureType type) {
+    // All Vulkan structs that could be part of the features chain will start with the
+    // structure type followed by the pNext pointer. We cast to the CommonVulkanHeader
+    // so we can get access to the pNext for the next struct.
+    struct CommonVulkanHeader {
+        VkStructureType sType;
+        void*           pNext;
+    };
 
-#if defined(SK_DEBUG) || GR_TEST_UTILS
+    void* pNext = features.pNext;
+    while (pNext) {
+        CommonVulkanHeader* header = static_cast<CommonVulkanHeader*>(pNext);
+        if (header->sType == type) {
+            return static_cast<T*>(pNext);
+        }
+        pNext = header->pNext;
+    }
+    return nullptr;
+}
+
+/**
+ * Returns a populated VkSamplerYcbcrConversionCreateInfo object based on VulkanYcbcrConversionInfo
+*/
+void SetupSamplerYcbcrConversionInfo(VkSamplerYcbcrConversionCreateInfo* outInfo,
+                                     const VulkanYcbcrConversionInfo& conversionInfo);
+
+#if defined(SK_DEBUG) || defined(GR_TEST_UTILS)
 static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
     switch (vkFormat) {
         case VK_FORMAT_R8G8B8A8_UNORM:           return "R8G8B8A8_UNORM";
@@ -165,7 +223,32 @@ static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
         default:                                 return "Unknown";
     }
 }
-#endif // defined(SK_DEBUG) || GR_TEST_UTILS
+#endif // defined(SK_DEBUG) || defined(GR_TEST_UTILS)
+
+#ifdef SK_BUILD_FOR_ANDROID
+/**
+ * Vulkan AHardwareBuffer utility functions shared between graphite and ganesh
+*/
+void GetYcbcrConversionInfoFromFormatProps(
+        VulkanYcbcrConversionInfo* outConversionInfo,
+        const VkAndroidHardwareBufferFormatPropertiesANDROID& formatProps);
+
+bool GetAHardwareBufferProperties(
+        VkAndroidHardwareBufferFormatPropertiesANDROID* outHwbFormatProps,
+        VkAndroidHardwareBufferPropertiesANDROID* outHwbProps,
+        const skgpu::VulkanInterface*,
+        const AHardwareBuffer*,
+        VkDevice);
+
+bool AllocateAndBindImageMemory(skgpu::VulkanAlloc* outVulkanAlloc,
+                                VkImage,
+                                const VkPhysicalDeviceMemoryProperties2&,
+                                const VkAndroidHardwareBufferPropertiesANDROID&,
+                                AHardwareBuffer*,
+                                const skgpu::VulkanInterface*,
+                                VkDevice);
+
+#endif // SK_BUILD_FOR_ANDROID
 
 }  // namespace skgpu
 

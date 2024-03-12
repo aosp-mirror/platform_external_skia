@@ -59,15 +59,13 @@ public:
         // Currently this only impacts GPU backends
         kAlwaysDither_Flag              = 1 << 2,
     };
-    /** Deprecated alias used by Chromium. Will be removed. */
-    static const Flags kUseDistanceFieldFonts_Flag = kUseDeviceIndependentFonts_Flag;
 
     /** No flags, unknown pixel geometry. */
     SkSurfaceProps();
     SkSurfaceProps(uint32_t flags, SkPixelGeometry);
 
-    SkSurfaceProps(const SkSurfaceProps&);
-    SkSurfaceProps& operator=(const SkSurfaceProps&);
+    SkSurfaceProps(const SkSurfaceProps&) = default;
+    SkSurfaceProps& operator=(const SkSurfaceProps&) = default;
 
     SkSurfaceProps cloneWithPixelGeometry(SkPixelGeometry newPixelGeometry) const {
         return SkSurfaceProps(fFlags, newPixelGeometry);

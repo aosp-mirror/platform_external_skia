@@ -13,11 +13,12 @@
 #include "include/core/SkRRect.h"
 #include "src/core/SkRectPriv.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
+#include "src/gpu/ganesh/GrFPArgs.h"
 #include "src/gpu/ganesh/GrProcessorUnitTest.h"
 #include "src/gpu/ganesh/GrStyle.h"
 #include "src/utils/SkDashPathPriv.h"
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 
 static const SkMatrix& test_matrix(SkRandom* random,
                                    bool includeNonPerspective,
@@ -344,10 +345,9 @@ sk_sp<GrColorSpaceXform> TestColorXform(SkRandom* random) {
 }
 
 TestAsFPArgs::TestAsFPArgs(GrProcessorTestData* d)
-        : fColorInfoStorage(std::make_unique<GrColorInfo>(GrColorType::kRGBA_8888,
-                                                          kPremul_SkAlphaType,
-                                                          TestColorSpace(d->fRandom)))
-        , fArgs(d->context(), fColorInfoStorage.get(), fSurfaceProps) {}
+        : fColorInfoStorage(std::make_unique<GrColorInfo>(
+                  GrColorType::kRGBA_8888, kPremul_SkAlphaType, TestColorSpace(d->fRandom)))
+        , fArgs(d->context(), fColorInfoStorage.get(), fSurfaceProps, GrFPArgs::Scope::kDefault) {}
 
 TestAsFPArgs::~TestAsFPArgs() {}
 

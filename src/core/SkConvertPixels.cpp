@@ -4,15 +4,25 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
-#include "include/private/SkColorData.h"
-#include "src/base/SkHalf.h"
-#include "src/core/SkColorSpacePriv.h"
-#include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkConvertPixels.h"
+
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkSize.h"
+#include "include/private/SkColorData.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkHalf.h"
+#include "src/base/SkRectMemcpy.h"
+#include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkImageInfoPriv.h"
-#include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineOpContexts.h"
+#include "src/core/SkSwizzlePriv.h"
+
+#include <cstdint>
+#include <cstring>
+#include <initializer_list>
 
 static bool rect_memcpy(const SkImageInfo& dstInfo,       void* dstPixels, size_t dstRB,
                         const SkImageInfo& srcInfo, const void* srcPixels, size_t srcRB,
@@ -189,6 +199,7 @@ static bool convert_to_alpha8(const SkImageInfo& dstInfo,       void* vdst, size
             return true;
         }
 
+        case kRGBA_10x6_SkColorType:
         case kR16G16B16A16_unorm_SkColorType: {
             auto src64 = (const uint64_t*) src;
             for (int y = 0; y < srcInfo.height(); y++) {
@@ -208,13 +219,13 @@ static bool convert_to_alpha8(const SkImageInfo& dstInfo,       void* vdst, size
 static void convert_with_pipeline(const SkImageInfo& dstInfo, void* dstRow, int dstStride,
                                   const SkImageInfo& srcInfo, const void* srcRow, int srcStride,
                                   const SkColorSpaceXformSteps& steps) {
-    SkRasterPipeline_MemoryCtx src = { (void*)srcRow, srcStride },
-                               dst = { (void*)dstRow, dstStride };
+    SkRasterPipeline_MemoryCtx src = { const_cast<void*>(srcRow), srcStride },
+                               dst = {                   dstRow,  dstStride };
 
     SkRasterPipeline_<256> pipeline;
-    pipeline.append_load(srcInfo.colorType(), &src);
+    pipeline.appendLoad(srcInfo.colorType(), &src);
     steps.apply(&pipeline);
-    pipeline.append_store(dstInfo.colorType(), &dst);
+    pipeline.appendStore(dstInfo.colorType(), &dst);
     pipeline.run(0,0, srcInfo.width(), srcInfo.height());
 }
 

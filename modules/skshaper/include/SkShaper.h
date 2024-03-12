@@ -8,14 +8,22 @@
 #ifndef SkShaper_DEFINED
 #define SkShaper_DEFINED
 
+#include "include/core/SkFont.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypes.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <type_traits>
+
+class SkFontStyle;
+class SkUnicode;
 
 #if !defined(SKSHAPER_IMPLEMENTATION)
     #define SKSHAPER_IMPLEMENTATION 0
@@ -37,25 +45,21 @@
     #endif
 #endif
 
-class SkFont;
-class SkFontMgr;
-class SkUnicode;
-
 class SKSHAPER_API SkShaper {
 public:
     static std::unique_ptr<SkShaper> MakePrimitive();
     #ifdef SK_SHAPER_HARFBUZZ_AVAILABLE
-    static std::unique_ptr<SkShaper> MakeShaperDrivenWrapper(sk_sp<SkFontMgr> = nullptr);
-    static std::unique_ptr<SkShaper> MakeShapeThenWrap(sk_sp<SkFontMgr> = nullptr);
+    static std::unique_ptr<SkShaper> MakeShaperDrivenWrapper(sk_sp<SkFontMgr> fallback);
+    static std::unique_ptr<SkShaper> MakeShapeThenWrap(sk_sp<SkFontMgr> fallback);
     static std::unique_ptr<SkShaper> MakeShapeDontWrapOrReorder(std::unique_ptr<SkUnicode> unicode,
-                                                                sk_sp<SkFontMgr> = nullptr);
+                                                                sk_sp<SkFontMgr> fallback);
     static void PurgeHarfBuzzCache();
     #endif
     #ifdef SK_SHAPER_CORETEXT_AVAILABLE
     static std::unique_ptr<SkShaper> MakeCoreText();
     #endif
 
-    static std::unique_ptr<SkShaper> Make(sk_sp<SkFontMgr> = nullptr);
+    static std::unique_ptr<SkShaper> Make(sk_sp<SkFontMgr> fallback = nullptr);
     static void PurgeCaches();
 
     SkShaper();
@@ -131,12 +135,12 @@ public:
 
     static std::unique_ptr<BiDiRunIterator>
     MakeBiDiRunIterator(const char* utf8, size_t utf8Bytes, uint8_t bidiLevel);
-    #ifdef SK_UNICODE_AVAILABLE
+#if defined(SK_SHAPER_UNICODE_AVAILABLE)
     static std::unique_ptr<BiDiRunIterator>
     MakeSkUnicodeBidiRunIterator(SkUnicode* unicode, const char* utf8, size_t utf8Bytes, uint8_t bidiLevel);
     static std::unique_ptr<BiDiRunIterator>
     MakeIcuBiDiRunIterator(const char* utf8, size_t utf8Bytes, uint8_t bidiLevel);
-    #endif
+#endif
     class TrivialBiDiRunIterator : public TrivialRunIterator<BiDiRunIterator> {
     public:
         TrivialBiDiRunIterator(uint8_t bidiLevel, size_t utf8Bytes)
@@ -148,7 +152,7 @@ public:
 
     static std::unique_ptr<ScriptRunIterator>
     MakeScriptRunIterator(const char* utf8, size_t utf8Bytes, SkFourByteTag script);
-    #if defined(SK_SHAPER_HARFBUZZ_AVAILABLE) && defined(SK_UNICODE_AVAILABLE)
+#if defined(SK_SHAPER_HARFBUZZ_AVAILABLE)
     static std::unique_ptr<ScriptRunIterator>
     MakeSkUnicodeHbScriptRunIterator(const char* utf8, size_t utf8Bytes);
     static std::unique_ptr<ScriptRunIterator>
@@ -156,7 +160,7 @@ public:
     // Still used in some cases
     static std::unique_ptr<ScriptRunIterator>
     MakeHbIcuScriptRunIterator(const char* utf8, size_t utf8Bytes);
-    #endif
+#endif
     class TrivialScriptRunIterator : public TrivialRunIterator<ScriptRunIterator> {
     public:
         TrivialScriptRunIterator(SkFourByteTag script, size_t utf8Bytes)

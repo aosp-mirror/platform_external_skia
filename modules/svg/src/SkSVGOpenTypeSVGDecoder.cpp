@@ -10,7 +10,6 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkBase64.h"
 #include "modules/skresources/include/SkResources.h"
 #include "modules/svg/include/SkSVGDOM.h"
 #include "modules/svg/include/SkSVGNode.h"
@@ -18,9 +17,12 @@
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGSVG.h"
 #include "modules/svg/include/SkSVGUse.h"
+#include "src/base/SkBase64.h"
 #include "src/core/SkEnumerate.h"
 
 #include <memory>
+
+using namespace skia_private;
 
 namespace {
 class DataResourceProvider final : public skresources::ResourceProvider {
@@ -112,7 +114,7 @@ bool SkSVGOpenTypeSVGDecoder::render(SkCanvas& canvas, int upem, SkGlyphID glyph
     SkSVGPresentationContext pctx;
     pctx.fInherited.fColor.set(foregroundColor);
 
-    SkTHashMap<SkString, SkSVGColorType> namedColors;
+    THashMap<SkString, SkSVGColorType> namedColors;
     if (palette.size()) {
         for (auto&& [i, color] : SkMakeEnumerate(palette)) {
             constexpr const size_t colorStringLen = sizeof("color") - 1;

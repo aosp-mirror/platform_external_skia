@@ -19,9 +19,10 @@
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "src/base/SkRandom.h"
-#include "src/effects/imagefilters/SkRuntimeImageFilter.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string_view>
 
@@ -34,7 +35,10 @@ static sk_sp<SkImageFilter> make_filter() {
         }
     )")).effect;
     SkRuntimeShaderBuilder builder(std::move(effect));
-    return SkImageFilters::RuntimeShader(builder, /*childShaderName=*/"", /*input=*/nullptr);
+    return SkImageFilters::RuntimeShader(builder,
+                                         /*sampleRadius=*/4,
+                                         /*childShaderName=*/"",
+                                         /*input=*/nullptr);
 }
 
 DEF_SIMPLE_GM_BG(rtif_distort, canvas, 500, 750, SK_ColorBLACK) {
@@ -50,7 +54,7 @@ DEF_SIMPLE_GM_BG(rtif_distort, canvas, 500, 750, SK_ColorBLACK) {
         canvas->saveLayer(nullptr, &filterPaint);
         const char* str = "The quick brown fox jumped over the lazy dog.";
         SkRandom rand;
-        SkFont font(ToolUtils::create_portable_typeface());
+        SkFont font = ToolUtils::DefaultPortableFont();
         for (int i = 0; i < 25; ++i) {
             int x = rand.nextULessThan(500);
             int y = rand.nextULessThan(500);
@@ -88,7 +92,7 @@ DEF_SIMPLE_GM(rtif_unsharp, canvas, 512, 256) {
     )")).effect;
     SkRuntimeShaderBuilder builder(std::move(effect));
 
-    auto image = GetResourceAsImage("images/mandrill_256.png");
+    auto image = ToolUtils::GetResourceAsImage("images/mandrill_256.png");
     auto blurredSrc = SkImageFilters::Blur(1, 1, /*input=*/nullptr);
 
     std::string_view childNames[] = { "content", "blurred" };

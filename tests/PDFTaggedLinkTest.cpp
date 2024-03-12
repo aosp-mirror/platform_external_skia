@@ -20,10 +20,11 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
-#include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
 #include "include/docs/SkPDFDocument.h"
+#include "src/pdf/SkPDFUtils.h"
 #include "tests/Test.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <memory>
 #include <utility>
@@ -47,8 +48,8 @@ DEF_TEST(SkPDF_tagged_links, r) {
     SkPDF::Metadata metadata;
     metadata.fTitle = "Example Tagged PDF With Links";
     metadata.fCreator = "Skia";
-    SkTime::DateTime now;
-    SkTime::GetDateTime(&now);
+    SkPDF::DateTime now;
+    SkPDFUtils::GetDateTime(&now);
     metadata.fCreation = now;
     metadata.fModified = now;
 
@@ -74,7 +75,7 @@ DEF_TEST(SkPDF_tagged_links, r) {
     SkCanvas* canvas =
             document->beginPage(pageSize.width(),
                                 pageSize.height());
-    SkFont font(nullptr, 20);
+    SkFont font(ToolUtils::DefaultTypeface(), 20);
 
     // The node ID should cover both the text and the annotation.
     SkPDF::SetNodeId(canvas, 2);

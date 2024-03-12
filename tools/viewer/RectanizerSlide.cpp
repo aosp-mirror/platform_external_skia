@@ -8,6 +8,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
+#include "include/private/base/SkTArray.h"
 #include "src/base/SkRandom.h"
 #include "src/base/SkUTF.h"
 #include "tools/viewer/Slide.h"
@@ -15,6 +16,7 @@
 #include "src/gpu/RectanizerPow2.h"
 #include "src/gpu/RectanizerSkyline.h"
 
+using namespace skia_private;
 using namespace skgpu;
 
 // This slide visualizes the various Rectanizer-derived classes behavior
@@ -139,7 +141,7 @@ private:
     SkTDArray<SkISize>                    fRects[3];
     SkTDArray<SkISize>*                   fCurRects;
     SkTDArray<SkIPoint16>                 fRectLocations;
-    SkTArray<std::unique_ptr<Rectanizer>> fRectanizers;
+    TArray<std::unique_ptr<Rectanizer>> fRectanizers;
     int                                   fCurRectanizer;
 
     const char* getRectanizerName() const {

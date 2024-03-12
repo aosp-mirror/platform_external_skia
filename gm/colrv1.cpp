@@ -19,6 +19,7 @@
 #include "include/core/SkTypeface.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 #include <initializer_list>
@@ -58,14 +59,14 @@ public:
 protected:
     void onOnceBeforeDraw() override {
         if (fVariationPosition.coordinateCount) {
-            fTypeface = MakeResourceAsTypeface(kTestFontNameVariable);
+            fTypeface = ToolUtils::CreateTypefaceFromResource(kTestFontNameVariable);
         } else {
-            fTypeface = MakeResourceAsTypeface(kTestFontName);
+            fTypeface = ToolUtils::CreateTypefaceFromResource(kTestFontName);
         }
         fVariationSliders = ToolUtils::VariationSliders(fTypeface.get(), fVariationPosition);
     }
 
-    SkString onShortName() override {
+    SkString getName() const override {
         SkASSERT(!fTestName.isEmpty());
         SkString gm_name = SkStringPrintf("colrv1_%s", fTestName.c_str());
 
@@ -95,7 +96,7 @@ protected:
         return fVariationSliders.readControls(controls);
     }
 
-    SkISize onISize() override {
+    SkISize getISize() override {
         // Sweep tests get a slightly wider canvas so that glyphs from one group fit in one row.
         if (fTestName.equals("sweep_varsweep")) {
             return SkISize::Make(xWidth + 500, xWidth);
@@ -155,7 +156,7 @@ protected:
                                        paint);
                 SkScalar glyphAdvance = font.measureText(
                         &fCodepoints[i], sizeof(uint32_t), SkTextEncoding::kUTF32, nullptr);
-                if (x + glyphAdvance < onISize().width() - xTranslate) {
+                if (x + glyphAdvance < getISize().width() - xTranslate) {
                     x += glyphAdvance + glyphAdvance * 0.05f;
                 } else {
                     y += y_shift;
@@ -273,8 +274,6 @@ DEF_GM(return F(C(paint_scale),            0.0f,  0.0f, {}))
 DEF_GM(return F(C(paint_scale),            0.0f,  0.0f, {{"SCOX"_t, 200.f}, {"SCOY"_t, 200.f}}))
 DEF_GM(return F(C(paint_scale),            0.0f,  0.0f, {{"SCSX"_t, 0.25f}, {"SCOY"_t, 0.25f}}))
 DEF_GM(return F(C(paint_scale),            0.0f,  0.0f, {{"SCSX"_t, -1.f}, {"SCOY"_t, -1.f}}))
-DEF_GM(return F(C(paint_scale),            0.0f,  0.0f, {}))
-DEF_GM(return F(C(paint_scale),            0.0f,  0.0f, {}))
 DEF_GM(return F(C(paint_skew),             0.0f,  0.0f, {}))
 DEF_GM(return F(C(paint_skew),             0.0f,  0.0f, {{"SKXA"_t, 20.f}}))
 DEF_GM(return F(C(paint_skew),             0.0f,  0.0f, {{"SKYA"_t, 20.f}}))
@@ -298,6 +297,15 @@ DEF_GM(return F(C(sweep_varsweep),
                  {"SWC2"_t, 0.083333333f},
                  {"SWC3"_t, 0.083333333f},
                  {"SWC4"_t, +0.25f}}))
+DEF_GM(return F(C(sweep_varsweep),
+                0.0f,
+                0.0f,
+                {{"SWPS"_t, 45.f},
+                 {"SWPE"_t, -45.f},
+                 {"SWC1"_t, -0.25f},
+                 {"SWC2"_t, -0.416687f},
+                 {"SWC3"_t, -0.583313f},
+                 {"SWC4"_t, -0.75f}}))
 DEF_GM(return F(C(variable_alpha),         0.0f,  0.0f, {}))
 DEF_GM(return F(C(variable_alpha),         0.0f,  0.0f, {{"APH1"_t, -0.7f}}))
 DEF_GM(return F(C(variable_alpha),         0.0f,  0.0f, {{"APH2"_t, -0.7f}, {"APH3"_t, -0.2f}}))

@@ -1,5 +1,5 @@
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_deps", "skia_filegroup", "split_srcs_and_hdrs")
 load("//bazel:flags.bzl", "bool_flag")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_deps", "skia_filegroup", "split_srcs_and_hdrs")
 
 licenses(["notice"])
 
@@ -19,8 +19,11 @@ CORE_FILES = [
     "GrGLCaps.h",
     "GrGLContext.cpp",
     "GrGLContext.h",
-    "GrGLDefines_impl.h",
+    "GrGLDefines.h",
+    "GrGLDirectContext.cpp",
     "GrGLExtensions.cpp",
+    "GrGLBackendSurface.cpp",
+    "GrGLBackendSurfacePriv.h",
     "GrGLGLSL.cpp",
     "GrGLGLSL.h",
     "GrGLGpu.cpp",
@@ -42,6 +45,7 @@ CORE_FILES = [
     "GrGLTextureRenderTarget.cpp",
     "GrGLTextureRenderTarget.h",
     "GrGLTypesPriv.cpp",
+    "GrGLTypesPriv.h",
     "GrGLUniformHandler.cpp",
     "GrGLUniformHandler.h",
     "GrGLUtil.cpp",
@@ -81,8 +85,14 @@ skia_filegroup(
 )
 
 skia_filegroup(
+    name = "android_srcs",
+    srcs = ["AHardwareBufferGL.cpp"],
+)
+
+skia_filegroup(
     name = "srcs",
     srcs = [
+        ":android_srcs",
         ":core_srcs",
         "//src/gpu/ganesh/gl/builders:srcs",
     ] + select({
@@ -104,7 +114,7 @@ skia_filegroup(
 skia_cc_deps(
     name = "deps",
     linkopts = select({
-        "@platforms//os:android": ["-landroid"],
+        "@platforms//os:android": ["-lGLESv2"],
         "@platforms//os:linux": ["-lGL"],
         # TODO(kjlubick) need OpenGL32.lib for non-arm windows
         "//conditions:default": [],

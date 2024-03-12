@@ -14,22 +14,17 @@
 #include "src/gpu/ganesh/gl/GrGLContext.h"
 #include "src/sksl/codegen/SkSLGLSLCodeGenerator.h"
 
-std::unique_ptr<SkSL::Program> GrSkSLtoGLSL(const GrGLGpu* gpu,
-                                            SkSL::ProgramKind programKind,
-                                            const std::string& sksl,
-                                            const SkSL::ProgramSettings& settings,
-                                            std::string* glsl,
-                                            GrContextOptions::ShaderErrorHandler* errorHandler);
-
 GrGLuint GrGLCompileAndAttachShader(const GrGLContext& glCtx,
                                     GrGLuint programId,
                                     GrGLenum type,
                                     const std::string& glsl,
+                                    bool shaderWasCached,
                                     GrThreadSafePipelineBuilder::Stats*,
                                     GrContextOptions::ShaderErrorHandler* errorHandler);
 
 bool GrGLCheckLinkStatus(const GrGLGpu* gpu,
                          GrGLuint programID,
+                         bool shaderWasCached,
                          GrContextOptions::ShaderErrorHandler* errorHandler,
                          const std::string* sksl[kGrShaderTypeCount],
                          const std::string glsl[kGrShaderTypeCount]);

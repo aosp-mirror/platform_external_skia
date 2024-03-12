@@ -17,6 +17,7 @@
 #include "modules/skshaper/include/SkShaper.h"
 #include "src/base/SkZip.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <cinttypes>
 #include <cstdint>
@@ -116,14 +117,14 @@ struct RunHandler final : public SkShaper::RunHandler {
 };
 
 void shaper_test(skiatest::Reporter* reporter, const char* name, SkData* data) {
-    auto shaper = SkShaper::Make();
+    auto shaper = SkShaper::Make(SkFontMgr::RefEmpty());  // no fallback
     if (!shaper) {
         ERRORF(reporter, "Could not create shaper.");
         return;
     }
 
     constexpr float kWidth = 400;
-    SkFont font(SkTypeface::MakeDefault());
+    SkFont font = ToolUtils::DefaultFont();
     RunHandler rh(name, reporter, (const char*)data->data(), data->size());
     shaper->shape((const char*)data->data(), data->size(), font, true, kWidth, &rh);
 

@@ -14,7 +14,9 @@
 #include "src/gpu/graphite/render/BitmapTextRenderStep.h"
 #include "src/gpu/graphite/render/CommonDepthStencilSettings.h"
 #include "src/gpu/graphite/render/CoverBoundsRenderStep.h"
+#include "src/gpu/graphite/render/CoverageMaskRenderStep.h"
 #include "src/gpu/graphite/render/MiddleOutFanRenderStep.h"
+#include "src/gpu/graphite/render/PerEdgeAAQuadRenderStep.h"
 #include "src/gpu/graphite/render/SDFTextRenderStep.h"
 #include "src/gpu/graphite/render/TessellateCurvesRenderStep.h"
 #include "src/gpu/graphite/render/TessellateStrokesRenderStep.h"
@@ -22,7 +24,24 @@
 #include "src/gpu/graphite/render/VerticesRenderStep.h"
 #include "src/sksl/SkSLUtil.h"
 
+#ifdef SK_ENABLE_VELLO_SHADERS
+#include "src/gpu/graphite/compute/VelloRenderer.h"
+#endif
+
 namespace skgpu::graphite {
+
+bool RendererProvider::IsVelloRendererSupported(const Caps* caps) {
+#ifdef SK_ENABLE_VELLO_SHADERS
+    return caps->computeSupport();
+#else
+    return false;
+#endif
+}
+
+// The destructor is intentionally defined here and not in the header file to allow forward
+// declared types (such as `VelloRenderer`) to be defined as a `std::unique_ptr` parameter type
+// in members.
+RendererProvider::~RendererProvider() = default;
 
 RendererProvider::RendererProvider(const Caps* caps, StaticBufferManager* bufferManager) {
     // This constructor requires all Renderers be densely packed so that it can simply iterate over
@@ -50,13 +69,16 @@ RendererProvider::RendererProvider(const Caps* caps, StaticBufferManager* buffer
                          DrawTypeFlags::kShape);
     fTessellatedStrokes = makeFromStep(
             std::make_unique<TessellateStrokesRenderStep>(infinitySupport), DrawTypeFlags::kShape);
-    fBitmapText = makeFromStep(std::make_unique<BitmapTextRenderStep>(),
-                               DrawTypeFlags::kText);
+    fCoverageMask = makeFromStep(std::make_unique<CoverageMaskRenderStep>(), DrawTypeFlags::kShape);
     for (bool lcd : {false, true}) {
+        fBitmapText[lcd] = makeFromStep(std::make_unique<BitmapTextRenderStep>(lcd),
+                                        DrawTypeFlags::kText);
         fSDFText[lcd] = makeFromStep(std::make_unique<SDFTextRenderStep>(lcd),
                                      DrawTypeFlags::kText);
     }
     fAnalyticRRect = makeFromStep(std::make_unique<AnalyticRRectRenderStep>(bufferManager),
+                                  DrawTypeFlags::kShape);
+    fPerEdgeAAQuad = makeFromStep(std::make_unique<PerEdgeAAQuadRenderStep>(bufferManager),
                                   DrawTypeFlags::kShape);
     for (PrimitiveType primType : {PrimitiveType::kTriangles, PrimitiveType::kTriangleStrip}) {
         for (bool color : {false, true}) {
@@ -123,6 +145,10 @@ RendererProvider::RendererProvider(const Caps* caps, StaticBufferManager* buffer
             fRenderers.push_back(&r);
         }
     }
+
+#ifdef SK_ENABLE_VELLO_SHADERS
+    fVelloRenderer = std::make_unique<VelloRenderer>(caps);
+#endif
 }
 
 const RenderStep* RendererProvider::lookup(uint32_t uniqueID) const {

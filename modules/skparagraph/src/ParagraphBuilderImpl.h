@@ -13,7 +13,6 @@
 #include "modules/skparagraph/include/ParagraphBuilder.h"
 #include "modules/skparagraph/include/ParagraphStyle.h"
 #include "modules/skparagraph/include/TextStyle.h"
-#include "modules/skunicode/include/SkUnicode.h"
 
 namespace skia {
 namespace textlayout {
@@ -62,19 +61,19 @@ public:
     std::unique_ptr<Paragraph> Build() override;
 
     // Support for "Client" unicode
-    SkSpan<char> getText();
-    const ParagraphStyle& getParagraphStyle() const;
+    SkSpan<char> getText() override;
+    const ParagraphStyle& getParagraphStyle() const override;
 
-    void setWordsUtf8(std::vector<SkUnicode::Position> wordsUtf8);
-    void setWordsUtf16(std::vector<SkUnicode::Position> wordsUtf16);
+    void setWordsUtf8(std::vector<SkUnicode::Position> wordsUtf8) override;
+    void setWordsUtf16(std::vector<SkUnicode::Position> wordsUtf16) override;
 
-    void setGraphemeBreaksUtf8(std::vector<SkUnicode::Position> graphemesUtf8);
-    void setGraphemeBreaksUtf16(std::vector<SkUnicode::Position> graphemesUtf16);
+    void setGraphemeBreaksUtf8(std::vector<SkUnicode::Position> graphemesUtf8) override;
+    void setGraphemeBreaksUtf16(std::vector<SkUnicode::Position> graphemesUtf16) override;
 
-    void setLineBreaksUtf8(std::vector<SkUnicode::LineBreakBefore> lineBreaksUtf8);
-    void setLineBreaksUtf16(std::vector<SkUnicode::LineBreakBefore> lineBreaksUtf16);
+    void setLineBreaksUtf8(std::vector<SkUnicode::LineBreakBefore> lineBreaksUtf8) override;
+    void setLineBreaksUtf16(std::vector<SkUnicode::LineBreakBefore> lineBreaksUtf16) override;
 
-    void SetUnicode(std::unique_ptr<SkUnicode> unicode) {
+    void SetUnicode(std::unique_ptr<SkUnicode> unicode) override {
         fUnicode = std::move(unicode);
     }
     // Support for Flutter optimization
@@ -87,6 +86,8 @@ public:
     // Just until we fix all the code; calls icu::make inside
     static std::unique_ptr<ParagraphBuilder> make(const ParagraphStyle& style,
                                                   sk_sp<FontCollection> fontCollection);
+
+    static bool RequiresClientICU();
 protected:
     void startStyledBlock();
     void endRunIfNeeded();
@@ -95,9 +96,9 @@ protected:
     void finalize();
 
     SkString fUtf8;
-    SkSTArray<4, TextStyle, true> fTextStyles;
-    SkSTArray<4, Block, true> fStyledBlocks;
-    SkSTArray<4, Placeholder, true> fPlaceholders;
+    skia_private::STArray<4, TextStyle, true> fTextStyles;
+    skia_private::STArray<4, Block, true> fStyledBlocks;
+    skia_private::STArray<4, Placeholder, true> fPlaceholders;
     sk_sp<FontCollection> fFontCollection;
     ParagraphStyle fParagraphStyle;
 
@@ -105,11 +106,12 @@ protected:
 private:
     SkOnce fillUTF16MappingOnce;
     void ensureUTF16Mapping();
-    SkTArray<TextIndex, true> fUTF8IndexForUTF16Index;
-#if !defined(SK_UNICODE_ICU_IMPLEMENTATION) && defined(SK_UNICODE_CLIENT_IMPLEMENTATION)
+    skia_private::TArray<TextIndex, true> fUTF8IndexForUTF16Index;
+    skia_private::TArray<TextIndex, true> fUTF16IndexForUTF8Index;
+#if defined(SK_UNICODE_CLIENT_IMPLEMENTATION)
     bool fTextIsFinalized;
     bool fUsingClientInfo;
-    std::vector<SkUnicode::Position> fWordsUtf8;
+    std::vector<SkUnicode::Position> fWordsUtf16;
     std::vector<SkUnicode::Position> fGraphemeBreaksUtf8;
     std::vector<SkUnicode::LineBreakBefore> fLineBreaksUtf8;
 #endif

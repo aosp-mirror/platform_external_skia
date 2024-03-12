@@ -5,6 +5,7 @@
 
 #include "include/core/SkFont.h"
 #include "include/core/SkFontMetrics.h"
+#include "include/core/SkFontMgr.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
@@ -17,8 +18,9 @@
 #include "src/base/SkUTF.h"
 #include "src/core/SkTextBlobPriv.h"
 
-#include <limits.h>
-#include <string.h>
+#include <cfloat>
+#include <climits>
+#include <cstring>
 
 
 using namespace SkPlainTextEditor;
@@ -257,17 +259,18 @@ static void set_character_bounds(void* context,
 }
 
 ShapeResult SkPlainTextEditor::Shape(const char* utf8Text,
-                          size_t textByteLen,
-                          const SkFont& font,
-                          const char* locale,
-                          float width)
+                                     size_t textByteLen,
+                                     const SkFont& font,
+                                     sk_sp<SkFontMgr> fontMgr,
+                                     const char* locale,
+                                     float width)
 {
     ShapeResult result;
     if (SkUTF::CountUTF8(utf8Text, textByteLen) < 0) {
         utf8Text = nullptr;
         textByteLen = 0;
     }
-    std::unique_ptr<SkShaper> shaper = SkShaper::Make();
+    std::unique_ptr<SkShaper> shaper = SkShaper::Make(fontMgr);
     float height = font.getSpacing();
     RunHandler runHandler(utf8Text, textByteLen);
     if (textByteLen) {

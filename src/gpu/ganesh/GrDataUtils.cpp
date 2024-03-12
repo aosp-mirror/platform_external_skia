@@ -8,14 +8,15 @@
 #include "src/gpu/ganesh/GrDataUtils.h"
 
 #include "include/core/SkColorSpace.h"
+#include "include/core/SkTextureCompressionType.h"
 #include "include/private/base/SkTPin.h"
 #include "modules/skcms/skcms.h"
 #include "src/base/SkMathPriv.h"
+#include "src/base/SkRectMemcpy.h"
 #include "src/base/SkTLazy.h"
 #include "src/base/SkUtils.h"
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkCompressedDataUtils.h"
-#include "src/core/SkConvertPixels.h"
 #include "src/core/SkMipmap.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkTraceEvent.h"
@@ -24,6 +25,8 @@
 #include "src/gpu/ganesh/GrColor.h"
 #include "src/gpu/ganesh/GrImageInfo.h"
 #include "src/gpu/ganesh/GrPixmap.h"
+
+using namespace skia_private;
 
 struct ETC1Block {
     uint32_t fHigh;
@@ -159,13 +162,13 @@ static void create_BC1_block(SkColor col0, SkColor col1, BC1Block* block) {
     }
 }
 
-size_t GrNumBlocks(SkImage::CompressionType type, SkISize baseDimensions) {
+size_t GrNumBlocks(SkTextureCompressionType type, SkISize baseDimensions) {
     switch (type) {
-        case SkImage::CompressionType::kNone:
+        case SkTextureCompressionType::kNone:
             return baseDimensions.width() * baseDimensions.height();
-        case SkImage::CompressionType::kETC2_RGB8_UNORM:
-        case SkImage::CompressionType::kBC1_RGB8_UNORM:
-        case SkImage::CompressionType::kBC1_RGBA8_UNORM: {
+        case SkTextureCompressionType::kETC2_RGB8_UNORM:
+        case SkTextureCompressionType::kBC1_RGB8_UNORM:
+        case SkTextureCompressionType::kBC1_RGBA8_UNORM: {
             int numBlocksWidth = num_4x4_blocks(baseDimensions.width());
             int numBlocksHeight = num_4x4_blocks(baseDimensions.height());
 
@@ -175,13 +178,13 @@ size_t GrNumBlocks(SkImage::CompressionType type, SkISize baseDimensions) {
     SkUNREACHABLE;
 }
 
-size_t GrCompressedRowBytes(SkImage::CompressionType type, int width) {
+size_t GrCompressedRowBytes(SkTextureCompressionType type, int width) {
     switch (type) {
-        case SkImage::CompressionType::kNone:
+        case SkTextureCompressionType::kNone:
             return 0;
-        case SkImage::CompressionType::kETC2_RGB8_UNORM:
-        case SkImage::CompressionType::kBC1_RGB8_UNORM:
-        case SkImage::CompressionType::kBC1_RGBA8_UNORM: {
+        case SkTextureCompressionType::kETC2_RGB8_UNORM:
+        case SkTextureCompressionType::kBC1_RGB8_UNORM:
+        case SkTextureCompressionType::kBC1_RGBA8_UNORM: {
             int numBlocksWidth = num_4x4_blocks(width);
 
             static_assert(sizeof(ETC1Block) == sizeof(BC1Block));
@@ -191,13 +194,13 @@ size_t GrCompressedRowBytes(SkImage::CompressionType type, int width) {
     SkUNREACHABLE;
 }
 
-SkISize GrCompressedDimensions(SkImage::CompressionType type, SkISize baseDimensions) {
+SkISize GrCompressedDimensions(SkTextureCompressionType type, SkISize baseDimensions) {
     switch (type) {
-        case SkImage::CompressionType::kNone:
+        case SkTextureCompressionType::kNone:
             return baseDimensions;
-        case SkImage::CompressionType::kETC2_RGB8_UNORM:
-        case SkImage::CompressionType::kBC1_RGB8_UNORM:
-        case SkImage::CompressionType::kBC1_RGBA8_UNORM: {
+        case SkTextureCompressionType::kETC2_RGB8_UNORM:
+        case SkTextureCompressionType::kBC1_RGB8_UNORM:
+        case SkTextureCompressionType::kBC1_RGBA8_UNORM: {
             int numBlocksWidth = num_4x4_blocks(baseDimensions.width());
             int numBlocksHeight = num_4x4_blocks(baseDimensions.height());
 
@@ -238,7 +241,7 @@ static void fillin_BC1_with_color(SkISize dimensions, const SkColor4f& colorf, c
     }
 }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 
 // Fill in 'dstPixels' with BC1 blocks derived from the 'pixmap'.
 void GrTwoColorBC1Compress(const SkPixmap& pixmap, SkColor otherColor, char* dstPixels) {
@@ -284,7 +287,7 @@ void GrTwoColorBC1Compress(const SkPixmap& pixmap, SkColor otherColor, char* dst
 #endif
 
 size_t GrComputeTightCombinedBufferSize(size_t bytesPerPixel, SkISize baseDimensions,
-                                        SkTArray<size_t>* individualMipOffsets, int mipLevelCount) {
+                                        TArray<size_t>* individualMipOffsets, int mipLevelCount) {
     SkASSERT(individualMipOffsets && !individualMipOffsets->size());
     SkASSERT(mipLevelCount >= 1);
 
@@ -318,12 +321,15 @@ size_t GrComputeTightCombinedBufferSize(size_t bytesPerPixel, SkISize baseDimens
     return combinedBufferSize;
 }
 
-void GrFillInCompressedData(SkImage::CompressionType type, SkISize dimensions,
-                            GrMipmapped mipmapped, char* dstPixels, const SkColor4f& colorf) {
+void GrFillInCompressedData(SkTextureCompressionType type,
+                            SkISize dimensions,
+                            skgpu::Mipmapped mipmapped,
+                            char* dstPixels,
+                            const SkColor4f& colorf) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
     int numMipLevels = 1;
-    if (mipmapped == GrMipmapped::kYes) {
+    if (mipmapped == skgpu::Mipmapped::kYes) {
         numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
 
@@ -332,11 +338,11 @@ void GrFillInCompressedData(SkImage::CompressionType type, SkISize dimensions,
     for (int i = 0; i < numMipLevels; ++i) {
         size_t levelSize = SkCompressedDataSize(type, dimensions, nullptr, false);
 
-        if (SkImage::CompressionType::kETC2_RGB8_UNORM == type) {
+        if (SkTextureCompressionType::kETC2_RGB8_UNORM == type) {
             fillin_ETC1_with_color(dimensions, colorf, &dstPixels[offset]);
         } else {
-            SkASSERT(type == SkImage::CompressionType::kBC1_RGB8_UNORM ||
-                     type == SkImage::CompressionType::kBC1_RGBA8_UNORM);
+            SkASSERT(type == SkTextureCompressionType::kBC1_RGB8_UNORM ||
+                     type == SkTextureCompressionType::kBC1_RGBA8_UNORM);
             fillin_BC1_with_color(dimensions, colorf, &dstPixels[offset]);
         }
 
@@ -365,6 +371,7 @@ static skgpu::Swizzle get_load_and_src_swizzle(GrColorType ct, SkRasterPipelineO
         case GrColorType::kBGRA_1010102:     *load = SkRasterPipelineOp::load_1010102;
                                              swizzle = skgpu::Swizzle("bgra");
                                              break;
+        case GrColorType::kRGBA_10x6:        *load = SkRasterPipelineOp::load_10x6;     break;
         case GrColorType::kAlpha_F16:        *load = SkRasterPipelineOp::load_af16;     break;
         case GrColorType::kRGBA_F16_Clamped: *load = SkRasterPipelineOp::load_f16;      break;
         case GrColorType::kRG_1616:          *load = SkRasterPipelineOp::load_rg1616;   break;
@@ -449,6 +456,7 @@ static skgpu::Swizzle get_dst_swizzle_and_store(GrColorType ct, SkRasterPipeline
         case GrColorType::kBGRA_1010102:     swizzle = skgpu::Swizzle("bgra");
                                              *store = SkRasterPipelineOp::store_1010102;
                                              break;
+        case GrColorType::kRGBA_10x6:        *store = SkRasterPipelineOp::store_10x6;     break;
         case GrColorType::kRGBA_F16_Clamped: *store = SkRasterPipelineOp::store_f16;      break;
         case GrColorType::kRG_1616:          *store = SkRasterPipelineOp::store_rg1616;   break;
         case GrColorType::kRGBA_16161616:    *store = SkRasterPipelineOp::store_16161616; break;
@@ -649,7 +657,7 @@ bool GrConvertPixels(const GrPixmap& dst, const GrCPixmap& src, bool flipY) {
     if (hasConversion) {
         loadSwizzle.apply(&pipeline);
         if (srcIsSRGB) {
-            pipeline.append_transfer_function(*skcms_sRGB_TransferFunction());
+            pipeline.appendTransferFunction(*skcms_sRGB_TransferFunction());
         }
         if (alphaOrCSConversion) {
             steps->apply(&pipeline);
@@ -670,7 +678,7 @@ bool GrConvertPixels(const GrPixmap& dst, const GrCPixmap& src, bool flipY) {
                 break;
         }
         if (dstIsSRGB) {
-            pipeline.append_transfer_function(*skcms_sRGB_Inverse_TransferFunction());
+            pipeline.appendTransferFunction(*skcms_sRGB_Inverse_TransferFunction());
         }
         storeSwizzle.apply(&pipeline);
     } else {
@@ -720,7 +728,7 @@ bool GrClearImage(const GrImageInfo& dstInfo, void* dst, size_t dstRB, std::arra
     char block[64];
     SkArenaAlloc alloc(block, sizeof(block), 1024);
     SkRasterPipeline_<256> pipeline;
-    pipeline.append_constant_color(&alloc, color.data());
+    pipeline.appendConstantColor(&alloc, color.data());
     switch (lumMode) {
         case LumMode::kNone:
             break;
@@ -736,7 +744,7 @@ bool GrClearImage(const GrImageInfo& dstInfo, void* dst, size_t dstRB, std::arra
             break;
     }
     if (dstIsSRGB) {
-        pipeline.append_transfer_function(*skcms_sRGB_Inverse_TransferFunction());
+        pipeline.appendTransferFunction(*skcms_sRGB_Inverse_TransferFunction());
     }
     storeSwizzle.apply(&pipeline);
     SkRasterPipeline_MemoryCtx dstCtx{dst, SkToInt(dstRB/dstInfo.bpp())};
