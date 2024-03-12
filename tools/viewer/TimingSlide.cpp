@@ -8,6 +8,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkSurface.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/Slide.h"
 
 #include <chrono>
@@ -17,8 +18,8 @@ public:
     TimingSlide() { fName = "Timing";}
 
     void load(SkScalar w, SkScalar h) override {
-        sk_sp<SkSurface> surf = SkSurface::MakeRasterN32Premul(W,H);
-        surf->getCanvas()->drawString("abc", 2,H-4, SkFont{}, SkPaint{});
+        sk_sp<SkSurface> surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(W, H));
+        surf->getCanvas()->drawString("abc", 2,H-4, ToolUtils::DefaultFont(), SkPaint{});
         fImg = surf->makeImageSnapshot();
     }
 

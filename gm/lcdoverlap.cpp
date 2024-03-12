@@ -20,6 +20,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 namespace skiagm {
 
@@ -34,15 +35,13 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("lcdoverlap");
-    }
+    SkString getName() const override { return SkString("lcdoverlap"); }
 
     void onOnceBeforeDraw() override {
         // build text blob
         SkTextBlobBuilder builder;
 
-        SkFont      font(ToolUtils::create_portable_typeface(), 32);
+        SkFont      font(ToolUtils::DefaultPortableTypeface(), 32);
         const char* text = "able was I ere I saw elba";
         font.setSubpixel(true);
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
@@ -50,7 +49,7 @@ protected:
         fBlob = builder.make();
     }
 
-    SkISize onISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
 
     void drawTestCase(SkCanvas* canvas, SkScalar x, SkScalar y, SkBlendMode mode,
                       SkBlendMode mode2) {

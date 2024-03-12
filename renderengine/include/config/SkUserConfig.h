@@ -11,16 +11,16 @@
 #define SK_ANDROID_FRAMEWORK_USE_PERFETTO
 #endif
 
+#ifndef SK_DEFAULT_TYPEFACE_IS_EMPTY
+#define SK_DEFAULT_TYPEFACE_IS_EMPTY
+#endif
+
+#ifndef SK_DISABLE_LEGACY_DEFAULT_TYPEFACE
+#define SK_DISABLE_LEGACY_DEFAULT_TYPEFACE
+#endif
+
 #ifndef SK_ENABLE_PRECOMPILE
 #define SK_ENABLE_PRECOMPILE
-#endif
-
-#ifndef SK_ENABLE_SKSL
-#define SK_ENABLE_SKSL
-#endif
-
-#ifndef SK_ENCODE_PNG
-#define SK_ENCODE_PNG
 #endif
 
 #ifndef SK_GAMMA_APPLY_TO_A8
@@ -33,10 +33,6 @@
 
 #ifndef SK_GL
 #define SK_GL
-#endif
-
-#ifndef SK_HAS_ANDROID_CODEC
-#define SK_HAS_ANDROID_CODEC
 #endif
 
 #ifndef SK_IN_RENDERENGINE

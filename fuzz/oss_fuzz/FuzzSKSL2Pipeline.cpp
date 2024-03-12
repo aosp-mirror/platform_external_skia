@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "include/private/SkSLProgramKind.h"
 #include "src/gpu/ganesh/GrShaderCaps.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLProgramKind.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
 #include "src/sksl/ir/SkSLProgram.h"
@@ -16,14 +16,13 @@
 
 #include "fuzz/Fuzz.h"
 
-bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
+bool FuzzSKSL2Pipeline(const uint8_t *data, size_t size) {
     SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Default());
     SkSL::ProgramSettings settings;
-    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-                                                    SkSL::ProgramKind::kRuntimeShader,
-                                                    std::string((const char*) bytes->data(),
-                                                                bytes->size()),
-                                                    settings);
+    std::unique_ptr<SkSL::Program> program =
+            compiler.convertProgram(SkSL::ProgramKind::kRuntimeShader,
+                                    std::string(reinterpret_cast<const char*>(data), size),
+                                    settings);
     if (!program) {
         return false;
     }
@@ -64,8 +63,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 3000) {
         return 0;
     }
-    auto bytes = SkData::MakeWithoutCopy(data, size);
-    FuzzSKSL2Pipeline(bytes);
+    FuzzSKSL2Pipeline(data, size);
     return 0;
 }
 #endif

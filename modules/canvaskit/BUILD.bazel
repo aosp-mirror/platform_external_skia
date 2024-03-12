@@ -1,10 +1,13 @@
-load("//bazel:macros.bzl", "bool_flag", "exports_files_legacy", "skia_filegroup", "wasm_cc_binary")
-load("//bazel:karma_test.bzl", "karma_test")
 load("@skia_user_config//:copts.bzl", "DEFAULT_COPTS")
+load("//bazel:macros.bzl", "bool_flag", "exports_files_legacy", "skia_filegroup", "wasm_cc_binary")
+load("//bazel/karma:karma_test.bzl", "karma_test")
 
 licenses(["notice"])
 
-exports_files_legacy()
+exports_files_legacy(
+    label_list = ["npm_build/types/index.d.ts"],
+    visibility = ["//infra:__subpackages__"],
+)
 
 BASE_LINKOPTS = [
     #"-flto",  # https://github.com/emscripten-core/emsdk/issues/807
@@ -36,7 +39,6 @@ DEBUG_OPTS = [
     "-sGL_ASSERTIONS",
     "-O0",
     "-g3",
-    "--source-map-base=/build/",
 ]
 
 skia_filegroup(
@@ -58,7 +60,7 @@ genrule(
           # in the fonts/ subdirectory as if it had been there all along.
           "--output=$@ " +
           "--align=4",
-    exec_tools = ["//tools:embed_resources"],
+    tools = ["//tools:embed_resources"],
 )
 
 # Note: These are defines that only impact the _bindings.cpp files in this folder.
@@ -70,13 +72,16 @@ CK_DEFINES = [
     ":enable_fonts_true": ["CK_INCLUDE_PARAGRAPH"],
     ":enable_fonts_false": ["CK_NO_FONTS"],
 }) + select({
+    ":include_embedded_font_true": ["CK_EMBED_FONT"],
+    ":include_embedded_font_false": [],
+}) + select({
     ":enable_skp_serialization_true": ["CK_SERIALIZE_SKP=1"],
     ":enable_skp_serialization_false": [],
 }) + select({
     ":enable_runtime_effect_true": ["CK_INCLUDE_RUNTIME_EFFECT=1"],
     ":enable_runtime_effect_false": [],
 }) + select({
-    "//src/gpu:gl_backend": ["CK_ENABLE_WEBGL"],
+    "//src/gpu:gl_ganesh": ["CK_ENABLE_WEBGL"],
     "//conditions:default": [],
 })
 
@@ -104,7 +109,7 @@ CK_LINKOPTS = BASE_LINKOPTS + [
     "--pre-js",
     "modules/canvaskit/pathops.js",
 ] + select({
-    "//src/gpu:gl_backend": [
+    "//src/gpu:gl_ganesh": [
         "--pre-js",
         "modules/canvaskit/cpu.js",
         "--pre-js",
@@ -171,6 +176,12 @@ CK_LINKOPTS = BASE_LINKOPTS + [
     ],
     ":enable_runtime_effect_false": [],
 }) + select({
+    "//bazel/common_config_settings:build_for_debugger_true": [
+        "--pre-js",
+        "modules/canvaskit/debugger.js",
+    ],
+    "//bazel/common_config_settings:build_for_debugger_false": [],
+}) + select({
     ":include_matrix_js_true": [
         "--pre-js",
         "modules/canvaskit/matrix.js",
@@ -226,7 +237,10 @@ JS_INTERFACE_FILES = [
     "htmlcanvas/preamble.js",
     "htmlcanvas/radialgradient.js",
     "htmlcanvas/util.js",
-]
+] + select({
+    "//bazel/common_config_settings:build_for_debugger_true": ["debugger.js"],
+    "//bazel/common_config_settings:build_for_debugger_false": [],
+})
 
 CK_SRCS = [
     "canvaskit_bindings.cpp",
@@ -243,6 +257,9 @@ CK_SRCS = [
 }) + select({
     ":enable_skottie_true": ["skottie_bindings.cpp"],
     ":enable_skottie_false": [],
+}) + select({
+    "//bazel/common_config_settings:build_for_debugger_true": ["debugger_bindings.cpp"],
+    "//bazel/common_config_settings:build_for_debugger_false": [],
 })
 
 CK_COPTS = [
@@ -263,16 +280,21 @@ cc_binary(
         "//:skia_public",
     ] + select({
         ":enable_fonts_true": [
-            "//modules/skparagraph",
-            "//modules/skunicode",
+            "//modules/skparagraph:legacy_skparagraph",
+            "//modules/skunicode:legacy_skunicode",
         ],
         ":enable_fonts_false": [],
     }) + select({
         ":enable_skottie_true": [
-            "//modules/skottie",
+            "//modules/skottie:legacy_skottie",
             "//modules/skottie:utils",
         ],
         ":enable_skottie_false": [],
+    }) + select({
+        "//bazel/common_config_settings:build_for_debugger_true": [
+            "//tools/debugger",
+        ],
+        "//bazel/common_config_settings:build_for_debugger_false": [],
     }),
 )
 
@@ -281,6 +303,12 @@ wasm_cc_binary(
     # Whatever is before the dot will be the name of the output js and wasm, aka "the stem".
     # https://github.com/emscripten-core/emsdk/blob/82ad00499a42abde16b363239d2bc83bf5d863ab/bazel/emscripten_toolchain/wasm_cc_binary.bzl#L91
     cc_target = ":canvaskit.build",
+    visibility = [
+        "//infra/debugger-app:__pkg__",
+        "//infra/jsfiddle:__pkg__",
+        "//infra/shaders:__pkg__",
+        "//infra/skottie:__pkg__",
+    ],
 )
 
 bool_flag(
@@ -346,4 +374,15 @@ karma_test(
         ":canvaskit/canvaskit.wasm",
         "//modules/canvaskit/tests/assets:test_assets",
     ],
+)
+
+genrule(
+    name = "make version file",
+    srcs = ["make_version.sh"],
+    outs = ["version.js"],
+    cmd = "$< $@",
+    # This script uses the Git executable, which is not on the remote builders.
+    # Forcing the execution to be local ensures it will be in the path.
+    local = True,
+    visibility = ["//infra:__subpackages__"],
 )

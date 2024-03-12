@@ -8,9 +8,9 @@
 #ifndef SkottieTextAdapter_DEFINED
 #define SkottieTextAdapter_DEFINED
 
+#include "modules/skottie/include/TextShaper.h"
 #include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/text/Font.h"
-#include "modules/skottie/src/text/SkottieShaper.h"
 #include "modules/skottie/src/text/TextAnimator.h"
 #include "modules/skottie/src/text/TextValue.h"
 
@@ -77,7 +77,7 @@ private:
     void reshape();
     void addFragment(Shaper::Fragment&, sksg::Group* container);
     void buildDomainMaps(const Shaper::Result&);
-    std::vector<sk_sp<sksg::RenderNode>> buildGlyphCompNodes(Shaper::Fragment&) const;
+    std::vector<sk_sp<sksg::RenderNode>> buildGlyphCompNodes(Shaper::ShapedGlyphs&) const;
 
     void pushPropsToFragment(const TextAnimator::ResolvedProps&, const FragmentRec&,
                              const SkV2& frag_offset, const SkV2& grouping_alignment,

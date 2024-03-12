@@ -18,6 +18,7 @@
 #include <array>
 #include <cstddef>
 #include <initializer_list>
+#include <utility>
 
 static void test_small_segment3() {
     SkPath path;
@@ -211,6 +212,10 @@ DEF_TEST(PathMeasure, reporter) {
     test_small_segment();
     test_small_segment2();
     test_small_segment3();
+
+    // SkPathMeasure isn't copyable, but it should be move-able
+    SkPathMeasure meas2(std::move(meas));
+    meas = std::move(meas2);
 }
 
 DEF_TEST(PathMeasureConic, reporter) {
@@ -239,7 +244,7 @@ DEF_TEST(PathMeasure_nextctr, reporter) {
     REPORTER_ASSERT(reporter, !meas.nextContour());
 }
 
-static void test_90_degrees(sk_sp<SkContourMeasure> cm, SkScalar radius,
+static void test_90_degrees(const sk_sp<SkContourMeasure>& cm, SkScalar radius,
                             skiatest::Reporter* reporter) {
     SkPoint pos;
     SkVector tan;

@@ -9,6 +9,8 @@
 #define SKSL_TRANSFORM
 
 #include "include/core/SkSpan.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
+
 #include <memory>
 #include <vector>
 
@@ -16,26 +18,34 @@ namespace SkSL {
 
 class Context;
 class Expression;
-struct Modifiers;
+class IndexExpression;
 struct Module;
 struct Program;
 class ProgramElement;
 class ProgramUsage;
 class Statement;
+class SwitchStatement;
 class Variable;
 enum class ProgramKind : int8_t;
 
 namespace Transform {
 
 /**
- * Checks to see if it would be safe to add `const` to the modifiers of a variable. If so, returns
- * the modifiers with `const` applied; if not, returns the existing modifiers as-is. Adding `const`
- * allows the inliner to fold away more values and generate tighter code.
+ * Checks to see if it would be safe to add `const` to the modifier flags of a variable. If so,
+ * returns the modifiers with `const` applied; if not, returns the existing modifiers as-is. Adding
+ * `const` allows the inliner to fold away more values and generate tighter code.
  */
-const Modifiers* AddConstToVarModifiers(const Context& context,
-                                        const Variable& var,
-                                        const Expression* initialValue,
-                                        const ProgramUsage* usage);
+ModifierFlags AddConstToVarModifiers(const Variable& var,
+                                     const Expression* initialValue,
+                                     const ProgramUsage* usage);
+
+/**
+ * Rewrites indexed swizzles of the form `myVec.zyx[i]` by replacing the swizzle with a lookup into
+ * a constant vector. e.g., the above expression would be rewritten as `myVec[vec3(2, 1, 0)[i]]`.
+ * This roughly matches glslang's handling of the code.
+ */
+std::unique_ptr<Expression> RewriteIndexedSwizzle(const Context& context,
+                                                  const IndexExpression& swizzle);
 
 /**
  * Copies built-in functions from modules into the program. Relies on ProgramUsage to determine
@@ -87,6 +97,38 @@ void RenamePrivateSymbols(Context& context, Module& module, ProgramUsage* usage,
 
 /** Replaces constant variables in a program with their equivalent values. */
 void ReplaceConstVarsWithLiterals(Module& module, ProgramUsage* usage);
+
+/**
+ * Looks for variables inside of the top-level of a switch body, such as:
+ *
+ *    switch (x) {
+ *        case 1: int i;         // `i` is at top-level
+ *        case 2: float f = 5.0; // `f` is at top-level, and has an initial-value assignment
+ *        case 3: { bool b; }    // `b` is not at top-level; it has an additional scope
+ *    }
+ *
+ * If any top-level variables are found, a scoped block is created around the switch, and the
+ * variable declarations are moved out of the switch body and into the outer scope. (Variables with
+ * additional scoping are left as-is.) Then, we replace the declarations with assignment statements:
+ *
+ *    {
+ *        int i;
+ *        float f;
+ *        switch (a) {
+ *            case 1:              // `i` is declared above and does not need initialization
+ *            case 2: f = 5.0;     // `f` is declared above and initialized here
+ *            case 3: { bool b; }  // `b` is left as-is because it has a block-scope
+ *        }
+ *    }
+ *
+ * This doesn't change the meaning or correctness of the code. If the switch needs to be rewriten
+ * (e.g. due to the restrictions of ES2 or WGSL), this transformation prevents scoping issues with
+ * variables falling out of scope between switch-cases when we fall through.
+ *
+ * If there are no variables at the top-level, the switch statement is returned as-is.
+ */
+std::unique_ptr<Statement> HoistSwitchVarDeclarationsAtTopLevel(const Context&,
+                                                                std::unique_ptr<SwitchStatement>);
 
 } // namespace Transform
 } // namespace SkSL

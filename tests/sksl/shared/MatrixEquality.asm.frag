@@ -1,847 +1,839 @@
-OpCapability Shader
-%1 = OpExtInstImport "GLSL.std.450"
-OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %_entrypoint_v "_entrypoint" %sk_Clockwise %sk_FragColor
-OpExecutionMode %_entrypoint_v OriginUpperLeft
-OpName %sk_Clockwise "sk_Clockwise"
-OpName %sk_FragColor "sk_FragColor"
-OpName %_UniformBuffer "_UniformBuffer"
-OpMemberName %_UniformBuffer 0 "colorGreen"
-OpMemberName %_UniformBuffer 1 "colorRed"
-OpMemberName %_UniformBuffer 2 "testMatrix2x2"
-OpMemberName %_UniformBuffer 3 "testMatrix3x3"
-OpName %_entrypoint_v "_entrypoint_v"
-OpName %main "main"
-OpName %_0_ok "_0_ok"
-OpName %_1_zero "_1_zero"
-OpName %_2_one "_2_one"
-OpName %_3_two "_3_two"
-OpName %_4_nine "_4_nine"
-OpName %_5_m "_5_m"
-OpDecorate %sk_Clockwise BuiltIn FrontFacing
-OpDecorate %sk_FragColor RelaxedPrecision
-OpDecorate %sk_FragColor Location 0
-OpDecorate %sk_FragColor Index 0
-OpMemberDecorate %_UniformBuffer 0 Offset 0
-OpMemberDecorate %_UniformBuffer 0 RelaxedPrecision
-OpMemberDecorate %_UniformBuffer 1 Offset 16
-OpMemberDecorate %_UniformBuffer 1 RelaxedPrecision
-OpMemberDecorate %_UniformBuffer 2 Offset 32
-OpMemberDecorate %_UniformBuffer 2 ColMajor
-OpMemberDecorate %_UniformBuffer 2 MatrixStride 16
-OpMemberDecorate %_UniformBuffer 2 RelaxedPrecision
-OpMemberDecorate %_UniformBuffer 3 Offset 64
-OpMemberDecorate %_UniformBuffer 3 ColMajor
-OpMemberDecorate %_UniformBuffer 3 MatrixStride 16
-OpMemberDecorate %_UniformBuffer 3 RelaxedPrecision
-OpDecorate %_UniformBuffer Block
-OpDecorate %10 Binding 0
-OpDecorate %10 DescriptorSet 0
-OpDecorate %39 RelaxedPrecision
-OpDecorate %48 RelaxedPrecision
-OpDecorate %49 RelaxedPrecision
-OpDecorate %51 RelaxedPrecision
-OpDecorate %52 RelaxedPrecision
-OpDecorate %61 RelaxedPrecision
-OpDecorate %72 RelaxedPrecision
-OpDecorate %73 RelaxedPrecision
-OpDecorate %75 RelaxedPrecision
-OpDecorate %76 RelaxedPrecision
-OpDecorate %79 RelaxedPrecision
-OpDecorate %80 RelaxedPrecision
-OpDecorate %87 RelaxedPrecision
-OpDecorate %92 RelaxedPrecision
-OpDecorate %93 RelaxedPrecision
-OpDecorate %95 RelaxedPrecision
-OpDecorate %96 RelaxedPrecision
-OpDecorate %103 RelaxedPrecision
-OpDecorate %108 RelaxedPrecision
-OpDecorate %109 RelaxedPrecision
-OpDecorate %111 RelaxedPrecision
-OpDecorate %112 RelaxedPrecision
-OpDecorate %115 RelaxedPrecision
-OpDecorate %116 RelaxedPrecision
-OpDecorate %125 RelaxedPrecision
-OpDecorate %126 RelaxedPrecision
-OpDecorate %129 RelaxedPrecision
-OpDecorate %130 RelaxedPrecision
-OpDecorate %427 RelaxedPrecision
-OpDecorate %428 RelaxedPrecision
-OpDecorate %429 RelaxedPrecision
-OpDecorate %430 RelaxedPrecision
-OpDecorate %431 RelaxedPrecision
-OpDecorate %432 RelaxedPrecision
-OpDecorate %443 RelaxedPrecision
-OpDecorate %444 RelaxedPrecision
-OpDecorate %445 RelaxedPrecision
-OpDecorate %446 RelaxedPrecision
-OpDecorate %447 RelaxedPrecision
-OpDecorate %448 RelaxedPrecision
-OpDecorate %452 RelaxedPrecision
-OpDecorate %453 RelaxedPrecision
-OpDecorate %454 RelaxedPrecision
-OpDecorate %455 RelaxedPrecision
-OpDecorate %456 RelaxedPrecision
-OpDecorate %457 RelaxedPrecision
-OpDecorate %464 RelaxedPrecision
-OpDecorate %465 RelaxedPrecision
-OpDecorate %466 RelaxedPrecision
-OpDecorate %467 RelaxedPrecision
-OpDecorate %468 RelaxedPrecision
-OpDecorate %469 RelaxedPrecision
-OpDecorate %573 RelaxedPrecision
-OpDecorate %575 RelaxedPrecision
-OpDecorate %576 RelaxedPrecision
-%bool = OpTypeBool
-%_ptr_Input_bool = OpTypePointer Input %bool
-%sk_Clockwise = OpVariable %_ptr_Input_bool Input
-%float = OpTypeFloat 32
-%v4float = OpTypeVector %float 4
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %_entrypoint_v "_entrypoint" %sk_FragColor
+               OpExecutionMode %_entrypoint_v OriginUpperLeft
+               OpName %sk_FragColor "sk_FragColor"
+               OpName %_UniformBuffer "_UniformBuffer"
+               OpMemberName %_UniformBuffer 0 "colorGreen"
+               OpMemberName %_UniformBuffer 1 "colorRed"
+               OpMemberName %_UniformBuffer 2 "testMatrix2x2"
+               OpMemberName %_UniformBuffer 3 "testMatrix3x3"
+               OpName %_entrypoint_v "_entrypoint_v"
+               OpName %main "main"
+               OpName %_0_ok "_0_ok"
+               OpName %_1_zero "_1_zero"
+               OpName %_2_one "_2_one"
+               OpName %_3_two "_3_two"
+               OpName %_4_nine "_4_nine"
+               OpName %_5_m "_5_m"
+               OpDecorate %sk_FragColor RelaxedPrecision
+               OpDecorate %sk_FragColor Location 0
+               OpDecorate %sk_FragColor Index 0
+               OpMemberDecorate %_UniformBuffer 0 Offset 0
+               OpMemberDecorate %_UniformBuffer 0 RelaxedPrecision
+               OpMemberDecorate %_UniformBuffer 1 Offset 16
+               OpMemberDecorate %_UniformBuffer 1 RelaxedPrecision
+               OpMemberDecorate %_UniformBuffer 2 Offset 32
+               OpMemberDecorate %_UniformBuffer 2 ColMajor
+               OpMemberDecorate %_UniformBuffer 2 MatrixStride 16
+               OpMemberDecorate %_UniformBuffer 2 RelaxedPrecision
+               OpMemberDecorate %_UniformBuffer 3 Offset 64
+               OpMemberDecorate %_UniformBuffer 3 ColMajor
+               OpMemberDecorate %_UniformBuffer 3 MatrixStride 16
+               OpMemberDecorate %_UniformBuffer 3 RelaxedPrecision
+               OpDecorate %_UniformBuffer Block
+               OpDecorate %7 Binding 0
+               OpDecorate %7 DescriptorSet 0
+               OpDecorate %37 RelaxedPrecision
+               OpDecorate %46 RelaxedPrecision
+               OpDecorate %47 RelaxedPrecision
+               OpDecorate %49 RelaxedPrecision
+               OpDecorate %50 RelaxedPrecision
+               OpDecorate %59 RelaxedPrecision
+               OpDecorate %70 RelaxedPrecision
+               OpDecorate %71 RelaxedPrecision
+               OpDecorate %73 RelaxedPrecision
+               OpDecorate %74 RelaxedPrecision
+               OpDecorate %77 RelaxedPrecision
+               OpDecorate %78 RelaxedPrecision
+               OpDecorate %85 RelaxedPrecision
+               OpDecorate %90 RelaxedPrecision
+               OpDecorate %91 RelaxedPrecision
+               OpDecorate %93 RelaxedPrecision
+               OpDecorate %94 RelaxedPrecision
+               OpDecorate %101 RelaxedPrecision
+               OpDecorate %106 RelaxedPrecision
+               OpDecorate %107 RelaxedPrecision
+               OpDecorate %109 RelaxedPrecision
+               OpDecorate %110 RelaxedPrecision
+               OpDecorate %113 RelaxedPrecision
+               OpDecorate %114 RelaxedPrecision
+               OpDecorate %123 RelaxedPrecision
+               OpDecorate %124 RelaxedPrecision
+               OpDecorate %127 RelaxedPrecision
+               OpDecorate %128 RelaxedPrecision
+               OpDecorate %421 RelaxedPrecision
+               OpDecorate %422 RelaxedPrecision
+               OpDecorate %423 RelaxedPrecision
+               OpDecorate %424 RelaxedPrecision
+               OpDecorate %425 RelaxedPrecision
+               OpDecorate %426 RelaxedPrecision
+               OpDecorate %437 RelaxedPrecision
+               OpDecorate %438 RelaxedPrecision
+               OpDecorate %439 RelaxedPrecision
+               OpDecorate %440 RelaxedPrecision
+               OpDecorate %441 RelaxedPrecision
+               OpDecorate %442 RelaxedPrecision
+               OpDecorate %446 RelaxedPrecision
+               OpDecorate %447 RelaxedPrecision
+               OpDecorate %448 RelaxedPrecision
+               OpDecorate %449 RelaxedPrecision
+               OpDecorate %450 RelaxedPrecision
+               OpDecorate %451 RelaxedPrecision
+               OpDecorate %458 RelaxedPrecision
+               OpDecorate %459 RelaxedPrecision
+               OpDecorate %460 RelaxedPrecision
+               OpDecorate %461 RelaxedPrecision
+               OpDecorate %462 RelaxedPrecision
+               OpDecorate %463 RelaxedPrecision
+               OpDecorate %567 RelaxedPrecision
+               OpDecorate %569 RelaxedPrecision
+               OpDecorate %570 RelaxedPrecision
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %sk_FragColor = OpVariable %_ptr_Output_v4float Output
-%v2float = OpTypeVector %float 2
+    %v2float = OpTypeVector %float 2
 %mat2v2float = OpTypeMatrix %v2float 2
-%v3float = OpTypeVector %float 3
+    %v3float = OpTypeVector %float 3
 %mat3v3float = OpTypeMatrix %v3float 3
 %_UniformBuffer = OpTypeStruct %v4float %v4float %mat2v2float %mat3v3float
 %_ptr_Uniform__UniformBuffer = OpTypePointer Uniform %_UniformBuffer
-%10 = OpVariable %_ptr_Uniform__UniformBuffer Uniform
-%void = OpTypeVoid
-%19 = OpTypeFunction %void
-%float_0 = OpConstant %float 0
-%22 = OpConstantComposite %v2float %float_0 %float_0
+          %7 = OpVariable %_ptr_Uniform__UniformBuffer Uniform
+       %void = OpTypeVoid
+         %16 = OpTypeFunction %void
+    %float_0 = OpConstant %float 0
+         %19 = OpConstantComposite %v2float %float_0 %float_0
 %_ptr_Function_v2float = OpTypePointer Function %v2float
-%26 = OpTypeFunction %v4float %_ptr_Function_v2float
+         %23 = OpTypeFunction %v4float %_ptr_Function_v2float
+       %bool = OpTypeBool
 %_ptr_Function_bool = OpTypePointer Function %bool
-%true = OpConstantTrue %bool
-%false = OpConstantFalse %bool
+       %true = OpConstantTrue %bool
+      %false = OpConstantFalse %bool
 %_ptr_Uniform_mat2v2float = OpTypePointer Uniform %mat2v2float
-%int = OpTypeInt 32 1
-%int_2 = OpConstant %int 2
-%float_1 = OpConstant %float 1
-%float_2 = OpConstant %float 2
-%float_3 = OpConstant %float 3
-%float_4 = OpConstant %float 4
-%44 = OpConstantComposite %v2float %float_1 %float_2
-%45 = OpConstantComposite %v2float %float_3 %float_4
-%46 = OpConstantComposite %mat2v2float %44 %45
-%v2bool = OpTypeVector %bool 2
+        %int = OpTypeInt 32 1
+      %int_2 = OpConstant %int 2
+    %float_1 = OpConstant %float 1
+    %float_2 = OpConstant %float 2
+    %float_3 = OpConstant %float 3
+    %float_4 = OpConstant %float 4
+         %42 = OpConstantComposite %v2float %float_1 %float_2
+         %43 = OpConstantComposite %v2float %float_3 %float_4
+         %44 = OpConstantComposite %mat2v2float %42 %43
+     %v2bool = OpTypeVector %bool 2
 %_ptr_Uniform_mat3v3float = OpTypePointer Uniform %mat3v3float
-%int_3 = OpConstant %int 3
-%float_5 = OpConstant %float 5
-%float_6 = OpConstant %float 6
-%float_7 = OpConstant %float 7
-%float_8 = OpConstant %float 8
-%float_9 = OpConstant %float 9
-%67 = OpConstantComposite %v3float %float_1 %float_2 %float_3
-%68 = OpConstantComposite %v3float %float_4 %float_5 %float_6
-%69 = OpConstantComposite %v3float %float_7 %float_8 %float_9
-%70 = OpConstantComposite %mat3v3float %67 %68 %69
-%v3bool = OpTypeVector %bool 3
-%float_100 = OpConstant %float 100
-%89 = OpConstantComposite %v2float %float_100 %float_0
-%90 = OpConstantComposite %v2float %float_0 %float_100
-%91 = OpConstantComposite %mat2v2float %89 %90
-%104 = OpConstantComposite %v3float %float_9 %float_8 %float_7
-%105 = OpConstantComposite %v3float %float_6 %float_5 %float_4
-%106 = OpConstantComposite %v3float %float_3 %float_2 %float_1
-%107 = OpConstantComposite %mat3v3float %104 %105 %106
+      %int_3 = OpConstant %int 3
+    %float_5 = OpConstant %float 5
+    %float_6 = OpConstant %float 6
+    %float_7 = OpConstant %float 7
+    %float_8 = OpConstant %float 8
+    %float_9 = OpConstant %float 9
+         %65 = OpConstantComposite %v3float %float_1 %float_2 %float_3
+         %66 = OpConstantComposite %v3float %float_4 %float_5 %float_6
+         %67 = OpConstantComposite %v3float %float_7 %float_8 %float_9
+         %68 = OpConstantComposite %mat3v3float %65 %66 %67
+     %v3bool = OpTypeVector %bool 3
+  %float_100 = OpConstant %float 100
+         %87 = OpConstantComposite %v2float %float_100 %float_0
+         %88 = OpConstantComposite %v2float %float_0 %float_100
+         %89 = OpConstantComposite %mat2v2float %87 %88
+        %102 = OpConstantComposite %v3float %float_9 %float_8 %float_7
+        %103 = OpConstantComposite %v3float %float_6 %float_5 %float_4
+        %104 = OpConstantComposite %v3float %float_3 %float_2 %float_1
+        %105 = OpConstantComposite %mat3v3float %102 %103 %104
 %_ptr_Function_float = OpTypePointer Function %float
 %_ptr_Uniform_v4float = OpTypePointer Uniform %v4float
-%int_0 = OpConstant %int 0
-%140 = OpConstantComposite %v2float %float_1 %float_0
-%141 = OpConstantComposite %v2float %float_0 %float_1
-%142 = OpConstantComposite %mat2v2float %140 %141
-%178 = OpConstantComposite %mat2v2float %22 %22
-%float_n1 = OpConstant %float -1
-%192 = OpConstantComposite %v2float %float_n1 %float_0
-%193 = OpConstantComposite %v2float %float_0 %float_n1
-%194 = OpConstantComposite %mat2v2float %192 %193
-%float_n0 = OpConstant %float -0
-%207 = OpConstantComposite %v2float %float_n0 %float_0
-%208 = OpConstantComposite %v2float %float_0 %float_n0
-%209 = OpConstantComposite %mat2v2float %207 %208
-%297 = OpConstantComposite %v3float %float_1 %float_0 %float_0
-%298 = OpConstantComposite %v3float %float_0 %float_1 %float_0
-%299 = OpConstantComposite %v3float %float_0 %float_0 %float_1
-%300 = OpConstantComposite %mat3v3float %297 %298 %299
-%316 = OpConstantComposite %v2float %float_9 %float_0
-%317 = OpConstantComposite %v2float %float_0 %float_9
-%318 = OpConstantComposite %mat2v2float %316 %317
-%319 = OpConstantComposite %v3float %float_9 %float_0 %float_0
-%320 = OpConstantComposite %v3float %float_0 %float_9 %float_0
-%321 = OpConstantComposite %mat3v3float %319 %320 %299
-%435 = OpConstantComposite %v4float %float_1 %float_2 %float_3 %float_4
-%v4bool = OpTypeVector %bool 4
-%472 = OpConstantComposite %v4float %float_0 %float_0 %float_0 %float_0
+      %int_0 = OpConstant %int 0
+        %138 = OpConstantComposite %v2float %float_1 %float_0
+        %139 = OpConstantComposite %v2float %float_0 %float_1
+        %140 = OpConstantComposite %mat2v2float %138 %139
+        %174 = OpConstantComposite %mat2v2float %19 %19
+   %float_n1 = OpConstant %float -1
+        %188 = OpConstantComposite %v2float %float_n1 %float_0
+        %189 = OpConstantComposite %v2float %float_0 %float_n1
+        %190 = OpConstantComposite %mat2v2float %188 %189
+   %float_n0 = OpConstant %float -0
+        %203 = OpConstantComposite %v2float %float_n0 %float_0
+        %204 = OpConstantComposite %v2float %float_0 %float_n0
+        %205 = OpConstantComposite %mat2v2float %203 %204
+        %291 = OpConstantComposite %v3float %float_1 %float_0 %float_0
+        %292 = OpConstantComposite %v3float %float_0 %float_1 %float_0
+        %293 = OpConstantComposite %v3float %float_0 %float_0 %float_1
+        %294 = OpConstantComposite %mat3v3float %291 %292 %293
+        %310 = OpConstantComposite %v2float %float_9 %float_0
+        %311 = OpConstantComposite %v2float %float_0 %float_9
+        %312 = OpConstantComposite %mat2v2float %310 %311
+        %313 = OpConstantComposite %v3float %float_9 %float_0 %float_0
+        %314 = OpConstantComposite %v3float %float_0 %float_9 %float_0
+        %315 = OpConstantComposite %mat3v3float %313 %314 %293
+        %429 = OpConstantComposite %v4float %float_1 %float_2 %float_3 %float_4
+     %v4bool = OpTypeVector %bool 4
+        %466 = OpConstantComposite %v4float %float_0 %float_0 %float_0 %float_0
 %_ptr_Function_mat3v3float = OpTypePointer Function %mat3v3float
 %_ptr_Function_v3float = OpTypePointer Function %v3float
-%int_1 = OpConstant %int 1
+      %int_1 = OpConstant %int 1
 %_ptr_Function_v4float = OpTypePointer Function %v4float
-%_entrypoint_v = OpFunction %void None %19
-%20 = OpLabel
-%23 = OpVariable %_ptr_Function_v2float Function
-OpStore %23 %22
-%25 = OpFunctionCall %v4float %main %23
-OpStore %sk_FragColor %25
-OpReturn
-OpFunctionEnd
-%main = OpFunction %v4float None %26
-%27 = OpFunctionParameter %_ptr_Function_v2float
-%28 = OpLabel
-%_0_ok = OpVariable %_ptr_Function_bool Function
-%_1_zero = OpVariable %_ptr_Function_float Function
-%_2_one = OpVariable %_ptr_Function_float Function
-%_3_two = OpVariable %_ptr_Function_float Function
-%_4_nine = OpVariable %_ptr_Function_float Function
-%_5_m = OpVariable %_ptr_Function_mat3v3float Function
-%567 = OpVariable %_ptr_Function_v4float Function
-OpStore %_0_ok %true
-OpSelectionMerge %34 None
-OpBranchConditional %true %33 %34
-%33 = OpLabel
-%35 = OpAccessChain %_ptr_Uniform_mat2v2float %10 %int_2
-%39 = OpLoad %mat2v2float %35
-%48 = OpCompositeExtract %v2float %39 0
-%49 = OpFOrdEqual %v2bool %48 %44
-%50 = OpAll %bool %49
-%51 = OpCompositeExtract %v2float %39 1
-%52 = OpFOrdEqual %v2bool %51 %45
-%53 = OpAll %bool %52
-%54 = OpLogicalAnd %bool %50 %53
-OpBranch %34
-%34 = OpLabel
-%55 = OpPhi %bool %false %28 %54 %33
-OpStore %_0_ok %55
-OpSelectionMerge %57 None
-OpBranchConditional %55 %56 %57
-%56 = OpLabel
-%58 = OpAccessChain %_ptr_Uniform_mat3v3float %10 %int_3
-%61 = OpLoad %mat3v3float %58
-%72 = OpCompositeExtract %v3float %61 0
-%73 = OpFOrdEqual %v3bool %72 %67
-%74 = OpAll %bool %73
-%75 = OpCompositeExtract %v3float %61 1
-%76 = OpFOrdEqual %v3bool %75 %68
-%77 = OpAll %bool %76
-%78 = OpLogicalAnd %bool %74 %77
-%79 = OpCompositeExtract %v3float %61 2
-%80 = OpFOrdEqual %v3bool %79 %69
-%81 = OpAll %bool %80
-%82 = OpLogicalAnd %bool %78 %81
-OpBranch %57
-%57 = OpLabel
-%83 = OpPhi %bool %false %34 %82 %56
-OpStore %_0_ok %83
-OpSelectionMerge %85 None
-OpBranchConditional %83 %84 %85
-%84 = OpLabel
-%86 = OpAccessChain %_ptr_Uniform_mat2v2float %10 %int_2
-%87 = OpLoad %mat2v2float %86
-%92 = OpCompositeExtract %v2float %87 0
-%93 = OpFUnordNotEqual %v2bool %92 %89
-%94 = OpAny %bool %93
-%95 = OpCompositeExtract %v2float %87 1
-%96 = OpFUnordNotEqual %v2bool %95 %90
-%97 = OpAny %bool %96
-%98 = OpLogicalOr %bool %94 %97
-OpBranch %85
-%85 = OpLabel
-%99 = OpPhi %bool %false %57 %98 %84
-OpStore %_0_ok %99
-OpSelectionMerge %101 None
-OpBranchConditional %99 %100 %101
-%100 = OpLabel
-%102 = OpAccessChain %_ptr_Uniform_mat3v3float %10 %int_3
-%103 = OpLoad %mat3v3float %102
-%108 = OpCompositeExtract %v3float %103 0
-%109 = OpFUnordNotEqual %v3bool %108 %104
-%110 = OpAny %bool %109
-%111 = OpCompositeExtract %v3float %103 1
-%112 = OpFUnordNotEqual %v3bool %111 %105
-%113 = OpAny %bool %112
-%114 = OpLogicalOr %bool %110 %113
-%115 = OpCompositeExtract %v3float %103 2
-%116 = OpFUnordNotEqual %v3bool %115 %106
-%117 = OpAny %bool %116
-%118 = OpLogicalOr %bool %114 %117
-OpBranch %101
-%101 = OpLabel
-%119 = OpPhi %bool %false %85 %118 %100
-OpStore %_0_ok %119
-%122 = OpAccessChain %_ptr_Uniform_v4float %10 %int_0
-%125 = OpLoad %v4float %122
-%126 = OpCompositeExtract %float %125 0
-OpStore %_1_zero %126
-%128 = OpAccessChain %_ptr_Uniform_v4float %10 %int_0
-%129 = OpLoad %v4float %128
-%130 = OpCompositeExtract %float %129 1
-OpStore %_2_one %130
-%132 = OpFMul %float %float_2 %130
-OpStore %_3_two %132
-%134 = OpFMul %float %float_9 %130
-OpStore %_4_nine %134
-OpSelectionMerge %136 None
-OpBranchConditional %119 %135 %136
-%135 = OpLabel
-%137 = OpCompositeConstruct %v2float %130 %126
-%138 = OpCompositeConstruct %v2float %126 %130
-%139 = OpCompositeConstruct %mat2v2float %137 %138
-%143 = OpFOrdEqual %v2bool %137 %140
-%144 = OpAll %bool %143
-%145 = OpFOrdEqual %v2bool %138 %141
-%146 = OpAll %bool %145
-%147 = OpLogicalAnd %bool %144 %146
-OpBranch %136
-%136 = OpLabel
-%148 = OpPhi %bool %false %101 %147 %135
-OpStore %_0_ok %148
-OpSelectionMerge %150 None
-OpBranchConditional %148 %149 %150
-%149 = OpLabel
-%152 = OpCompositeConstruct %v2float %130 %130
-%153 = OpCompositeConstruct %v2float %130 %126
-%154 = OpCompositeConstruct %mat2v2float %153 %152
-%155 = OpFOrdEqual %v2bool %153 %140
-%156 = OpAll %bool %155
-%157 = OpFOrdEqual %v2bool %152 %141
-%158 = OpAll %bool %157
-%159 = OpLogicalAnd %bool %156 %158
-%151 = OpLogicalNot %bool %159
-OpBranch %150
-%150 = OpLabel
-%160 = OpPhi %bool %false %136 %151 %149
-OpStore %_0_ok %160
-OpSelectionMerge %162 None
-OpBranchConditional %160 %161 %162
-%161 = OpLabel
-%163 = OpCompositeConstruct %v2float %130 %float_0
-%164 = OpCompositeConstruct %v2float %float_0 %130
-%165 = OpCompositeConstruct %mat2v2float %163 %164
-%166 = OpFOrdEqual %v2bool %163 %140
-%167 = OpAll %bool %166
-%168 = OpFOrdEqual %v2bool %164 %141
-%169 = OpAll %bool %168
-%170 = OpLogicalAnd %bool %167 %169
-OpBranch %162
-%162 = OpLabel
-%171 = OpPhi %bool %false %150 %170 %161
-OpStore %_0_ok %171
-OpSelectionMerge %173 None
-OpBranchConditional %171 %172 %173
-%172 = OpLabel
-%175 = OpCompositeConstruct %v2float %130 %float_0
-%176 = OpCompositeConstruct %v2float %float_0 %130
-%177 = OpCompositeConstruct %mat2v2float %175 %176
-%179 = OpFOrdEqual %v2bool %175 %22
-%180 = OpAll %bool %179
-%181 = OpFOrdEqual %v2bool %176 %22
-%182 = OpAll %bool %181
-%183 = OpLogicalAnd %bool %180 %182
-%174 = OpLogicalNot %bool %183
-OpBranch %173
-%173 = OpLabel
-%184 = OpPhi %bool %false %162 %174 %172
-OpStore %_0_ok %184
-OpSelectionMerge %186 None
-OpBranchConditional %184 %185 %186
-%185 = OpLabel
-%187 = OpFNegate %float %130
-%188 = OpCompositeConstruct %v2float %187 %float_0
-%189 = OpCompositeConstruct %v2float %float_0 %187
-%190 = OpCompositeConstruct %mat2v2float %188 %189
-%195 = OpFOrdEqual %v2bool %188 %192
-%196 = OpAll %bool %195
-%197 = OpFOrdEqual %v2bool %189 %193
-%198 = OpAll %bool %197
-%199 = OpLogicalAnd %bool %196 %198
-OpBranch %186
-%186 = OpLabel
-%200 = OpPhi %bool %false %173 %199 %185
-OpStore %_0_ok %200
-OpSelectionMerge %202 None
-OpBranchConditional %200 %201 %202
-%201 = OpLabel
-%203 = OpCompositeConstruct %v2float %126 %float_0
-%204 = OpCompositeConstruct %v2float %float_0 %126
-%205 = OpCompositeConstruct %mat2v2float %203 %204
-%210 = OpFOrdEqual %v2bool %203 %207
-%211 = OpAll %bool %210
-%212 = OpFOrdEqual %v2bool %204 %208
-%213 = OpAll %bool %212
-%214 = OpLogicalAnd %bool %211 %213
-OpBranch %202
-%202 = OpLabel
-%215 = OpPhi %bool %false %186 %214 %201
-OpStore %_0_ok %215
-OpSelectionMerge %217 None
-OpBranchConditional %215 %216 %217
-%216 = OpLabel
-%218 = OpFNegate %float %130
-%219 = OpCompositeConstruct %v2float %218 %float_0
-%220 = OpCompositeConstruct %v2float %float_0 %218
-%221 = OpCompositeConstruct %mat2v2float %219 %220
-%222 = OpFNegate %v2float %219
-%223 = OpFNegate %v2float %220
-%224 = OpCompositeConstruct %mat2v2float %222 %223
-%225 = OpFOrdEqual %v2bool %222 %140
-%226 = OpAll %bool %225
-%227 = OpFOrdEqual %v2bool %223 %141
-%228 = OpAll %bool %227
-%229 = OpLogicalAnd %bool %226 %228
-OpBranch %217
-%217 = OpLabel
-%230 = OpPhi %bool %false %202 %229 %216
-OpStore %_0_ok %230
-OpSelectionMerge %232 None
-OpBranchConditional %230 %231 %232
-%231 = OpLabel
-%233 = OpCompositeConstruct %v2float %126 %float_0
-%234 = OpCompositeConstruct %v2float %float_0 %126
-%235 = OpCompositeConstruct %mat2v2float %233 %234
-%236 = OpFNegate %v2float %233
-%237 = OpFNegate %v2float %234
-%238 = OpCompositeConstruct %mat2v2float %236 %237
-%239 = OpFOrdEqual %v2bool %236 %207
-%240 = OpAll %bool %239
-%241 = OpFOrdEqual %v2bool %237 %208
-%242 = OpAll %bool %241
-%243 = OpLogicalAnd %bool %240 %242
-OpBranch %232
-%232 = OpLabel
-%244 = OpPhi %bool %false %217 %243 %231
-OpStore %_0_ok %244
-OpSelectionMerge %246 None
-OpBranchConditional %244 %245 %246
-%245 = OpLabel
-%247 = OpCompositeConstruct %v2float %130 %float_0
-%248 = OpCompositeConstruct %v2float %float_0 %130
-%249 = OpCompositeConstruct %mat2v2float %247 %248
-%250 = OpFOrdEqual %v2bool %247 %140
-%251 = OpAll %bool %250
-%252 = OpFOrdEqual %v2bool %248 %141
-%253 = OpAll %bool %252
-%254 = OpLogicalAnd %bool %251 %253
-OpBranch %246
-%246 = OpLabel
-%255 = OpPhi %bool %false %232 %254 %245
-OpStore %_0_ok %255
-OpSelectionMerge %257 None
-OpBranchConditional %255 %256 %257
-%256 = OpLabel
-%259 = OpCompositeConstruct %v2float %132 %float_0
-%260 = OpCompositeConstruct %v2float %float_0 %132
-%261 = OpCompositeConstruct %mat2v2float %259 %260
-%262 = OpFOrdEqual %v2bool %259 %140
-%263 = OpAll %bool %262
-%264 = OpFOrdEqual %v2bool %260 %141
-%265 = OpAll %bool %264
-%266 = OpLogicalAnd %bool %263 %265
-%258 = OpLogicalNot %bool %266
-OpBranch %257
-%257 = OpLabel
-%267 = OpPhi %bool %false %246 %258 %256
-OpStore %_0_ok %267
-OpSelectionMerge %269 None
-OpBranchConditional %267 %268 %269
-%268 = OpLabel
-%271 = OpCompositeConstruct %v2float %130 %float_0
-%272 = OpCompositeConstruct %v2float %float_0 %130
-%273 = OpCompositeConstruct %mat2v2float %271 %272
-%274 = OpFUnordNotEqual %v2bool %271 %140
-%275 = OpAny %bool %274
-%276 = OpFUnordNotEqual %v2bool %272 %141
-%277 = OpAny %bool %276
-%278 = OpLogicalOr %bool %275 %277
-%270 = OpLogicalNot %bool %278
-OpBranch %269
-%269 = OpLabel
-%279 = OpPhi %bool %false %257 %270 %268
-OpStore %_0_ok %279
-OpSelectionMerge %281 None
-OpBranchConditional %279 %280 %281
-%280 = OpLabel
-%282 = OpCompositeConstruct %v2float %130 %float_0
-%283 = OpCompositeConstruct %v2float %float_0 %130
-%284 = OpCompositeConstruct %mat2v2float %282 %283
-%285 = OpFUnordNotEqual %v2bool %282 %22
-%286 = OpAny %bool %285
-%287 = OpFUnordNotEqual %v2bool %283 %22
-%288 = OpAny %bool %287
-%289 = OpLogicalOr %bool %286 %288
-OpBranch %281
-%281 = OpLabel
-%290 = OpPhi %bool %false %269 %289 %280
-OpStore %_0_ok %290
-OpSelectionMerge %292 None
-OpBranchConditional %290 %291 %292
-%291 = OpLabel
-%293 = OpCompositeConstruct %v3float %130 %126 %126
-%294 = OpCompositeConstruct %v3float %126 %130 %126
-%295 = OpCompositeConstruct %v3float %126 %126 %130
-%296 = OpCompositeConstruct %mat3v3float %293 %294 %295
-%301 = OpFOrdEqual %v3bool %293 %297
-%302 = OpAll %bool %301
-%303 = OpFOrdEqual %v3bool %294 %298
-%304 = OpAll %bool %303
-%305 = OpLogicalAnd %bool %302 %304
-%306 = OpFOrdEqual %v3bool %295 %299
-%307 = OpAll %bool %306
-%308 = OpLogicalAnd %bool %305 %307
-OpBranch %292
-%292 = OpLabel
-%309 = OpPhi %bool %false %281 %308 %291
-OpStore %_0_ok %309
-OpSelectionMerge %311 None
-OpBranchConditional %309 %310 %311
-%310 = OpLabel
-%312 = OpCompositeConstruct %v3float %134 %126 %126
-%313 = OpCompositeConstruct %v3float %126 %134 %126
-%314 = OpCompositeConstruct %v3float %126 %126 %130
-%315 = OpCompositeConstruct %mat3v3float %312 %313 %314
-%322 = OpFOrdEqual %v3bool %312 %319
-%323 = OpAll %bool %322
-%324 = OpFOrdEqual %v3bool %313 %320
-%325 = OpAll %bool %324
-%326 = OpLogicalAnd %bool %323 %325
-%327 = OpFOrdEqual %v3bool %314 %299
-%328 = OpAll %bool %327
-%329 = OpLogicalAnd %bool %326 %328
-OpBranch %311
-%311 = OpLabel
-%330 = OpPhi %bool %false %292 %329 %310
-OpStore %_0_ok %330
-OpSelectionMerge %332 None
-OpBranchConditional %330 %331 %332
-%331 = OpLabel
-%333 = OpCompositeConstruct %v3float %130 %float_0 %float_0
-%334 = OpCompositeConstruct %v3float %float_0 %130 %float_0
-%335 = OpCompositeConstruct %v3float %float_0 %float_0 %130
-%336 = OpCompositeConstruct %mat3v3float %333 %334 %335
-%337 = OpFOrdEqual %v3bool %333 %297
-%338 = OpAll %bool %337
-%339 = OpFOrdEqual %v3bool %334 %298
-%340 = OpAll %bool %339
-%341 = OpLogicalAnd %bool %338 %340
-%342 = OpFOrdEqual %v3bool %335 %299
-%343 = OpAll %bool %342
-%344 = OpLogicalAnd %bool %341 %343
-OpBranch %332
-%332 = OpLabel
-%345 = OpPhi %bool %false %311 %344 %331
-OpStore %_0_ok %345
-OpSelectionMerge %347 None
-OpBranchConditional %345 %346 %347
-%346 = OpLabel
-%348 = OpCompositeConstruct %v3float %134 %float_0 %float_0
-%349 = OpCompositeConstruct %v3float %float_0 %134 %float_0
-%350 = OpCompositeConstruct %v3float %float_0 %float_0 %130
-%351 = OpCompositeConstruct %mat3v3float %348 %349 %350
-%352 = OpFOrdEqual %v3bool %348 %319
-%353 = OpAll %bool %352
-%354 = OpFOrdEqual %v3bool %349 %320
-%355 = OpAll %bool %354
-%356 = OpLogicalAnd %bool %353 %355
-%357 = OpFOrdEqual %v3bool %350 %299
-%358 = OpAll %bool %357
-%359 = OpLogicalAnd %bool %356 %358
-OpBranch %347
-%347 = OpLabel
-%360 = OpPhi %bool %false %332 %359 %346
-OpStore %_0_ok %360
-OpSelectionMerge %362 None
-OpBranchConditional %360 %361 %362
-%361 = OpLabel
-%363 = OpCompositeConstruct %v3float %130 %float_0 %float_0
-%364 = OpCompositeConstruct %v3float %float_0 %130 %float_0
-%365 = OpCompositeConstruct %v3float %float_0 %float_0 %130
-%366 = OpCompositeConstruct %mat3v3float %363 %364 %365
-%367 = OpVectorShuffle %v2float %363 %363 0 1
-%368 = OpVectorShuffle %v2float %364 %364 0 1
-%369 = OpCompositeConstruct %mat2v2float %367 %368
-%370 = OpFOrdEqual %v2bool %367 %140
-%371 = OpAll %bool %370
-%372 = OpFOrdEqual %v2bool %368 %141
-%373 = OpAll %bool %372
-%374 = OpLogicalAnd %bool %371 %373
-OpBranch %362
-%362 = OpLabel
-%375 = OpPhi %bool %false %347 %374 %361
-OpStore %_0_ok %375
-OpSelectionMerge %377 None
-OpBranchConditional %375 %376 %377
-%376 = OpLabel
-%378 = OpCompositeConstruct %v3float %130 %float_0 %float_0
-%379 = OpCompositeConstruct %v3float %float_0 %130 %float_0
-%380 = OpCompositeConstruct %v3float %float_0 %float_0 %130
-%381 = OpCompositeConstruct %mat3v3float %378 %379 %380
-%382 = OpVectorShuffle %v2float %378 %378 0 1
-%383 = OpVectorShuffle %v2float %379 %379 0 1
-%384 = OpCompositeConstruct %mat2v2float %382 %383
-%385 = OpFOrdEqual %v2bool %382 %140
-%386 = OpAll %bool %385
-%387 = OpFOrdEqual %v2bool %383 %141
-%388 = OpAll %bool %387
-%389 = OpLogicalAnd %bool %386 %388
-OpBranch %377
-%377 = OpLabel
-%390 = OpPhi %bool %false %362 %389 %376
-OpStore %_0_ok %390
-OpSelectionMerge %392 None
-OpBranchConditional %390 %391 %392
-%391 = OpLabel
-%393 = OpCompositeConstruct %v2float %130 %126
-%394 = OpCompositeConstruct %v2float %126 %130
-%395 = OpCompositeConstruct %mat2v2float %393 %394
-%396 = OpFOrdEqual %v2bool %393 %140
-%397 = OpAll %bool %396
-%398 = OpFOrdEqual %v2bool %394 %141
-%399 = OpAll %bool %398
-%400 = OpLogicalAnd %bool %397 %399
-OpBranch %392
-%392 = OpLabel
-%401 = OpPhi %bool %false %377 %400 %391
-OpStore %_0_ok %401
-OpSelectionMerge %403 None
-OpBranchConditional %401 %402 %403
-%402 = OpLabel
-%404 = OpCompositeConstruct %v2float %130 %126
-%405 = OpCompositeConstruct %v2float %126 %130
-%406 = OpCompositeConstruct %mat2v2float %404 %405
-%407 = OpFOrdEqual %v2bool %404 %140
-%408 = OpAll %bool %407
-%409 = OpFOrdEqual %v2bool %405 %141
-%410 = OpAll %bool %409
-%411 = OpLogicalAnd %bool %408 %410
-OpBranch %403
-%403 = OpLabel
-%412 = OpPhi %bool %false %392 %411 %402
-OpStore %_0_ok %412
-OpSelectionMerge %414 None
-OpBranchConditional %412 %413 %414
-%413 = OpLabel
-%415 = OpCompositeConstruct %v2float %130 %126
-%416 = OpCompositeConstruct %v2float %126 %130
-%417 = OpCompositeConstruct %mat2v2float %415 %416
-%418 = OpFOrdEqual %v2bool %415 %140
-%419 = OpAll %bool %418
-%420 = OpFOrdEqual %v2bool %416 %141
-%421 = OpAll %bool %420
-%422 = OpLogicalAnd %bool %419 %421
-OpBranch %414
-%414 = OpLabel
-%423 = OpPhi %bool %false %403 %422 %413
-OpStore %_0_ok %423
-OpSelectionMerge %425 None
-OpBranchConditional %423 %424 %425
-%424 = OpLabel
-%426 = OpAccessChain %_ptr_Uniform_mat2v2float %10 %int_2
-%427 = OpLoad %mat2v2float %426
-%428 = OpCompositeExtract %float %427 0 0
-%429 = OpCompositeExtract %float %427 0 1
-%430 = OpCompositeExtract %float %427 1 0
-%431 = OpCompositeExtract %float %427 1 1
-%432 = OpCompositeConstruct %v4float %428 %429 %430 %431
-%433 = OpCompositeConstruct %v4float %130 %130 %130 %130
-%434 = OpFMul %v4float %432 %433
-%436 = OpFOrdEqual %v4bool %434 %435
-%438 = OpAll %bool %436
-OpBranch %425
-%425 = OpLabel
-%439 = OpPhi %bool %false %414 %438 %424
-OpStore %_0_ok %439
-OpSelectionMerge %441 None
-OpBranchConditional %439 %440 %441
-%440 = OpLabel
-%442 = OpAccessChain %_ptr_Uniform_mat2v2float %10 %int_2
-%443 = OpLoad %mat2v2float %442
-%444 = OpCompositeExtract %float %443 0 0
-%445 = OpCompositeExtract %float %443 0 1
-%446 = OpCompositeExtract %float %443 1 0
-%447 = OpCompositeExtract %float %443 1 1
-%448 = OpCompositeConstruct %v4float %444 %445 %446 %447
-%449 = OpCompositeConstruct %v4float %130 %130 %130 %130
-%450 = OpFMul %v4float %448 %449
-%451 = OpAccessChain %_ptr_Uniform_mat2v2float %10 %int_2
-%452 = OpLoad %mat2v2float %451
-%453 = OpCompositeExtract %float %452 0 0
-%454 = OpCompositeExtract %float %452 0 1
-%455 = OpCompositeExtract %float %452 1 0
-%456 = OpCompositeExtract %float %452 1 1
-%457 = OpCompositeConstruct %v4float %453 %454 %455 %456
-%458 = OpFOrdEqual %v4bool %450 %457
-%459 = OpAll %bool %458
-OpBranch %441
-%441 = OpLabel
-%460 = OpPhi %bool %false %425 %459 %440
-OpStore %_0_ok %460
-OpSelectionMerge %462 None
-OpBranchConditional %460 %461 %462
-%461 = OpLabel
-%463 = OpAccessChain %_ptr_Uniform_mat2v2float %10 %int_2
-%464 = OpLoad %mat2v2float %463
-%465 = OpCompositeExtract %float %464 0 0
-%466 = OpCompositeExtract %float %464 0 1
-%467 = OpCompositeExtract %float %464 1 0
-%468 = OpCompositeExtract %float %464 1 1
-%469 = OpCompositeConstruct %v4float %465 %466 %467 %468
-%470 = OpCompositeConstruct %v4float %126 %126 %126 %126
-%471 = OpFMul %v4float %469 %470
-%473 = OpFOrdEqual %v4bool %471 %472
-%474 = OpAll %bool %473
-OpBranch %462
-%462 = OpLabel
-%475 = OpPhi %bool %false %441 %474 %461
-OpStore %_0_ok %475
-%478 = OpCompositeConstruct %v3float %130 %132 %float_3
-%479 = OpCompositeConstruct %v3float %float_7 %float_8 %134
-%480 = OpCompositeConstruct %mat3v3float %478 %68 %479
-OpStore %_5_m %480
-OpSelectionMerge %482 None
-OpBranchConditional %475 %481 %482
-%481 = OpLabel
-%483 = OpAccessChain %_ptr_Function_v3float %_5_m %int_0
-%485 = OpLoad %v3float %483
-%486 = OpFOrdEqual %v3bool %485 %67
-%487 = OpAll %bool %486
-OpBranch %482
-%482 = OpLabel
-%488 = OpPhi %bool %false %462 %487 %481
-OpStore %_0_ok %488
-OpSelectionMerge %490 None
-OpBranchConditional %488 %489 %490
-%489 = OpLabel
-%492 = OpAccessChain %_ptr_Function_v3float %_5_m %int_1
-%493 = OpLoad %v3float %492
-%494 = OpFOrdEqual %v3bool %493 %68
-%495 = OpAll %bool %494
-OpBranch %490
-%490 = OpLabel
-%496 = OpPhi %bool %false %482 %495 %489
-OpStore %_0_ok %496
-OpSelectionMerge %498 None
-OpBranchConditional %496 %497 %498
-%497 = OpLabel
-%499 = OpAccessChain %_ptr_Function_v3float %_5_m %int_2
-%500 = OpLoad %v3float %499
-%501 = OpFOrdEqual %v3bool %500 %69
-%502 = OpAll %bool %501
-OpBranch %498
-%498 = OpLabel
-%503 = OpPhi %bool %false %490 %502 %497
-OpStore %_0_ok %503
-OpSelectionMerge %505 None
-OpBranchConditional %503 %504 %505
-%504 = OpLabel
-%506 = OpAccessChain %_ptr_Function_v3float %_5_m %int_0
-%507 = OpLoad %v3float %506
-%508 = OpCompositeExtract %float %507 0
-%509 = OpFOrdEqual %bool %508 %float_1
-OpBranch %505
-%505 = OpLabel
-%510 = OpPhi %bool %false %498 %509 %504
-OpStore %_0_ok %510
-OpSelectionMerge %512 None
-OpBranchConditional %510 %511 %512
-%511 = OpLabel
-%513 = OpAccessChain %_ptr_Function_v3float %_5_m %int_0
-%514 = OpLoad %v3float %513
-%515 = OpCompositeExtract %float %514 1
-%516 = OpFOrdEqual %bool %515 %float_2
-OpBranch %512
-%512 = OpLabel
-%517 = OpPhi %bool %false %505 %516 %511
-OpStore %_0_ok %517
-OpSelectionMerge %519 None
-OpBranchConditional %517 %518 %519
-%518 = OpLabel
-%520 = OpAccessChain %_ptr_Function_v3float %_5_m %int_0
-%521 = OpLoad %v3float %520
-%522 = OpCompositeExtract %float %521 2
-%523 = OpFOrdEqual %bool %522 %float_3
-OpBranch %519
-%519 = OpLabel
-%524 = OpPhi %bool %false %512 %523 %518
-OpStore %_0_ok %524
-OpSelectionMerge %526 None
-OpBranchConditional %524 %525 %526
-%525 = OpLabel
-%527 = OpAccessChain %_ptr_Function_v3float %_5_m %int_1
-%528 = OpLoad %v3float %527
-%529 = OpCompositeExtract %float %528 0
-%530 = OpFOrdEqual %bool %529 %float_4
-OpBranch %526
-%526 = OpLabel
-%531 = OpPhi %bool %false %519 %530 %525
-OpStore %_0_ok %531
-OpSelectionMerge %533 None
-OpBranchConditional %531 %532 %533
-%532 = OpLabel
-%534 = OpAccessChain %_ptr_Function_v3float %_5_m %int_1
-%535 = OpLoad %v3float %534
-%536 = OpCompositeExtract %float %535 1
-%537 = OpFOrdEqual %bool %536 %float_5
-OpBranch %533
-%533 = OpLabel
-%538 = OpPhi %bool %false %526 %537 %532
-OpStore %_0_ok %538
-OpSelectionMerge %540 None
-OpBranchConditional %538 %539 %540
-%539 = OpLabel
-%541 = OpAccessChain %_ptr_Function_v3float %_5_m %int_1
-%542 = OpLoad %v3float %541
-%543 = OpCompositeExtract %float %542 2
-%544 = OpFOrdEqual %bool %543 %float_6
-OpBranch %540
-%540 = OpLabel
-%545 = OpPhi %bool %false %533 %544 %539
-OpStore %_0_ok %545
-OpSelectionMerge %547 None
-OpBranchConditional %545 %546 %547
-%546 = OpLabel
-%548 = OpAccessChain %_ptr_Function_v3float %_5_m %int_2
-%549 = OpLoad %v3float %548
-%550 = OpCompositeExtract %float %549 0
-%551 = OpFOrdEqual %bool %550 %float_7
-OpBranch %547
-%547 = OpLabel
-%552 = OpPhi %bool %false %540 %551 %546
-OpStore %_0_ok %552
-OpSelectionMerge %554 None
-OpBranchConditional %552 %553 %554
-%553 = OpLabel
-%555 = OpAccessChain %_ptr_Function_v3float %_5_m %int_2
-%556 = OpLoad %v3float %555
-%557 = OpCompositeExtract %float %556 1
-%558 = OpFOrdEqual %bool %557 %float_8
-OpBranch %554
-%554 = OpLabel
-%559 = OpPhi %bool %false %547 %558 %553
-OpStore %_0_ok %559
-OpSelectionMerge %561 None
-OpBranchConditional %559 %560 %561
-%560 = OpLabel
-%562 = OpAccessChain %_ptr_Function_v3float %_5_m %int_2
-%563 = OpLoad %v3float %562
-%564 = OpCompositeExtract %float %563 2
-%565 = OpFOrdEqual %bool %564 %float_9
-OpBranch %561
-%561 = OpLabel
-%566 = OpPhi %bool %false %554 %565 %560
-OpStore %_0_ok %566
-OpSelectionMerge %571 None
-OpBranchConditional %566 %569 %570
-%569 = OpLabel
-%572 = OpAccessChain %_ptr_Uniform_v4float %10 %int_0
-%573 = OpLoad %v4float %572
-OpStore %567 %573
-OpBranch %571
-%570 = OpLabel
-%574 = OpAccessChain %_ptr_Uniform_v4float %10 %int_1
-%575 = OpLoad %v4float %574
-OpStore %567 %575
-OpBranch %571
-%571 = OpLabel
-%576 = OpLoad %v4float %567
-OpReturnValue %576
-OpFunctionEnd
+%_entrypoint_v = OpFunction %void None %16
+         %17 = OpLabel
+         %20 = OpVariable %_ptr_Function_v2float Function
+               OpStore %20 %19
+         %22 = OpFunctionCall %v4float %main %20
+               OpStore %sk_FragColor %22
+               OpReturn
+               OpFunctionEnd
+       %main = OpFunction %v4float None %23
+         %24 = OpFunctionParameter %_ptr_Function_v2float
+         %25 = OpLabel
+      %_0_ok = OpVariable %_ptr_Function_bool Function
+    %_1_zero = OpVariable %_ptr_Function_float Function
+     %_2_one = OpVariable %_ptr_Function_float Function
+     %_3_two = OpVariable %_ptr_Function_float Function
+    %_4_nine = OpVariable %_ptr_Function_float Function
+       %_5_m = OpVariable %_ptr_Function_mat3v3float Function
+        %561 = OpVariable %_ptr_Function_v4float Function
+               OpStore %_0_ok %true
+               OpSelectionMerge %32 None
+               OpBranchConditional %true %31 %32
+         %31 = OpLabel
+         %33 = OpAccessChain %_ptr_Uniform_mat2v2float %7 %int_2
+         %37 = OpLoad %mat2v2float %33
+         %46 = OpCompositeExtract %v2float %37 0
+         %47 = OpFOrdEqual %v2bool %46 %42
+         %48 = OpAll %bool %47
+         %49 = OpCompositeExtract %v2float %37 1
+         %50 = OpFOrdEqual %v2bool %49 %43
+         %51 = OpAll %bool %50
+         %52 = OpLogicalAnd %bool %48 %51
+               OpBranch %32
+         %32 = OpLabel
+         %53 = OpPhi %bool %false %25 %52 %31
+               OpStore %_0_ok %53
+               OpSelectionMerge %55 None
+               OpBranchConditional %53 %54 %55
+         %54 = OpLabel
+         %56 = OpAccessChain %_ptr_Uniform_mat3v3float %7 %int_3
+         %59 = OpLoad %mat3v3float %56
+         %70 = OpCompositeExtract %v3float %59 0
+         %71 = OpFOrdEqual %v3bool %70 %65
+         %72 = OpAll %bool %71
+         %73 = OpCompositeExtract %v3float %59 1
+         %74 = OpFOrdEqual %v3bool %73 %66
+         %75 = OpAll %bool %74
+         %76 = OpLogicalAnd %bool %72 %75
+         %77 = OpCompositeExtract %v3float %59 2
+         %78 = OpFOrdEqual %v3bool %77 %67
+         %79 = OpAll %bool %78
+         %80 = OpLogicalAnd %bool %76 %79
+               OpBranch %55
+         %55 = OpLabel
+         %81 = OpPhi %bool %false %32 %80 %54
+               OpStore %_0_ok %81
+               OpSelectionMerge %83 None
+               OpBranchConditional %81 %82 %83
+         %82 = OpLabel
+         %84 = OpAccessChain %_ptr_Uniform_mat2v2float %7 %int_2
+         %85 = OpLoad %mat2v2float %84
+         %90 = OpCompositeExtract %v2float %85 0
+         %91 = OpFUnordNotEqual %v2bool %90 %87
+         %92 = OpAny %bool %91
+         %93 = OpCompositeExtract %v2float %85 1
+         %94 = OpFUnordNotEqual %v2bool %93 %88
+         %95 = OpAny %bool %94
+         %96 = OpLogicalOr %bool %92 %95
+               OpBranch %83
+         %83 = OpLabel
+         %97 = OpPhi %bool %false %55 %96 %82
+               OpStore %_0_ok %97
+               OpSelectionMerge %99 None
+               OpBranchConditional %97 %98 %99
+         %98 = OpLabel
+        %100 = OpAccessChain %_ptr_Uniform_mat3v3float %7 %int_3
+        %101 = OpLoad %mat3v3float %100
+        %106 = OpCompositeExtract %v3float %101 0
+        %107 = OpFUnordNotEqual %v3bool %106 %102
+        %108 = OpAny %bool %107
+        %109 = OpCompositeExtract %v3float %101 1
+        %110 = OpFUnordNotEqual %v3bool %109 %103
+        %111 = OpAny %bool %110
+        %112 = OpLogicalOr %bool %108 %111
+        %113 = OpCompositeExtract %v3float %101 2
+        %114 = OpFUnordNotEqual %v3bool %113 %104
+        %115 = OpAny %bool %114
+        %116 = OpLogicalOr %bool %112 %115
+               OpBranch %99
+         %99 = OpLabel
+        %117 = OpPhi %bool %false %83 %116 %98
+               OpStore %_0_ok %117
+        %120 = OpAccessChain %_ptr_Uniform_v4float %7 %int_0
+        %123 = OpLoad %v4float %120
+        %124 = OpCompositeExtract %float %123 0
+               OpStore %_1_zero %124
+        %126 = OpAccessChain %_ptr_Uniform_v4float %7 %int_0
+        %127 = OpLoad %v4float %126
+        %128 = OpCompositeExtract %float %127 1
+               OpStore %_2_one %128
+        %130 = OpFMul %float %float_2 %128
+               OpStore %_3_two %130
+        %132 = OpFMul %float %float_9 %128
+               OpStore %_4_nine %132
+               OpSelectionMerge %134 None
+               OpBranchConditional %117 %133 %134
+        %133 = OpLabel
+        %135 = OpCompositeConstruct %v2float %128 %124
+        %136 = OpCompositeConstruct %v2float %124 %128
+        %137 = OpCompositeConstruct %mat2v2float %135 %136
+        %141 = OpFOrdEqual %v2bool %135 %138
+        %142 = OpAll %bool %141
+        %143 = OpFOrdEqual %v2bool %136 %139
+        %144 = OpAll %bool %143
+        %145 = OpLogicalAnd %bool %142 %144
+               OpBranch %134
+        %134 = OpLabel
+        %146 = OpPhi %bool %false %99 %145 %133
+               OpStore %_0_ok %146
+               OpSelectionMerge %148 None
+               OpBranchConditional %146 %147 %148
+        %147 = OpLabel
+        %149 = OpCompositeConstruct %v2float %128 %128
+        %150 = OpCompositeConstruct %v2float %128 %124
+        %151 = OpCompositeConstruct %mat2v2float %150 %149
+        %152 = OpFUnordNotEqual %v2bool %150 %138
+        %153 = OpAny %bool %152
+        %154 = OpFUnordNotEqual %v2bool %149 %139
+        %155 = OpAny %bool %154
+        %156 = OpLogicalOr %bool %153 %155
+               OpBranch %148
+        %148 = OpLabel
+        %157 = OpPhi %bool %false %134 %156 %147
+               OpStore %_0_ok %157
+               OpSelectionMerge %159 None
+               OpBranchConditional %157 %158 %159
+        %158 = OpLabel
+        %160 = OpCompositeConstruct %v2float %128 %float_0
+        %161 = OpCompositeConstruct %v2float %float_0 %128
+        %162 = OpCompositeConstruct %mat2v2float %160 %161
+        %163 = OpFOrdEqual %v2bool %160 %138
+        %164 = OpAll %bool %163
+        %165 = OpFOrdEqual %v2bool %161 %139
+        %166 = OpAll %bool %165
+        %167 = OpLogicalAnd %bool %164 %166
+               OpBranch %159
+        %159 = OpLabel
+        %168 = OpPhi %bool %false %148 %167 %158
+               OpStore %_0_ok %168
+               OpSelectionMerge %170 None
+               OpBranchConditional %168 %169 %170
+        %169 = OpLabel
+        %171 = OpCompositeConstruct %v2float %128 %float_0
+        %172 = OpCompositeConstruct %v2float %float_0 %128
+        %173 = OpCompositeConstruct %mat2v2float %171 %172
+        %175 = OpFUnordNotEqual %v2bool %171 %19
+        %176 = OpAny %bool %175
+        %177 = OpFUnordNotEqual %v2bool %172 %19
+        %178 = OpAny %bool %177
+        %179 = OpLogicalOr %bool %176 %178
+               OpBranch %170
+        %170 = OpLabel
+        %180 = OpPhi %bool %false %159 %179 %169
+               OpStore %_0_ok %180
+               OpSelectionMerge %182 None
+               OpBranchConditional %180 %181 %182
+        %181 = OpLabel
+        %183 = OpFNegate %float %128
+        %184 = OpCompositeConstruct %v2float %183 %float_0
+        %185 = OpCompositeConstruct %v2float %float_0 %183
+        %186 = OpCompositeConstruct %mat2v2float %184 %185
+        %191 = OpFOrdEqual %v2bool %184 %188
+        %192 = OpAll %bool %191
+        %193 = OpFOrdEqual %v2bool %185 %189
+        %194 = OpAll %bool %193
+        %195 = OpLogicalAnd %bool %192 %194
+               OpBranch %182
+        %182 = OpLabel
+        %196 = OpPhi %bool %false %170 %195 %181
+               OpStore %_0_ok %196
+               OpSelectionMerge %198 None
+               OpBranchConditional %196 %197 %198
+        %197 = OpLabel
+        %199 = OpCompositeConstruct %v2float %124 %float_0
+        %200 = OpCompositeConstruct %v2float %float_0 %124
+        %201 = OpCompositeConstruct %mat2v2float %199 %200
+        %206 = OpFOrdEqual %v2bool %199 %203
+        %207 = OpAll %bool %206
+        %208 = OpFOrdEqual %v2bool %200 %204
+        %209 = OpAll %bool %208
+        %210 = OpLogicalAnd %bool %207 %209
+               OpBranch %198
+        %198 = OpLabel
+        %211 = OpPhi %bool %false %182 %210 %197
+               OpStore %_0_ok %211
+               OpSelectionMerge %213 None
+               OpBranchConditional %211 %212 %213
+        %212 = OpLabel
+        %214 = OpFNegate %float %128
+        %215 = OpCompositeConstruct %v2float %214 %float_0
+        %216 = OpCompositeConstruct %v2float %float_0 %214
+        %217 = OpCompositeConstruct %mat2v2float %215 %216
+        %218 = OpFNegate %v2float %215
+        %219 = OpFNegate %v2float %216
+        %220 = OpCompositeConstruct %mat2v2float %218 %219
+        %221 = OpFOrdEqual %v2bool %218 %138
+        %222 = OpAll %bool %221
+        %223 = OpFOrdEqual %v2bool %219 %139
+        %224 = OpAll %bool %223
+        %225 = OpLogicalAnd %bool %222 %224
+               OpBranch %213
+        %213 = OpLabel
+        %226 = OpPhi %bool %false %198 %225 %212
+               OpStore %_0_ok %226
+               OpSelectionMerge %228 None
+               OpBranchConditional %226 %227 %228
+        %227 = OpLabel
+        %229 = OpCompositeConstruct %v2float %124 %float_0
+        %230 = OpCompositeConstruct %v2float %float_0 %124
+        %231 = OpCompositeConstruct %mat2v2float %229 %230
+        %232 = OpFNegate %v2float %229
+        %233 = OpFNegate %v2float %230
+        %234 = OpCompositeConstruct %mat2v2float %232 %233
+        %235 = OpFOrdEqual %v2bool %232 %203
+        %236 = OpAll %bool %235
+        %237 = OpFOrdEqual %v2bool %233 %204
+        %238 = OpAll %bool %237
+        %239 = OpLogicalAnd %bool %236 %238
+               OpBranch %228
+        %228 = OpLabel
+        %240 = OpPhi %bool %false %213 %239 %227
+               OpStore %_0_ok %240
+               OpSelectionMerge %242 None
+               OpBranchConditional %240 %241 %242
+        %241 = OpLabel
+        %243 = OpCompositeConstruct %v2float %128 %float_0
+        %244 = OpCompositeConstruct %v2float %float_0 %128
+        %245 = OpCompositeConstruct %mat2v2float %243 %244
+        %246 = OpFOrdEqual %v2bool %243 %138
+        %247 = OpAll %bool %246
+        %248 = OpFOrdEqual %v2bool %244 %139
+        %249 = OpAll %bool %248
+        %250 = OpLogicalAnd %bool %247 %249
+               OpBranch %242
+        %242 = OpLabel
+        %251 = OpPhi %bool %false %228 %250 %241
+               OpStore %_0_ok %251
+               OpSelectionMerge %253 None
+               OpBranchConditional %251 %252 %253
+        %252 = OpLabel
+        %254 = OpCompositeConstruct %v2float %130 %float_0
+        %255 = OpCompositeConstruct %v2float %float_0 %130
+        %256 = OpCompositeConstruct %mat2v2float %254 %255
+        %257 = OpFUnordNotEqual %v2bool %254 %138
+        %258 = OpAny %bool %257
+        %259 = OpFUnordNotEqual %v2bool %255 %139
+        %260 = OpAny %bool %259
+        %261 = OpLogicalOr %bool %258 %260
+               OpBranch %253
+        %253 = OpLabel
+        %262 = OpPhi %bool %false %242 %261 %252
+               OpStore %_0_ok %262
+               OpSelectionMerge %264 None
+               OpBranchConditional %262 %263 %264
+        %263 = OpLabel
+        %265 = OpCompositeConstruct %v2float %128 %float_0
+        %266 = OpCompositeConstruct %v2float %float_0 %128
+        %267 = OpCompositeConstruct %mat2v2float %265 %266
+        %268 = OpFOrdEqual %v2bool %265 %138
+        %269 = OpAll %bool %268
+        %270 = OpFOrdEqual %v2bool %266 %139
+        %271 = OpAll %bool %270
+        %272 = OpLogicalAnd %bool %269 %271
+               OpBranch %264
+        %264 = OpLabel
+        %273 = OpPhi %bool %false %253 %272 %263
+               OpStore %_0_ok %273
+               OpSelectionMerge %275 None
+               OpBranchConditional %273 %274 %275
+        %274 = OpLabel
+        %276 = OpCompositeConstruct %v2float %128 %float_0
+        %277 = OpCompositeConstruct %v2float %float_0 %128
+        %278 = OpCompositeConstruct %mat2v2float %276 %277
+        %279 = OpFUnordNotEqual %v2bool %276 %19
+        %280 = OpAny %bool %279
+        %281 = OpFUnordNotEqual %v2bool %277 %19
+        %282 = OpAny %bool %281
+        %283 = OpLogicalOr %bool %280 %282
+               OpBranch %275
+        %275 = OpLabel
+        %284 = OpPhi %bool %false %264 %283 %274
+               OpStore %_0_ok %284
+               OpSelectionMerge %286 None
+               OpBranchConditional %284 %285 %286
+        %285 = OpLabel
+        %287 = OpCompositeConstruct %v3float %128 %124 %124
+        %288 = OpCompositeConstruct %v3float %124 %128 %124
+        %289 = OpCompositeConstruct %v3float %124 %124 %128
+        %290 = OpCompositeConstruct %mat3v3float %287 %288 %289
+        %295 = OpFOrdEqual %v3bool %287 %291
+        %296 = OpAll %bool %295
+        %297 = OpFOrdEqual %v3bool %288 %292
+        %298 = OpAll %bool %297
+        %299 = OpLogicalAnd %bool %296 %298
+        %300 = OpFOrdEqual %v3bool %289 %293
+        %301 = OpAll %bool %300
+        %302 = OpLogicalAnd %bool %299 %301
+               OpBranch %286
+        %286 = OpLabel
+        %303 = OpPhi %bool %false %275 %302 %285
+               OpStore %_0_ok %303
+               OpSelectionMerge %305 None
+               OpBranchConditional %303 %304 %305
+        %304 = OpLabel
+        %306 = OpCompositeConstruct %v3float %132 %124 %124
+        %307 = OpCompositeConstruct %v3float %124 %132 %124
+        %308 = OpCompositeConstruct %v3float %124 %124 %128
+        %309 = OpCompositeConstruct %mat3v3float %306 %307 %308
+        %316 = OpFOrdEqual %v3bool %306 %313
+        %317 = OpAll %bool %316
+        %318 = OpFOrdEqual %v3bool %307 %314
+        %319 = OpAll %bool %318
+        %320 = OpLogicalAnd %bool %317 %319
+        %321 = OpFOrdEqual %v3bool %308 %293
+        %322 = OpAll %bool %321
+        %323 = OpLogicalAnd %bool %320 %322
+               OpBranch %305
+        %305 = OpLabel
+        %324 = OpPhi %bool %false %286 %323 %304
+               OpStore %_0_ok %324
+               OpSelectionMerge %326 None
+               OpBranchConditional %324 %325 %326
+        %325 = OpLabel
+        %327 = OpCompositeConstruct %v3float %128 %float_0 %float_0
+        %328 = OpCompositeConstruct %v3float %float_0 %128 %float_0
+        %329 = OpCompositeConstruct %v3float %float_0 %float_0 %128
+        %330 = OpCompositeConstruct %mat3v3float %327 %328 %329
+        %331 = OpFOrdEqual %v3bool %327 %291
+        %332 = OpAll %bool %331
+        %333 = OpFOrdEqual %v3bool %328 %292
+        %334 = OpAll %bool %333
+        %335 = OpLogicalAnd %bool %332 %334
+        %336 = OpFOrdEqual %v3bool %329 %293
+        %337 = OpAll %bool %336
+        %338 = OpLogicalAnd %bool %335 %337
+               OpBranch %326
+        %326 = OpLabel
+        %339 = OpPhi %bool %false %305 %338 %325
+               OpStore %_0_ok %339
+               OpSelectionMerge %341 None
+               OpBranchConditional %339 %340 %341
+        %340 = OpLabel
+        %342 = OpCompositeConstruct %v3float %132 %float_0 %float_0
+        %343 = OpCompositeConstruct %v3float %float_0 %132 %float_0
+        %344 = OpCompositeConstruct %v3float %float_0 %float_0 %128
+        %345 = OpCompositeConstruct %mat3v3float %342 %343 %344
+        %346 = OpFOrdEqual %v3bool %342 %313
+        %347 = OpAll %bool %346
+        %348 = OpFOrdEqual %v3bool %343 %314
+        %349 = OpAll %bool %348
+        %350 = OpLogicalAnd %bool %347 %349
+        %351 = OpFOrdEqual %v3bool %344 %293
+        %352 = OpAll %bool %351
+        %353 = OpLogicalAnd %bool %350 %352
+               OpBranch %341
+        %341 = OpLabel
+        %354 = OpPhi %bool %false %326 %353 %340
+               OpStore %_0_ok %354
+               OpSelectionMerge %356 None
+               OpBranchConditional %354 %355 %356
+        %355 = OpLabel
+        %357 = OpCompositeConstruct %v3float %128 %float_0 %float_0
+        %358 = OpCompositeConstruct %v3float %float_0 %128 %float_0
+        %359 = OpCompositeConstruct %v3float %float_0 %float_0 %128
+        %360 = OpCompositeConstruct %mat3v3float %357 %358 %359
+        %361 = OpVectorShuffle %v2float %357 %357 0 1
+        %362 = OpVectorShuffle %v2float %358 %358 0 1
+        %363 = OpCompositeConstruct %mat2v2float %361 %362
+        %364 = OpFOrdEqual %v2bool %361 %138
+        %365 = OpAll %bool %364
+        %366 = OpFOrdEqual %v2bool %362 %139
+        %367 = OpAll %bool %366
+        %368 = OpLogicalAnd %bool %365 %367
+               OpBranch %356
+        %356 = OpLabel
+        %369 = OpPhi %bool %false %341 %368 %355
+               OpStore %_0_ok %369
+               OpSelectionMerge %371 None
+               OpBranchConditional %369 %370 %371
+        %370 = OpLabel
+        %372 = OpCompositeConstruct %v3float %128 %float_0 %float_0
+        %373 = OpCompositeConstruct %v3float %float_0 %128 %float_0
+        %374 = OpCompositeConstruct %v3float %float_0 %float_0 %128
+        %375 = OpCompositeConstruct %mat3v3float %372 %373 %374
+        %376 = OpVectorShuffle %v2float %372 %372 0 1
+        %377 = OpVectorShuffle %v2float %373 %373 0 1
+        %378 = OpCompositeConstruct %mat2v2float %376 %377
+        %379 = OpFOrdEqual %v2bool %376 %138
+        %380 = OpAll %bool %379
+        %381 = OpFOrdEqual %v2bool %377 %139
+        %382 = OpAll %bool %381
+        %383 = OpLogicalAnd %bool %380 %382
+               OpBranch %371
+        %371 = OpLabel
+        %384 = OpPhi %bool %false %356 %383 %370
+               OpStore %_0_ok %384
+               OpSelectionMerge %386 None
+               OpBranchConditional %384 %385 %386
+        %385 = OpLabel
+        %387 = OpCompositeConstruct %v2float %128 %124
+        %388 = OpCompositeConstruct %v2float %124 %128
+        %389 = OpCompositeConstruct %mat2v2float %387 %388
+        %390 = OpFOrdEqual %v2bool %387 %138
+        %391 = OpAll %bool %390
+        %392 = OpFOrdEqual %v2bool %388 %139
+        %393 = OpAll %bool %392
+        %394 = OpLogicalAnd %bool %391 %393
+               OpBranch %386
+        %386 = OpLabel
+        %395 = OpPhi %bool %false %371 %394 %385
+               OpStore %_0_ok %395
+               OpSelectionMerge %397 None
+               OpBranchConditional %395 %396 %397
+        %396 = OpLabel
+        %398 = OpCompositeConstruct %v2float %128 %124
+        %399 = OpCompositeConstruct %v2float %124 %128
+        %400 = OpCompositeConstruct %mat2v2float %398 %399
+        %401 = OpFOrdEqual %v2bool %398 %138
+        %402 = OpAll %bool %401
+        %403 = OpFOrdEqual %v2bool %399 %139
+        %404 = OpAll %bool %403
+        %405 = OpLogicalAnd %bool %402 %404
+               OpBranch %397
+        %397 = OpLabel
+        %406 = OpPhi %bool %false %386 %405 %396
+               OpStore %_0_ok %406
+               OpSelectionMerge %408 None
+               OpBranchConditional %406 %407 %408
+        %407 = OpLabel
+        %409 = OpCompositeConstruct %v2float %128 %124
+        %410 = OpCompositeConstruct %v2float %124 %128
+        %411 = OpCompositeConstruct %mat2v2float %409 %410
+        %412 = OpFOrdEqual %v2bool %409 %138
+        %413 = OpAll %bool %412
+        %414 = OpFOrdEqual %v2bool %410 %139
+        %415 = OpAll %bool %414
+        %416 = OpLogicalAnd %bool %413 %415
+               OpBranch %408
+        %408 = OpLabel
+        %417 = OpPhi %bool %false %397 %416 %407
+               OpStore %_0_ok %417
+               OpSelectionMerge %419 None
+               OpBranchConditional %417 %418 %419
+        %418 = OpLabel
+        %420 = OpAccessChain %_ptr_Uniform_mat2v2float %7 %int_2
+        %421 = OpLoad %mat2v2float %420
+        %422 = OpCompositeExtract %float %421 0 0
+        %423 = OpCompositeExtract %float %421 0 1
+        %424 = OpCompositeExtract %float %421 1 0
+        %425 = OpCompositeExtract %float %421 1 1
+        %426 = OpCompositeConstruct %v4float %422 %423 %424 %425
+        %427 = OpCompositeConstruct %v4float %128 %128 %128 %128
+        %428 = OpFMul %v4float %426 %427
+        %430 = OpFOrdEqual %v4bool %428 %429
+        %432 = OpAll %bool %430
+               OpBranch %419
+        %419 = OpLabel
+        %433 = OpPhi %bool %false %408 %432 %418
+               OpStore %_0_ok %433
+               OpSelectionMerge %435 None
+               OpBranchConditional %433 %434 %435
+        %434 = OpLabel
+        %436 = OpAccessChain %_ptr_Uniform_mat2v2float %7 %int_2
+        %437 = OpLoad %mat2v2float %436
+        %438 = OpCompositeExtract %float %437 0 0
+        %439 = OpCompositeExtract %float %437 0 1
+        %440 = OpCompositeExtract %float %437 1 0
+        %441 = OpCompositeExtract %float %437 1 1
+        %442 = OpCompositeConstruct %v4float %438 %439 %440 %441
+        %443 = OpCompositeConstruct %v4float %128 %128 %128 %128
+        %444 = OpFMul %v4float %442 %443
+        %445 = OpAccessChain %_ptr_Uniform_mat2v2float %7 %int_2
+        %446 = OpLoad %mat2v2float %445
+        %447 = OpCompositeExtract %float %446 0 0
+        %448 = OpCompositeExtract %float %446 0 1
+        %449 = OpCompositeExtract %float %446 1 0
+        %450 = OpCompositeExtract %float %446 1 1
+        %451 = OpCompositeConstruct %v4float %447 %448 %449 %450
+        %452 = OpFOrdEqual %v4bool %444 %451
+        %453 = OpAll %bool %452
+               OpBranch %435
+        %435 = OpLabel
+        %454 = OpPhi %bool %false %419 %453 %434
+               OpStore %_0_ok %454
+               OpSelectionMerge %456 None
+               OpBranchConditional %454 %455 %456
+        %455 = OpLabel
+        %457 = OpAccessChain %_ptr_Uniform_mat2v2float %7 %int_2
+        %458 = OpLoad %mat2v2float %457
+        %459 = OpCompositeExtract %float %458 0 0
+        %460 = OpCompositeExtract %float %458 0 1
+        %461 = OpCompositeExtract %float %458 1 0
+        %462 = OpCompositeExtract %float %458 1 1
+        %463 = OpCompositeConstruct %v4float %459 %460 %461 %462
+        %464 = OpCompositeConstruct %v4float %124 %124 %124 %124
+        %465 = OpFMul %v4float %463 %464
+        %467 = OpFOrdEqual %v4bool %465 %466
+        %468 = OpAll %bool %467
+               OpBranch %456
+        %456 = OpLabel
+        %469 = OpPhi %bool %false %435 %468 %455
+               OpStore %_0_ok %469
+        %472 = OpCompositeConstruct %v3float %128 %130 %float_3
+        %473 = OpCompositeConstruct %v3float %float_7 %float_8 %132
+        %474 = OpCompositeConstruct %mat3v3float %472 %66 %473
+               OpStore %_5_m %474
+               OpSelectionMerge %476 None
+               OpBranchConditional %469 %475 %476
+        %475 = OpLabel
+        %477 = OpAccessChain %_ptr_Function_v3float %_5_m %int_0
+        %479 = OpLoad %v3float %477
+        %480 = OpFOrdEqual %v3bool %479 %65
+        %481 = OpAll %bool %480
+               OpBranch %476
+        %476 = OpLabel
+        %482 = OpPhi %bool %false %456 %481 %475
+               OpStore %_0_ok %482
+               OpSelectionMerge %484 None
+               OpBranchConditional %482 %483 %484
+        %483 = OpLabel
+        %486 = OpAccessChain %_ptr_Function_v3float %_5_m %int_1
+        %487 = OpLoad %v3float %486
+        %488 = OpFOrdEqual %v3bool %487 %66
+        %489 = OpAll %bool %488
+               OpBranch %484
+        %484 = OpLabel
+        %490 = OpPhi %bool %false %476 %489 %483
+               OpStore %_0_ok %490
+               OpSelectionMerge %492 None
+               OpBranchConditional %490 %491 %492
+        %491 = OpLabel
+        %493 = OpAccessChain %_ptr_Function_v3float %_5_m %int_2
+        %494 = OpLoad %v3float %493
+        %495 = OpFOrdEqual %v3bool %494 %67
+        %496 = OpAll %bool %495
+               OpBranch %492
+        %492 = OpLabel
+        %497 = OpPhi %bool %false %484 %496 %491
+               OpStore %_0_ok %497
+               OpSelectionMerge %499 None
+               OpBranchConditional %497 %498 %499
+        %498 = OpLabel
+        %500 = OpAccessChain %_ptr_Function_v3float %_5_m %int_0
+        %501 = OpLoad %v3float %500
+        %502 = OpCompositeExtract %float %501 0
+        %503 = OpFOrdEqual %bool %502 %float_1
+               OpBranch %499
+        %499 = OpLabel
+        %504 = OpPhi %bool %false %492 %503 %498
+               OpStore %_0_ok %504
+               OpSelectionMerge %506 None
+               OpBranchConditional %504 %505 %506
+        %505 = OpLabel
+        %507 = OpAccessChain %_ptr_Function_v3float %_5_m %int_0
+        %508 = OpLoad %v3float %507
+        %509 = OpCompositeExtract %float %508 1
+        %510 = OpFOrdEqual %bool %509 %float_2
+               OpBranch %506
+        %506 = OpLabel
+        %511 = OpPhi %bool %false %499 %510 %505
+               OpStore %_0_ok %511
+               OpSelectionMerge %513 None
+               OpBranchConditional %511 %512 %513
+        %512 = OpLabel
+        %514 = OpAccessChain %_ptr_Function_v3float %_5_m %int_0
+        %515 = OpLoad %v3float %514
+        %516 = OpCompositeExtract %float %515 2
+        %517 = OpFOrdEqual %bool %516 %float_3
+               OpBranch %513
+        %513 = OpLabel
+        %518 = OpPhi %bool %false %506 %517 %512
+               OpStore %_0_ok %518
+               OpSelectionMerge %520 None
+               OpBranchConditional %518 %519 %520
+        %519 = OpLabel
+        %521 = OpAccessChain %_ptr_Function_v3float %_5_m %int_1
+        %522 = OpLoad %v3float %521
+        %523 = OpCompositeExtract %float %522 0
+        %524 = OpFOrdEqual %bool %523 %float_4
+               OpBranch %520
+        %520 = OpLabel
+        %525 = OpPhi %bool %false %513 %524 %519
+               OpStore %_0_ok %525
+               OpSelectionMerge %527 None
+               OpBranchConditional %525 %526 %527
+        %526 = OpLabel
+        %528 = OpAccessChain %_ptr_Function_v3float %_5_m %int_1
+        %529 = OpLoad %v3float %528
+        %530 = OpCompositeExtract %float %529 1
+        %531 = OpFOrdEqual %bool %530 %float_5
+               OpBranch %527
+        %527 = OpLabel
+        %532 = OpPhi %bool %false %520 %531 %526
+               OpStore %_0_ok %532
+               OpSelectionMerge %534 None
+               OpBranchConditional %532 %533 %534
+        %533 = OpLabel
+        %535 = OpAccessChain %_ptr_Function_v3float %_5_m %int_1
+        %536 = OpLoad %v3float %535
+        %537 = OpCompositeExtract %float %536 2
+        %538 = OpFOrdEqual %bool %537 %float_6
+               OpBranch %534
+        %534 = OpLabel
+        %539 = OpPhi %bool %false %527 %538 %533
+               OpStore %_0_ok %539
+               OpSelectionMerge %541 None
+               OpBranchConditional %539 %540 %541
+        %540 = OpLabel
+        %542 = OpAccessChain %_ptr_Function_v3float %_5_m %int_2
+        %543 = OpLoad %v3float %542
+        %544 = OpCompositeExtract %float %543 0
+        %545 = OpFOrdEqual %bool %544 %float_7
+               OpBranch %541
+        %541 = OpLabel
+        %546 = OpPhi %bool %false %534 %545 %540
+               OpStore %_0_ok %546
+               OpSelectionMerge %548 None
+               OpBranchConditional %546 %547 %548
+        %547 = OpLabel
+        %549 = OpAccessChain %_ptr_Function_v3float %_5_m %int_2
+        %550 = OpLoad %v3float %549
+        %551 = OpCompositeExtract %float %550 1
+        %552 = OpFOrdEqual %bool %551 %float_8
+               OpBranch %548
+        %548 = OpLabel
+        %553 = OpPhi %bool %false %541 %552 %547
+               OpStore %_0_ok %553
+               OpSelectionMerge %555 None
+               OpBranchConditional %553 %554 %555
+        %554 = OpLabel
+        %556 = OpAccessChain %_ptr_Function_v3float %_5_m %int_2
+        %557 = OpLoad %v3float %556
+        %558 = OpCompositeExtract %float %557 2
+        %559 = OpFOrdEqual %bool %558 %float_9
+               OpBranch %555
+        %555 = OpLabel
+        %560 = OpPhi %bool %false %548 %559 %554
+               OpStore %_0_ok %560
+               OpSelectionMerge %565 None
+               OpBranchConditional %560 %563 %564
+        %563 = OpLabel
+        %566 = OpAccessChain %_ptr_Uniform_v4float %7 %int_0
+        %567 = OpLoad %v4float %566
+               OpStore %561 %567
+               OpBranch %565
+        %564 = OpLabel
+        %568 = OpAccessChain %_ptr_Uniform_v4float %7 %int_1
+        %569 = OpLoad %v4float %568
+               OpStore %561 %569
+               OpBranch %565
+        %565 = OpLabel
+        %570 = OpLoad %v4float %561
+               OpReturnValue %570
+               OpFunctionEnd

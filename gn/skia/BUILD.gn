@@ -180,6 +180,21 @@ config("default") {
     ldflags += [ "-static-libstdc++" ]
   }
 
+  if (show_includes) {
+    assert(is_clang, "show_includes requires clang to build.")
+    if (is_win) {
+      cflags += [
+        "/clang:-H",
+        "/clang:-fshow-skipped-includes",
+      ]
+    } else {
+      cflags += [
+        "-H",
+        "-fshow-skipped-includes",
+      ]
+    }
+  }
+
   if (is_ios) {
     if (target_cpu == "arm") {
       _arch_flags = [
@@ -278,6 +293,19 @@ config("default") {
       ldflags += [
         "-target",
         "arm64-apple-macos11",
+      ]
+    } else {
+      asmflags += [
+        "-target",
+        "x86_64-apple-macos10.13",
+      ]
+      cflags += [
+        "-target",
+        "x86_64-apple-macos10.13",
+      ]
+      ldflags += [
+        "-target",
+        "x86_64-apple-macos10.13",
       ]
     }
   }
@@ -425,7 +453,6 @@ config("warnings") {
     cflags_cc += [
       "-Wnon-virtual-dtor",
       "-Wno-noexcept-type",
-      "-Wno-redundant-move",  #TODO: gcc conflict with return-std-move-in-c++11
     ]
   }
 
@@ -462,7 +489,6 @@ config("warnings") {
     # TODO: These would all be really great warnings to turn on.
     cflags += [
       "-Wno-cast-align",
-      "-Wno-cast-qual",
       "-Wno-conversion",  # -Wsign-conversion and -Wshorten-64-to-32,
                           # are re-enabled for header sources
       "-Wno-disabled-macro-expansion",
@@ -506,6 +532,8 @@ config("warnings") {
       "-Wno-old-style-cast",
       "-Wno-newline-eof",
       "-Wno-padded",
+      "-Wno-return-std-move-in-c++11",  # we no longer support C++11, and don't
+                                        # need C++11-only performance warnings
       "-Wno-shadow-field-in-constructor",
       "-Wno-shadow-uncaptured-local",
       "-Wno-zero-as-null-pointer-constant",  # VK_NULL_HANDLE is defined as 0

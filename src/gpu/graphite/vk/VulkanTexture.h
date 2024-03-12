@@ -10,23 +10,26 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/vk/VulkanTypes.h"
+#include "include/private/base/SkTArray.h"
 #include "src/gpu/graphite/Texture.h"
+#include "src/gpu/graphite/vk/VulkanImageView.h"
 
 #include <utility>
 
-namespace skgpu { class MutableTextureStateRef; }
+namespace skgpu { class MutableTextureState; }
 
 namespace skgpu::graphite {
 
 class VulkanSharedContext;
 class VulkanCommandBuffer;
+class VulkanResourceProvider;
 
 class VulkanTexture : public Texture {
 public:
     struct CreatedImageInfo {
         VkImage fImage = VK_NULL_HANDLE;
         VulkanAlloc fMemoryAlloc;
-        sk_sp<MutableTextureStateRef> fMutableState;
+        sk_sp<MutableTextureState> fMutableState;
     };
 
     static bool MakeVkImage(const VulkanSharedContext*,
@@ -35,14 +38,16 @@ public:
                             CreatedImageInfo* outInfo);
 
     static sk_sp<Texture> Make(const VulkanSharedContext*,
+                               const VulkanResourceProvider*,
                                SkISize dimensions,
                                const TextureInfo&,
                                skgpu::Budgeted);
 
     static sk_sp<Texture> MakeWrapped(const VulkanSharedContext*,
+                                      const VulkanResourceProvider*,
                                       SkISize dimensions,
                                       const TextureInfo&,
-                                      sk_sp<MutableTextureStateRef>,
+                                      sk_sp<MutableTextureState>,
                                       VkImage,
                                       const VulkanAlloc&);
 
@@ -50,11 +55,11 @@ public:
 
     VkImage vkImage() const { return fImage; }
 
-   void setImageLayout(VulkanCommandBuffer* buffer,
-                       VkImageLayout newLayout,
-                       VkAccessFlags dstAccessMask,
-                       VkPipelineStageFlags dstStageMask,
-                       bool byRegion) {
+    void setImageLayout(VulkanCommandBuffer* buffer,
+                        VkImageLayout newLayout,
+                        VkAccessFlags dstAccessMask,
+                        VkPipelineStageFlags dstStageMask,
+                        bool byRegion) const {
         this->setImageLayoutAndQueueIndex(buffer, newLayout, dstAccessMask, dstStageMask, byRegion,
                                           VK_QUEUE_FAMILY_IGNORED);
     }
@@ -64,10 +69,12 @@ public:
                                      VkAccessFlags dstAccessMask,
                                      VkPipelineStageFlags dstStageMask,
                                      bool byRegion,
-                                     uint32_t newQueueFamilyIndex);
+                                     uint32_t newQueueFamilyIndex) const;
 
     VkImageLayout currentLayout() const;
     uint32_t currentQueueFamilyIndex() const;
+
+    const VulkanImageView* getImageView(VulkanImageView::Usage) const;
 
     // Helpers to use for setting the layout of the VkImage
     static VkPipelineStageFlags LayoutToPipelineSrcStageFlags(const VkImageLayout layout);
@@ -77,16 +84,20 @@ private:
     VulkanTexture(const VulkanSharedContext* sharedContext,
                   SkISize dimensions,
                   const TextureInfo& info,
-                  sk_sp<MutableTextureStateRef>,
+                  sk_sp<MutableTextureState>,
                   VkImage,
                   const VulkanAlloc&,
                   Ownership,
-                  skgpu::Budgeted);
+                  skgpu::Budgeted,
+                  sk_sp<VulkanSamplerYcbcrConversion>);
 
     void freeGpuData() override;
 
     VkImage fImage;
     VulkanAlloc fMemoryAlloc;
+    sk_sp<VulkanSamplerYcbcrConversion> fSamplerYcbcrConversion;
+
+    mutable skia_private::STArray<2, std::unique_ptr<const VulkanImageView>> fImageViews;
 };
 
 } // namespace skgpu::graphite

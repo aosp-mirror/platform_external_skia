@@ -104,14 +104,13 @@ GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
     return analysis;
 }
 
-const GrPipeline* GrSimpleMeshDrawOpHelper::CreatePipeline(
-                                                const GrCaps* caps,
-                                                SkArenaAlloc* arena,
-                                                skgpu::Swizzle writeViewSwizzle,
-                                                GrAppliedClip&& appliedClip,
-                                                const GrDstProxyView& dstProxyView,
-                                                GrProcessorSet&& processorSet,
-                                                GrPipeline::InputFlags pipelineFlags) {
+const GrPipeline* GrSimpleMeshDrawOpHelper::CreatePipeline(const GrCaps* caps,
+                                                           SkArenaAlloc* arena,
+                                                           skgpu::Swizzle writeViewSwizzle,
+                                                           GrAppliedClip&& appliedClip,
+                                                           const GrDstProxyView& dstProxyView,
+                                                           GrProcessorSet&& processorSet,
+                                                           GrPipeline::InputFlags pipelineFlags) {
     GrPipeline::InitArgs pipelineArgs;
 
     pipelineArgs.fInputFlags = pipelineFlags;
@@ -124,10 +123,9 @@ const GrPipeline* GrSimpleMeshDrawOpHelper::CreatePipeline(
                                    std::move(appliedClip));
 }
 
-const GrPipeline* GrSimpleMeshDrawOpHelper::CreatePipeline(
-                                                GrOpFlushState* flushState,
-                                                GrProcessorSet&& processorSet,
-                                                GrPipeline::InputFlags pipelineFlags) {
+const GrPipeline* GrSimpleMeshDrawOpHelper::CreatePipeline(GrOpFlushState* flushState,
+                                                           GrProcessorSet&& processorSet,
+                                                           GrPipeline::InputFlags pipelineFlags) {
     return CreatePipeline(&flushState->caps(),
                           flushState->allocator(),
                           flushState->writeView().swizzle(),
@@ -147,12 +145,11 @@ const GrPipeline* GrSimpleMeshDrawOpHelper::createPipeline(GrOpFlushState* flush
                           this->pipelineFlags());
 }
 
-const GrPipeline* GrSimpleMeshDrawOpHelper::createPipeline(
-        const GrCaps* caps,
-        SkArenaAlloc* arena,
-        skgpu::Swizzle writeViewSwizzle,
-        GrAppliedClip&& appliedClip,
-        const GrDstProxyView& dstProxyView) {
+const GrPipeline* GrSimpleMeshDrawOpHelper::createPipeline(const GrCaps* caps,
+                                                           SkArenaAlloc* arena,
+                                                           skgpu::Swizzle writeViewSwizzle,
+                                                           GrAppliedClip&& appliedClip,
+                                                           const GrDstProxyView& dstProxyView) {
     return GrSimpleMeshDrawOpHelper::CreatePipeline(caps,
                                                     arena,
                                                     writeViewSwizzle,
@@ -235,7 +232,7 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::createProgramInfo(
                              this->pipelineFlags());
 }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 static void dump_pipeline_flags(GrPipeline::InputFlags flags, SkString* result) {
     if (GrPipeline::InputFlags::kNone != flags) {
         if (flags & GrPipeline::InputFlags::kSnapVerticesToPixelCenters) {

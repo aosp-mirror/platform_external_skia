@@ -50,15 +50,27 @@ public:
      */
     virtual sk_sp<SkImage> getFrame(float t);
 
+    // Describes how the frame image is to be scaled to the animation-declared asset size.
+    enum class SizeFit {
+        // See SkMatrix::ScaleToFit
+        kFill   = SkMatrix::kFill_ScaleToFit,
+        kStart  = SkMatrix::kStart_ScaleToFit,
+        kCenter = SkMatrix::kCenter_ScaleToFit,
+        kEnd    = SkMatrix::kEnd_ScaleToFit,
+
+        // No scaling.
+        kNone,
+    };
+
     struct FrameData {
         // SkImage payload.
-        sk_sp<SkImage>       image;
+        sk_sp<SkImage>    image;
         // Resampling parameters.
-        SkSamplingOptions    sampling;
+        SkSamplingOptions sampling;
         // Additional image transform to be applied before AE scaling rules.
-        SkMatrix             matrix = SkMatrix::I();
-        // Scaling strategy for aspect ratio adjustments.
-        SkMatrix::ScaleToFit scaling = SkMatrix::kCenter_ScaleToFit;
+        SkMatrix          matrix = SkMatrix::I();
+        // Strategy for image size -> AE asset size scaling.
+        SizeFit           scaling = SizeFit::kCenter;
     };
 
     /**
@@ -75,29 +87,32 @@ public:
     virtual FrameData getFrameData(float t);
 };
 
+enum class ImageDecodeStrategy {
+    // Images are decoded on-the-fly, at rasterization time.
+    // Large images may cause jank as decoding is expensive (and can thrash internal caches).
+    kLazyDecode,
+    // Force-decode all images upfront, at the cost of potentially more RAM and slower
+    // animation build times.
+    kPreDecode,
+};
+
 class MultiFrameImageAsset final : public ImageAsset {
 public:
-    /**
-    * By default, images are decoded on-the-fly, at rasterization time.
-    * Large images may cause jank as decoding is expensive (and can thrash internal caches).
-    *
-    * Pass |predecode| true to force-decode all images upfront, at the cost of potentially more RAM
-    * and slower animation build times.
-    */
-    static sk_sp<MultiFrameImageAsset> Make(sk_sp<SkData>, bool predecode = false);
+    static sk_sp<MultiFrameImageAsset> Make(sk_sp<SkData>,
+                                            ImageDecodeStrategy = ImageDecodeStrategy::kLazyDecode);
 
     bool isMultiFrame() override;
 
     sk_sp<SkImage> getFrame(float t) override;
 
 private:
-    explicit MultiFrameImageAsset(std::unique_ptr<SkAnimCodecPlayer>, bool predecode);
+    explicit MultiFrameImageAsset(std::unique_ptr<SkAnimCodecPlayer>, ImageDecodeStrategy);
 
     sk_sp<SkImage> generateFrame(float t);
 
     std::unique_ptr<SkAnimCodecPlayer> fPlayer;
     sk_sp<SkImage>                     fCachedFrame;
-    bool                               fPreDecode;
+    ImageDecodeStrategy fStrategy;
 
     using INHERITED = ImageAsset;
 };
@@ -188,17 +203,18 @@ public:
 
 class FileResourceProvider final : public ResourceProvider {
 public:
-    static sk_sp<FileResourceProvider> Make(SkString base_dir, bool predecode = false);
+    static sk_sp<FileResourceProvider> Make(SkString base_dir,
+                                            ImageDecodeStrategy = ImageDecodeStrategy::kLazyDecode);
 
     sk_sp<SkData> load(const char resource_path[], const char resource_name[]) const override;
 
     sk_sp<ImageAsset> loadImageAsset(const char[], const char[], const char[]) const override;
 
 private:
-    FileResourceProvider(SkString, bool);
+    FileResourceProvider(SkString, ImageDecodeStrategy);
 
     const SkString fDir;
-    const bool     fPredecode;
+    const ImageDecodeStrategy fStrategy;
 
     using INHERITED = ResourceProvider;
 };
@@ -213,7 +229,7 @@ protected:
     sk_sp<SkData> loadFont(const char[], const char[]) const override;
     sk_sp<ExternalTrackAsset> loadAudioAsset(const char[], const char[], const char[]) override;
 
-private:
+protected:
     const sk_sp<ResourceProvider> fProxy;
 };
 
@@ -229,24 +245,31 @@ private:
 
     sk_sp<ImageAsset> loadImageAsset(const char[], const char[], const char[]) const override;
 
-    mutable SkMutex                                 fMutex;
-    mutable SkTHashMap<SkString, sk_sp<ImageAsset>> fImageCache;
+    mutable SkMutex                                             fMutex;
+    mutable skia_private::THashMap<SkString, sk_sp<ImageAsset>> fImageCache;
 
     using INHERITED = ResourceProviderProxyBase;
 };
 
 class DataURIResourceProviderProxy final : public ResourceProviderProxyBase {
 public:
-    static sk_sp<DataURIResourceProviderProxy> Make(sk_sp<ResourceProvider> rp,
-                                                    bool predecode = false);
+    // If font data is supplied via base64 encoding, this needs a provided SkFontMgr to process
+    // that font data into an SkTypeface.
+    static sk_sp<DataURIResourceProviderProxy> Make(
+            sk_sp<ResourceProvider> rp,
+            ImageDecodeStrategy = ImageDecodeStrategy::kLazyDecode,
+            sk_sp<const SkFontMgr> fontMgr = nullptr);
 
 private:
-    DataURIResourceProviderProxy(sk_sp<ResourceProvider>, bool);
+    DataURIResourceProviderProxy(sk_sp<ResourceProvider>,
+                                 ImageDecodeStrategy,
+                                 sk_sp<const SkFontMgr> fontMgr);
 
     sk_sp<ImageAsset> loadImageAsset(const char[], const char[], const char[]) const override;
     sk_sp<SkTypeface> loadTypeface(const char[], const char[]) const override;
 
-    const bool fPredecode;
+    const ImageDecodeStrategy fStrategy;
+    sk_sp<const SkFontMgr> fFontMgr;
 
     using INHERITED = ResourceProviderProxyBase;
 };

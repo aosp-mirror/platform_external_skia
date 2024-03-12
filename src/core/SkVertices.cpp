@@ -11,7 +11,6 @@
 #include "include/private/base/SkTo.h"
 #include "src/base/SkSafeMath.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/core/SkOpts.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSafeRange.h"
 #include "src/core/SkVerticesPriv.h"
@@ -19,10 +18,10 @@
 #include <atomic>
 #include <new>
 
-static int32_t next_id() {
-    static std::atomic<int32_t> nextID{1};
+static uint32_t next_id() {
+    static std::atomic<uint32_t> nextID{1};
 
-    int32_t id;
+    uint32_t id;
     do {
         id = nextID.fetch_add(1, std::memory_order_relaxed);
     } while (id == SK_InvalidGenID);

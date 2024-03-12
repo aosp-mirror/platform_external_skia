@@ -8,18 +8,19 @@
 #ifndef SKSL_METALCODEGENERATOR
 #define SKSL_METALCODEGENERATOR
 
-#include "include/private/SkSLDefines.h"
-#include "include/private/base/SkTArray.h"
+#include "include/core/SkSpan.h"
 #include "src/core/SkTHash.h"
+#include "src/sksl/SkSLDefines.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
-#include "src/sksl/ir/SkSLType.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 
 #include <cstdint>
+#include <functional>
 #include <initializer_list>
+#include <memory>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace SkSL {
 
@@ -34,6 +35,7 @@ class DoStatement;
 class Expression;
 class ExpressionStatement;
 class Extension;
+struct Field;
 class FieldAccess;
 class ForStatement;
 class FunctionCall;
@@ -41,6 +43,7 @@ class FunctionDeclaration;
 class FunctionDefinition;
 class FunctionPrototype;
 class IfStatement;
+class IndexExpression;
 class InterfaceBlock;
 class Literal;
 class Operator;
@@ -53,17 +56,16 @@ class ReturnStatement;
 class Statement;
 class StructDefinition;
 class SwitchStatement;
+class Swizzle;
 class TernaryExpression;
+class Type;
 class VarDeclaration;
 class Variable;
 class VariableReference;
 enum class OperatorPrecedence : uint8_t;
 enum IntrinsicKind : int8_t;
-struct IndexExpression;
 struct Layout;
-struct Modifiers;
 struct Program;
-struct Swizzle;
 
 /**
  * Converts a Program into Metal code.
@@ -80,14 +82,17 @@ public:
 protected:
     using Precedence = OperatorPrecedence;
 
-    typedef int Requirements;
-    inline static constexpr Requirements kNo_Requirements          = 0;
-    inline static constexpr Requirements kInputs_Requirement       = 1 << 0;
-    inline static constexpr Requirements kOutputs_Requirement      = 1 << 1;
-    inline static constexpr Requirements kUniforms_Requirement     = 1 << 2;
-    inline static constexpr Requirements kGlobals_Requirement      = 1 << 3;
-    inline static constexpr Requirements kFragCoord_Requirement    = 1 << 4;
-    inline static constexpr Requirements kThreadgroups_Requirement = 1 << 5;
+    using Requirements =  int;
+    static constexpr Requirements kNo_Requirements          = 0;
+    static constexpr Requirements kInputs_Requirement       = 1 << 0;
+    static constexpr Requirements kOutputs_Requirement      = 1 << 1;
+    static constexpr Requirements kUniforms_Requirement     = 1 << 2;
+    static constexpr Requirements kGlobals_Requirement      = 1 << 3;
+    static constexpr Requirements kFragCoord_Requirement    = 1 << 4;
+    static constexpr Requirements kSampleMaskIn_Requirement = 1 << 5;
+    static constexpr Requirements kVertexID_Requirement     = 1 << 6;
+    static constexpr Requirements kInstanceID_Requirement   = 1 << 7;
+    static constexpr Requirements kThreadgroups_Requirement = 1 << 8;
 
     class GlobalStructVisitor;
     void visitGlobalStruct(GlobalStructVisitor* visitor);
@@ -117,8 +122,7 @@ protected:
 
     void writeConstantVariables();
 
-    void writeFields(const std::vector<Type::Field>& fields, Position pos,
-                     const InterfaceBlock* parentIntf = nullptr);
+    void writeFields(SkSpan<const Field> fields, Position pos);
 
     int size(const Type* type, bool isPacked) const;
 
@@ -157,7 +161,7 @@ protected:
 
     void writeLayout(const Layout& layout);
 
-    void writeModifiers(const Modifiers& modifiers);
+    void writeModifiers(ModifierFlags flags);
 
     void writeVarInitializer(const Variable& var, const Expression& value);
 
@@ -172,10 +176,6 @@ protected:
     void writeExpression(const Expression& expr, Precedence parentPrecedence);
 
     void writeMinAbsHack(Expression& absExpr, Expression& otherExpr);
-
-    std::string getOutParamHelper(const FunctionCall& c,
-                                  const ExpressionArray& arguments,
-                                  const SkTArray<VariableReference*>& outVars);
 
     std::string getInversePolyfill(const ExpressionArray& arguments);
 
@@ -253,6 +253,8 @@ protected:
 
     void writeIndexExpression(const IndexExpression& expr);
 
+    void writeIndexInnerExpression(const Expression& expr);
+
     void writePrefixExpression(const PrefixExpression& p, Precedence parentPrecedence);
 
     void writePostfixExpression(const PostfixExpression& p, Precedence parentPrecedence);
@@ -289,13 +291,14 @@ protected:
     // instances, not the types themselves)
     void writeComputeMainInputs();
 
-    int getUniformBinding(const Modifiers& m);
+    int getUniformBinding(const Layout& layout);
 
-    int getUniformSet(const Modifiers& m);
+    int getUniformSet(const Layout& layout);
 
-    SkTHashSet<std::string_view> fReservedWords;
-    SkTHashMap<const Type::Field*, const InterfaceBlock*> fInterfaceBlockMap;
-    SkTHashMap<const InterfaceBlock*, std::string_view> fInterfaceBlockNameMap;
+    void writeWithIndexSubstitution(const std::function<void()>& fn);
+
+    skia_private::THashSet<std::string_view> fReservedWords;
+    skia_private::THashMap<const Type*, std::string> fInterfaceBlockNameMap;
     int fAnonInterfaceCount = 0;
     int fPaddingCount = 0;
     const char* fLineEnding;
@@ -307,15 +310,29 @@ protected:
     bool fAtLineStart = false;
     // true if we have run into usages of dFdx / dFdy
     bool fFoundDerivatives = false;
-    SkTHashMap<const FunctionDeclaration*, Requirements> fRequirements;
-    SkTHashSet<std::string> fHelpers;
+    skia_private::THashMap<const FunctionDeclaration*, Requirements> fRequirements;
+    skia_private::THashSet<std::string> fHelpers;
     int fUniformBuffer = -1;
     std::string fRTFlipName;
     const FunctionDeclaration* fCurrentFunction = nullptr;
     int fSwizzleHelperCount = 0;
-    bool fIgnoreVariableReferenceModifiers = false;
     static constexpr char kTextureSuffix[] = "_Tex";
     static constexpr char kSamplerSuffix[] = "_Smplr";
+
+    // If we might use an index expression more than once, we need to capture the result in a
+    // temporary variable to avoid double-evaluation. This should generally only occur when emitting
+    // a function call, since we need to polyfill GLSL-style out-parameter support. (skia:14130)
+    // The map holds <index-expression, temp-variable name>.
+    using IndexSubstitutionMap = skia_private::THashMap<const Expression*, std::string>;
+
+    // When fIndexSubstitution is null (usually), index-substitution does not need to be performed.
+    struct IndexSubstitutionData {
+        IndexSubstitutionMap fMap;
+        StringStream fMainStream;
+        StringStream fPrefixStream;
+        bool fCreateSubstitutes = true;
+    };
+    std::unique_ptr<IndexSubstitutionData> fIndexSubstitutionData;
 
     // Workaround/polyfill flags
     bool fWrittenInverse2 = false, fWrittenInverse3 = false, fWrittenInverse4 = false;

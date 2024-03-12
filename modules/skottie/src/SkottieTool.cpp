@@ -7,16 +7,20 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkGraphics.h"
+#include "include/core/SkPicture.h"
 #include "include/core/SkPictureRecorder.h"
+#include "include/core/SkSerialProcs.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/encode/SkPngEncoder.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTPin.h"
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/utils/SkottieUtils.h"
 #include "modules/skresources/include/SkResources.h"
 #include "src/core/SkOSFile.h"
 #include "src/core/SkTaskGroup.h"
+#include "src/image/SkImage_Base.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/flags/CommandLineFlags.h"
 
@@ -36,6 +40,16 @@
     const char* formats_help = "Output format (png, skp, mp4, or null)";
 #else
     const char* formats_help = "Output format (png, skp, or null)";
+#endif
+
+#if defined(SK_BUILD_FOR_MAC) && defined(SK_FONTMGR_CORETEXT_AVAILABLE)
+#include "include/ports/SkFontMgr_mac_ct.h"
+#elif defined(SK_BUILD_FOR_ANDROID) && defined(SK_FONTMGR_ANDROID_AVAILABLE)
+#include "include/ports/SkFontMgr_android.h"
+#elif defined(SK_BUILD_FOR_UNIX) && defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
+#include "include/ports/SkFontMgr_fontconfig.h"
+#else
+#include "include/ports/SkFontMgr_empty.h"
 #endif
 
 static DEFINE_string2(input    , i, nullptr, "Input .json file.");
@@ -221,7 +235,7 @@ public:
     }
 #else
     static std::unique_ptr<FrameGenerator> Make(FrameSink* sink, const SkMatrix& matrix) {
-        auto surface = SkSurface::MakeRasterN32Premul(FLAGS_width, FLAGS_height);
+        auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(FLAGS_width, FLAGS_height));
         if (!surface) {
             SkDebugf("Could not allocate a %d x %d surface.\n", FLAGS_width, FLAGS_height);
             return nullptr;
@@ -269,7 +283,12 @@ public:
         auto stream = make_file_stream(frame_index, "skp");
 
         if (frame && stream) {
-            frame->serialize(stream.get());
+            SkSerialProcs sProcs;
+            sProcs.fImageProc = [](SkImage* img, void*) -> sk_sp<SkData> {
+                return SkPngEncoder::Encode(as_IB(img)->directContext(), img,
+                                            SkPngEncoder::Options{});
+            };
+            frame->serialize(stream.get(), &sProcs);
         }
     }
 
@@ -301,7 +320,7 @@ public:
 
     ~GPUGenerator() override {
         // ensure all pending reads are completed
-        fCtx->flushAndSubmit(true);
+        fCtx->flushAndSubmit(GrSyncCpu::kYes);
     }
 
     void generateFrame(const skottie::Animation* anim, size_t frame_index) override {
@@ -322,10 +341,8 @@ private:
     GPUGenerator(FrameSink* sink, const SkMatrix& matrix)
         : FrameGenerator(sink)
     {
-        fCtx = fFactory.getContextInfo(sk_gpu_test::GrContextFactory::kGL_ContextType)
-                           .directContext();
-        fSurface =
-                SkSurface::MakeRenderTarget(fCtx,
+        fCtx = fFactory.getContextInfo(skgpu::ContextType::kGL).directContext();
+        fSurface = SkSurfaces::RenderTarget(fCtx,
                                             skgpu::Budgeted::kNo,
                                             SkImageInfo::MakeN32Premul(FLAGS_width, FLAGS_height),
                                             0,
@@ -354,12 +371,13 @@ private:
             SkPixmap pm(SkImageInfo::MakeN32Premul(FLAGS_width, FLAGS_height),
                         result->data(0), result->rowBytes(0));
 
-            auto release_proc = [](const void*, SkImage::ReleaseContext ctx) {
+            auto release_proc = [](const void*, SkImages::ReleaseContext ctx) {
                 std::unique_ptr<const SkSurface::AsyncReadResult>
                         adopted(reinterpret_cast<const SkSurface::AsyncReadResult*>(ctx));
             };
 
-            auto frame_image = SkImage::MakeFromRaster(pm, release_proc, (void*)result.release());
+            auto frame_image =
+                    SkImages::RasterFromPixmap(pm, release_proc, (void*)result.release());
 
             rec->sink->writeFrame(std::move(frame_image), rec->index);
         }
@@ -423,7 +441,7 @@ extern bool gSkUseThreadLocalStrikeCaches_IAcknowledgeThisIsIncrediblyExperiment
 int main(int argc, char** argv) {
     gSkUseThreadLocalStrikeCaches_IAcknowledgeThisIsIncrediblyExperimental = true;
     CommandLineFlags::Parse(argc, argv);
-    SkAutoGraphics ag;
+    SkGraphics::Init();
 
     if (FLAGS_input.isEmpty() || FLAGS_writePath.isEmpty()) {
         SkDebugf("Missing required 'input' and 'writePath' args.\n");
@@ -450,12 +468,25 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // If necessary, clients should use a font manager that would load fonts from the system.
+#if defined(SK_BUILD_FOR_MAC) && defined(SK_FONTMGR_CORETEXT_AVAILABLE)
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_CoreText(nullptr);
+#elif defined(SK_BUILD_FOR_ANDROID) && defined(SK_FONTMGR_ANDROID_AVAILABLE)
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_Android(nullptr);
+#elif defined(SK_BUILD_FOR_UNIX) && defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_FontConfig(nullptr);
+#else
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_Custom_Empty();
+#endif
+
+    auto predecode = skresources::ImageDecodeStrategy::kPreDecode;
     auto logger = sk_make_sp<Logger>();
-    auto     rp = skresources::CachingResourceProvider::Make(
-                    skresources::DataURIResourceProviderProxy::Make(
-                      skresources::FileResourceProvider::Make(SkOSPath::Dirname(FLAGS_input[0]),
-                                                                /*predecode=*/true),
-                      /*predecode=*/true));
+    auto rp = skresources::CachingResourceProvider::Make(
+            skresources::DataURIResourceProviderProxy::Make(
+                    skresources::FileResourceProvider::Make(SkOSPath::Dirname(FLAGS_input[0]),
+                                                            predecode),
+                    predecode,
+                    fontMgr));
     auto data   = SkData::MakeFromFileName(FLAGS_input[0]);
     auto precomp_interceptor =
             sk_make_sp<skottie_utils::ExternalAnimationPrecompInterceptor>(rp, "__");
