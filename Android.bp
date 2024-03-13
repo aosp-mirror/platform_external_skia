@@ -1643,6 +1643,7 @@ cc_library_static {
         "src/xml/SkDOM.cpp",
         "src/xml/SkXMLParser.cpp",
         "src/xml/SkXMLWriter.cpp",
+        "tools/SkSharingProc.cpp",
     ],
 
     target: {
@@ -1977,7 +1978,6 @@ cc_library_static {
           "src/text/gpu/TextBlob.cpp",
           "src/text/gpu/TextBlobRedrawCoordinator.cpp",
           "src/text/gpu/VertexFiller.cpp",
-          "tools/SkSharingProc.cpp",
         ],
         local_include_dirs: [
           "android",
