@@ -113,7 +113,7 @@ inline void DrawAtlas::processEviction(PlotLocator plotLocator) {
     fAtlasGeneration = fGenerationCounter->next();
 }
 
-inline bool DrawAtlas::updatePlot(Plot* plot, AtlasLocator* atlasLocator) {
+inline void DrawAtlas::updatePlot(Plot* plot, AtlasLocator* atlasLocator) {
     int pageIdx = plot->pageIndex();
     this->makeMRU(plot, pageIdx);
 
@@ -121,7 +121,6 @@ inline bool DrawAtlas::updatePlot(Plot* plot, AtlasLocator* atlasLocator) {
 
     atlasLocator->updatePlotLocator(plot->plotLocator());
     SkDEBUGCODE(this->validate(*atlasLocator);)
-    return true;
 }
 
 bool DrawAtlas::addRectToPage(unsigned int pageIdx, int width, int height,
@@ -134,7 +133,8 @@ bool DrawAtlas::addRectToPage(unsigned int pageIdx, int width, int height,
 
     for (Plot* plot = plotIter.get(); plot; plot = plotIter.next()) {
         if (plot->addRect(width, height, atlasLocator)) {
-            return this->updatePlot(plot, atlasLocator);
+            this->updatePlot(plot, atlasLocator);
+            return true;
         }
     }
 
@@ -185,8 +185,23 @@ static constexpr auto kAtlasRecentlyUsedCount = 128;
 DrawAtlas::ErrorCode DrawAtlas::addRect(Recorder* recorder,
                                         int width, int height,
                                         AtlasLocator* atlasLocator) {
-    if (width > fPlotWidth || height > fPlotHeight) {
+    if (width > fPlotWidth || height > fPlotHeight || width < 0 || height < 0) {
         return ErrorCode::kError;
+    }
+
+    // We permit zero-sized rects to allow inverse fills in the PathAtlases to work,
+    // but we don't want to enter them in the Rectanizer. So we handle this special case here.
+    // For text this should be caught at a higher level, but if not the only end result
+    // will be rendering a degenerate quad.
+    if (width == 0 || height == 0) {
+        if (fNumActivePages == 0) {
+            // Make sure we have a Page for the AtlasLocator to refer to
+            this->activateNewPage(recorder);
+        }
+        atlasLocator->updateRect(skgpu::IRect16::MakeXYWH(0, 0, 0, 0));
+        // Use the MRU Plot from the first Page
+        atlasLocator->updatePlotLocator(fPages[0].fPlotList.head()->plotLocator());
+        return ErrorCode::kSucceeded;
     }
 
     // Look through each page to see if we can upload without having to flush
@@ -211,9 +226,7 @@ DrawAtlas::ErrorCode DrawAtlas::addRect(Recorder* recorder,
                 this->processEvictionAndResetRects(plot);
                 SkDEBUGCODE(bool verify = )plot->addRect(width, height, atlasLocator);
                 SkASSERT(verify);
-                if (!this->updatePlot(plot, atlasLocator)) {
-                    return ErrorCode::kError;
-                }
+                this->updatePlot(plot, atlasLocator);
                 return ErrorCode::kSucceeded;
             }
         }
