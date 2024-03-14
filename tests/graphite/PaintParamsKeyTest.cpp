@@ -19,6 +19,7 @@
 #include "include/core/SkVertices.h"
 #include "include/effects/SkColorMatrix.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/effects/SkPerlinNoiseShader.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/Image.h"
 #include "include/gpu/graphite/Recorder.h"
@@ -65,11 +66,13 @@ enum class ShaderType {
     kNone,
     kBlend,
     kColorFilter,
+    kCoordClamp,
     kConicalGradient,
     kEmpty,
     kImage,
     kLinearGradient,
     kLocalMatrix,
+    kPerlinNoise,
     kRadialGradient,
     kSolidColor,
     kSweepGradient,
@@ -242,9 +245,46 @@ sk_sp<SkImage> make_image(SkRandom* rand, Recorder* recorder) {
 }
 
 //--------------------------------------------------------------------------------------------------
+std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_coord_clamp_shader(SkRandom* rand,
+                                                                              Recorder* recorder) {
+    auto [s, o] = create_random_shader(rand, recorder);
+    SkASSERT(!s == !o);
+
+    if (!s) {
+        return { nullptr, nullptr };
+    }
+
+    constexpr SkRect kSubset{0, 0, 256, 256}; // this is somewhat arbitrary but we need some subset
+    sk_sp<SkShader> ccs = SkShaders::CoordClamp(std::move(s), kSubset);
+    sk_sp<PrecompileShader> cco = PrecompileShaders::CoordClamp({ std::move(o) });
+
+    return { ccs, cco };
+}
+
 std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_empty_shader(SkRandom* /* rand */) {
     sk_sp<SkShader> s = SkShaders::Empty();
     sk_sp<PrecompileShader> o = PrecompileShaders::Empty();
+
+    return { s, o };
+}
+
+std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_perlin_noise_shader(SkRandom* rand) {
+    sk_sp<SkShader> s;
+    sk_sp<PrecompileShader> o;
+
+    if (rand->nextBool()) {
+        s = SkShaders::MakeFractalNoise(/* baseFrequencyX= */ 0.3f,
+                                        /* baseFrequencyY= */ 0.3f,
+                                        /* numOctaves= */ 2,
+                                        /* seed= */ 4);
+        o = PrecompileShaders::MakeFractalNoise();
+    } else {
+        s = SkShaders::MakeTurbulence(/* baseFrequencyX= */ 0.3f,
+                                      /* baseFrequencyY= */ 0.3f,
+                                      /* numOctaves= */ 2,
+                                      /* seed= */ 4);
+        o = PrecompileShaders::MakeTurbulence();
+    }
 
     return { s, o };
 }
@@ -383,6 +423,8 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>>  create_shader(SkRandom* ran
             return create_blend_shader(rand, recorder);
         case ShaderType::kColorFilter:
             return create_colorfilter_shader(rand, recorder);
+        case ShaderType::kCoordClamp:
+            return create_coord_clamp_shader(rand, recorder);
         case ShaderType::kConicalGradient:
             return create_gradient_shader(rand, SkShaderBase::GradientType::kConical);
         case ShaderType::kEmpty:
@@ -393,6 +435,8 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>>  create_shader(SkRandom* ran
             return create_gradient_shader(rand, SkShaderBase::GradientType::kLinear);
         case ShaderType::kLocalMatrix:
             return create_localmatrix_shader(rand, recorder);
+        case ShaderType::kPerlinNoise:
+            return create_perlin_noise_shader(rand);
         case ShaderType::kRadialGradient:
             return create_gradient_shader(rand, SkShaderBase::GradientType::kRadial);
         case ShaderType::kSolidColor:
@@ -925,10 +969,12 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
 #if EXPANDED_SET
             ShaderType::kNone,
             ShaderType::kColorFilter,
+            ShaderType::kCoordClamp,
             ShaderType::kConicalGradient,
             ShaderType::kEmpty,
             ShaderType::kLinearGradient,
             ShaderType::kLocalMatrix,
+            ShaderType::kPerlinNoise,
             ShaderType::kSweepGradient,
 #endif
     };

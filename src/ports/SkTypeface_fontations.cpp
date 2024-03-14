@@ -634,6 +634,57 @@ std::unique_ptr<SkScalerContext> SkTypeface_Fontations::onCreateScalerContext(
             sk_ref_sp(const_cast<SkTypeface_Fontations*>(this)), effects, desc);
 }
 
+std::unique_ptr<SkAdvancedTypefaceMetrics> SkTypeface_Fontations::onGetAdvancedMetrics() const {
+    std::unique_ptr<SkAdvancedTypefaceMetrics> info(new SkAdvancedTypefaceMetrics);
+
+    if (!fontations_ffi::is_embeddable(*fBridgeFontRef)) {
+        info->fFlags |= SkAdvancedTypefaceMetrics::kNotEmbeddable_FontFlag;
+    }
+
+    if (!fontations_ffi::is_subsettable(*fBridgeFontRef)) {
+        info->fFlags |= SkAdvancedTypefaceMetrics::kNotSubsettable_FontFlag;
+    }
+
+    if (fontations_ffi::table_data(
+                *fBridgeFontRef, SkSetFourByteTag('f', 'v', 'a', 'r'), 0, rust::Slice<uint8_t>())) {
+        info->fFlags |= SkAdvancedTypefaceMetrics::kVariable_FontFlag;
+    }
+
+    // Metrics information.
+    fontations_ffi::Metrics metrics =
+            fontations_ffi::get_unscaled_metrics(*fBridgeFontRef, *fBridgeNormalizedCoords);
+    info->fAscent = metrics.ascent;
+    info->fDescent = metrics.descent;
+    info->fCapHeight = metrics.cap_height;
+
+    info->fBBox = SkIRect::MakeLTRB((int32_t)metrics.x_min,
+                                    (int32_t)metrics.top,
+                                    (int32_t)metrics.x_max,
+                                    (int32_t)metrics.bottom);
+
+    // Style information.
+    if (fontations_ffi::is_fixed_pitch(*fBridgeFontRef)) {
+        info->fStyle |= SkAdvancedTypefaceMetrics::kFixedPitch_Style;
+    }
+
+    fontations_ffi::BridgeFontStyle fontStyle;
+    if (fontations_ffi::get_font_style(*fBridgeFontRef, fontStyle)) {
+        if (fontStyle.slant == SkFontStyle::Slant::kItalic_Slant) {
+            info->fStyle |= SkAdvancedTypefaceMetrics::kItalic_Style;
+        }
+    }
+
+    if (fontations_ffi::is_serif_style(*fBridgeFontRef)) {
+        info->fStyle |= SkAdvancedTypefaceMetrics::kSerif_Style;
+    } else if (fontations_ffi::is_script_style(*fBridgeFontRef)) {
+        info->fStyle |= SkAdvancedTypefaceMetrics::kScript_Style;
+    }
+
+    info->fItalicAngle = fontations_ffi::italic_angle(*fBridgeFontRef);
+
+    return info;
+}
+
 void SkTypeface_Fontations::onGetFontDescriptor(SkFontDescriptor* desc, bool* serialize) const {
     SkString familyName;
     onGetFamilyName(&familyName);
