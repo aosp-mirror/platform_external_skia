@@ -2719,7 +2719,7 @@ void SkCanvas::onDrawGlyphRunList(const sktext::GlyphRunList& glyphRunList, cons
     // filter layer.
     auto layer = this->aboutToDraw(paint, &bounds, PredrawFlags::kSkipMaskFilterAutoLayer);
     if (layer) {
-        this->topDevice()->drawGlyphRunList(this, glyphRunList, paint, layer->paint());
+        this->topDevice()->drawGlyphRunList(this, glyphRunList, layer->paint());
     }
 }
 
@@ -2730,9 +2730,8 @@ sk_sp<Slug> SkCanvas::convertBlobToSlug(
     return this->onConvertGlyphRunListToSlug(glyphRunList, paint);
 }
 
-sk_sp<Slug>
-SkCanvas::onConvertGlyphRunListToSlug(
-        const sktext::GlyphRunList& glyphRunList, const SkPaint& paint) {
+sk_sp<Slug> SkCanvas::onConvertGlyphRunListToSlug(const sktext::GlyphRunList& glyphRunList,
+                                                  const SkPaint& paint) {
     SkRect bounds = glyphRunList.sourceBoundsWithOrigin();
     if (bounds.isEmpty() || !bounds.isFinite() || paint.nothingToDraw()) {
         return nullptr;
@@ -2740,26 +2739,25 @@ SkCanvas::onConvertGlyphRunListToSlug(
     // See comment in onDrawGlyphRunList()
     auto layer = this->aboutToDraw(paint, &bounds, PredrawFlags::kSkipMaskFilterAutoLayer);
     if (layer) {
-        return this->topDevice()->convertGlyphRunListToSlug(glyphRunList, paint, layer->paint());
+        return this->topDevice()->convertGlyphRunListToSlug(glyphRunList, layer->paint());
     }
     return nullptr;
 }
 
-void SkCanvas::drawSlug(const Slug* slug) {
+void SkCanvas::drawSlug(const Slug* slug, const SkPaint& paint) {
     TRACE_EVENT0("skia", TRACE_FUNC);
     if (slug) {
-        this->onDrawSlug(slug);
+        this->onDrawSlug(slug, paint);
     }
 }
 
-void SkCanvas::onDrawSlug(const Slug* slug) {
+void SkCanvas::onDrawSlug(const Slug* slug, const SkPaint& paint) {
     SkRect bounds = slug->sourceBoundsWithOrigin();
-    if (this->internalQuickReject(bounds, slug->initialPaint())) {
+    if (this->internalQuickReject(bounds, paint)) {
         return;
     }
     // See comment in onDrawGlyphRunList()
-    auto layer = this->aboutToDraw(slug->initialPaint(), &bounds,
-                                   PredrawFlags::kSkipMaskFilterAutoLayer);
+    auto layer = this->aboutToDraw(paint, &bounds, PredrawFlags::kSkipMaskFilterAutoLayer);
     if (layer) {
         this->topDevice()->drawSlug(this, slug, layer->paint());
     }
