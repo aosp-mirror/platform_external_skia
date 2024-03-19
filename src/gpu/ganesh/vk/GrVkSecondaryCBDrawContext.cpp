@@ -7,21 +7,18 @@
 
 #include "include/private/chromium/GrVkSecondaryCBDrawContext.h"
 
+#include "include/core/SkDeferredDisplayList.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkSurfaceCharacterization.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "include/gpu/vk/GrVkTypes.h"
-#include "include/private/chromium/GrDeferredDisplayList.h"
-#include "include/private/chromium/GrSurfaceCharacterization.h"
 #include "src/core/SkSurfacePriv.h"
 #include "src/gpu/ganesh/GrContextThreadSafeProxyPriv.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrProxyProvider.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
-#include "src/gpu/ganesh/GrRenderTarget.h"
 #include "src/gpu/ganesh/GrRenderTargetProxy.h"
-#include "src/gpu/ganesh/GrResourceProvider.h"
 #include "src/gpu/ganesh/GrSurfaceProxyView.h"
 
 sk_sp<GrVkSecondaryCBDrawContext> GrVkSecondaryCBDrawContext::Make(GrRecordingContext* rContext,
@@ -36,40 +33,9 @@ sk_sp<GrVkSecondaryCBDrawContext> GrVkSecondaryCBDrawContext::Make(GrRecordingCo
         return nullptr;
     }
 
-
-    GrProxyProvider* gpp = rContext->priv().proxyProvider();
-    if (gpp->isAbandoned()) {
-        return nullptr;
-    }
-
-    GrResourceProvider* resourceProvider = gpp->resourceProvider();
-    if (!resourceProvider) {
-        return nullptr;
-    }
-
-    sk_sp<GrRenderTarget> rt = resourceProvider->wrapVulkanSecondaryCBAsRenderTarget(imageInfo,
-                                                                                     vkInfo);
-    if (!rt) {
-        return nullptr;
-    }
-
-    SkASSERT(!rt->asTexture());  // A GrRenderTarget that's not textureable
-    SkASSERT(!rt->getUniqueKey().isValid());
-    // This proxy should be unbudgeted because we're just wrapping an external resource
-    SkASSERT(GrBudgetedType::kBudgeted != rt->resourcePriv().budgetedType());
-
-    GrColorType colorType = SkColorTypeToGrColorType(imageInfo.colorType());
-
-    if (!gpp->caps()->isFormatAsColorTypeRenderable(
-            colorType, GrBackendFormats::MakeVk(vkInfo.fFormat), /*sampleCount=*/1)) {
-        return nullptr;
-    }
-
-    sk_sp<GrRenderTargetProxy> proxy(
-            new GrRenderTargetProxy(std::move(rt),
-                                    GrSurfaceProxy::UseAllocator::kNo,
-                                    GrRenderTargetProxy::WrapsVkSecondaryCB::kYes));
-
+    sk_sp<GrSurfaceProxy> proxy(
+            rContext->priv().proxyProvider()->wrapVulkanSecondaryCBAsRenderTarget(imageInfo,
+                                                                                  vkInfo));
     if (!proxy) {
         return nullptr;
     }
@@ -81,7 +47,7 @@ sk_sp<GrVkSecondaryCBDrawContext> GrVkSecondaryCBDrawContext::Make(GrRecordingCo
                                                 imageInfo.refColorSpace(),
                                                 kTopLeft_GrSurfaceOrigin,
                                                 SkSurfacePropsCopyOrDefault(props),
-                                                skgpu::ganesh::Device::InitContents::kUninit);
+                                                skgpu::v1::Device::InitContents::kUninit);
     if (!device) {
         return nullptr;
     }
@@ -90,9 +56,10 @@ sk_sp<GrVkSecondaryCBDrawContext> GrVkSecondaryCBDrawContext::Make(GrRecordingCo
                                                                             props));
 }
 
-GrVkSecondaryCBDrawContext::GrVkSecondaryCBDrawContext(sk_sp<skgpu::ganesh::Device> device,
+GrVkSecondaryCBDrawContext::GrVkSecondaryCBDrawContext(sk_sp<skgpu::v1::Device> device,
                                                        const SkSurfaceProps* props)
-        : fDevice(std::move(device)), fProps(SkSurfacePropsCopyOrDefault(props)) {}
+    : fDevice(device)
+    , fProps(SkSurfacePropsCopyOrDefault(props)) {}
 
 GrVkSecondaryCBDrawContext::~GrVkSecondaryCBDrawContext() {
     SkASSERT(!fDevice);
@@ -126,7 +93,7 @@ void GrVkSecondaryCBDrawContext::releaseResources() {
     fDevice.reset();
 }
 
-bool GrVkSecondaryCBDrawContext::characterize(GrSurfaceCharacterization* characterization) const {
+bool GrVkSecondaryCBDrawContext::characterize(SkSurfaceCharacterization* characterization) const {
     auto direct = fDevice->recordingContext()->asDirectContext();
     if (!direct) {
         return false;
@@ -153,11 +120,11 @@ bool GrVkSecondaryCBDrawContext::characterize(GrSurfaceCharacterization* charact
                           format,
                           readSurfaceView.origin(),
                           numSamples,
-                          GrSurfaceCharacterization::Textureable(false),
-                          skgpu::Mipmapped::kNo,
-                          GrSurfaceCharacterization::UsesGLFBO0(false),
-                          GrSurfaceCharacterization::VkRTSupportsInputAttachment(false),
-                          GrSurfaceCharacterization::VulkanSecondaryCBCompatible(true),
+                          SkSurfaceCharacterization::Textureable(false),
+                          SkSurfaceCharacterization::MipMapped(false),
+                          SkSurfaceCharacterization::UsesGLFBO0(false),
+                          SkSurfaceCharacterization::VkRTSupportsInputAttachment(false),
+                          SkSurfaceCharacterization::VulkanSecondaryCBCompatible(true),
                           isProtected,
                           this->props());
 
@@ -165,7 +132,7 @@ bool GrVkSecondaryCBDrawContext::characterize(GrSurfaceCharacterization* charact
 }
 
 bool GrVkSecondaryCBDrawContext::isCompatible(
-        const GrSurfaceCharacterization& characterization) const {
+        const SkSurfaceCharacterization& characterization) const {
 
     auto dContext = fDevice->recordingContext()->asDirectContext();
     if (!dContext) {
@@ -219,9 +186,9 @@ bool GrVkSecondaryCBDrawContext::isCompatible(
 }
 
 #ifndef SK_DDL_IS_UNIQUE_POINTER
-bool GrVkSecondaryCBDrawContext::draw(sk_sp<const GrDeferredDisplayList> ddl) {
+bool GrVkSecondaryCBDrawContext::draw(sk_sp<const SkDeferredDisplayList> ddl) {
 #else
-bool GrVkSecondaryCBDrawContext::draw(const GrDeferredDisplayList* ddl) {
+bool GrVkSecondaryCBDrawContext::draw(const SkDeferredDisplayList* ddl) {
 #endif
     if (!ddl || !this->isCompatible(ddl->characterization())) {
         return false;
@@ -234,6 +201,6 @@ bool GrVkSecondaryCBDrawContext::draw(const GrDeferredDisplayList* ddl) {
 
     GrSurfaceProxyView readSurfaceView = fDevice->readSurfaceView();
 
-    direct->priv().createDDLTask(std::move(ddl), readSurfaceView.asRenderTargetProxyRef());
+    direct->priv().createDDLTask(std::move(ddl), readSurfaceView.asRenderTargetProxyRef(), {0, 0});
     return true;
 }

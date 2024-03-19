@@ -1,28 +1,16 @@
 /*
- * Copyright 2018 Google LLC
+ * Copyright 2018 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
-#include "src/core/SkTypeface_remote.h"
-
-#include "include/core/SkDrawable.h"
-#include "include/core/SkFontMetrics.h"
-#include "include/private/base/SkDebug.h"
-#include "include/private/base/SkMalloc.h"
+#include "include/core/SkPaint.h"
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
-#include "src/core/SkGlyph.h"
-#include "src/core/SkReadBuffer.h"
+#include "src/core/SkStrike.h"
+#include "src/core/SkStrikeCache.h"
 #include "src/core/SkTraceEvent.h"
-#include "src/core/SkWriteBuffer.h"
-
-#include <optional>
-#include <utility>
-
-class SkArenaAlloc;
-class SkDescriptor;
-class SkPath;
+#include "src/core/SkTypeface_remote.h"
 
 SkScalerContextProxy::SkScalerContextProxy(sk_sp<SkTypeface> tf,
                                            const SkScalerContextEffects& effects,
@@ -31,21 +19,24 @@ SkScalerContextProxy::SkScalerContextProxy(sk_sp<SkTypeface> tf,
         : SkScalerContext{std::move(tf), effects, desc}
         , fDiscardableManager{std::move(manager)} {}
 
-SkScalerContext::GlyphMetrics SkScalerContextProxy::generateMetrics(const SkGlyph& glyph,
-                                                                    SkArenaAlloc*) {
+bool SkScalerContextProxy::generateAdvance(SkGlyph* glyph) {
+    return false;
+}
+
+void SkScalerContextProxy::generateMetrics(SkGlyph* glyph, SkArenaAlloc*) {
     TRACE_EVENT1("skia", "generateMetrics", "rec", TRACE_STR_COPY(this->getRec().dump().c_str()));
     if (this->getProxyTypeface()->isLogging()) {
         SkDebugf("GlyphCacheMiss generateMetrics looking for glyph: %x\n  generateMetrics: %s\n",
-                 glyph.getPackedID().value(), this->getRec().dump().c_str());
+                 glyph->getPackedID().value(), this->getRec().dump().c_str());
     }
 
+    glyph->fMaskFormat = fRec.fMaskFormat;
+    glyph->zeroMetrics();
     fDiscardableManager->notifyCacheMiss(
-                                         SkStrikeClient::CacheMissType::kGlyphMetrics, fRec.fTextSize);
-
-    return {glyph.maskFormat()};
+            SkStrikeClient::CacheMissType::kGlyphMetrics, fRec.fTextSize);
 }
 
-void SkScalerContextProxy::generateImage(const SkGlyph& glyph, void*) {
+void SkScalerContextProxy::generateImage(const SkGlyph& glyph) {
     TRACE_EVENT1("skia", "generateImage", "rec", TRACE_STR_COPY(this->getRec().dump().c_str()));
     if (this->getProxyTypeface()->isLogging()) {
         SkDebugf("GlyphCacheMiss generateImage: %s\n", this->getRec().dump().c_str());
@@ -91,72 +82,6 @@ void SkScalerContextProxy::generateFontMetrics(SkFontMetrics* metrics) {
             SkStrikeClient::CacheMissType::kFontMetrics, fRec.fTextSize);
     sk_bzero(metrics, sizeof(*metrics));
 }
-
-std::optional<SkTypefaceProxyPrototype>
-SkTypefaceProxyPrototype::MakeFromBuffer(SkReadBuffer& buffer) {
-    SkASSERT(buffer.isValid());
-    const SkTypefaceID typefaceID = buffer.readUInt();
-    const int glyphCount = buffer.readInt();
-    const int32_t styleValue = buffer.read32();
-    const bool isFixedPitch = buffer.readBool();
-    const bool glyphMaskNeedsCurrentColor = buffer.readBool();
-
-    if (buffer.isValid()) {
-        return SkTypefaceProxyPrototype{
-            typefaceID, glyphCount, styleValue, isFixedPitch, glyphMaskNeedsCurrentColor};
-    }
-
-    return std::nullopt;
-}
-
-SkTypefaceProxyPrototype::SkTypefaceProxyPrototype(const SkTypeface& typeface)
-        : fServerTypefaceID{typeface.uniqueID()}
-        , fGlyphCount{typeface.countGlyphs()}
-        , fStyleValue{typeface.fontStyle().fValue}
-        , fIsFixedPitch{typeface.isFixedPitch()}
-        , fGlyphMaskNeedsCurrentColor{typeface.glyphMaskNeedsCurrentColor()} {}
-
-SkTypefaceProxyPrototype::SkTypefaceProxyPrototype(SkTypefaceID typefaceID, int glyphCount,
-                                                   int32_t styleValue, bool isFixedPitch,
-                                                   bool glyphMaskNeedsCurrentColor)
-        : fServerTypefaceID {typefaceID}
-        , fGlyphCount{glyphCount}
-        , fStyleValue{styleValue}
-        , fIsFixedPitch{isFixedPitch}
-        , fGlyphMaskNeedsCurrentColor{glyphMaskNeedsCurrentColor} {}
-
-void SkTypefaceProxyPrototype::flatten(SkWriteBuffer& buffer) const {
-    buffer.writeUInt(fServerTypefaceID);
-    buffer.writeInt(fGlyphCount);
-    buffer.write32(fStyleValue);
-    buffer.writeBool(fIsFixedPitch);
-    buffer.writeBool(fGlyphMaskNeedsCurrentColor);
-}
-
-
-SkTypefaceProxy::SkTypefaceProxy(const SkTypefaceProxyPrototype& prototype,
-                                 sk_sp<SkStrikeClient::DiscardableHandleManager> manager,
-                                 bool isLogging)
-        : SkTypeface{prototype.style(), prototype.fIsFixedPitch}
-        , fTypefaceID{prototype.fServerTypefaceID}
-        , fGlyphCount{prototype.fGlyphCount}
-        , fIsLogging{isLogging}
-        , fGlyphMaskNeedsCurrentColor{prototype.fGlyphMaskNeedsCurrentColor}
-        , fDiscardableManager{std::move(manager)} {}
-
-SkTypefaceProxy::SkTypefaceProxy(SkTypefaceID typefaceID,
-                                 int glyphCount,
-                                 const SkFontStyle& style,
-                                 bool isFixedPitch,
-                                 bool glyphMaskNeedsCurrentColor,
-                                 sk_sp<SkStrikeClient::DiscardableHandleManager> manager,
-                                 bool isLogging)
-        : SkTypeface{style, isFixedPitch}
-        , fTypefaceID{typefaceID}
-        , fGlyphCount{glyphCount}
-        , fIsLogging{isLogging}
-        , fGlyphMaskNeedsCurrentColor(glyphMaskNeedsCurrentColor)
-        , fDiscardableManager{std::move(manager)} {}
 
 SkTypefaceProxy* SkScalerContextProxy::getProxyTypeface() const {
     return (SkTypefaceProxy*)this->getTypeface();

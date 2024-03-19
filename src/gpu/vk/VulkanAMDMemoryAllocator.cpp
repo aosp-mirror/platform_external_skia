@@ -20,7 +20,8 @@ sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(
          VkDevice device,
          uint32_t physicalDeviceVersion,
          const VulkanExtensions* extensions,
-         const VulkanInterface* interface,
+         sk_sp<const VulkanInterface> interface,
+         bool mustUseCoherentHostVisibleMemory,
          bool threadSafe) {
     return nullptr;
 }
@@ -32,7 +33,8 @@ sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(
         VkDevice device,
         uint32_t physicalDeviceVersion,
         const VulkanExtensions* extensions,
-        const VulkanInterface* interface,
+        sk_sp<const VulkanInterface> interface,
+        bool mustUseCoherentHostVisibleMemory,
         bool threadSafe) {
 #define SKGPU_COPY_FUNCTION(NAME) functions.vk##NAME = interface->fFunctions.f##NAME
 #define SKGPU_COPY_FUNCTION_KHR(NAME) functions.vk##NAME##KHR = interface->fFunctions.f##NAME
@@ -82,11 +84,11 @@ sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(
 
     info.physicalDevice = physicalDevice;
     info.device = device;
-    // The old value was found to result in roughly 20% wasted space in Chromium. Reducing to only
-    // 64KB cut down the wasted space to about 1%, with no perf regressions and some perf
-    // improvements. The AMD allocator will start making blocks at 1/8 the max size set here and
-    // builds up as needed until capping at this max size.
-    info.preferredLargeHeapBlockSize = 64*1024;
+    // 4MB was picked for the size here by looking at memory usage of Android apps and runs of DM.
+    // It seems to be a good compromise of not wasting unused allocated space and not making too
+    // many small allocations. The AMD allocator will start making blocks at 1/8 the max size and
+    // builds up block size as needed before capping at the max set here.
+    info.preferredLargeHeapBlockSize = 4*1024*1024;
     info.pAllocationCallbacks = nullptr;
     info.pDeviceMemoryCallbacks = nullptr;
     info.pHeapSizeLimit = nullptr;
@@ -100,11 +102,16 @@ sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(
     VmaAllocator allocator;
     vmaCreateAllocator(&info, &allocator);
 
-    return sk_sp<VulkanAMDMemoryAllocator>(new VulkanAMDMemoryAllocator(allocator));
+    return sk_sp<VulkanAMDMemoryAllocator>(new VulkanAMDMemoryAllocator(
+            allocator, std::move(interface), mustUseCoherentHostVisibleMemory));
 }
 
-VulkanAMDMemoryAllocator::VulkanAMDMemoryAllocator(VmaAllocator allocator)
-        : fAllocator(allocator) {}
+VulkanAMDMemoryAllocator::VulkanAMDMemoryAllocator(VmaAllocator allocator,
+                                                   sk_sp<const VulkanInterface> interface,
+                                                   bool mustUseCoherentHostVisibleMemory)
+        : fAllocator(allocator)
+        , fInterface(std::move(interface))
+        , fMustUseCoherentHostVisibleMemory(mustUseCoherentHostVisibleMemory) {}
 
 VulkanAMDMemoryAllocator::~VulkanAMDMemoryAllocator() {
     vmaDestroyAllocator(fAllocator);
@@ -187,6 +194,10 @@ VkResult VulkanAMDMemoryAllocator::allocateBufferMemory(VkBuffer buffer,
             break;
     }
 
+    if (fMustUseCoherentHostVisibleMemory &&
+        (info.requiredFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+        info.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    }
     if (kDedicatedAllocation_AllocationPropertyFlag & allocationPropertyFlags) {
         info.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
     }
@@ -211,13 +222,13 @@ VkResult VulkanAMDMemoryAllocator::allocateBufferMemory(VkBuffer buffer,
 
 void VulkanAMDMemoryAllocator::freeMemory(const VulkanBackendMemory& memoryHandle) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-    const VmaAllocation allocation = (VmaAllocation)memoryHandle;
+    const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
     vmaFreeMemory(fAllocator, allocation);
 }
 
 void VulkanAMDMemoryAllocator::getAllocInfo(const VulkanBackendMemory& memoryHandle,
                                             VulkanAlloc* alloc) const {
-    const VmaAllocation allocation = (VmaAllocation)memoryHandle;
+    const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
     VmaAllocationInfo vmaInfo;
     vmaGetAllocationInfo(fAllocator, allocation, &vmaInfo);
 
@@ -245,27 +256,27 @@ void VulkanAMDMemoryAllocator::getAllocInfo(const VulkanBackendMemory& memoryHan
 VkResult VulkanAMDMemoryAllocator::mapMemory(const VulkanBackendMemory& memoryHandle,
                                              void** data) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-    const VmaAllocation allocation = (VmaAllocation)memoryHandle;
+    const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
     return vmaMapMemory(fAllocator, allocation, data);
 }
 
 void VulkanAMDMemoryAllocator::unmapMemory(const VulkanBackendMemory& memoryHandle) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-    const VmaAllocation allocation = (VmaAllocation)memoryHandle;
+    const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
     vmaUnmapMemory(fAllocator, allocation);
 }
 
 VkResult VulkanAMDMemoryAllocator::flushMemory(const VulkanBackendMemory& memoryHandle,
                                                VkDeviceSize offset, VkDeviceSize size) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-    const VmaAllocation allocation = (VmaAllocation)memoryHandle;
+    const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
     return vmaFlushAllocation(fAllocator, allocation, offset, size);
 }
 
 VkResult VulkanAMDMemoryAllocator::invalidateMemory(const VulkanBackendMemory& memoryHandle,
                                                     VkDeviceSize offset, VkDeviceSize size) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-    const VmaAllocation allocation = (VmaAllocation)memoryHandle;
+    const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
     return vmaInvalidateAllocation(fAllocator, allocation, offset, size);
 }
 

@@ -118,9 +118,13 @@ public:
     TableColorFilterGM() {}
 
 protected:
-    SkString getName() const override { return SkString("tablecolorfilter"); }
+    SkString onShortName() override {
+        return SkString("tablecolorfilter");
+    }
 
-    SkISize getISize() override { return {700, 1650}; }
+    SkISize onISize() override {
+        return {700, 1650};
+    }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->drawColor(0xFFDDDDDD);
@@ -221,9 +225,9 @@ public:
         : fColors(colors), fModes(modes), fName(name) {}
 
 private:
-    SkString getName() const override { return SkString(fName); }
+    SkString onShortName() override { return SkString(fName); }
 
-    SkISize getISize() override { return {790, 790}; }
+    SkISize onISize() override { return {790, 790}; }
 
     void onDraw(SkCanvas* canvas) override {
         SkBitmap bm;

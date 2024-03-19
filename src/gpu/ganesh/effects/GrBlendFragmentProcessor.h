@@ -8,12 +8,12 @@
 #ifndef GrBlendFragmentProcessor_DEFINED
 #define GrBlendFragmentProcessor_DEFINED
 
-#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkRefCnt.h"
 
 #include <memory>
-#include <utility>
 
-enum class SkBlendMode;
+class GrFragmentProcessor;
 
 namespace GrBlendFragmentProcessor {
 

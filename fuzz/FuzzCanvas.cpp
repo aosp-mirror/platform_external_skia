@@ -7,9 +7,7 @@
 
 #include "fuzz/Fuzz.h"
 #include "fuzz/FuzzCommon.h"
-#include "include/codec/SkPngDecoder.h"
 #include "include/core/SkBitmap.h"
-#include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkFontMgr.h"
@@ -35,13 +33,10 @@
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkLumaColorFilter.h"
 #include "include/effects/SkPerlinNoiseShader.h"
-#include "include/encode/SkPngEncoder.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTo.h"
 #include "include/svg/SkSVGCanvas.h"
 #include "include/utils/SkNullCanvas.h"
 #include "src/base/SkUTF.h"
-#include "src/core/SkFontPriv.h"
 #include "src/core/SkOSFile.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkPicturePriv.h"
@@ -50,7 +45,6 @@
 #include "tools/UrlDataManager.h"
 #include "tools/debugger/DebugCanvas.h"
 #include "tools/flags/CommandLineFlags.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #if defined(SK_GANESH)
 #include "include/gpu/GrDirectContext.h"
@@ -332,17 +326,13 @@ static sk_sp<SkShader> make_fuzz_shader(Fuzz* fuzz, int depth) {
             }
             fuzz->nextRange(&numOctaves, 2, 7);
             if (turbulence) {
-                return SkShaders::MakeTurbulence(baseFrequencyX,
-                                                 baseFrequencyY,
-                                                 numOctaves,
-                                                 seed,
-                                                 useTileSize ? &tileSize : nullptr);
+                return SkPerlinNoiseShader::MakeTurbulence(baseFrequencyX, baseFrequencyY,
+                                                           numOctaves, seed,
+                                                           useTileSize ? &tileSize : nullptr);
             } else {
-                return SkShaders::MakeFractalNoise(baseFrequencyX,
-                                                   baseFrequencyY,
-                                                   numOctaves,
-                                                   seed,
-                                                   useTileSize ? &tileSize : nullptr);
+                return SkPerlinNoiseShader::MakeFractalNoise(baseFrequencyX, baseFrequencyY,
+                                                             numOctaves, seed,
+                                                             useTileSize ? &tileSize : nullptr);
             }
         }
         default:
@@ -446,11 +436,12 @@ static sk_sp<SkTypeface> make_fuzz_typeface(Fuzz* fuzz) {
     if (make_fuzz_t<bool>(fuzz)) {
         return nullptr;
     }
-    sk_sp<SkFontMgr> mgr = ToolUtils::TestFontMgr();
-    int familyCount = mgr->countFamilies();
+    auto fontMugger = SkFontMgr::RefDefault();
+    SkASSERT(fontMugger);
+    int familyCount = fontMugger->countFamilies();
     int i, j;
     fuzz->nextRange(&i, 0, familyCount - 1);
-    sk_sp<SkFontStyleSet> family(mgr->createStyleSet(i));
+    sk_sp<SkFontStyleSet> family(fontMugger->createStyleSet(i));
     int styleCount = family->count();
     fuzz->nextRange(&j, 0, styleCount - 1);
     return sk_sp<SkTypeface>(family->createTypeface(j));
@@ -539,7 +530,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
         return nullptr;
     }
     uint8_t imageFilterType;
-    fuzz->nextRange(&imageFilterType, 0, 22);
+    fuzz->nextRange(&imageFilterType, 0, 23);
     switch (imageFilterType) {
         case 0:
             return nullptr;
@@ -563,6 +554,19 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
             return SkImageFilters::MatrixTransform(matrix, sampling, std::move(input));
         }
         case 3: {
+            SkRegion region;
+            SkScalar innerMin, outerMax;
+            sk_sp<SkImageFilter> input = make_fuzz_imageFilter(fuzz, depth - 1);
+            bool useCropRect;
+            fuzz->next(&region, &innerMin, &outerMax, &useCropRect);
+            SkIRect cropRect;
+            if (useCropRect) {
+                fuzz->next(&cropRect);
+            }
+            return SkImageFilters::AlphaThreshold(region, innerMin, outerMax, std::move(input),
+                                                  useCropRect ? &cropRect : nullptr);
+        }
+        case 4: {
             float k1, k2, k3, k4;
             bool enforcePMColor;
             bool useCropRect;
@@ -577,7 +581,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
                                               std::move(background), std::move(foreground),
                                               useCropRect ? &cropRect : nullptr);
         }
-        case 4: {
+        case 5: {
             sk_sp<SkColorFilter> cf = make_fuzz_colorfilter(fuzz, depth - 1);
             sk_sp<SkImageFilter> input = make_fuzz_imageFilter(fuzz, depth - 1);
             bool useCropRect;
@@ -589,12 +593,12 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
             return SkImageFilters::ColorFilter(std::move(cf), std::move(input),
                                                useCropRect ? &cropRect : nullptr);
         }
-        case 5: {
+        case 6: {
             sk_sp<SkImageFilter> ifo = make_fuzz_imageFilter(fuzz, depth - 1);
             sk_sp<SkImageFilter> ifi = make_fuzz_imageFilter(fuzz, depth - 1);
             return SkImageFilters::Compose(std::move(ifo), std::move(ifi));
         }
-        case 6: {
+        case 7: {
             SkColorChannel xChannelSelector, yChannelSelector;
             fuzz->nextEnum(&xChannelSelector, SkColorChannel::kLastEnum);
             fuzz->nextEnum(&yChannelSelector, SkColorChannel::kLastEnum);
@@ -611,7 +615,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
                                                    std::move(displacement), std::move(color),
                                                    useCropRect ? &cropRect : nullptr);
         }
-        case 7: {
+        case 8: {
             SkScalar dx, dy, sigmaX, sigmaY;
             SkColor color;
             bool shadowOnly, useCropRect;
@@ -630,32 +634,30 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
                                                   useCropRect ? &cropRect : nullptr);
             }
         }
-        case 8:
-            return SkImageFilters::Image(make_fuzz_image(fuzz), SkCubicResampler::Mitchell());
-        case 9: {
+        case 9:
+            return SkImageFilters::Image(make_fuzz_image(fuzz));
+        case 10: {
             sk_sp<SkImage> image = make_fuzz_image(fuzz);
             SkRect srcRect, dstRect;
             fuzz->next(&srcRect, &dstRect);
             return SkImageFilters::Image(std::move(image), srcRect, dstRect, next_sampling(fuzz));
         }
-        case 10:
+        case 11:
             return make_fuzz_lighting_imagefilter(fuzz, depth - 1);
-        case 11: {
-            SkRect lensBounds;
-            SkScalar zoomAmount;
+        case 12: {
+            SkRect srcRect;
             SkScalar inset;
             bool useCropRect;
             SkIRect cropRect;
-            fuzz->next(&lensBounds, &zoomAmount, &inset, &useCropRect);
+            fuzz->next(&srcRect, &inset, &useCropRect);
             if (useCropRect) {
                 fuzz->next(&cropRect);
             }
             sk_sp<SkImageFilter> input = make_fuzz_imageFilter(fuzz, depth - 1);
-            const auto sampling = next_sampling(fuzz);
-            return SkImageFilters::Magnifier(lensBounds, zoomAmount, inset, sampling,
-                                             std::move(input), useCropRect ? &cropRect : nullptr);
+            return SkImageFilters::Magnifier(srcRect, inset, std::move(input),
+                                             useCropRect ? &cropRect : nullptr);
         }
-        case 12: {
+        case 13: {
             constexpr int kMaxKernelSize = 5;
             int32_t n, m;
             fuzz->nextRange(&n, 1, kMaxKernelSize);
@@ -679,7 +681,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
                     SkISize{n, m}, kernel, gain, bias, SkIPoint{offsetX, offsetY}, tileMode,
                     convolveAlpha, std::move(input), useCropRect ? &cropRect : nullptr);
         }
-        case 13: {
+        case 14: {
             sk_sp<SkImageFilter> first = make_fuzz_imageFilter(fuzz, depth - 1);
             sk_sp<SkImageFilter> second = make_fuzz_imageFilter(fuzz, depth - 1);
             bool useCropRect;
@@ -691,7 +693,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
             return SkImageFilters::Merge(std::move(first), std::move(second),
                                          useCropRect ? &cropRect : nullptr);
         }
-        case 14: {
+        case 15: {
             constexpr int kMaxCount = 4;
             sk_sp<SkImageFilter> ifs[kMaxCount];
             int count;
@@ -707,7 +709,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
             }
             return SkImageFilters::Merge(ifs, count, useCropRect ? &cropRect : nullptr);
         }
-        case 15: {
+        case 16: {
             int rx, ry;
             fuzz->next(&rx, &ry);
             bool useCropRect;
@@ -720,7 +722,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
             return SkImageFilters::Dilate(rx, ry, std::move(input),
                                           useCropRect ? &cropRect : nullptr);
         }
-        case 16: {
+        case 17: {
             int rx, ry;
             fuzz->next(&rx, &ry);
             bool useCropRect;
@@ -733,7 +735,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
             return SkImageFilters::Erode(rx, ry, std::move(input),
                                          useCropRect ? &cropRect : nullptr);
         }
-        case 17: {
+        case 18: {
             SkScalar dx, dy;
             fuzz->next(&dx, &dy);
             bool useCropRect;
@@ -746,23 +748,23 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
             return SkImageFilters::Offset(dx, dy, std::move(input),
                                           useCropRect ? &cropRect : nullptr);
         }
-        case 18: {
+        case 19: {
             sk_sp<SkPicture> picture = make_fuzz_picture(fuzz, depth - 1);
             return SkImageFilters::Picture(std::move(picture));
         }
-        case 19: {
+        case 20: {
             SkRect cropRect;
             fuzz->next(&cropRect);
             sk_sp<SkPicture> picture = make_fuzz_picture(fuzz, depth - 1);
             return SkImageFilters::Picture(std::move(picture), cropRect);
         }
-        case 20: {
+        case 21: {
             SkRect src, dst;
             fuzz->next(&src, &dst);
             sk_sp<SkImageFilter> input = make_fuzz_imageFilter(fuzz, depth - 1);
             return SkImageFilters::Tile(src, dst, std::move(input));
         }
-        case 21: {
+        case 22: {
             SkBlendMode blendMode;
             bool useCropRect;
             fuzz->next(&useCropRect);
@@ -776,7 +778,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
             return SkImageFilters::Blend(blendMode, std::move(bg), std::move(fg),
                                          useCropRect ? &cropRect : nullptr);
         }
-        case 22: {
+        case 23: {
             sk_sp<SkShader> shader = make_fuzz_shader(fuzz, depth - 1);
             bool useCropRect;
             fuzz->next(&useCropRect);
@@ -805,8 +807,8 @@ static sk_sp<SkImage> make_fuzz_image(Fuzz* fuzz) {
         data[i] = SkPreMultiplyColor(c);
     }
     (void)data.release();
-    return SkImages::RasterFromPixmap(
-            pixmap, [](const void* p, void*) { sk_free(const_cast<void*>(p)); }, nullptr);
+    return SkImage::MakeFromRaster(pixmap, [](const void* p, void*) { sk_free((void*)p); },
+                                   nullptr);
 }
 
 template <typename T>
@@ -867,7 +869,7 @@ constexpr int kMaxGlyphCount = 30;
 static SkTDArray<uint8_t> make_fuzz_text(Fuzz* fuzz, const SkFont& font, SkTextEncoding encoding) {
     SkTDArray<uint8_t> array;
     if (SkTextEncoding::kGlyphID == encoding) {
-        int glyphRange = font.getTypeface()->countGlyphs();
+        int glyphRange = font.getTypefaceOrDefault()->countGlyphs();
         if (glyphRange == 0) {
             // Some fuzzing environments have no fonts, so empty array is the best
             // we can do.
@@ -952,7 +954,7 @@ static sk_sp<SkTextBlob> make_fuzz_textblob(Fuzz* fuzz) {
     int8_t runCount;
     fuzz->nextRange(&runCount, (int8_t)1, (int8_t)8);
     while (runCount-- > 0) {
-        SkFont font = ToolUtils::DefaultFont();
+        SkFont font;
         SkTextEncoding encoding = fuzz_paint_text_encoding(fuzz);
         font.setEdging(make_fuzz_t<bool>(fuzz) ? SkFont::Edging::kAlias : SkFont::Edging::kAntiAlias);
         SkTDArray<uint8_t> text = make_fuzz_text(fuzz, font, encoding);
@@ -1004,16 +1006,12 @@ static void fuzz_canvas(Fuzz* fuzz, SkCanvas* canvas, int depth = 9) {
             return;
         }
         SkPaint paint;
-        SkFont font = ToolUtils::DefaultFont();
+        SkFont font;
         unsigned drawCommand;
         fuzz->nextRange(&drawCommand, 0, 62);
         switch (drawCommand) {
             case 0:
-#if defined(SK_GANESH)
-                if (auto dContext = GrAsDirectContext(canvas->recordingContext())) {
-                    dContext->flushAndSubmit();
-                }
-#endif
+                canvas->flush();
                 break;
             case 1:
                 canvas->save();
@@ -1513,8 +1511,7 @@ DEF_FUZZ(NullCanvas, fuzz) {
 constexpr SkISize kCanvasSize = {128, 160};
 
 DEF_FUZZ(RasterN32Canvas, fuzz) {
-    auto surface = SkSurfaces::Raster(
-            SkImageInfo::MakeN32Premul(kCanvasSize.width(), kCanvasSize.height()));
+    auto surface = SkSurface::MakeRasterN32Premul(kCanvasSize.width(), kCanvasSize.height());
     if (!surface || !surface->getCanvas()) { fuzz->signalBug(); }
     fuzz_canvas(fuzz, surface->getCanvas());
 }
@@ -1525,18 +1522,12 @@ DEF_FUZZ(RasterN32CanvasViaSerialization, fuzz) {
                                               SkIntToScalar(kCanvasSize.height())));
     sk_sp<SkPicture> pic(recorder.finishRecordingAsPicture());
     if (!pic) { fuzz->signalBug(); }
-    SkSerialProcs sProcs;
-    sProcs.fImageProc = [](SkImage* img, void*) -> sk_sp<SkData> {
-        return SkPngEncoder::Encode(nullptr, img, SkPngEncoder::Options{});
-    };
-    sk_sp<SkData> data = pic->serialize(&sProcs);
+    sk_sp<SkData> data = pic->serialize();
     if (!data) { fuzz->signalBug(); }
     SkReadBuffer rb(data->data(), data->size());
-    SkCodecs::Register(SkPngDecoder::Decoder());
     auto deserialized = SkPicturePriv::MakeFromBuffer(rb);
     if (!deserialized) { fuzz->signalBug(); }
-    auto surface = SkSurfaces::Raster(
-            SkImageInfo::MakeN32Premul(kCanvasSize.width(), kCanvasSize.height()));
+    auto surface = SkSurface::MakeRasterN32Premul(kCanvasSize.width(), kCanvasSize.height());
     SkASSERT(surface && surface->getCanvas());
     surface->getCanvas()->drawPicture(deserialized);
 }
@@ -1620,7 +1611,7 @@ DEF_FUZZ(SerializedImageFilter, fuzz) {
 #if defined(SK_GANESH)
 static void fuzz_ganesh(Fuzz* fuzz, GrDirectContext* context) {
     SkASSERT(context);
-    auto surface = SkSurfaces::RenderTarget(
+    auto surface = SkSurface::MakeRenderTarget(
             context,
             skgpu::Budgeted::kNo,
             SkImageInfo::Make(kCanvasSize, kRGBA_8888_SkColorType, kPremul_SkAlphaType));
@@ -1630,7 +1621,7 @@ static void fuzz_ganesh(Fuzz* fuzz, GrDirectContext* context) {
 
 DEF_FUZZ(MockGPUCanvas, fuzz) {
     sk_gpu_test::GrContextFactory f;
-    fuzz_ganesh(fuzz, f.get(skgpu::ContextType::kMock));
+    fuzz_ganesh(fuzz, f.get(sk_gpu_test::GrContextFactory::kMock_ContextType));
 }
 #endif
 
@@ -1651,9 +1642,9 @@ static void dump_GPU_info(GrDirectContext* context) {
 
 DEF_FUZZ(NativeGLCanvas, fuzz) {
     sk_gpu_test::GrContextFactory f;
-    auto context = f.get(skgpu::ContextType::kGL);
+    auto context = f.get(sk_gpu_test::GrContextFactory::kGL_ContextType);
     if (!context) {
-        context = f.get(skgpu::ContextType::kGLES);
+        context = f.get(sk_gpu_test::GrContextFactory::kGLES_ContextType);
     }
     if (FLAGS_gpuInfo) {
         dump_GPU_info(context);

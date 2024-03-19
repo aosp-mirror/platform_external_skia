@@ -18,8 +18,6 @@
 #include "include/private/base/SkTArray.h"
 #include "src/base/SkRandom.h"
 
-using namespace skia_private;
-
 namespace skiagm {
 
 // This GM tests a grab-bag of convex and concave polygons. They are triangles,
@@ -30,9 +28,12 @@ public:
     PolygonsGM() {}
 
 protected:
-    SkString getName() const override { return SkString("polygons"); }
 
-    SkISize getISize() override {
+    SkString onShortName() override {
+        return SkString("polygons");
+    }
+
+    SkISize onISize() override {
         int width = kNumPolygons * kCellSize + 40;
         int height = (kNumJoins * kNumStrokeWidths + kNumExtraStyles) * kCellSize + 40;
         return SkISize::Make(width, height);
@@ -165,7 +166,7 @@ private:
     inline static constexpr int kNumStrokeWidths = 3;
     inline static constexpr int kNumJoins = 3;
 
-    TArray<SkPath> fPolygons;
+    SkTArray<SkPath> fPolygons;
     using INHERITED = GM;
 };
 

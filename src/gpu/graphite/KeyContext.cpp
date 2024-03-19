@@ -7,28 +7,19 @@
 
 #include "src/gpu/graphite/KeyContext.h"
 
-#include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 
 namespace skgpu::graphite {
 
 KeyContext::KeyContext(skgpu::graphite::Recorder* recorder,
                        const SkM44& local2Dev,
-                       const SkColorInfo& dstColorInfo,
-                       const SkColor4f& paintColor,
-                       sk_sp<TextureProxy> dstTexture,
-                       SkIPoint dstOffset)
+                       const SkColorInfo& dstColorInfo)
         : fRecorder(recorder)
         , fLocal2Dev(local2Dev)
         , fLocalMatrix(nullptr)
-        , fDstColorInfo(dstColorInfo)
-        , fCaps(recorder->priv().caps())
-        , fDstTexture(std::move(dstTexture))
-        , fDstOffset(dstOffset) {
+        , fDstColorInfo(dstColorInfo) {
     fDictionary = fRecorder->priv().shaderCodeDictionary();
     fRTEffectDict = fRecorder->priv().runtimeEffectDictionary();
-    fPaintColor = PaintParams::Color4fPrepForDst(paintColor, fDstColorInfo).makeOpaque().premul();
-    fPaintColor.fA = paintColor.fA;
 }
 
 KeyContext::KeyContext(const KeyContext& other)
@@ -37,10 +28,7 @@ KeyContext::KeyContext(const KeyContext& other)
         , fLocalMatrix(other.fLocalMatrix)
         , fDictionary(other.fDictionary)
         , fRTEffectDict(other.fRTEffectDict)
-        , fDstColorInfo(other.fDstColorInfo)
-        , fPaintColor(other.fPaintColor)
-        , fCaps(other.fCaps)
-        , fDstTexture(other.fDstTexture)
-        , fDstOffset(other.fDstOffset) {}
+        , fDstColorInfo(other.fDstColorInfo) {
+}
 
 } // namespace skgpu::graphite

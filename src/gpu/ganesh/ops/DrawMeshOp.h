@@ -10,22 +10,20 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkRefCnt.h"
-#include "include/private/base/SkTArray.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/ops/GrOp.h"
 
 class GrColorSpaceXform;
 class GrPaint;
 class GrRecordingContext;
-class SkMatrix;
 class SkMesh;
+class SkMatrixProvider;
 
-namespace skgpu::ganesh::DrawMeshOp {
+namespace skgpu::v1::DrawMeshOp {
 GrOp::Owner Make(GrRecordingContext*,
                  GrPaint&&,
                  const SkMesh&,
-                 skia_private::TArray<std::unique_ptr<GrFragmentProcessor>> children,
-                 const SkMatrix&,
+                 const SkMatrixProvider&,
                  GrAAType,
                  sk_sp<GrColorSpaceXform>);
 
@@ -33,9 +31,9 @@ GrOp::Owner Make(GrRecordingContext*,
                  GrPaint&&,
                  sk_sp<SkVertices>,
                  const GrPrimitiveType* overridePrimitiveType,
-                 const SkMatrix&,
+                 const SkMatrixProvider&,
                  GrAAType,
                  sk_sp<GrColorSpaceXform>);
-}  // namespace skgpu::ganesh::DrawMeshOp
+}  // namespace skgpu::v1::DrawMeshOp
 
 #endif  // DrawMeshOp_DEFINED

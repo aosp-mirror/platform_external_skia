@@ -16,9 +16,7 @@
 
 #include <vector>
 
-namespace skottie_utils {
-class TextEditor;
-}
+class SkottieTextEditor;
 
 namespace sksg    { class Scene;     }
 
@@ -45,7 +43,7 @@ private:
     void renderUI();
 
     class TransformTracker;
-    class SlotManagerInterface;
+    class SlotManagerWrapper;
 
     const SkString                     fPath;
 
@@ -53,8 +51,8 @@ private:
     skottie::Animation::Builder::Stats fAnimationStats;
     sksg::InvalidationController       fInvalController;
     sk_sp<TransformTracker>            fTransformTracker;
-    std::unique_ptr<SlotManagerInterface>fSlotManagerInterface;
-    sk_sp<skottie_utils::TextEditor>   fTextEditor;
+    std::unique_ptr<SlotManagerWrapper>fSlotManagerWrapper;
+    sk_sp<SkottieTextEditor>           fTextEditor;
     std::vector<float>                 fFrameTimes;
     SkSize                             fWinSize              = SkSize::MakeEmpty();
     double                             fTimeBase             = 0,
@@ -68,6 +66,8 @@ private:
                                        fShowSlotManager      = false,
                                        fDraggingProgress     = false,
                                        fPreferGlyphPaths     = false;
+
+    using INHERITED = Slide;
 };
 
 #endif // SK_ENABLE_SKOTTIE

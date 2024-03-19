@@ -5,13 +5,13 @@
 * found in the LICENSE file.
 */
 
-#include "tools/window/unix/WindowContextFactory_unix.h"
+#include "tools/sk_app/unix/WindowContextFactory_unix.h"
 
 #include "src/base/SkUTF.h"
+#include "tools/sk_app/WindowContext.h"
 #include "tools/sk_app/unix/Window_unix.h"
 #include "tools/skui/ModifierKey.h"
 #include "tools/timer/Timer.h"
-#include "tools/window/WindowContext.h"
 
 extern "C" {
     #include "tools/sk_app/unix/keysym2ucs.h"
@@ -268,10 +268,10 @@ bool Window_unix::handleEvent(const XEvent& event) {
                                   skui::InputState::kDown, get_modifiers(event));
                     break;
                 case Button4:
-                    this->onMouseWheel(1.0f, 0, 0, get_modifiers(event));
+                    this->onMouseWheel(1.0f, get_modifiers(event));
                     break;
                 case Button5:
-                    this->onMouseWheel(-1.0f, 0, 0, get_modifiers(event));
+                    this->onMouseWheel(-1.0f, get_modifiers(event));
                     break;
             }
             break;
@@ -380,7 +380,7 @@ bool Window_unix::attach(BackendType attachType) {
 
     this->initWindow(fDisplay);
 
-    skwindow::XlibWindowInfo winInfo;
+    window_context_factory::XlibWindowInfo winInfo;
     winInfo.fDisplay = fDisplay;
     winInfo.fWindow = fWindow;
     winInfo.fFBConfig = fFBConfig;
@@ -395,29 +395,34 @@ bool Window_unix::attach(BackendType attachType) {
     }
 
     switch (attachType) {
+#ifdef SK_DAWN
+        case kDawn_BackendType:
+            fWindowContext =
+                    window_context_factory::MakeDawnVulkanForXlib(winInfo, fRequestedDisplayParams);
+            break;
+#endif
 #if defined(SK_DAWN) && defined(SK_GRAPHITE)
         case kGraphiteDawn_BackendType:
-            fWindowContext = skwindow::MakeGraphiteDawnVulkanForXlib(winInfo,
-                                                                     fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeGraphiteDawnVulkanForXlib(winInfo,
+                                                                          fRequestedDisplayParams);
             break;
 #endif
 #ifdef SK_VULKAN
         case kVulkan_BackendType:
-            fWindowContext = skwindow::MakeVulkanForXlib(winInfo, fRequestedDisplayParams);
-            break;
-#endif
-#if defined(SK_VULKAN) && defined(SK_GRAPHITE)
-        case kGraphiteVulkan_BackendType:
-            fWindowContext = skwindow::MakeGraphiteVulkanForXlib(winInfo, fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeVulkanForXlib(winInfo, fRequestedDisplayParams);
             break;
 #endif
 #ifdef SK_GL
         case kNativeGL_BackendType:
-            fWindowContext = skwindow::MakeGLForXlib(winInfo, fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeGLForXlib(winInfo, fRequestedDisplayParams);
             break;
 #endif
         case kRaster_BackendType:
-            fWindowContext = skwindow::MakeRasterForXlib(winInfo, fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeRasterForXlib(winInfo, fRequestedDisplayParams);
             break;
     }
     this->onBackendCreated();
@@ -454,7 +459,7 @@ void Window_unix::setRequestedDisplayParams(const DisplayParams& params, bool al
     }
 #endif
 
-    Window::setRequestedDisplayParams(params, allowReattach);
+    INHERITED::setRequestedDisplayParams(params, allowReattach);
 }
 
 const char* Window_unix::getClipboardText() {

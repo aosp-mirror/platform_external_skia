@@ -34,7 +34,7 @@ class SkiaEspnDesktopPageSet(story.StorySet):
 
     urls_list = [
       # Why: #1 sports.
-      'https://www.espn.com/nfl/scoreboard',
+      'http://espn.go.com',
     ]
 
     for url in urls_list:

@@ -8,12 +8,11 @@
 #ifndef GrBackendUtils_DEFINED
 #define GrBackendUtils_DEFINED
 
-class GrBackendFormat;
-enum class SkTextureCompressionType;
+#include "include/core/SkImage.h"
 
-#include <cstddef>
+#include "include/gpu/GrBackendSurface.h"
 
-SkTextureCompressionType GrBackendFormatToCompressionType(const GrBackendFormat& format);
+SkImage::CompressionType GrBackendFormatToCompressionType(const GrBackendFormat& format);
 
 // Returns the number of bytes per texel block for the given format. All non compressed formats
 // are treated as having a block size of 1x1, so this is equivalent to bytesPerPixel.

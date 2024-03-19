@@ -5,16 +5,14 @@ licenses(["notice"])
 exports_files_legacy()
 
 GRADIENT_FILES = [
-    "SkConicalGradient.cpp",
-    "SkConicalGradient.h",
-    "SkGradientBaseShader.cpp",
-    "SkGradientBaseShader.h",
+    "SkGradientShader.cpp",
+    "SkGradientShaderBase.cpp",
+    "SkGradientShaderBase.h",
     "SkLinearGradient.cpp",
     "SkLinearGradient.h",
     "SkRadialGradient.cpp",
-    "SkRadialGradient.h",
     "SkSweepGradient.cpp",
-    "SkSweepGradient.h",
+    "SkTwoPointConicalGradient.cpp",
 ]
 
 split_srcs_and_hdrs(

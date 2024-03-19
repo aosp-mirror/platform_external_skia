@@ -19,7 +19,6 @@
 #include "include/core/SkTypes.h"
 #include "include/encode/SkJpegEncoder.h"
 #include "include/private/base/SkTemplates.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 using namespace skia_private;
@@ -38,7 +37,7 @@ static inline sk_sp<SkImage> encode_pixmap_and_make_image(const SkPixmap& src,
     SkJpegEncoder::Options options;
     options.fAlphaOption = alphaOption;
     SkJpegEncoder::Encode(&dst, src, options);
-    return SkImages::DeferredFromEncodedData(dst.detachAsData());
+    return SkImage::MakeFromEncoded(dst.detachAsData());
 }
 
 class EncodeJpegAlphaOptsGM : public GM {
@@ -46,12 +45,16 @@ public:
     EncodeJpegAlphaOptsGM() {}
 
 protected:
-    SkString getName() const override { return SkString("encode-alpha-jpeg"); }
+    SkString onShortName() override {
+        return SkString("encode-alpha-jpeg");
+    }
 
-    SkISize getISize() override { return SkISize::Make(400, 200); }
+    SkISize onISize() override {
+        return SkISize::Make(400, 200);
+    }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        sk_sp<SkImage> srcImg = ToolUtils::GetResourceAsImage("images/rainbow-gradient.png");
+        sk_sp<SkImage> srcImg = GetResourceAsImage("images/rainbow-gradient.png");
         if (!srcImg) {
             *errorMsg = "Could not load images/rainbow-gradient.png. "
                         "Did you forget to set the resourcePath?";

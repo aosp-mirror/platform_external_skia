@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "include/gpu/gl/glx/GrGLMakeGLXInterface.h"
 #include "include/private/base/SkOnce.h"
 #include "tools/gpu/gl/GLTestContext.h"
 
@@ -240,8 +239,8 @@ GLXGLTestContext::GLXGLTestContext(GrGLStandard forcedGpuAPI, GLXGLTestContext* 
         return;
     }
 
-#if defined(SK_GL)
-    auto gl = GrGLInterfaces::MakeGLX();
+#ifdef SK_GL
+    auto gl = GrGLMakeNativeInterface();
     if (!gl) {
         SkDebugf("Failed to create gl interface");
         this->destroyGLContext();
@@ -306,7 +305,7 @@ void GLXGLTestContext::destroyGLContext() {
 GLXContext GLXGLTestContext::CreateBestContext(bool isES, Display* display, GLXFBConfig bestFbc,
                                                GLXContext glxShareContext) {
     auto glXCreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC)
-        glXGetProcAddressARB((const GrGLubyte*)"glXCreateContextAttribsARB");
+        glXGetProcAddressARB((GrGLubyte*)"glXCreateContextAttribsARB");
     if (!glXCreateContextAttribsARB) {
         SkDebugf("Failed to get address of glXCreateContextAttribsARB");
         return nullptr;

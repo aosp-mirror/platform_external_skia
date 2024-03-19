@@ -12,14 +12,13 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTextBlob.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
 // https://bugs.skia.org/5321
 // two strings should draw the same.  PDF did not.
 DEF_SIMPLE_GM(skbug_5321, canvas, 128, 128) {
-    SkFont font = ToolUtils::DefaultPortableFont();
+    SkFont font;
     font.setEdging(SkFont::Edging::kAlias);
     font.setSize(30);
 

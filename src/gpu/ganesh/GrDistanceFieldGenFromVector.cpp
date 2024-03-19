@@ -16,8 +16,6 @@
 #include "src/core/SkRectPriv.h"
 #include "src/gpu/ganesh/geometry/GrPathUtils.h"
 
-using namespace skia_private;
-
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 
 namespace {
@@ -227,7 +225,7 @@ public:
     }
 };
 
-typedef TArray<PathSegment, true> PathSegmentArray;
+typedef SkTArray<PathSegment, true> PathSegmentArray;
 
 void PathSegment::init() {
     const DPoint p0 = { fPts[0].fX, fPts[0].fY };
@@ -376,7 +374,7 @@ static inline void add_quad(const SkPoint pts[3], PathSegmentArray* segments) {
 
 static inline void add_cubic(const SkPoint pts[4],
                              PathSegmentArray* segments) {
-    STArray<15, SkPoint, true> quads;
+    SkSTArray<15, SkPoint, true> quads;
     GrPathUtils::convertCubicToQuads(pts, SK_Scalar1, &quads);
     int count = quads.size();
     for (int q = 0; q < count; q += 3) {
@@ -774,7 +772,7 @@ bool GrGenerateDistanceFieldFromPath(unsigned char* distanceField,
 
     // polygonize path into line and quad segments
     SkPathEdgeIter iter(workingPath);
-    STArray<15, PathSegment, true> segments;
+    SkSTArray<15, PathSegment, true> segments;
     while (auto e = iter.next()) {
         switch (e.fEdge) {
             case SkPathEdgeIter::Edge::kLine: {

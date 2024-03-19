@@ -6,19 +6,14 @@
  * found in the LICENSE file.
  */
 
-#include "include/codec/SkCodec.h"
-#include "include/codec/SkGifDecoder.h"
-#include "include/codec/SkJpegDecoder.h"
-#include "include/codec/SkPngDecoder.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorSpace.h"
-#include "include/core/SkFontMgr.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
-#include "include/ports/SkFontMgr_empty.h"
-
+#include "include/core/SkTime.h"
+#include "modules/skresources/include/SkResources.h"
 #include <jni.h>
 #include <math.h>
 #include <string>
@@ -27,15 +22,10 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
-#include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
-#include "include/gpu/ganesh/gl/GrGLDirectContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
 #include "include/gpu/gl/GrGLTypes.h"
-#include "include/gpu/gl/egl/GrGLMakeEGLInterface.h"
 
 #include "modules/skottie/include/Skottie.h"
-#include "modules/skresources/include/SkResources.h"
 #include "modules/sksg/include/SkSGInvalidationController.h"
 
 #include <GLES2/gl2.h>
@@ -85,14 +75,14 @@ static void release_global_jni_ref(const void* /*data*/, void* context) {
 extern "C" JNIEXPORT jlong
 JNICALL
 Java_org_skia_skottie_SkottieRunner_nCreateProxy(JNIEnv *env, jclass clazz) {
-    sk_sp<const GrGLInterface> glInterface = GrGLInterfaces::MakeEGL();
+    sk_sp<const GrGLInterface> glInterface = GrGLMakeNativeInterface();
     if (!glInterface.get()) {
         return 0;
     }
 
     GrContextOptions options;
     options.fDisableDistanceFieldPaths = true;
-    sk_sp<GrDirectContext> dContext = GrDirectContexts::MakeGL(std::move(glInterface), options);
+    sk_sp<GrDirectContext> dContext = GrDirectContext::MakeGL(std::move(glInterface), options);
     if (!dContext.get()) {
         return 0;
     }
@@ -175,17 +165,8 @@ Java_org_skia_skottie_SkottieAnimation_nCreateProxy(JNIEnv *env,
     skottieAnimation->mRunner = skottieRunner;
     skottieAnimation->mStream = std::move(stream);
 
-    sk_sp<SkFontMgr> freetypeMgr = SkFontMgr_New_Custom_Empty();
-
-    SkCodecs::Register(SkPngDecoder::Decoder());
-    SkCodecs::Register(SkGifDecoder::Decoder());
-    SkCodecs::Register(SkJpegDecoder::Decoder());
-
     skottieAnimation->mAnimation = skottie::Animation::Builder()
-        // Note, this nullptr ResourceProvider will only be able to decode base64 encoded images
-        // (using the above registered codecs) or base64 encoded FreeType typefaces.
-        .setResourceProvider(skresources::DataURIResourceProviderProxy::Make(nullptr,
-            skresources::ImageDecodeStrategy::kPreDecode, freetypeMgr))
+        .setResourceProvider(skresources::DataURIResourceProviderProxy::Make(nullptr))
         .make(skottieAnimation->mStream.get());
     skottieAnimation->mTimeBase  = 0.0f; // force a time reset
     skottieAnimation->mDuration = 1000 * skottieAnimation->mAnimation->duration();
@@ -251,13 +232,13 @@ Java_org_skia_skottie_SkottieAnimation_nDrawFrame(JNIEnv *env, jclass clazz,
         fboInfo.fFormat = GL_RGBA8;
         colorType = kN32_SkColorType;
     }
-    fboInfo.fProtected = skgpu::Protected::kNo;
-    auto backendRT = GrBackendRenderTargets::MakeGL(width, height, 0, STENCIL_BUFFER_SIZE, fboInfo);
+    GrBackendRenderTarget backendRT(width, height, 0, STENCIL_BUFFER_SIZE, fboInfo);
 
     SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
 
-    sk_sp<SkSurface> renderTarget(SkSurfaces::WrapBackendRenderTarget(
-            dContext, backendRT, kBottomLeft_GrSurfaceOrigin, colorType, nullptr, &props));
+    sk_sp<SkSurface> renderTarget(SkSurface::MakeFromBackendRenderTarget(
+            dContext, backendRT, kBottomLeft_GrSurfaceOrigin, colorType,
+            nullptr, &props));
 
     auto canvas = renderTarget->getCanvas();
     canvas->clear(backgroundColor);
@@ -265,7 +246,8 @@ Java_org_skia_skottie_SkottieAnimation_nDrawFrame(JNIEnv *env, jclass clazz,
     SkAutoCanvasRestore acr(canvas, true);
     SkRect bounds = SkRect::MakeWH(width, height);
     skottieAnimation->mAnimation->render(canvas, &bounds);
-    dContext->flushAndSubmit();
+
+    canvas->flush();
     return true;
 }
 

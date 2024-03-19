@@ -6,7 +6,6 @@
  */
 
 #include "gm/gm.h"
-#include "include/core/SkBBHFactory.h"
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkMatrix.h"
@@ -55,9 +54,13 @@ protected:
          fPicture = make_picture();
     }
 
-    SkString getName() const override { return SkString("pictures"); }
+    SkString onShortName() override {
+        return SkString("pictures");
+    }
 
-    SkISize getISize() override { return SkISize::Make(450, 120); }
+    SkISize onISize() override {
+        return SkISize::Make(450, 120);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(10, 10);
@@ -119,9 +122,13 @@ protected:
         SkASSERT(fPicture->cullRect().top() == 80);
     }
 
-    SkString getName() const override { return SkString("picture_cull_rect"); }
+    SkString onShortName() override {
+        return SkString("picture_cull_rect");
+    }
 
-    SkISize getISize() override { return SkISize::Make(120, 120); }
+    SkISize onISize() override {
+        return SkISize::Make(120, 120);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->clipRect(SkRect::MakeLTRB(0, 60, 120, 120));

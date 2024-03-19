@@ -16,11 +16,7 @@
 #include "src/gpu/ganesh/ops/GrOp.h"
 
 class GrAppliedClip;
-namespace skgpu {
-namespace ganesh {
-class SurfaceDrawContext;
-}
-}  // namespace skgpu
+namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
 class GrShape;
 
 /**
@@ -59,7 +55,7 @@ public:
      * to combine with other ops. If the op knows how to clip its own geometry then it will
      * generally be much faster than a generalized clip method.
      */
-    virtual ClipResult clipToShape(skgpu::ganesh::SurfaceDrawContext*,
+    virtual ClipResult clipToShape(skgpu::v1::SurfaceDrawContext*,
                                    SkClipOp,
                                    const SkMatrix& /* clipMatrix */,
                                    const GrShape&,
@@ -91,7 +87,7 @@ public:
     }
 #endif
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     // This is really only intended for TextureOp and FillRectOp to override
     virtual int numQuads() const { return -1; }
 #endif

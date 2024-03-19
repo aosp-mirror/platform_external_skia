@@ -33,11 +33,9 @@
 #include "src/gpu/ganesh/ops/GrMeshDrawOp.h"
 #include "src/gpu/ganesh/ops/GrSimpleMeshDrawOpHelper.h"
 
-using namespace skia_private;
-
 using AAMode = skgpu::ganesh::DashOp::AAMode;
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 constexpr int kAAModeCnt = static_cast<int>(skgpu::ganesh::DashOp::AAMode::kCoverageWithMSAA) + 1;
 #endif
 
@@ -351,8 +349,8 @@ private:
         // rectangles.  We preserve all of this work in the rects / draws arrays below.  Then we
         // iterate again over these decomposed dashes to generate vertices
         static const int kNumStackDashes = 128;
-        STArray<kNumStackDashes, SkRect, true> rects;
-        STArray<kNumStackDashes, DashDraw, true> draws;
+        SkSTArray<kNumStackDashes, SkRect, true> rects;
+        SkSTArray<kNumStackDashes, DashDraw, true> draws;
 
         int totalRectCount = 0;
         int rectOffset = 0;
@@ -661,7 +659,7 @@ private:
         return CombineResult::kMerged;
     }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     SkString onDumpInfo() const override {
         SkString string;
         for (const auto& geo : fLines) {
@@ -685,7 +683,7 @@ private:
     bool fullDash() const { return fFullDash; }
     SkPaint::Cap cap() const { return fCap; }
 
-    STArray<1, LineData, true> fLines;
+    SkSTArray<1, LineData, true> fLines;
     SkPMColor4f fColor;
     bool fUsesLocalCoords : 1;
     bool fFullDash : 1;
@@ -759,6 +757,9 @@ private:
 
     SkMatrix    fLocalMatrix         = SkMatrix::InvalidMatrix();
     SkPMColor4f fColor               = SK_PMColor4fILLEGAL;
+    float       fPrevRadius          = SK_FloatNaN;
+    float       fPrevCenterX         = SK_FloatNaN;
+    float       fPrevIntervalLength  = SK_FloatNaN;
 
     UniformHandle fParamUniform;
     UniformHandle fColorUniform;
@@ -873,7 +874,7 @@ DashingCircleEffect::DashingCircleEffect(const SkPMColor4f& color,
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(DashingCircleEffect)
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 GrGeometryProcessor* DashingCircleEffect::TestCreate(GrProcessorTestData* d) {
     AAMode aaMode = static_cast<AAMode>(d->fRandom->nextULessThan(kAAModeCnt));
     GrColor color = GrTest::RandomColor(d->fRandom);
@@ -1087,7 +1088,7 @@ DashingLineEffect::DashingLineEffect(const SkPMColor4f& color,
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(DashingLineEffect)
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 GrGeometryProcessor* DashingLineEffect::TestCreate(GrProcessorTestData* d) {
     AAMode aaMode = static_cast<AAMode>(d->fRandom->nextULessThan(kAAModeCnt));
     GrColor color = GrTest::RandomColor(d->fRandom);
@@ -1226,7 +1227,7 @@ bool CanDrawDashLine(const SkPoint pts[2], const GrStyle& style, const SkMatrix&
 
 } // namespace skgpu::ganesh::DashOp
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 
 #include "src/gpu/ganesh/GrDrawOpTest.h"
 
@@ -1304,4 +1305,4 @@ GR_DRAW_OP_TEST_DEFINE(DashOpImpl) {
                                                  style, GrGetRandomStencil(random, context));
 }
 
-#endif // defined(GR_TEST_UTILS)
+#endif // GR_TEST_UTILS

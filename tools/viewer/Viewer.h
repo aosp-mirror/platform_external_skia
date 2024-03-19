@@ -8,13 +8,13 @@
 #ifndef Viewer_DEFINED
 #define Viewer_DEFINED
 
-#include "include/core/SkColorSpace.h"
-#include "include/core/SkData.h"
+#include "gm/gm.h"
+#include "include/core/SkExecutor.h"
 #include "include/core/SkFont.h"
 #include "include/gpu/GrContextOptions.h"
-#include "include/private/base/SkTArray.h"
-#include "include/private/gpu/ganesh/GrTypesPriv.h"
-#include "modules/skcms/skcms.h"
+#include "include/private/SkSLString.h"
+#include "src/core/SkScan.h"
+#include "src/core/SkVMBlitter.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "tools/gpu/MemoryCache.h"
 #include "tools/sk_app/Application.h"
@@ -22,23 +22,12 @@
 #include "tools/sk_app/Window.h"
 #include "tools/viewer/AnimTimer.h"
 #include "tools/viewer/ImGuiLayer.h"
+#include "tools/viewer/Slide.h"
 #include "tools/viewer/StatsLayer.h"
 #include "tools/viewer/TouchGesture.h"
-#include "tools/window/DisplayParams.h"
 
-#include <cstdint>
-#include <atomic>
-#include <functional>
-#include <string>
-
-class SkImage;
-class SkSurface;
-class Slide;
-namespace skui {
-enum class InputState;
-enum class Key;
-enum class ModifierKey;
-}  // namespace skui
+class SkCanvas;
+class SkData;
 
 class Viewer : public sk_app::Application, sk_app::Window::Layer {
 public:
@@ -52,7 +41,6 @@ public:
     void onResize(int width, int height) override;
     bool onTouch(intptr_t owner, skui::InputState state, float x, float y) override;
     bool onMouse(int x, int y, skui::InputState state, skui::ModifierKey modifiers) override;
-    bool onMouseWheel(float delta, int x, int y, skui::ModifierKey) override;
     void onUIStateChanged(const SkString& stateName, const SkString& stateValue) override;
     bool onKey(skui::Key key, skui::InputState state, skui::ModifierKey modifiers) override;
     bool onChar(SkUnichar c, skui::ModifierKey modifiers) override;
@@ -124,6 +112,14 @@ public:
         bool fAntiAlias = false;
         bool fDither = false;
         bool fForceRuntimeBlend = false;
+        enum class AntiAliasState {
+            Alias,
+            Normal,
+            AnalyticAAEnabled,
+            AnalyticAAForced,
+        } fAntiAliasState = AntiAliasState::Alias;
+        const bool fOriginalSkUseAnalyticAA = gSkUseAnalyticAA;
+        const bool fOriginalSkForceAnalyticAA = gSkForceAnalyticAA;
 
         bool fCapType = false;
         bool fJoinType = false;
@@ -180,7 +176,7 @@ private:
     StatsLayer::Timer      fAnimateTimer;
 
     AnimTimer              fAnimTimer;
-    skia_private::TArray<sk_sp<Slide>> fSlides;
+    SkTArray<sk_sp<Slide>> fSlides;
     int                    fCurrentSlide;
 
     bool                   fRefresh; // whether to continuously refresh for measuring render time
@@ -241,7 +237,7 @@ private:
     PerspectiveMode        fPerspectiveMode;
     SkPoint                fPerspectivePoints[4];
 
-    skia_private::TArray<std::function<void()>> fDeferredActions;
+    SkTArray<std::function<void()>> fDeferredActions;
 
     // fPaint contains override values, fPaintOverrides controls if overrides are applied.
     SkPaint fPaint;
@@ -253,7 +249,7 @@ private:
 
     // fDisplay contains default values (fWindow.fRequestedDisplayParams contains the overrides),
     // fDisplayOverrides controls if overrides are applied.
-    skwindow::DisplayParams fDisplay;
+    sk_app::DisplayParams fDisplay;
     DisplayFields fDisplayOverrides;
 
     struct CachedShader {
@@ -263,13 +259,13 @@ private:
         SkString            fKeyString;
         SkString            fKeyDescription;
 
-        SkFourByteTag            fShaderType;
-        std::string              fShader[kGrShaderTypeCount];
-        SkSL::Program::Interface fInterfaces[kGrShaderTypeCount];
+        SkFourByteTag         fShaderType;
+        std::string           fShader[kGrShaderTypeCount];
+        SkSL::Program::Inputs fInputs[kGrShaderTypeCount];
     };
 
     sk_gpu_test::MemoryCache fPersistentCache;
-    skia_private::TArray<CachedShader>   fCachedShaders;
+    SkTArray<CachedShader>   fCachedShaders;
 
     enum ShaderOptLevel : int {
         kShaderOptLevel_Source,
@@ -278,6 +274,11 @@ private:
         kShaderOptLevel_Inline,
     };
     ShaderOptLevel fOptLevel = kShaderOptLevel_Source;
+
+    SkVMBlitter::Key fHoveredKey;
+    skvm::Program    fHoveredProgram;
+
+    SkTHashMap<SkVMBlitter::Key, std::string> fDisassemblyCache;
 };
 
 #endif

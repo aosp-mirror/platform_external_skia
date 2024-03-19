@@ -10,19 +10,15 @@
 #include "bench/Benchmark.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
-#include "include/core/SkFontMgr.h"
 #include "include/core/SkGraphics.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
 #include "src/base/SkTLazy.h"
 #include "src/core/SkStrikeSpec.h"
 #include "src/core/SkTaskGroup.h"
+#include "src/core/SkTextBlobTrace.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
-#include "tools/text/SkTextBlobTrace.h"
-
-using namespace skia_private;
 
 static void do_font_stuff(SkFont* font) {
     SkPaint defaultPaint;
@@ -55,16 +51,16 @@ protected:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     void onDraw(int loops, SkCanvas*) override {
         size_t oldCacheLimitSize = SkGraphics::GetFontCacheLimit();
         SkGraphics::SetFontCacheLimit(fCacheSize);
-        SkFont font = ToolUtils::DefaultFont();
+        SkFont font;
         font.setEdging(SkFont::Edging::kAntiAlias);
         font.setSubpixel(true);
-        font.setTypeface(ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Italic()));
+        font.setTypeface(ToolUtils::create_portable_typeface("serif", SkFontStyle::Italic()));
 
         for (int work = 0; work < loops; work++) {
             do_font_stuff(&font);
@@ -89,19 +85,19 @@ protected:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     void onDraw(int loops, SkCanvas*) override {
         size_t oldCacheLimitSize = SkGraphics::GetFontCacheLimit();
         SkGraphics::SetFontCacheLimit(fCacheSize);
         sk_sp<SkTypeface> typefaces[] = {
-                ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Italic()),
-                ToolUtils::CreatePortableTypeface("sans-serif", SkFontStyle::Italic())};
+                ToolUtils::create_portable_typeface("serif", SkFontStyle::Italic()),
+                ToolUtils::create_portable_typeface("sans-serif", SkFontStyle::Italic())};
 
         for (int work = 0; work < loops; work++) {
             SkTaskGroup().batch(16, [&](int threadIndex) {
-                SkFont font = ToolUtils::DefaultFont();
+                SkFont font;
                 font.setEdging(SkFont::Edging::kAntiAlias);
                 font.setSubpixel(true);
                 font.setTypeface(typefaces[threadIndex % 2]);
@@ -174,7 +170,7 @@ public:
         fLockedHandles.reset();
         fLastDeletedHandleId = fNextHandleId;
     }
-    const THashSet<SkDiscardableHandleId>& lockedHandles() const {
+    const SkTHashSet<SkDiscardableHandleId>& lockedHandles() const {
         SkAutoMutexExclusive l(fMutex);
 
         return fLockedHandles;
@@ -210,7 +206,7 @@ private:
 
     SkDiscardableHandleId fNextHandleId = 0u;
     SkDiscardableHandleId fLastDeletedHandleId = 0u;
-    THashSet<SkDiscardableHandleId> fLockedHandles;
+    SkTHashSet<SkDiscardableHandleId> fLockedHandles;
     int fCacheMissCount[SkStrikeClient::CacheMissType::kLast + 1u];
 };
 
@@ -223,7 +219,7 @@ class DiffCanvasBench : public Benchmark {
 
     const char* onGetName() override { return fBenchName.c_str(); }
 
-    bool isSuitableFor(Backend b) override { return b == Backend::kNonRendering; }
+    bool isSuitableFor(Backend b) override { return b == kNonRendering_Backend; }
 
     void onDraw(int loops, SkCanvas* modelCanvas) override {
         SkSurfaceProps props;
@@ -243,7 +239,7 @@ class DiffCanvasBench : public Benchmark {
         auto stream = fDataProvider();
         fDiscardableManager = sk_make_sp<DiscardableManager>();
         fServer.init(fDiscardableManager.get());
-        fTrace = SkTextBlobTrace::CreateBlobTrace(stream.get(), nullptr);
+        fTrace = SkTextBlobTrace::CreateBlobTrace(stream.get());
     }
 
 public:

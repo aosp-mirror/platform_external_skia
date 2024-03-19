@@ -8,14 +8,7 @@
 #ifndef GrDefaultGeoProcFactory_DEFINED
 #define GrDefaultGeoProcFactory_DEFINED
 
-#include "include/private/SkColorData.h"
-#include "include/private/base/SkAssert.h"
-
-#include <cstdint>
-
-class GrGeometryProcessor;
-class SkArenaAlloc;
-class SkMatrix;
+#include "src/gpu/ganesh/GrGeometryProcessor.h"
 
 /*
  * A factory for creating default Geometry Processors which simply multiply position by the uniform

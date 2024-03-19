@@ -29,9 +29,13 @@ public:
     }
 
 protected:
-    SkISize getISize() override { return SkISize::Make(770, 770); }
+    SkISize onISize() override {
+        return SkISize::Make(770, 770);
+    }
 
-    SkString getName() const override { return SkString("pathinterior"); }
+    SkString onShortName() override {
+        return SkString("pathinterior");
+    }
 
     void show(SkCanvas* canvas, const SkPath& path) {
         SkPaint paint;

@@ -15,7 +15,7 @@
 #include "include/private/base/SkNoncopyable.h"
 #include "modules/svg/include/SkSVGTypes.h"
 
-class SK_API SkSVGValue : public SkNoncopyable {
+class SkSVGValue : public SkNoncopyable {
 public:
     enum class Type {
         kColor,
@@ -47,7 +47,7 @@ private:
 };
 
 template <typename T, SkSVGValue::Type ValueType>
-class SK_API SkSVGWrapperValue final : public SkSVGValue {
+class SkSVGWrapperValue final : public SkSVGValue {
 public:
     static constexpr Type TYPE = ValueType;
 

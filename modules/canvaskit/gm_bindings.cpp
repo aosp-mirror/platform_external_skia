@@ -20,19 +20,17 @@
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
-#include "include/gpu/ganesh/gl/GrGLDirectContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
 #include "include/gpu/gl/GrGLTypes.h"
 #include "modules/canvaskit/WasmCommon.h"
+#include "src/core/SkFontMgrPriv.h"
 #include "src/core/SkMD5.h"
 #include "tests/Test.h"
 #include "tests/TestHarness.h"
 #include "tools/HashAndEncode.h"
 #include "tools/ResourceFactory.h"
 #include "tools/flags/CommandLineFlags.h"
-#include "tools/fonts/FontToolUtils.h"
-#include "tools/gpu/ContextType.h"
+#include "tools/fonts/TestFontMgr.h"
 
 using namespace emscripten;
 
@@ -44,18 +42,18 @@ using namespace emscripten;
 static JSArray ListGMs() {
     SkDebugf("Listing GMs\n");
     JSArray gms = emscripten::val::array();
-    for (const skiagm::GMFactory& fact : skiagm::GMRegistry::Range()) {
+    for (skiagm::GMFactory fact : skiagm::GMRegistry::Range()) {
         std::unique_ptr<skiagm::GM> gm(fact());
-        SkDebugf("gm %s\n", gm->getName().c_str());
-        gms.call<void>("push", std::string(gm->getName().c_str()));
+        SkDebugf("gm %s\n", gm->getName());
+        gms.call<void>("push", std::string(gm->getName()));
     }
     return gms;
 }
 
 static std::unique_ptr<skiagm::GM> getGMWithName(std::string name) {
-    for (const skiagm::GMFactory& fact : skiagm::GMRegistry::Range()) {
+    for (skiagm::GMFactory fact : skiagm::GMRegistry::Range()) {
         std::unique_ptr<skiagm::GM> gm(fact());
-        if (gm->getName().c_str() == name) {
+        if (gm->getName() == name) {
             return gm;
         }
     }
@@ -76,7 +74,7 @@ static sk_sp<GrDirectContext> MakeGrContext(EMSCRIPTEN_WEBGL_CONTEXT_HANDLE cont
     // setup GrDirectContext
     auto interface = GrGLMakeNativeInterface();
     // setup contexts
-    sk_sp<GrDirectContext> dContext((GrDirectContexts::MakeGL(interface)));
+    sk_sp<GrDirectContext> dContext((GrDirectContext::MakeGL(interface)));
     return dContext;
 }
 
@@ -126,7 +124,7 @@ static JSObject RunGM(sk_sp<GrDirectContext> ctx, std::string name) {
     auto colorType = SkColorType::kN32_SkColorType;
     SkISize size = gm->getISize();
     SkImageInfo info = SkImageInfo::Make(size, colorType, alphaType);
-    sk_sp<SkSurface> surface(SkSurfaces::RenderTarget(
+    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(
             ctx.get(), skgpu::Budgeted::kYes, info, 0, kBottomLeft_GrSurfaceOrigin, nullptr, true));
     if (!surface) {
         SkDebugf("Could not make surface\n");
@@ -152,7 +150,7 @@ static JSObject RunGM(sk_sp<GrDirectContext> ctx, std::string name) {
     } else if (drawResult == skiagm::DrawResult::kSkip) {
         return result;
     }
-    ctx->flushAndSubmit(surface.get(), GrSyncCpu::kYes);
+    surface->flushAndSubmit(true);
 
     // Based on GPUSink::readBack
     SkBitmap bitmap;
@@ -268,24 +266,27 @@ static JSObject RunTest(std::string name) {
 
 namespace skiatest {
 
-using ContextType = skgpu::ContextType;
+using ContextType = sk_gpu_test::GrContextFactory::ContextType;
 
-// These are the supported ContextTypeFilterFn. They are defined in Test.h and implemented here.
-bool IsGLContextType(skgpu::ContextType ct) {
-    return skgpu::ganesh::ContextTypeBackend(ct) == GrBackendApi::kOpenGL;
+// These are the supported GrContextTypeFilterFn. They are defined in Test.h and implemented here.
+bool IsGLContextType(ContextType ct) {
+    return GrBackendApi::kOpenGL == sk_gpu_test::GrContextFactory::ContextTypeBackend(ct);
 }
-bool IsMockContextType(skgpu::ContextType ct) {
-    return ct == skgpu::ContextType::kMock;
+bool IsRenderingGLContextType(ContextType ct) {
+    return IsGLContextType(ct) && sk_gpu_test::GrContextFactory::IsRenderingContext(ct);
+}
+bool IsMockContextType(ContextType ct) {
+    return ct == ContextType::kMock_ContextType;
 }
 // These are not supported
-bool IsVulkanContextType(ContextType) { return false; }
-bool IsMetalContextType(ContextType) { return false; }
-bool IsDirect3DContextType(ContextType) { return false; }
-bool IsDawnContextType(ContextType) { return false; }
+bool IsVulkanContextType(ContextType) {return false;}
+bool IsMetalContextType(ContextType) {return false;}
+bool IsDirect3DContextType(ContextType) {return false;}
+bool IsDawnContextType(ContextType) {return false;}
 
-void RunWithGaneshTestContexts(GrContextTestFn* testFn, ContextTypeFilterFn* filter,
+void RunWithGaneshTestContexts(GrContextTestFn* testFn, GrContextTypeFilterFn* filter,
                                Reporter* reporter, const GrContextOptions& options) {
-    for (auto contextType : {skgpu::ContextType::kGLES, skgpu::ContextType::kMock}) {
+    for (auto contextType : {ContextType::kGLES_ContextType, ContextType::kMock_ContextType}) {
         if (filter && !(*filter)(contextType)) {
             continue;
         }
@@ -301,7 +302,7 @@ void RunWithGaneshTestContexts(GrContextTestFn* testFn, ContextTypeFilterFn* fil
         // From DMGpuTestProcs.cpp
         (*testFn)(reporter, ctxInfo);
         // Sync so any release/finished procs get called.
-        ctxInfo.directContext()->flushAndSubmit(GrSyncCpu::kYes);
+        ctxInfo.directContext()->flushAndSubmit(/*sync*/true);
     }
 }
 } // namespace skiatest
@@ -343,7 +344,10 @@ GLTestContext *CreatePlatformGLTestContext(GrGLStandard forcedGpuAPI,
 }
 } // namespace sk_gpu_test
 
-void Init() { ToolUtils::UsePortableFontMgr(); }
+void Init() {
+    // Use the portable fonts.
+    gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
+}
 
 TestHarness CurrentTestHarness() {
     return TestHarness::kWasmGMTests;

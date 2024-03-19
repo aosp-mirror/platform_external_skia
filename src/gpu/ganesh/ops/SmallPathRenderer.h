@@ -14,7 +14,7 @@
 
 class GrStyledShape;
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 class SmallPathRenderer final : public PathRenderer {
 public:
@@ -32,7 +32,7 @@ private:
     bool onDrawPath(const DrawPathArgs&) override;
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // SK_ENABLE_OPTIMIZE_SIZE
 

@@ -15,7 +15,6 @@
 #include "tools/skui/ModifierKey.h"
 
 class SkSurface;
-class SkTypeface;
 
 class HelloWorld : public sk_app::Application, sk_app::Window::Layer {
 public:
@@ -33,7 +32,6 @@ private:
 
     sk_app::Window* fWindow;
     sk_app::Window::BackendType fBackendType;
-    sk_sp<SkTypeface> fTypeface;
 
     SkScalar fRotationAngle;
 };

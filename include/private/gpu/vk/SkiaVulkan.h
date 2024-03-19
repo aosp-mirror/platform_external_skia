@@ -10,9 +10,7 @@
 
 #include "include/core/SkTypes.h"
 
-// IWYU pragma: begin_exports
-
-#if (SKIA_IMPLEMENTATION || !defined(SK_VULKAN)) && !defined(SK_USE_EXTERNAL_VULKAN_HEADERS)
+#if SKIA_IMPLEMENTATION || !defined(SK_VULKAN)
 #include "include/third_party/vulkan/vulkan/vulkan_core.h"
 #else
 // For google3 builds we don't set SKIA_IMPLEMENTATION so we need to make sure that the vulkan
@@ -22,7 +20,7 @@
 
 #ifdef SK_BUILD_FOR_ANDROID
 // This is needed to get android extensions for external memory
-#if (SKIA_IMPLEMENTATION || !defined(SK_VULKAN)) && !defined(SK_USE_EXTERNAL_VULKAN_HEADERS)
+#if SKIA_IMPLEMENTATION || !defined(SK_VULKAN)
 #include "include/third_party/vulkan/vulkan/vulkan_android.h"
 #else
 // For google3 builds we don't set SKIA_IMPLEMENTATION so we need to make sure that the vulkan
@@ -30,7 +28,5 @@
 #include <vulkan/vulkan_android.h>
 #endif
 #endif
-
-// IWYU pragma: end_exports
 
 #endif

@@ -10,10 +10,10 @@
 
 #include "include/private/SkColorData.h"
 #include "include/private/SkSLSampleUsage.h"
+#include "include/private/SkSLString.h"
 #include "include/private/base/SkMacros.h"
 #include "src/gpu/ganesh/GrProcessor.h"
 #include "src/gpu/ganesh/glsl/GrGLSLUniformHandler.h"
-#include "src/sksl/SkSLString.h"
 
 #include <tuple>
 
@@ -274,10 +274,6 @@ public:
         return SkToBool(fFlags & kConstantOutputForConstantInput_OptimizationFlag);
     }
 
-    void clearConstantOutputForConstantInputFlag() {
-        fFlags &= ~kConstantOutputForConstantInput_OptimizationFlag;
-    }
-
     /** Returns true if this and other processor conservatively draw identically. It can only return
         true when the two processor are of the same subclass (i.e. they return the same object from
         from getFactory()).
@@ -297,7 +293,7 @@ public:
     GrTextureEffect* asTextureEffect();
     const GrTextureEffect* asTextureEffect() const;
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     // Generates debug info for this processor tree by recursively calling dumpInfo() on this
     // processor and its children.
     SkString dumpTreeInfo() const;
@@ -459,7 +455,7 @@ private:
         kWillReadDstColor_Flag = kFirstPrivateFlag << 3,
     };
 
-    skia_private::STArray<1, std::unique_ptr<GrFragmentProcessor>, true> fChildProcessors;
+    SkSTArray<1, std::unique_ptr<GrFragmentProcessor>, true> fChildProcessors;
     const GrFragmentProcessor* fParent = nullptr;
     uint32_t fFlags = 0;
     SkSL::SampleUsage fUsage;
@@ -629,7 +625,7 @@ public:
         Iter& operator=(const Iter&) = delete;
 
     private:
-        skia_private::STArray<4, ProgramImpl*, true> fFPStack;
+        SkSTArray<4, ProgramImpl*, true> fFPStack;
     };
 
 private:
@@ -645,7 +641,7 @@ private:
     // The (mangled) name of our entry-point function
     SkString fFunctionName;
 
-    skia_private::TArray<std::unique_ptr<ProgramImpl>, true> fChildProcessors;
+    SkTArray<std::unique_ptr<ProgramImpl>, true> fChildProcessors;
 
     friend class GrFragmentProcessor;
 };

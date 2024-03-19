@@ -32,7 +32,7 @@ import (
 const (
 	g3CanaryBucketName = "g3-compile-tasks"
 
-	InfraFailureErrorMsg    = "Your run failed due to unknown infrastructure failures. Ask the Infra Gardener to investigate (or file a bug at go/autoroll-bug)."
+	InfraFailureErrorMsg    = "Your run failed due to unknown infrastructure failures. Ask the Infra Gardener to investigate (or directly ping rmistry@)."
 	MissingApprovalErrorMsg = "To run the G3 tryjob, changes must be either owned and authored by Googlers or approved (Code-Review+1) by Googlers."
 	MergeConflictErrorMsg   = "G3 tryjob failed because the change is causing a merge conflict when applying it to the Skia hash in G3."
 
@@ -210,21 +210,21 @@ func waitForCanaryRoll(parentCtx context.Context, taskFileName, taskStoragePath 
 			if task.Error != "" {
 				sklog.Errorf("Run failed with: %s", task.Error)
 			}
-			_ = pg.Push(ctx, metricName, metricValue_InfraFailure)
+			pg.Push(ctx, metricName, metricValue_InfraFailure)
 			// Use a general purpose error message.
 			return td.FailStep(ctx, errors.New(InfraFailureErrorMsg))
 		case MissingApprovalStatus:
-			_ = pg.Push(ctx, metricName, metricValue_NoInfraFailure)
+			pg.Push(ctx, metricName, metricValue_NoInfraFailure)
 			return td.FailStep(ctx, errors.New(MissingApprovalErrorMsg))
 		case MergeConflictStatus:
-			_ = pg.Push(ctx, metricName, metricValue_NoInfraFailure)
+			pg.Push(ctx, metricName, metricValue_NoInfraFailure)
 			return td.FailStep(ctx, errors.New(MergeConflictErrorMsg))
 		case FailureStatus:
-			_ = pg.Push(ctx, metricName, metricValue_NoInfraFailure)
+			pg.Push(ctx, metricName, metricValue_NoInfraFailure)
 			return td.FailStep(ctx, fmt.Errorf("Run failed G3 TAP.\n%s", PatchingInformation))
 		case SuccessStatus:
 			// Run passed G3 TAP.
-			_ = pg.Push(ctx, metricName, metricValue_NoInfraFailure)
+			pg.Push(ctx, metricName, metricValue_NoInfraFailure)
 			return nil
 		}
 	}

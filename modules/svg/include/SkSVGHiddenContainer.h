@@ -10,7 +10,7 @@
 
 #include "modules/svg/include/SkSVGContainer.h"
 
-class SK_API SkSVGHiddenContainer : public SkSVGContainer {
+class SkSVGHiddenContainer : public SkSVGContainer {
 protected:
     explicit SkSVGHiddenContainer(SkSVGTag t) : INHERITED(t) {}
 

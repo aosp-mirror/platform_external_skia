@@ -18,7 +18,7 @@
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
 #endif
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 #ifdef SK_DEBUG
 void PathRenderer::StencilPathArgs::validate() const {
@@ -107,4 +107,4 @@ void PathRenderer::onStencilPath(const StencilPathArgs& args) {
     this->drawPath(drawArgs);
 }
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1

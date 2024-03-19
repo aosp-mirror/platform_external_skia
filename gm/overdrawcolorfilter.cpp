@@ -31,9 +31,11 @@ static inline void set_bitmap(SkBitmap* bitmap, uint8_t alpha) {
 }
 
 struct OverdrawColorFilter : public skiagm::GM {
-    SkString getName() const override { return SkString{"overdrawcolorfilter"}; }
+    SkString onShortName() override {
+        return SkString{"overdrawcolorfilter"};
+    }
 
-    SkISize getISize() override { return {200, 400}; }
+    SkISize onISize() override { return {200, 400}; }
 
     void onDraw(SkCanvas* canvas) override {
         static const SkColor colors[SkOverdrawColorFilter::kNumColors] = {

@@ -86,7 +86,7 @@ public:
 
     /** Poll for messages and unmap any incoming buffers. */
     void process() {
-        skia_private::STArray<4, BufferFinishedMessage> messages;
+        SkSTArray<4, BufferFinishedMessage> messages;
         fFinishedBufferInbox.poll(&messages);
         if (!fAbandoned) {
             for (auto& m : messages) {
@@ -146,6 +146,7 @@ public:
                            SkISize dimensions,
                            size_t rowBytes,
                            TClientMappedBufferManager<T, IDType>* manager) {
+        SkASSERT(!result.fTransferBuffer->isMapped());
         const void* mappedData = result.fTransferBuffer->map();
         if (!mappedData) {
             return false;
@@ -215,7 +216,7 @@ private:
         sk_sp<T> fMappedBuffer;
         size_t fRowBytes;
     };
-    skia_private::STArray<4, Plane> fPlanes;
+    SkSTArray<3, Plane> fPlanes;
     IDType fIntendedRecipient;
 };
 

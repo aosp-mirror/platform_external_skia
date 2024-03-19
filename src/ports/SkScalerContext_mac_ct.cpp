@@ -34,12 +34,12 @@
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkAutoMalloc.h"
-#include "src/base/SkEndian.h"
 #include "src/base/SkMathPriv.h"
+#include "src/core/SkEndian.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskGamma.h"
-#include "src/core/SkMemset.h"
+#include "src/core/SkOpts.h"
 #include "src/ports/SkScalerContext_mac_ct.h"
 #include "src/ports/SkTypeface_mac_ct.h"
 #include "src/sfnt/SkOTTableTypes.h"
@@ -293,21 +293,27 @@ CGRGBPixel* SkScalerContext_Mac::Offscreen::getCG(const SkScalerContext_Mac& con
     return image;
 }
 
-SkScalerContext::GlyphMetrics SkScalerContext_Mac::generateMetrics(const SkGlyph& glyph,
-                                                                   SkArenaAlloc*) {
-    GlyphMetrics mx(glyph.maskFormat());
+bool SkScalerContext_Mac::generateAdvance(SkGlyph* glyph) {
+    return false;
+}
 
-    mx.neverRequestPath = ((SkTypeface_Mac*)this->getTypeface())->fHasColorGlyphs;
+void SkScalerContext_Mac::generateMetrics(SkGlyph* glyph, SkArenaAlloc* alloc) {
+    glyph->fMaskFormat = fRec.fMaskFormat;
 
-    const CGGlyph cgGlyph = (CGGlyph)glyph.getGlyphID();
+    if (((SkTypeface_Mac*)this->getTypeface())->fHasColorGlyphs) {
+        glyph->setPath(alloc, nullptr, false);
+    }
+
+    const CGGlyph cgGlyph = (CGGlyph) glyph->getGlyphID();
+    glyph->zeroMetrics();
 
     // The following block produces cgAdvance in CG units (pixels, y up).
     CGSize cgAdvance;
     CTFontGetAdvancesForGlyphs(fCTFont.get(), kCTFontOrientationHorizontal,
                                &cgGlyph, &cgAdvance, 1);
     cgAdvance = CGSizeApplyAffineTransform(cgAdvance, fTransform);
-    mx.advance.fX =  SkFloatFromCGFloat(cgAdvance.width);
-    mx.advance.fY = -SkFloatFromCGFloat(cgAdvance.height);
+    glyph->fAdvanceX =  SkFloatFromCGFloat(cgAdvance.width);
+    glyph->fAdvanceY = -SkFloatFromCGFloat(cgAdvance.height);
 
     // The following produces skBounds in SkGlyph units (pixels, y down),
     // or returns early if skBounds would be empty.
@@ -333,12 +339,12 @@ SkScalerContext::GlyphMetrics SkScalerContext_Mac::generateMetrics(const SkGlyph
         if (0 == cgAdvance.width && 0 == cgAdvance.height) {
             SkUniqueCFRef<CGPathRef> path(CTFontCreatePathForGlyph(fCTFont.get(), cgGlyph,nullptr));
             if (!path || CGPathIsEmpty(path.get())) {
-                return mx;
+                return;
             }
         }
 
         if (SkCGRectIsEmpty(cgBounds)) {
-            return mx;
+            return;
         }
 
         // Convert cgBounds to SkGlyph units (pixels, y down).
@@ -349,17 +355,27 @@ SkScalerContext::GlyphMetrics SkScalerContext_Mac::generateMetrics(const SkGlyph
     // Currently the bounds are based on being rendered at (0,0).
     // The top left must not move, since that is the base from which subpixel positioning is offset.
     if (fDoSubPosition) {
-        skBounds.fRight += SkFixedToFloat(glyph.getSubXFixed());
-        skBounds.fBottom += SkFixedToFloat(glyph.getSubYFixed());
+        skBounds.fRight += SkFixedToFloat(glyph->getSubXFixed());
+        skBounds.fBottom += SkFixedToFloat(glyph->getSubYFixed());
     }
 
-    skBounds.roundOut(&mx.bounds);
+    // We're trying to pack left and top into int16_t,
+    // and width and height into uint16_t, after outsetting by 1.
+    if (!SkRect::MakeXYWH(-32767, -32767, 65535, 65535).contains(skBounds)) {
+        return;
+    }
+
+    SkIRect skIBounds;
+    skBounds.roundOut(&skIBounds);
     // Expand the bounds by 1 pixel, to give CG room for anti-aliasing.
     // Note that this outset is to allow room for LCD smoothed glyphs. However, the correct outset
     // is not currently known, as CG dilates the outlines by some percentage.
     // Note that if this context is A8 and not back-forming from LCD, there is no need to outset.
-    mx.bounds.outset(1, 1);
-    return mx;
+    skIBounds.outset(1, 1);
+    glyph->fLeft = SkToS16(skIBounds.fLeft);
+    glyph->fTop = SkToS16(skIBounds.fTop);
+    glyph->fWidth = SkToU16(skIBounds.width());
+    glyph->fHeight = SkToU16(skIBounds.height());
 }
 
 static constexpr uint8_t sk_pow2_table(size_t i) {
@@ -460,7 +476,7 @@ static SkPMColor cgpixels_to_pmcolor(CGRGBPixel rgb) {
     return SkPackARGB32(a, r, g, b);
 }
 
-void SkScalerContext_Mac::generateImage(const SkGlyph& glyph, void* imageBuffer) {
+void SkScalerContext_Mac::generateImage(const SkGlyph& glyph) {
     CGGlyph cgGlyph = SkTo<CGGlyph>(glyph.getGlyphID());
 
     // FIXME: lcd smoothed un-hinted rasterization unsupported.
@@ -474,8 +490,8 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph, void* imageBuffer)
     }
 
     // Fix the glyph
-    if ((glyph.maskFormat() == SkMask::kLCD16_Format) ||
-        (glyph.maskFormat() == SkMask::kA8_Format
+    if ((glyph.fMaskFormat == SkMask::kLCD16_Format) ||
+        (glyph.fMaskFormat == SkMask::kA8_Format
          && requestSmooth
          && SkCTFontGetSmoothBehavior() != SkCTFontSmoothBehavior::none))
     {
@@ -487,8 +503,8 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph, void* imageBuffer)
         //Other code may also be applying the pre-blend, so we'd need another
         //one with this and one without.
         CGRGBPixel* addr = cgPixels;
-        for (int y = 0; y < glyph.height(); ++y) {
-            for (int x = 0; x < glyph.width(); ++x) {
+        for (int y = 0; y < glyph.fHeight; ++y) {
+            for (int x = 0; x < glyph.fWidth; ++x) {
                 int r = (addr[x] >> 16) & 0xFF;
                 int g = (addr[x] >>  8) & 0xFF;
                 int b = (addr[x] >>  0) & 0xFF;
@@ -499,38 +515,38 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph, void* imageBuffer)
     }
 
     // Convert glyph to mask
-    switch (glyph.maskFormat()) {
+    switch (glyph.fMaskFormat) {
         case SkMask::kLCD16_Format: {
             if (fPreBlend.isApplicable()) {
-                RGBToLcd16<true>(cgPixels, cgRowBytes, glyph, imageBuffer,
+                RGBToLcd16<true>(cgPixels, cgRowBytes, glyph, glyph.fImage,
                                  fPreBlend.fR, fPreBlend.fG, fPreBlend.fB);
             } else {
-                RGBToLcd16<false>(cgPixels, cgRowBytes, glyph, imageBuffer,
+                RGBToLcd16<false>(cgPixels, cgRowBytes, glyph, glyph.fImage,
                                   fPreBlend.fR, fPreBlend.fG, fPreBlend.fB);
             }
         } break;
         case SkMask::kA8_Format: {
             if (fPreBlend.isApplicable()) {
-                RGBToA8<true>(cgPixels, cgRowBytes, glyph, imageBuffer, fPreBlend.fG);
+                RGBToA8<true>(cgPixels, cgRowBytes, glyph, glyph.fImage, fPreBlend.fG);
             } else {
-                RGBToA8<false>(cgPixels, cgRowBytes, glyph, imageBuffer, fPreBlend.fG);
+                RGBToA8<false>(cgPixels, cgRowBytes, glyph, glyph.fImage, fPreBlend.fG);
             }
         } break;
         case SkMask::kBW_Format: {
-            const int width = glyph.width();
+            const int width = glyph.fWidth;
             size_t dstRB = glyph.rowBytes();
-            uint8_t* dst = (uint8_t*)imageBuffer;
-            for (int y = 0; y < glyph.height(); y++) {
+            uint8_t* dst = (uint8_t*)glyph.fImage;
+            for (int y = 0; y < glyph.fHeight; y++) {
                 cgpixels_to_bits(dst, cgPixels, width);
                 cgPixels = SkTAddOffset<CGRGBPixel>(cgPixels, cgRowBytes);
                 dst = SkTAddOffset<uint8_t>(dst, dstRB);
             }
         } break;
         case SkMask::kARGB32_Format: {
-            const int width = glyph.width();
+            const int width = glyph.fWidth;
             size_t dstRB = glyph.rowBytes();
-            SkPMColor* dst = (SkPMColor*)imageBuffer;
-            for (int y = 0; y < glyph.height(); y++) {
+            SkPMColor* dst = (SkPMColor*)glyph.fImage;
+            for (int y = 0; y < glyph.fHeight; y++) {
                 for (int x = 0; x < width; ++x) {
                     dst[x] = cgpixels_to_pmcolor(cgPixels[x]);
                 }

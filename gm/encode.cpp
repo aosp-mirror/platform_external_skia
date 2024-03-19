@@ -6,22 +6,18 @@
  */
 
 #include "gm/gm.h"
-
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageEncoder.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
-#include "include/core/SkStream.h"
 #include "include/core/SkString.h"
-#include "include/encode/SkJpegEncoder.h"
-#include "include/encode/SkPngEncoder.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
-#include "tools/fonts/FontToolUtils.h"
 
 namespace skiagm {
 
@@ -30,27 +26,26 @@ public:
     EncodeGM() {}
 
 protected:
-    SkString getName() const override { return SkString("encode"); }
+    SkString onShortName() override {
+        return SkString("encode");
+    }
 
-    SkISize getISize() override { return SkISize::Make(1024, 600); }
+    SkISize onISize() override {
+        return SkISize::Make(1024, 600);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkBitmap orig;
-        ToolUtils::GetResourceAsBitmap("images/mandrill_512_q075.jpg", &orig);
-        SkDynamicMemoryWStream stream;
-        SkASSERT_RELEASE(SkPngEncoder::Encode(&stream, orig.pixmap(), {}));
-        sk_sp<SkData> pngData = stream.detachAsData();
-        stream.reset();
+        GetResourceAsBitmap("images/mandrill_512_q075.jpg", &orig);
+        auto pngData = SkEncodeBitmap(orig, SkEncodedImageFormat::kPNG, 100);
+        auto jpgData = SkEncodeBitmap(orig, SkEncodedImageFormat::kJPEG, 100);
 
-        SkASSERT_RELEASE(SkJpegEncoder::Encode(&stream, orig.pixmap(), {}));
-        sk_sp<SkData> jpgData = stream.detachAsData();
-
-        sk_sp<SkImage> pngImage = SkImages::DeferredFromEncodedData(pngData);
-        sk_sp<SkImage> jpgImage = SkImages::DeferredFromEncodedData(jpgData);
+        sk_sp<SkImage> pngImage = SkImage::MakeFromEncoded(pngData);
+        sk_sp<SkImage> jpgImage = SkImage::MakeFromEncoded(jpgData);
         canvas->drawImage(pngImage.get(), 0.0f, 0.0f);
         canvas->drawImage(jpgImage.get(), 512.0f, 0.0f);
 
-        SkFont font = ToolUtils::DefaultPortableFont();
+        SkFont font;
         font.setEdging(SkFont::Edging::kAlias);
         canvas->drawString("Images should look identical.", 450.0f, 550.0f, font, SkPaint());
     }
@@ -73,7 +68,7 @@ DEF_SIMPLE_GM(jpeg_orientation, canvas, 1000, 1000) {
             path.printf("/skia/orientation/Landscape_%d.jpg", i + 1);
             auto stream = SkStream::MakeFromFile(path.c_str());
             auto data = SkData::MakeFromStream(stream.get(), stream->getLength());
-            imgs[i] = SkImages::DeferredFromEncodedData(data, nullptr);
+            imgs[i] = SkImage::MakeFromEncoded(data, nullptr);
         }
     }
     canvas->scale(0.25, 0.25);

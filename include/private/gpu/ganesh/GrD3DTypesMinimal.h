@@ -48,7 +48,7 @@ struct GrD3DBackendSurfaceInfo {
     GrD3DTextureResourceInfo snapTextureResourceInfo() const;
 
     bool isProtected() const;
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     bool operator==(const GrD3DBackendSurfaceInfo& that) const;
 #endif
 
@@ -65,7 +65,7 @@ public:
 
     GrD3DSurfaceInfo getSurfaceInfo(uint32_t sampleCount,
                                     uint32_t levelCount,
-                                    skgpu::Protected isProtected) const;
+                                    GrProtected isProtected) const;
 
 private:
     GrD3DTextureResourceSpec* fSpec;

@@ -9,13 +9,9 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
-#include "include/private/base/SkTArray.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 
 #include <tuple>
-
-using namespace skia_private;
 
 // Math constants are not always defined.
 #ifndef M_PI
@@ -60,7 +56,7 @@ private:
     std::array<double, 4> fCubicY;
     double fMaxError;  // Max error (in pixels) between the cubic and the screen-space arc.
     double fTheta;  // Angle of the arc. This is only used for informational purposes.
-    TArray<SkString> fInfoStrings;
+    SkTArray<SkString> fInfoStrings;
 
     class Click;
 };
@@ -186,7 +182,7 @@ void SampleFitCubicToCircle::draw(SkCanvas* canvas) {
     SkPaint textPaint;
     textPaint.setColor(SK_ColorWHITE);
     constexpr static float kInfoTextSize = 16;
-    SkFont font(ToolUtils::DefaultTypeface(), kInfoTextSize);
+    SkFont font(nullptr, kInfoTextSize);
     int infoY = 10 + kInfoTextSize;
     for (const SkString& infoString : fInfoStrings) {
         canvas->drawString(infoString.c_str(), 10, infoY, font, textPaint);

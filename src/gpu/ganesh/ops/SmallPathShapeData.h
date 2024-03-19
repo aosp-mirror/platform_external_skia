@@ -10,12 +10,12 @@
 
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 
-#include "src/core/SkChecksum.h"
+#include "src/core/SkOpts.h"
 #include "src/gpu/ganesh/GrDrawOpAtlas.h"
 
 class GrStyledShape;
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 class SmallPathShapeDataKey {
 public:
@@ -63,11 +63,11 @@ public:
     }
 
     static inline uint32_t Hash(const SmallPathShapeDataKey& key) {
-        return SkChecksum::Hash32(key.data(), sizeof(uint32_t) * key.count32());
+        return SkOpts::hash(key.data(), sizeof(uint32_t) * key.count32());
     }
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // SK_ENABLE_OPTIMIZE_SIZE
 

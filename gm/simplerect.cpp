@@ -20,13 +20,15 @@ public:
     SimpleRectGM() {}
 
 protected:
-    SkString getName() const override {
+    SkString onShortName() override {
         SkString name;
         name.printf("simplerect");
         return name;
     }
 
-    SkISize getISize() override { return SkISize::Make(800, 800); }
+    SkISize onISize() override {
+        return SkISize::Make(800, 800);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(1, 1);    // want to exercise non-identity ctm performance

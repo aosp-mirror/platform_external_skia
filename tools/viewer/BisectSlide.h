@@ -8,21 +8,11 @@
 #ifndef BisectSlide_DEFINED
 #define BisectSlide_DEFINED
 
-#include "include/core/SkMatrix.h"
-#include "include/core/SkPaint.h"
+#include "include/core/SkCanvas.h"
 #include "include/core/SkPath.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkSize.h"
-#include "include/core/SkString.h"
-#include "include/core/SkTypes.h"
-#include "include/private/base/SkTArray.h"
 #include "tools/viewer/Slide.h"
 
 #include <stack>
-#include <utility>
-
-class SkCanvas;
 
 /**
  * This is a simple utility designed to extract the paths from an SKP file and then isolate a single
@@ -53,11 +43,10 @@ private:
 
     SkString fFilePath;
     SkIRect fDrawBounds = SkIRect::MakeEmpty();
-    skia_private::TArray<FoundPath> fFoundPaths;
-    skia_private::TArray<FoundPath> fTossedPaths;
-    skia_private::TArray<char> fTrail;
-    std::stack<std::pair<skia_private::TArray<FoundPath>, skia_private::TArray<FoundPath>>>
-        fPathHistory;
+    SkTArray<FoundPath> fFoundPaths;
+    SkTArray<FoundPath> fTossedPaths;
+    SkTArray<char> fTrail;
+    std::stack<std::pair<SkTArray<FoundPath>, SkTArray<FoundPath>>> fPathHistory;
 };
 
 #endif

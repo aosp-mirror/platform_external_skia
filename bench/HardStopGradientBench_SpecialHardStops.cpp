@@ -47,8 +47,8 @@ public:
         return fName.c_str();
     }
 
-    SkISize onGetSize() override {
-        return SkISize::Make(fW, fH);
+    SkIPoint onGetSize() override {
+        return SkIPoint::Make(fW, fH);
     }
 
     void onPreDraw(SkCanvas* canvas) override {

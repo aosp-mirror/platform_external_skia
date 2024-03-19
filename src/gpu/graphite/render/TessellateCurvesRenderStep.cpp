@@ -7,7 +7,7 @@
 
 #include "src/gpu/graphite/render/TessellateCurvesRenderStep.h"
 
-#include "src/sksl/SkSLString.h"
+#include "include/private/SkSLString.h"
 
 #include "src/gpu/graphite/BufferManager.h"
 #include "src/gpu/graphite/DrawParams.h"
@@ -41,19 +41,19 @@ using Writer = PatchWriter<DynamicInstancesPatchAllocator<FixedCountCurves>,
 
 // The order of the attribute declarations must match the order used by
 // PatchWriter::emitPatchAttribs, i.e.:
-//     join << fanPoint << stroke << color << depth << curveType << ssboIndices
+//     join << fanPoint << stroke << color << depth << curveType << ssboIndex
 static constexpr Attribute kBaseAttributes[] = {
         {"p01", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"p23", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
-        {"ssboIndices", VertexAttribType::kUShort2, SkSLType::kUShort2}};
+        {"ssboIndex", VertexAttribType::kInt, SkSLType::kInt}};
 
 static constexpr Attribute kAttributesWithCurveType[] = {
         {"p01", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"p23", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
         {"curveType", VertexAttribType::kFloat, SkSLType::kFloat},
-        {"ssboIndices", VertexAttribType::kUShort2, SkSLType::kUShort2}};
+        {"ssboIndex", VertexAttribType::kInt, SkSLType::kInt}};
 
 static constexpr SkSpan<const Attribute> kAttributes[2] = {kAttributesWithCurveType,
                                                            kBaseAttributes};
@@ -108,7 +108,7 @@ std::string TessellateCurvesRenderStep::vertexSkSL() const {
 
 void TessellateCurvesRenderStep::writeVertices(DrawWriter* dw,
                                                const DrawParams& params,
-                                               skvx::ushort2 ssboIndices) const {
+                                               int ssboIndex) const {
     SkPath path = params.geometry().shape().asPath(); // TODO: Iterate the Shape directly
 
     int patchReserveCount = FixedCountCurves::PreallocCount(path.countVerbs());
@@ -118,13 +118,13 @@ void TessellateCurvesRenderStep::writeVertices(DrawWriter* dw,
                   fIndexBuffer,
                   patchReserveCount};
     writer.updatePaintDepthAttrib(params.order().depthAsFloat());
-    writer.updateSsboIndexAttrib(ssboIndices);
+    writer.updateSsboIndexAttrib(ssboIndex);
 
     // The vector xform approximates how the control points are transformed by the shader to
     // more accurately compute how many *parametric* segments are needed.
     // TODO: This doesn't account for perspective division yet, which will require updating the
     // approximate transform based on each verb's control points' bounding box.
-    SkASSERT(params.transform().type() < Transform::Type::kPerspective);
+    SkASSERT(params.transform().type() < Transform::Type::kProjection);
     writer.setShaderTransform(wangs_formula::VectorXform{params.transform().matrix()},
                               params.transform().maxScaleFactor());
 

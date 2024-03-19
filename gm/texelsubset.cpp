@@ -18,7 +18,6 @@
 #include "include/core/SkString.h"
 #include "include/private/base/SkTArray.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrProxyProvider.h"
@@ -26,14 +25,11 @@
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/gpu/TestOps.h"
 
 #include <memory>
 #include <utility>
-
-using namespace skia_private;
 
 using MipmapMode = GrSamplerState::MipmapMode;
 using Filter     = GrSamplerState::Filter;
@@ -51,7 +47,7 @@ public:
     }
 
 protected:
-    SkString getName() const override {
+    SkString onShortName() override {
         SkString name("texel_subset");
         switch (fFilter) {
             case Filter::kNearest:
@@ -75,7 +71,7 @@ protected:
         return name;
     }
 
-    SkISize getISize() override {
+    SkISize onISize() override {
         static constexpr int kN = GrSamplerState::kWrapModeCount;
         int w = kTestPad + 2*kN*(kImageSize.width()  + 2*kDrawPad + kTestPad);
         int h = kTestPad + 2*kN*(kImageSize.height() + 2*kDrawPad + kTestPad);
@@ -83,22 +79,22 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        SkAssertResult(ToolUtils::GetResourceAsBitmap("images/mandrill_128.png", &fBitmap));
+        GetResourceAsBitmap("images/mandrill_128.png", &fBitmap);
         // Make the bitmap non-square to detect any width/height confusion.
         fBitmap.extractSubset(&fBitmap, SkIRect::MakeSize(fBitmap.dimensions()).makeInset(0, 20));
         SkASSERT(fBitmap.dimensions() == kImageSize);
     }
 
     DrawResult onDraw(GrRecordingContext* rContext, SkCanvas* canvas, SkString* errorMsg) override {
-        auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
+        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
         if (!sdc) {
             *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
             return DrawResult::kSkip;
         }
 
-        skgpu::Mipmapped mipmapped =
-                (fMipmapMode != MipmapMode::kNone) ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
-        if (mipmapped == skgpu::Mipmapped::kYes && !rContext->priv().caps()->mipmapSupport()) {
+        GrMipmapped mipmapped = (fMipmapMode != MipmapMode::kNone) ? GrMipmapped::kYes
+                                                                   : GrMipmapped::kNo;
+        if (mipmapped == GrMipmapped::kYes && !rContext->priv().caps()->mipmapSupport()) {
             return DrawResult::kSkip;
         }
         auto view = std::get<0>(GrMakeCachedBitmapProxyView(
@@ -119,7 +115,7 @@ protected:
                                             3*fBitmap.width()/5 + 2, 4*fBitmap.height()/5 + 2);
         }
 
-        TArray<SkMatrix> textureMatrices;
+        SkTArray<SkMatrix> textureMatrices;
 
         SkRect a = SkRect::Make(texelSubset);
         SkRect b = fUpscale ? a.makeInset (.31f * a.width(), .31f * a.height())
@@ -140,7 +136,7 @@ protected:
 
         SkRect localRect = SkRect::Make(fBitmap.bounds()).makeOutset(kDrawPad, kDrawPad);
 
-        auto size = this->getISize();
+        auto size = this->onISize();
 
         SkScalar y = kDrawPad + kTestPad;
         SkRect drawRect;

@@ -35,7 +35,7 @@ namespace skgpu {
 class SingleOwner;
 }
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 class SurfaceFillContext;
 
@@ -62,7 +62,7 @@ public:
     int width() const { return fReadView.proxy()->width(); }
     int height() const { return fReadView.proxy()->height(); }
 
-    skgpu::Mipmapped mipmapped() const { return fReadView.mipmapped(); }
+    GrMipmapped mipmapped() const { return fReadView.mipmapped(); }
 
     const GrCaps* caps() const;
 
@@ -92,7 +92,6 @@ public:
     // GPU implementation for SkImage:: and SkSurface::asyncRescaleAndReadPixelsYUV420.
     void asyncRescaleAndReadPixelsYUV420(GrDirectContext*,
                                          SkYUVColorSpace yuvColorSpace,
-                                         bool readAlpha,
                                          sk_sp<SkColorSpace> dstColorSpace,
                                          const SkIRect& srcRect,
                                          SkISize dstSize,
@@ -163,7 +162,7 @@ public:
                      SkImage::RescaleGamma,
                      SkImage::RescaleMode);
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     bool testCopy(sk_sp<GrSurfaceProxy> src, const SkIRect& srcRect, const SkIPoint& dstPoint) {
         return this->copy(std::move(src), srcRect, dstPoint) != nullptr;
     }
@@ -193,8 +192,6 @@ protected:
         // If null then the transfer could not be performed. Otherwise this buffer will contain
         // the pixel data when the transfer is complete.
         sk_sp<GrGpuBuffer> fTransferBuffer;
-        // RowBytes for transfer buffer data
-        size_t fRowBytes;
         // If this is null then the transfer buffer will contain the data in the requested
         // color type. Otherwise, when the transfer is done this must be called to convert
         // from the transfer buffer's color type to the requested color type.
@@ -262,6 +259,6 @@ private:
     using INHERITED = SkRefCnt;
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // SurfaceContext_DEFINED

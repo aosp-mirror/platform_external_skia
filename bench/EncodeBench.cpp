@@ -11,7 +11,7 @@
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
-#include "tools/DecodeUtils.h"
+#include "tools/Resources.h"
 
 // Like other Benchmark subclasses, Encoder benchmarks are run by:
 // nanobench --match ^Encode_
@@ -27,12 +27,12 @@ public:
         , fEncoder(encoder)
         , fName(SkStringPrintf("Encode_%s_%s", filename, encoderName)) {}
 
-    bool isSuitableFor(Backend backend) override { return backend == Backend::kNonRendering; }
+    bool isSuitableFor(Backend backend) override { return backend == kNonRendering_Backend; }
 
     const char* onGetName() override { return fName.c_str(); }
 
     void onDelayedSetup() override {
-        SkAssertResult(ToolUtils::GetResourceAsBitmap(fSourceFilename, &fBitmap));
+        SkAssertResult(GetResourceAsBitmap(fSourceFilename, &fBitmap));
     }
 
     void onDraw(int loops, SkCanvas*) override {

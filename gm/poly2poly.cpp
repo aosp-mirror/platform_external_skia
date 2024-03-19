@@ -22,7 +22,6 @@
 #include "include/core/SkTypeface.h"
 #include "include/utils/SkTextUtils.h"
 #include "tools/Resources.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <stdint.h>
 
@@ -31,9 +30,14 @@ public:
     Poly2PolyGM() {}
 
 protected:
-    SkString getName() const override { return SkString("poly2poly"); }
 
-    SkISize getISize() override { return SkISize::Make(835, 840); }
+    SkString onShortName() override {
+        return SkString("poly2poly");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(835, 840);
+    }
 
     static void doDraw(SkCanvas* canvas, const SkFont& font, SkPaint* paint, const int isrc[],
                        const int idst[], int count) {
@@ -69,10 +73,7 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        fEmFace = ToolUtils::CreateTypefaceFromResource("fonts/Em.ttf");
-        if (!fEmFace) {
-            fEmFace = ToolUtils::DefaultPortableTypeface();
-        }
+        fEmFace = MakeResourceAsTypeface("fonts/Em.ttf");
     }
 
     void onDraw(SkCanvas* canvas) override {

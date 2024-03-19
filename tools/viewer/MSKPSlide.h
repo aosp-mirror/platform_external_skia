@@ -8,17 +8,10 @@
 #ifndef MSKPSlide_DEFINED
 #define MSKPSlide_DEFINED
 
-#include "include/core/SkScalar.h"
-#include "include/core/SkSize.h"
-#include "include/core/SkStream.h"
-#include "include/core/SkString.h"
 #include "tools/MSKPPlayer.h"
 #include "tools/viewer/Slide.h"
 
-#include <memory>
-#include <vector>
-
-class SkCanvas;
+class SkStreamSeekable;
 
 class MSKPSlide : public Slide {
 public:
@@ -55,6 +48,8 @@ private:
     std::vector<SkString>         fLayerIDStrings;
     int                           fDrawLayerID = -1;  // -1 means just draw the root layer
     bool                          fListAllLayers = true;
+
+    using INHERITED = Slide;
 };
 
 #endif

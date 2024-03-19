@@ -25,13 +25,12 @@ namespace sktext {
 class GlyphRunList;
 }
 
-class SkDevice;
+class SkBaseDevice;
 class SkBitmap;
 class SkBlender;
 class SkClipStack;
 class SkData;
 class SkImage;
-class SkMesh;
 class SkPaint;
 class SkPath;
 class SkRRect;
@@ -41,11 +40,16 @@ struct SkISize;
 struct SkPoint;
 struct SkRect;
 struct SkSamplingOptions;
+#ifdef SK_ENABLE_SKSL
+class SkMesh;
+#endif
 
 class SkSVGDevice final : public SkClipStackDevice {
 public:
-    static sk_sp<SkDevice> Make(const SkISize& size, std::unique_ptr<SkXMLWriter>, uint32_t flags);
+    static sk_sp<SkBaseDevice> Make(const SkISize& size, std::unique_ptr<SkXMLWriter>,
+                                    uint32_t flags);
 
+protected:
     void drawPaint(const SkPaint& paint) override;
     void drawAnnotation(const SkRect& rect, const char key[], SkData* value) override;
     void drawPoints(SkCanvas::PointMode mode, size_t count,
@@ -60,17 +64,17 @@ public:
                   const SkPaint& paint,
                   bool pathIsMutable = false) override;
 
-    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) override;
-    void drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) override;
-
-private:
-    SkSVGDevice(const SkISize& size, std::unique_ptr<SkXMLWriter>, uint32_t);
-    ~SkSVGDevice() override;
-
     void onDrawGlyphRunList(SkCanvas*,
                             const sktext::GlyphRunList&,
                             const SkPaint& initialPaint,
                             const SkPaint& drawingPaint) override;
+    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) override;
+#ifdef SK_ENABLE_SKSL
+    void drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) override;
+#endif
+private:
+    SkSVGDevice(const SkISize& size, std::unique_ptr<SkXMLWriter>, uint32_t);
+    ~SkSVGDevice() override;
 
     struct MxCp;
     void drawBitmapCommon(const MxCp&, const SkBitmap& bm, const SkPaint& paint);
@@ -96,7 +100,9 @@ private:
     };
 
     std::unique_ptr<AutoElement> fRootElement;
-    skia_private::TArray<ClipRec> fClipStack;
+    SkTArray<ClipRec>            fClipStack;
+
+    using INHERITED = SkClipStackDevice;
 };
 
 #endif // SkSVGDevice_DEFINED

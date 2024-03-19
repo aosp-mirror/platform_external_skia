@@ -1,7 +1,5 @@
 // Copyright 2019 Google LLC.
 
-#include "modules/skparagraph/src/TextLine.h"
-
 #include "include/core/SkBlurTypes.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkFontMetrics.h"
@@ -22,9 +20,8 @@
 #include "modules/skparagraph/src/Decorations.h"
 #include "modules/skparagraph/src/ParagraphImpl.h"
 #include "modules/skparagraph/src/ParagraphPainterImpl.h"
+#include "modules/skparagraph/src/TextLine.h"
 #include "modules/skshaper/include/SkShaper.h"
-#include "modules/skshaper/include/SkShaper_harfbuzz.h"
-#include "modules/skshaper/include/SkShaper_skunicode.h"
 
 #include <algorithm>
 #include <iterator>
@@ -62,7 +59,7 @@ TextRange operator*(const TextRange& a, const TextRange& b) {
     return end > begin ? TextRange(begin, end) : EMPTY_TEXT;
 }
 
-int compareRound(SkScalar a, SkScalar b, bool applyRoundingHack) {
+int compareRound(SkScalar a, SkScalar b) {
     // There is a rounding error that gets bigger when maxWidth gets bigger
     // VERY long zalgo text (> 100000) on a VERY long line (> 10000)
     // Canvas scaling affects it
@@ -74,13 +71,8 @@ int compareRound(SkScalar a, SkScalar b, bool applyRoundingHack) {
         return 0;
     }
 
-    auto ra = a;
-    auto rb = b;
-
-    if (applyRoundingHack) {
-        ra = littleRound(a);
-        rb = littleRound(b);
-    }
+    auto ra = littleRound(a);
+    auto rb = littleRound(b);
     if (ra < rb) {
         return -1;
     } else {
@@ -448,63 +440,37 @@ void TextLine::paintDecorations(ParagraphPainter* painter, SkScalar x, SkScalar 
 }
 
 void TextLine::justify(SkScalar maxWidth) {
-    int whitespacePatches = 0;
+    // Count words and the extra spaces to spread across the line
+    // TODO: do it at the line breaking?..
+    size_t whitespacePatches = 0;
     SkScalar textLen = 0;
-    SkScalar whitespaceLen = 0;
     bool whitespacePatch = false;
-    // Take leading whitespaces width but do not increment a whitespace patch number
-    bool leadingWhitespaces = false;
     this->iterateThroughClustersInGlyphsOrder(false, false,
-        [&](const Cluster* cluster, ClusterIndex index, bool ghost) {
+        [&whitespacePatches, &textLen, &whitespacePatch](const Cluster* cluster, bool ghost) {
             if (cluster->isWhitespaceBreak()) {
-                if (index == 0) {
-                    leadingWhitespaces = true;
-                } else if (!whitespacePatch && !leadingWhitespaces) {
-                    // We only count patches BETWEEN words, not before
+                if (!whitespacePatch) {
+                    whitespacePatch = true;
                     ++whitespacePatches;
                 }
-                whitespacePatch = !leadingWhitespaces;
-                whitespaceLen += cluster->width();
-            } else if (cluster->isIdeographic()) {
-                // Whitespace break before and after
-                if (!whitespacePatch && index != 0) {
-                    // We only count patches BETWEEN words, not before
-                    ++whitespacePatches; // before
-                }
-                whitespacePatch = true;
-                leadingWhitespaces = false;
-                ++whitespacePatches;    // after
             } else {
                 whitespacePatch = false;
-                leadingWhitespaces = false;
             }
             textLen += cluster->width();
             return true;
         });
 
-    if (whitespacePatch) {
-        // We only count patches BETWEEN words, not after
-        --whitespacePatches;
-    }
     if (whitespacePatches == 0) {
-        if (fOwner->paragraphStyle().getTextDirection() == TextDirection::kRtl) {
-            // Justify -> Right align
-            fShift = maxWidth - textLen;
-        }
         return;
     }
 
-    SkScalar step = (maxWidth - textLen + whitespaceLen) / whitespacePatches;
-    SkScalar shift = 0.0f;
-    SkScalar prevShift = 0.0f;
+    SkScalar step = (maxWidth - textLen) / whitespacePatches;
+    SkScalar shift = 0;
 
     // Deal with the ghost spaces
     auto ghostShift = maxWidth - this->fAdvance.fX;
     // Spread the extra whitespaces
     whitespacePatch = false;
-    // Do not break on leading whitespaces
-    leadingWhitespaces = false;
-    this->iterateThroughClustersInGlyphsOrder(false, true, [&](const Cluster* cluster, ClusterIndex index, bool ghost) {
+    this->iterateThroughClustersInGlyphsOrder(false, true, [&](const Cluster* cluster, bool ghost) {
 
         if (ghost) {
             if (cluster->run().leftToRight()) {
@@ -513,41 +479,19 @@ void TextLine::justify(SkScalar maxWidth) {
             return true;
         }
 
+        auto prevShift = shift;
         if (cluster->isWhitespaceBreak()) {
-            if (index == 0) {
-                leadingWhitespaces = true;
-            } else if (!whitespacePatch && !leadingWhitespaces) {
+            if (!whitespacePatch) {
                 shift += step;
                 whitespacePatch = true;
                 --whitespacePatches;
             }
-            shift -= cluster->width();
-        } else if (cluster->isIdeographic()) {
-            if (!whitespacePatch && index != 0) {
-                shift += step;
-               --whitespacePatches;
-            }
-            whitespacePatch = false;
-            leadingWhitespaces = false;
         } else {
             whitespacePatch = false;
-            leadingWhitespaces = false;
         }
-        this->shiftCluster(cluster, shift, prevShift);
-        prevShift = shift;
-        // We skip ideographic whitespaces
-        if (!cluster->isWhitespaceBreak() && cluster->isIdeographic()) {
-            shift += step;
-            whitespacePatch = true;
-            --whitespacePatches;
-        }
+        shiftCluster(cluster, shift, prevShift);
         return true;
     });
-
-    if (whitespacePatch && whitespacePatches < 0) {
-        whitespacePatches++;
-        shift -= step;
-    }
 
     SkAssertResult(nearlyEqual(shift, maxWidth - textLen));
     SkASSERT(whitespacePatches == 0);
@@ -631,6 +575,11 @@ void TextLine::createEllipsis(SkScalar maxWidth, const SkString& ellipsis, bool)
     }
 }
 
+static inline SkUnichar nextUtf8Unit(const char** ptr, const char* end) {
+    SkUnichar val = SkUTF::NextUTF8(ptr, end);
+    return val < 0 ? 0xFFFD : val;
+}
+
 std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, const Cluster* cluster) {
 
     class ShapeHandler final : public SkShaper::RunHandler {
@@ -681,44 +630,20 @@ std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, const Clu
         }
     }
 
-    auto shaped = [&](sk_sp<SkTypeface> typeface, sk_sp<SkFontMgr> fallback) -> std::unique_ptr<Run> {
+    auto shaped = [&](sk_sp<SkTypeface> typeface, bool fallback) -> std::unique_ptr<Run> {
         ShapeHandler handler(run.heightMultiplier(), run.useHalfLeading(), run.baselineShift(), ellipsis);
-        SkFont font(std::move(typeface), textStyle.getFontSize());
+        SkFont font(typeface, textStyle.getFontSize());
         font.setEdging(SkFont::Edging::kAntiAlias);
         font.setHinting(SkFontHinting::kSlight);
         font.setSubpixel(true);
 
-        std::unique_ptr<SkShaper> shaper = SkShapers::HB::ShapeDontWrapOrReorder(
-                fOwner->getUnicode()->copy(), fallback ? fallback : SkFontMgr::RefEmpty());
-
-        const SkBidiIterator::Level defaultLevel = SkBidiIterator::kLTR;
-        const char* utf8 = ellipsis.c_str();
-        size_t utf8Bytes = ellipsis.size();
-
-        std::unique_ptr<SkShaper::BiDiRunIterator> bidi = SkShapers::unicode::BidiRunIterator(
-                fOwner->getUnicode(), utf8, utf8Bytes, defaultLevel);
-        SkASSERT(bidi);
-
-        std::unique_ptr<SkShaper::LanguageRunIterator> language =
-                SkShaper::MakeStdLanguageRunIterator(utf8, utf8Bytes);
-        SkASSERT(language);
-
-        std::unique_ptr<SkShaper::ScriptRunIterator> script =
-                SkShapers::HB::ScriptRunIterator(utf8, utf8Bytes);
-        SkASSERT(script);
-
-        std::unique_ptr<SkShaper::FontRunIterator> fontRuns = SkShaper::MakeFontMgrRunIterator(
-                utf8, utf8Bytes, font, fallback ? fallback : SkFontMgr::RefEmpty());
-        SkASSERT(fontRuns);
-
-        shaper->shape(utf8,
-                      utf8Bytes,
-                      *fontRuns,
-                      *bidi,
-                      *script,
-                      *language,
-                      nullptr,
-                      0,
+        std::unique_ptr<SkShaper> shaper = SkShaper::MakeShapeDontWrapOrReorder(
+                            fOwner->getUnicode()->copy(),
+                            fallback ? SkFontMgr::RefDefault() : SkFontMgr::RefEmpty());
+        shaper->shape(ellipsis.c_str(),
+                      ellipsis.size(),
+                      font,
+                      true,
                       std::numeric_limits<SkScalar>::max(),
                       &handler);
         auto ellipsisRun = handler.run();
@@ -728,7 +653,7 @@ std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, const Clu
     };
 
     // Check the current font
-    auto ellipsisRun = shaped(run.fFont.refTypeface(), nullptr);
+    auto ellipsisRun = shaped(run.fFont.refTypeface(), false);
     if (ellipsisRun->isResolved()) {
         return ellipsisRun;
     }
@@ -737,7 +662,7 @@ std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, const Clu
     std::vector<sk_sp<SkTypeface>> typefaces = fOwner->fontCollection()->findTypefaces(
             textStyle.getFontFamilies(), textStyle.getFontStyle(), textStyle.getFontArguments());
     for (const auto& typeface : typefaces) {
-        ellipsisRun = shaped(typeface, nullptr);
+        ellipsisRun = shaped(typeface, false);
         if (ellipsisRun->isResolved()) {
             return ellipsisRun;
         }
@@ -746,17 +671,12 @@ std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, const Clu
     // Try the fallback
     if (fOwner->fontCollection()->fontFallbackEnabled()) {
         const char* ch = ellipsis.c_str();
-      SkUnichar unicode = SkUTF::NextUTF8WithReplacement(&ch,
-                                                         ellipsis.c_str()
-                                                             + ellipsis.size());
-        // We do not expect emojis in ellipsis so if they appeat there
-        // they will not be resolved with the pretiest color emoji font
-        auto typeface = fOwner->fontCollection()->defaultFallback(
-                                            unicode,
-                                            textStyle.getFontStyle(),
-                                            textStyle.getLocale());
+        SkUnichar unicode = nextUtf8Unit(&ch, ellipsis.c_str() + ellipsis.size());
+
+       auto typeface = fOwner->fontCollection()->defaultFallback(
+                    unicode, textStyle.getFontStyle(), textStyle.getLocale());
         if (typeface) {
-            ellipsisRun = shaped(typeface, fOwner->fontCollection()->getFallbackManager());
+            ellipsisRun = shaped(typeface, true);
             if (ellipsisRun->isResolved()) {
                 return ellipsisRun;
             }
@@ -886,7 +806,7 @@ TextLine::ClipContext TextLine::measureTextInsideOneRun(TextRange textRange,
     result.clip.offset(textStartInLine, 0);
     //SkDebugf("@%f[%f:%f)\n", textStartInLine, result.clip.fLeft, result.clip.fRight);
 
-    if (compareRound(result.clip.fRight, fAdvance.fX, fOwner->getApplyRoundingHack()) > 0 && !includeGhostSpaces) {
+    if (compareRound(result.clip.fRight, fAdvance.fX) > 0 && !includeGhostSpaces) {
         // There are few cases when we need it.
         // The most important one: we measure the text with spaces at the end (or at the beginning in RTL)
         // and we should ignore these spaces
@@ -916,7 +836,6 @@ void TextLine::iterateThroughClustersInGlyphsOrder(bool reversed,
     // Walk through the clusters in the logical order (or reverse)
     SkSpan<const size_t> runs(fRunsInVisualOrder.data(), fRunsInVisualOrder.size());
     bool ignore = false;
-    ClusterIndex index = 0;
     directional_for_each(runs, !reversed, [&](decltype(runs[0]) r) {
         if (ignore) return;
         auto run = this->fOwner->run(r);
@@ -932,8 +851,7 @@ void TextLine::iterateThroughClustersInGlyphsOrder(bool reversed,
             if (!includeGhosts && ghost) {
                 return;
             }
-            if (!visitor(&cluster, index++, ghost)) {
-
+            if (!visitor(&cluster, ghost)) {
                 ignore = true;
                 return;
             }
@@ -976,8 +894,7 @@ SkScalar TextLine::iterateThroughSingleRunByStyles(TextAdjustment textAdjustment
 
     if (styleType == StyleType::kNone) {
         ClipContext clipContext = correctContext(textRange, 0.0f);
-        // The placehoder can have height=0 or (exclusively) width=0 and still be a thing
-        if (clipContext.clip.height() > 0.0f || clipContext.clip.width() > 0.0f) {
+        if (clipContext.clip.height() > 0) {
             visitor(textRange, TextStyle(), clipContext);
             return clipContext.clip.width();
         } else {
@@ -1099,10 +1016,11 @@ void TextLine::iterateThroughVisualRuns(bool includingGhostSpaces, const RunVisi
         }
     }
 
-    if (!includingGhostSpaces && compareRound(totalWidth, this->width(), fOwner->getApplyRoundingHack()) != 0) {
     // This is a very important assert!
     // It asserts that 2 different ways of calculation come with the same results
-        SkDEBUGFAILF("ASSERT: %f != %f\n", totalWidth, this->width());
+    if (!includingGhostSpaces && compareRound(totalWidth, this->width()) != 0) {
+        SkDebugf("ASSERT: %f != %f\n", totalWidth, this->width());
+        SkASSERT(false);
     }
 }
 
@@ -1112,7 +1030,6 @@ SkVector TextLine::offset() const {
 
 LineMetrics TextLine::getMetrics() const {
     LineMetrics result;
-    SkASSERT(fOwner);
 
     // Fill out the metrics
     fOwner->ensureUTF16Mapping();
@@ -1124,12 +1041,8 @@ LineMetrics TextLine::getMetrics() const {
     result.fAscent = - fMaxRunMetrics.ascent();
     result.fDescent = fMaxRunMetrics.descent();
     result.fUnscaledAscent = - fMaxRunMetrics.ascent(); // TODO: implement
-    result.fHeight = fAdvance.fY;
-    result.fWidth = fAdvance.fX;
-    if (fOwner->getApplyRoundingHack()) {
-        result.fHeight = littleRound(result.fHeight);
-        result.fWidth = littleRound(result.fWidth);
-    }
+    result.fHeight = littleRound(fAdvance.fY);
+    result.fWidth = littleRound(fAdvance.fX);
     result.fLeft = this->offset().fX;
     // This is Flutter definition of a baseline
     result.fBaseline = this->offset().fY + this->height() - this->sizes().descent();
@@ -1176,7 +1089,7 @@ bool TextLine::endsWithHardLineBreak() const {
 void TextLine::getRectsForRange(TextRange textRange0,
                                 RectHeightStyle rectHeightStyle,
                                 RectWidthStyle rectWidthStyle,
-                                std::vector<TextBox>& boxes) const
+                                std::vector<TextBox>& boxes)
 {
     const Run* lastRun = nullptr;
     auto startBox = boxes.size();
@@ -1368,13 +1281,11 @@ void TextLine::getRectsForRange(TextRange textRange0,
         });
         return true;
     });
-    if (fOwner->getApplyRoundingHack()) {
-        for (auto& r : boxes) {
-            r.rect.fLeft = littleRound(r.rect.fLeft);
-            r.rect.fRight = littleRound(r.rect.fRight);
-            r.rect.fTop = littleRound(r.rect.fTop);
-            r.rect.fBottom = littleRound(r.rect.fBottom);
-        }
+    for (auto& r : boxes) {
+        r.rect.fLeft = littleRound(r.rect.fLeft);
+        r.rect.fRight = littleRound(r.rect.fRight);
+        r.rect.fTop = littleRound(r.rect.fTop);
+        r.rect.fBottom = littleRound(r.rect.fBottom);
     }
 }
 
@@ -1447,10 +1358,7 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
                 size_t found = context.pos;
                 for (size_t index = context.pos; index < context.pos + context.size; ++index) {
                     // TODO: this rounding is done to match Flutter tests. Must be removed..
-                    auto end = context.run->positionX(index) + context.fTextShift + offsetX;
-                    if (fOwner->getApplyRoundingHack()) {
-                        end = littleRound(end);
-                    }
+                    auto end = littleRound(context.run->positionX(index) + context.fTextShift + offsetX);
                     if (end > dx) {
                         break;
                     } else if (end == dx && !context.run->leftToRight()) {
@@ -1462,33 +1370,14 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
                 }
 
                 SkScalar glyphemePosLeft = context.run->positionX(found) + context.fTextShift + offsetX;
-                SkScalar glyphemesWidth = context.run->positionX(found + 1) - context.run->positionX(found);
+                SkScalar glyphemePosWidth = context.run->positionX(found + 1) - context.run->positionX(found);
 
                 // Find the grapheme range that contains the point
                 auto clusterIndex8 = context.run->globalClusterIndex(found);
                 auto clusterEnd8 = context.run->globalClusterIndex(found + 1);
-                auto graphemes = fOwner->countSurroundingGraphemes({clusterIndex8, clusterEnd8});
 
-                SkScalar center = glyphemePosLeft + glyphemesWidth / 2;
-                if (graphemes.size() > 1) {
-                    // Calculate the position proportionally based on grapheme count
-                    SkScalar averageGraphemeWidth = glyphemesWidth / graphemes.size();
-                    SkScalar delta = dx - glyphemePosLeft;
-                    int graphemeIndex = SkScalarNearlyZero(averageGraphemeWidth)
-                                         ? 0
-                                         : SkScalarFloorToInt(delta / averageGraphemeWidth);
-                    auto graphemeCenter = glyphemePosLeft + graphemeIndex * averageGraphemeWidth +
-                                          averageGraphemeWidth / 2;
-                    auto graphemeUtf8Index = graphemes[graphemeIndex];
-                    if ((dx < graphemeCenter) == context.run->leftToRight()) {
-                        size_t utf16Index = fOwner->getUTF16Index(graphemeUtf8Index);
-                        result = { SkToS32(utf16Index), kDownstream };
-                    } else {
-                        size_t utf16Index = fOwner->getUTF16Index(graphemeUtf8Index + 1);
-                        result = { SkToS32(utf16Index), kUpstream };
-                    }
-                    // Keep UTF16 index as is
-                } else if ((dx < center) == context.run->leftToRight()) {
+                SkScalar center = glyphemePosLeft + glyphemePosWidth / 2;
+                if ((dx < center) == context.run->leftToRight()) {
                     size_t utf16Index = fOwner->getUTF16Index(clusterIndex8);
                     result = { SkToS32(utf16Index), kDownstream };
                 } else {
@@ -1526,12 +1415,10 @@ void TextLine::getRectsForPlaceholders(std::vector<TextBox>& boxes) {
             SkRect clip = context.clip;
             clip.offset(this->offset());
 
-            if (fOwner->getApplyRoundingHack()) {
-                clip.fLeft = littleRound(clip.fLeft);
-                clip.fRight = littleRound(clip.fRight);
-                clip.fTop = littleRound(clip.fTop);
-                clip.fBottom = littleRound(clip.fBottom);
-            }
+            clip.fLeft = littleRound(clip.fLeft);
+            clip.fRight = littleRound(clip.fRight);
+            clip.fTop = littleRound(clip.fTop);
+            clip.fBottom = littleRound(clip.fBottom);
             boxes.emplace_back(clip, run->getTextDirection());
             return true;
         });

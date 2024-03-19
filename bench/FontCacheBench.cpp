@@ -11,9 +11,8 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkString.h"
+#include "include/private/SkChecksum.h"
 #include "include/private/base/SkTemplates.h"
-#include "src/core/SkChecksum.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include "bench/gUniqueGlyphIDs.h"
 
@@ -37,7 +36,7 @@ protected:
     }
 
     void onDraw(int loops, SkCanvas* canvas) override {
-        SkFont font = ToolUtils::DefaultFont();
+        SkFont font;
         font.setEdging(SkFont::Edging::kAntiAlias);
 
         const uint16_t* array = gUniqueGlyphIDs;
@@ -165,7 +164,7 @@ protected:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     void onDelayedSetup() override {

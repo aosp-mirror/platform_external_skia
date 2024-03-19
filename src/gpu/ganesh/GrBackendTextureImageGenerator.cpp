@@ -26,7 +26,7 @@ GrBackendTextureImageGenerator::RefHelper::RefHelper(
         sk_sp<GrTexture> texture,
         GrDirectContext::DirectContextID owningContextID,
         std::unique_ptr<GrSemaphore> semaphore)
-        : fOriginalTexture(std::move(texture))
+        : fOriginalTexture(texture)
         , fOwningContextID(owningContextID)
         , fBorrowingContextReleaseProc(nullptr)
         , fSemaphore(std::move(semaphore)) {}
@@ -38,8 +38,8 @@ GrBackendTextureImageGenerator::RefHelper::~RefHelper() {
     GrResourceCache::ReturnResourceFromThread(std::move(fOriginalTexture), fOwningContextID);
 }
 
-std::unique_ptr<GrTextureGenerator>
-GrBackendTextureImageGenerator::Make(const sk_sp<GrTexture>& texture,
+std::unique_ptr<SkImageGenerator>
+GrBackendTextureImageGenerator::Make(sk_sp<GrTexture> texture,
                                      GrSurfaceOrigin origin,
                                      std::unique_ptr<GrSemaphore> semaphore,
                                      SkColorType colorType,
@@ -53,9 +53,9 @@ GrBackendTextureImageGenerator::Make(const sk_sp<GrTexture>& texture,
     }
 
     SkColorInfo info(colorType, alphaType, std::move(colorSpace));
-    return std::unique_ptr<GrTextureGenerator>(new GrBackendTextureImageGenerator(
+    return std::unique_ptr<SkImageGenerator>(new GrBackendTextureImageGenerator(
             info,
-            texture,
+            std::move(texture),
             origin,
             dContext->directContextID(),
             std::move(semaphore)));
@@ -63,7 +63,7 @@ GrBackendTextureImageGenerator::Make(const sk_sp<GrTexture>& texture,
 
 GrBackendTextureImageGenerator::GrBackendTextureImageGenerator(
         const SkColorInfo& info,
-        const sk_sp<GrTexture>& texture,
+        sk_sp<GrTexture> texture,
         GrSurfaceOrigin origin,
         GrDirectContext::DirectContextID owningContextID,
         std::unique_ptr<GrSemaphore> semaphore)
@@ -74,10 +74,6 @@ GrBackendTextureImageGenerator::GrBackendTextureImageGenerator(
 
 GrBackendTextureImageGenerator::~GrBackendTextureImageGenerator() {
     fRefHelper->unref();
-}
-
-bool GrBackendTextureImageGenerator::onIsProtected() const {
-    return fBackendTexture.isProtected();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -94,7 +90,7 @@ void GrBackendTextureImageGenerator::ReleaseRefHelper_TextureReleaseProc(void* c
 GrSurfaceProxyView GrBackendTextureImageGenerator::onGenerateTexture(
         GrRecordingContext* rContext,
         const SkImageInfo& info,
-        skgpu::Mipmapped mipmapped,
+        GrMipmapped mipmapped,
         GrImageTexGenPolicy texGenPolicy) {
     SkASSERT(rContext);
     SkASSERT_RELEASE(info.dimensions() == fBackendTexture.dimensions());
@@ -154,8 +150,8 @@ GrSurfaceProxyView GrBackendTextureImageGenerator::onGenerateTexture(
 
     GrColorType grColorType = SkColorTypeToGrColorType(info.colorType());
 
-    skgpu::Mipmapped textureIsMipMapped =
-            fBackendTexture.hasMipmaps() ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
+    GrMipmapped textureIsMipMapped = fBackendTexture.hasMipmaps() ? GrMipmapped::kYes
+                                                                  : GrMipmapped::kNo;
 
     // Ganesh assumes that, when wrapping a mipmapped backend texture from a client, that its
     // mipmaps are fully fleshed out.
@@ -224,7 +220,7 @@ GrSurfaceProxyView GrBackendTextureImageGenerator::onGenerateTexture(
     }
 
     if (texGenPolicy == GrImageTexGenPolicy::kDraw &&
-        (mipmapped == skgpu::Mipmapped::kNo || proxy->mipmapped() == skgpu::Mipmapped::kYes)) {
+        (mipmapped == GrMipmapped::kNo || proxy->mipmapped() == GrMipmapped::kYes)) {
         // If we have the correct mip support, we're done
         return GrSurfaceProxyView(std::move(proxy), fSurfaceOrigin, readSwizzle);
     } else {

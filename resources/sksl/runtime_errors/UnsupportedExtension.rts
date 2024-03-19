@@ -2,4 +2,6 @@
 
 /*%%*
 unsupported directive '#extension'
+no type named 'i'
+expected a type, but found ':'
 *%%*/

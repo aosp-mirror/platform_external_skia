@@ -12,7 +12,7 @@
 
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 SmallPathShapeDataKey::SmallPathShapeDataKey(const GrStyledShape& shape, uint32_t dim) {
     // Shapes' keys are for their pre-style geometry, but by now we shouldn't have any
@@ -52,6 +52,6 @@ SmallPathShapeDataKey::SmallPathShapeDataKey(const GrStyledShape& shape, const S
     shape.writeUnstyledKey(&fKey[5]);
 }
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // SK_ENABLE_OPTIMIZE_SIZE

@@ -36,7 +36,7 @@ public:
 
     sk_sp<SkColorSpace> computeOutputColorSpace(SkColorType outputColorType,
                                                 sk_sp<SkColorSpace> prefColorSpace = nullptr) {
-        return fCodec->computeOutputColorSpace(outputColorType, std::move(prefColorSpace));
+        return fCodec->computeOutputColorSpace(outputColorType, prefColorSpace);
     }
 
     int width() const;

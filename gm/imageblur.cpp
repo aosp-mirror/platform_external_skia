@@ -16,7 +16,6 @@
 #include "include/effects/SkImageFilters.h"
 #include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #define WIDTH 500
 #define HEIGHT 500
@@ -29,7 +28,7 @@ void imageblurgm_draw(SkScalar fSigmaX, SkScalar fSigmaY, SkCanvas* canvas) {
 
         SkRandom rand;
         SkPaint textPaint;
-        SkFont   font = ToolUtils::DefaultPortableFont();
+        SkFont   font(ToolUtils::create_portable_typeface());
         for (int i = 0; i < 25; ++i) {
             int x = rand.nextULessThan(WIDTH);
             int y = rand.nextULessThan(HEIGHT);

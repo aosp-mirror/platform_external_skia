@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Copyright 2022 Google LLC
 #
@@ -22,7 +22,7 @@ import utils
 
 # https://cloud.google.com/storage/docs/gsutil_install#windows
 URL = "https://storage.googleapis.com/pub/gsutil.zip"
-VERSION = "5.25"
+VERSION = "5.10"
 
 def create_asset(target_dir):
   """Create the asset."""

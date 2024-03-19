@@ -8,17 +8,10 @@
 #include "tools/viewer/SlideDir.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkColor.h"
 #include "include/core/SkCubicMap.h"
-#include "include/core/SkFont.h"
-#include "include/core/SkMatrix.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/base/SkTPin.h"
-#include "include/utils/SkTextUtils.h"
 #include "modules/sksg/include/SkSGDraw.h"
-#include "modules/sksg/include/SkSGGeometryNode.h"
 #include "modules/sksg/include/SkSGGroup.h"
 #include "modules/sksg/include/SkSGPaint.h"
 #include "modules/sksg/include/SkSGPlane.h"
@@ -27,17 +20,10 @@
 #include "modules/sksg/include/SkSGScene.h"
 #include "modules/sksg/include/SkSGText.h"
 #include "modules/sksg/include/SkSGTransform.h"
-#include "src/base/SkBitmaskEnum.h"
-#include "tools/skui/InputState.h"
-#include "tools/skui/ModifierKey.h"
 #include "tools/timer/TimeUtils.h"
 
 #include <cmath>
 #include <utility>
-
-namespace sksg { class InvalidationController; }
-
-using namespace skia_private;
 
 class SlideDir::Animator : public SkRefCnt {
 public:
@@ -116,6 +102,8 @@ private:
     }
 
     const sk_sp<Slide> fSlide;
+
+    using INHERITED = sksg::RenderNode;
 };
 
 SkMatrix SlideMatrix(const sk_sp<Slide>& slide, const SkRect& dst) {
@@ -270,9 +258,11 @@ private:
                     fOpacity1 = 1,
                     fTimeBase = 0;
     State           fState    = State::kIdle;
+
+    using INHERITED = Animator;
 };
 
-SlideDir::SlideDir(const SkString& name, TArray<sk_sp<Slide>>&& slides, int columns)
+SlideDir::SlideDir(const SkString& name, SkTArray<sk_sp<Slide>>&& slides, int columns)
     : fSlides(std::move(slides))
     , fColumns(columns) {
     fName = name;

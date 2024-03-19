@@ -429,14 +429,14 @@ public:
     }
 
 protected:
-    SkString getName() const override {
+    SkString onShortName() override {
         if (fConvexOnly) {
             return SkString("convex-polygon-inset");
         } else {
             return SkString("simple-polygon-offset");
         }
     }
-    SkISize getISize() override { return SkISize::Make(kGMWidth, kGMHeight); }
+    SkISize onISize() override { return SkISize::Make(kGMWidth, kGMHeight); }
     bool runAsBench() const override { return true; }
 
     static void GetConvexPolygon(int index, SkPathDirection dir,

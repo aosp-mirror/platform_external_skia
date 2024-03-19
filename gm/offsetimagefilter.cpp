@@ -21,7 +21,6 @@
 #include "include/effects/SkImageFilters.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <utility>
 
@@ -36,12 +35,16 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("offsetimagefilter"); }
+    SkString onShortName() override {
+        return SkString("offsetimagefilter");
+    }
 
-    SkISize getISize() override { return SkISize::Make(WIDTH, HEIGHT); }
+    SkISize onISize() override {
+        return SkISize::Make(WIDTH, HEIGHT);
+    }
 
     void onOnceBeforeDraw() override {
-        fBitmap = ToolUtils::CreateStringImage(80, 80, 0xD000D000, 15, 65, 96, "e");
+        fBitmap = ToolUtils::create_string_image(80, 80, 0xD000D000, 15, 65, 96, "e");
 
         fCheckerboard = ToolUtils::create_checkerboard_image(80, 80, 0xFFA0A0A0, 0xFF404040, 8);
     }
@@ -56,7 +59,7 @@ protected:
                                                  i * 8,
                                                  image->width() - i * 8,
                                                  image->height() - i * 12);
-            sk_sp<SkImageFilter> tileInput(SkImageFilters::Image(image, SkFilterMode::kNearest));
+            sk_sp<SkImageFilter> tileInput(SkImageFilters::Image(image));
             SkScalar dx = SkIntToScalar(i*5);
             SkScalar dy = SkIntToScalar(i*10);
             paint.setImageFilter(SkImageFilters::Offset(dx, dy, std::move(tileInput), &cropRect));
@@ -104,9 +107,11 @@ public:
     SimpleOffsetImageFilterGM() {}
 
 protected:
-    SkString getName() const override { return SkString("simple-offsetimagefilter"); }
+    SkString onShortName() override {
+        return SkString("simple-offsetimagefilter");
+    }
 
-    SkISize getISize() override { return SkISize::Make(640, 200); }
+    SkISize onISize() override { return SkISize::Make(640, 200); }
 
     void doDraw(SkCanvas* canvas, const SkRect& r, sk_sp<SkImageFilter> imgf,
                 const SkIRect* cropR = nullptr, const SkRect* clipR = nullptr) {

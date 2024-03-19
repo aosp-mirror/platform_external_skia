@@ -17,8 +17,6 @@
 #include <stdlib.h>
 #include <functional>
 
-using namespace skia_private;
-
 #define ENABLE_COMMAND_LINE_SHAPES_BENCH 0
 
 #if ENABLE_COMMAND_LINE_SHAPES_BENCH
@@ -132,7 +130,7 @@ private:
 
         return fName.c_str();
     }
-    SkISize onGetSize() override { return SkISize::Make(kBenchWidth, kBenchHeight); }
+    SkIPoint onGetSize() override { return SkIPoint::Make(kBenchWidth, kBenchHeight); }
 
     void onDelayedSetup() override {
         SkScalar w = SkIntToScalar(fShapesSize.width());
@@ -245,7 +243,7 @@ private:
     SkRRect               fInnerRect;
     SkRRect               fInnerOval;
     SkRRect               fInnerRRect;
-    TArray<ShapeInfo>   fShapes;
+    SkTArray<ShapeInfo>   fShapes;
 
 
     using INHERITED = Benchmark;

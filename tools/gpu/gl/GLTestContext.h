@@ -90,6 +90,10 @@ private:
     /** The same as fOriginalGLInterface unless the version has been overridden. */
     sk_sp<const GrGLInterface> fGLInterface;
 
+#ifndef SK_GL
+    bool fWasInitialized = false;
+#endif
+
     using INHERITED = TestContext;
 };
 

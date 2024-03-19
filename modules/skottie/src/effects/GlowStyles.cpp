@@ -5,27 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkBlendMode.h"
-#include "include/core/SkColor.h"
+#include "modules/skottie/src/effects/Effects.h"
+
 #include "include/core/SkColorFilter.h"
-#include "include/core/SkImageFilter.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
 #include "include/effects/SkColorMatrix.h"
 #include "include/effects/SkImageFilters.h"
-#include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
-#include "modules/skottie/src/SkottiePriv.h"
+#include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottieValue.h"
-#include "modules/skottie/src/effects/Effects.h"
 #include "modules/sksg/include/SkSGRenderEffect.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
-#include "src/utils/SkJSON.h"
 
-#include <algorithm>
 #include <cmath>
-#include <utility>
 
 namespace skottie::internal {
 
@@ -139,7 +130,7 @@ private:
 
     const Type fType;
 
-    ColorValue  fColor;
+    VectorValue fColor;
     ScalarValue fOpacity  = 100, // percentage
                 fSize     =   0,
                 fChoke    =   0,

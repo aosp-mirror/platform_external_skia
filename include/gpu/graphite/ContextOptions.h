@@ -8,14 +8,9 @@
 #ifndef skgpu_graphite_ContextOptions_DEFINED
 #define skgpu_graphite_ContextOptions_DEFINED
 
-#include "include/private/base/SkAPI.h"
-#include "include/private/base/SkMath.h"
-
 namespace skgpu { class ShaderErrorHandler; }
 
 namespace skgpu::graphite {
-
-struct ContextOptionsPriv;
 
 struct SK_API ContextOptions {
     ContextOptions() {}
@@ -32,14 +27,6 @@ struct SK_API ContextOptions {
      * via SkDebugf and assert.
      */
     skgpu::ShaderErrorHandler* fShaderErrorHandler = nullptr;
-
-    /**
-     * Specifies the number of samples Graphite should use when performing internal draws with MSAA
-     * (hardware capabilities permitting).
-     *
-     * If <= 1, Graphite will disable internal code paths that use multisampling.
-     */
-    int fInternalMultisampleCount = 4;
 
     /**
      * Will the client make sure to only ever be executing one thread that uses the Context and all
@@ -75,26 +62,35 @@ struct SK_API ContextOptions {
      * fGlypheCacheTextureMaximumBytes.
      */
     bool fAllowMultipleGlyphCacheTextures = true;
+
+    /**
+     * If true, then add 1 pixel padding to all glyph masks in the atlas to support bi-lerp
+     * rendering of all glyphs. This must be set to true to use Slugs.
+     */
+    #if defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG) || \
+        defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG_SERIALIZE) || \
+        defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG_STRIKE_SERIALIZE)
+    bool fSupportBilerpFromGlyphAtlas = true;
+    #else
     bool fSupportBilerpFromGlyphAtlas = false;
+    #endif
 
-    /**
-     * Disable caching of glyph uploads at the start of each Recording. These can add additional
-     * overhead and are only necessary if Recordings are replayed or played out of order.
-     *
-     * Deprecated, now only used to set requireOrderedRecordings Caps.
-     */
-    bool fDisableCachedGlyphUploads = false;
-
-    static constexpr size_t kDefaultContextBudget = 256 * (1 << 20);
-    /**
-     * What is the budget for GPU resources allocated and held by the Context.
-     */
-    size_t fGpuBudgetInBytes = kDefaultContextBudget;
-
+#if GRAPHITE_TEST_UTILS
     /**
      * Private options that are only meant for testing within Skia's tools.
      */
-    ContextOptionsPriv* fOptionsPriv = nullptr;
+
+    /**
+     * Maximum width and height of internal texture atlases.
+     */
+    int  fMaxTextureAtlasSize = 2048;
+
+    /**
+     * If true, will store a pointer in Recorder that points back to the Context
+     * that created it. Used by readPixels() and other methods that normally require a Context.
+     */
+    bool fStoreContextRefInRecorder = false;
+#endif
 };
 
 }  // namespace skgpu::graphite

@@ -26,7 +26,7 @@ class SkMatrix;
 class SkPath;
 class SkSurfaceProps;
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 class SurfaceDrawContext;
 
@@ -157,7 +157,7 @@ public:
         const GrStyledShape* fShape;
         GrAA                 fDoStencilMSAA;
 
-        SkDEBUGCODE(void validate() const;)
+        SkDEBUGCODE(void validate() const);
     };
 
     /**
@@ -205,6 +205,6 @@ private:
     using INHERITED = SkRefCnt;
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // PathRenderer_DEFINED

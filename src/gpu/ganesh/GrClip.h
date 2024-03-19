@@ -10,17 +10,10 @@
 
 #include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
-#include "include/core/SkScalar.h"
-#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrAppliedClip.h"
 
 class GrDrawOp;
-class GrRecordingContext;
-namespace skgpu {
-namespace ganesh {
-class SurfaceDrawContext;
-}
-}  // namespace skgpu
+namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
 
 /**
  * GrClip is an abstract base class for applying a clip. It constructs a clip mask if necessary, and
@@ -71,12 +64,8 @@ public:
      * clips). If kNoDraw is returned, 'bounds' and the applied clip are in an undetermined state
      * and should be ignored (and the draw should be skipped).
      */
-    virtual Effect apply(GrRecordingContext*,
-                         skgpu::ganesh::SurfaceDrawContext*,
-                         GrDrawOp*,
-                         GrAAType,
-                         GrAppliedClip*,
-                         SkRect* bounds) const = 0;
+    virtual Effect apply(GrRecordingContext*, skgpu::v1::SurfaceDrawContext*, GrDrawOp*, GrAAType,
+                         GrAppliedClip*, SkRect* bounds) const = 0;
 
     /**
      * Perform preliminary, conservative analysis on the draw bounds as if it were provided to
@@ -223,7 +212,7 @@ public:
 
 private:
     Effect apply(GrRecordingContext*,
-                 skgpu::ganesh::SurfaceDrawContext*,
+                 skgpu::v1::SurfaceDrawContext*,
                  GrDrawOp*,
                  GrAAType aa,
                  GrAppliedClip* out,

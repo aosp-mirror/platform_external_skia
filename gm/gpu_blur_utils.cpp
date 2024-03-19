@@ -10,18 +10,14 @@
 #include "include/core/SkColorSpace.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/BlurUtils.h"
-#include "src/gpu/ganesh/GrBlurUtils.h"
-#include "src/gpu/ganesh/GrCanvas.h"
+#include "src/core/SkGpuBlurUtils.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
 #include "src/gpu/ganesh/GrStyle.h"
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
 #include "src/gpu/ganesh/effects/GrBlendFragmentProcessor.h"
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
-#include "src/gpu/ganesh/image/GrImageUtils.h"
 #include "src/image/SkImage_Base.h"
 
 namespace {
@@ -33,7 +29,7 @@ static GrSurfaceProxyView blur(GrRecordingContext* ctx,
                                float sigmaX,
                                float sigmaY,
                                SkTileMode mode) {
-    auto resultSDC = GrBlurUtils::GaussianBlur(ctx,
+    auto resultSDC = SkGpuBlurUtils::GaussianBlur(ctx,
                                                   src,
                                                   GrColorType::kRGBA_8888,
                                                   kPremul_SkAlphaType,
@@ -79,7 +75,7 @@ static GrSurfaceProxyView slow_blur(GrRecordingContext* rContext,
         return sfc->readSurfaceView();
     };
 
-    SkIPoint outset = {skgpu::BlurSigmaRadius(sigmaX), skgpu::BlurSigmaRadius(sigmaY)};
+    SkIPoint outset = {SkGpuBlurUtils::SigmaRadius(sigmaX), SkGpuBlurUtils::SigmaRadius(sigmaY)};
     SkISize size = {dstB.width() + 2*outset.x(), dstB.height() + 2*outset.y()};
     src = tileInto(std::move(src), srcB, size, outset - dstB.topLeft(), mode);
     if (!src) {
@@ -89,23 +85,23 @@ static GrSurfaceProxyView slow_blur(GrRecordingContext* rContext,
 
     while (sigmaX || sigmaY) {
         float stepX = sigmaX;
-        if (stepX > skgpu::kMaxLinearBlurSigma) {
-            stepX = skgpu::kMaxLinearBlurSigma;
+        if (stepX > SkGpuBlurUtils::kMaxSigma) {
+            stepX = SkGpuBlurUtils::kMaxSigma;
             // A blur of sigma1 followed by a blur of sigma2 is equiv. to a single blur of
             // sqrt(sigma1^2 + sigma2^2).
-            sigmaX = sqrt(sigmaX*sigmaX - skgpu::kMaxLinearBlurSigma*skgpu::kMaxLinearBlurSigma);
+            sigmaX = sqrt(sigmaX*sigmaX - SkGpuBlurUtils::kMaxSigma*SkGpuBlurUtils::kMaxSigma);
         } else {
             sigmaX = 0.f;
         }
         float stepY = sigmaY;
-        if (stepY > skgpu::kMaxLinearBlurSigma) {
-            stepY = skgpu::kMaxLinearBlurSigma;
-            sigmaY = sqrt(sigmaY*sigmaY- skgpu::kMaxLinearBlurSigma*skgpu::kMaxLinearBlurSigma);
+        if (stepY > SkGpuBlurUtils::kMaxSigma) {
+            stepY = SkGpuBlurUtils::kMaxSigma;
+            sigmaY = sqrt(sigmaY*sigmaY- SkGpuBlurUtils::kMaxSigma*SkGpuBlurUtils::kMaxSigma);
         } else {
             sigmaY = 0.f;
         }
         auto bounds = SkIRect::MakeSize(src.dimensions());
-        auto sdc = GrBlurUtils::GaussianBlur(rContext,
+        auto sdc = SkGpuBlurUtils::GaussianBlur(rContext,
                                                 std::move(src),
                                                 GrColorType::kRGBA_8888,
                                                 kPremul_SkAlphaType,
@@ -133,7 +129,7 @@ GrSurfaceProxyView make_src_image(GrRecordingContext* rContext,
                                   SkISize dimensions,
                                   const SkIRect* contentArea = nullptr) {
     auto srcII = SkImageInfo::Make(dimensions, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    auto surf = SkSurfaces::RenderTarget(rContext, skgpu::Budgeted::kYes, srcII);
+    auto surf = SkSurface::MakeRenderTarget(rContext, skgpu::Budgeted::kYes, srcII);
     if (!surf) {
         return {};
     }
@@ -179,7 +175,7 @@ GrSurfaceProxyView make_src_image(GrRecordingContext* rContext,
     surf->getCanvas()->drawLine({7.f*w/8.f, 0.f}, {7.f*h/8.f, h}, paint);
 
     auto img = surf->makeImageSnapshot();
-    auto [src, ct] = skgpu::ganesh::AsView(rContext, img, skgpu::Mipmapped::kNo);
+    auto [src, ct] = as_IB(img)->asView(rContext, GrMipmapped::kNo);
     return src;
 }
 
@@ -195,7 +191,7 @@ static GM::DrawResult run(GrRecordingContext* rContext, SkCanvas* canvas,  SkStr
         return DrawResult::kSkip;
     }
 
-    auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
+    auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
     if (!sdc) {
         *errorMsg = GM::kErrorMsg_DrawSkippedGpuOnly;
         return DrawResult::kSkip;
@@ -379,7 +375,7 @@ static DrawResult do_very_large_blur_gm(GrRecordingContext* rContext,
                                         SkString* errorMsg,
                                         GrSurfaceProxyView src,
                                         SkIRect srcB) {
-    auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
+    auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
     if (!sdc) {
         *errorMsg = GM::kErrorMsg_DrawSkippedGpuOnly;
         return DrawResult::kSkip;

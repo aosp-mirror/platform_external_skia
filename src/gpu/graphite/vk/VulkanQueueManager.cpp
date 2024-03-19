@@ -29,7 +29,7 @@ std::unique_ptr<CommandBuffer> VulkanQueueManager::getNewCommandBuffer(
             static_cast<VulkanResourceProvider*>(resourceProvider);
 
     auto cmdBuffer = VulkanCommandBuffer::Make(this->vkSharedContext(), vkResourceProvider);
-    return cmdBuffer;
+    return std::move(cmdBuffer);
 }
 
 class VulkanWorkSubmission final : public GpuWorkSubmission {
@@ -38,11 +38,10 @@ public:
         : GpuWorkSubmission(std::move(cmdBuffer), queueManager) {}
     ~VulkanWorkSubmission() override {}
 
-private:
-    bool onIsFinished() override {
+    bool isFinished() override {
         return static_cast<VulkanCommandBuffer*>(this->commandBuffer())->isFinished();
     }
-    void onWaitUntilFinished() override {
+    void waitUntilFinished() override {
         return static_cast<VulkanCommandBuffer*>(this->commandBuffer())->waitUntilFinished();
     }
 };

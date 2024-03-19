@@ -20,14 +20,13 @@
 #include "include/core/SkTypes.h"
 #include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 namespace skiagm {
 
 class EmptyPathGM : public GM {
-    SkString getName() const override { return SkString("emptypath"); }
+    SkString onShortName() override { return SkString("emptypath"); }
 
-    SkISize getISize() override { return {600, 280}; }
+    SkISize onISize() override { return {600, 280}; }
 
     void drawEmpty(SkCanvas* canvas,
                     SkColor color,
@@ -66,7 +65,7 @@ class EmptyPathGM : public GM {
             {SkPaint::kStrokeAndFill_Style, "Stroke And Fill"},
         };
 
-        SkFont     font(ToolUtils::DefaultPortableTypeface(), 15);
+        SkFont     font(ToolUtils::create_portable_typeface(), 15);
         const char title[] = "Empty Paths Drawn Into Rectangle Clips With "
                              "Indicated Style and Fill";
         canvas->drawString(title, 20.0f, 20.0f, font, SkPaint());
@@ -104,7 +103,7 @@ class EmptyPathGM : public GM {
 
                 SkPaint labelPaint;
                 labelPaint.setColor(color);
-                SkFont labelFont(ToolUtils::DefaultPortableTypeface(), 12);
+                SkFont labelFont(ToolUtils::create_portable_typeface(), 12);
                 canvas->drawString(gStyles[style].fName, 0, rect.height() + 15.0f,
                                    labelFont, labelPaint);
                 canvas->drawString(gFills[fill].fName, 0, rect.height() + 28.0f,
@@ -158,9 +157,9 @@ static SkPath make_path_move_mix() {
 }
 
 class EmptyStrokeGM : public GM {
-    SkString getName() const override { return SkString("emptystroke"); }
+    SkString onShortName() override { return SkString("emptystroke"); }
 
-    SkISize getISize() override { return {200, 240}; }
+    SkISize onISize() override { return {200, 240}; }
 
     void onDraw(SkCanvas* canvas) override {
         static constexpr SkPath (*kProcs[])() = {

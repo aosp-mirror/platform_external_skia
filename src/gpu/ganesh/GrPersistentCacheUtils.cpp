@@ -7,46 +7,41 @@
 
 #include "src/gpu/ganesh/GrPersistentCacheUtils.h"
 
+#include "include/private/SkSLString.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/SkSLString.h"
 
 namespace GrPersistentCacheUtils {
 
-static constexpr int kCurrentVersion = 12;
+static constexpr int kCurrentVersion = 10;
 
 int GetCurrentVersion() {
-    // The persistent cache stores a copy of the SkSL::Program::Interface struct. If you alter the
-    // Program::Interface struct in any way, you must increment kCurrentVersion to invalidate the
-    // outdated persistent cache files. The KnownSkSLProgramInterface struct must also be updated
-    // to match the new contents of Program::Interface.
-    struct KnownSkSLProgramInterface {
-        bool useLastFragColor;
-        bool useRTFlipUniform;
-        bool outputSecondaryColor;
-    };
-    static_assert(sizeof(SkSL::Program::Interface) == sizeof(KnownSkSLProgramInterface));
+    // The persistent cache stores a copy of the SkSL::Program::Inputs struct. If you alter the
+    // Program::Inputs struct in any way, you must increment kCurrentVersion to invalidate the
+    // outdated persistent cache files. The KnownSkSLProgramInputs struct must also be updated to
+    // match the new contents of Program::Inputs.
+    struct KnownSkSLProgramInputs { bool useRTFlipUniform; };
+    static_assert(sizeof(SkSL::Program::Inputs) == sizeof(KnownSkSLProgramInputs));
 
     return kCurrentVersion;
 }
 
 sk_sp<SkData> PackCachedShaders(SkFourByteTag shaderType,
                                 const std::string shaders[],
-                                const SkSL::Program::Interface interfaces[],
-                                int numInterfaces,
+                                const SkSL::Program::Inputs inputs[],
+                                int numInputs,
                                 const ShaderMetadata* meta) {
     // For consistency (so tools can blindly pack and unpack cached shaders), we always write
-    // kGrShaderTypeCount interfaces. If the backend gives us fewer, we just replicate the last one.
-    SkASSERT(numInterfaces >= 1 && numInterfaces <= kGrShaderTypeCount);
+    // kGrShaderTypeCount inputs. If the backend gives us fewer, we just replicate the last one.
+    SkASSERT(numInputs >= 1 && numInputs <= kGrShaderTypeCount);
 
-    SkBinaryWriteBuffer writer({});
+    SkBinaryWriteBuffer writer;
     writer.writeInt(kCurrentVersion);
     writer.writeUInt(shaderType);
     for (int i = 0; i < kGrShaderTypeCount; ++i) {
         writer.writeByteArray(shaders[i].c_str(), shaders[i].size());
-        writer.writePad32(&interfaces[std::min(i, numInterfaces - 1)],
-                          sizeof(SkSL::Program::Interface));
+        writer.writePad32(&inputs[std::min(i, numInputs - 1)], sizeof(SkSL::Program::Inputs));
     }
     writer.writeBool(SkToBool(meta));
     if (meta) {
@@ -81,8 +76,8 @@ SkFourByteTag GetType(SkReadBuffer* reader) {
 
 bool UnpackCachedShaders(SkReadBuffer* reader,
                          std::string shaders[],
-                         SkSL::Program::Interface interfaces[],
-                         int numInterfaces,
+                         SkSL::Program::Inputs inputs[],
+                         int numInputs,
                          ShaderMetadata* meta) {
     for (int i = 0; i < kGrShaderTypeCount; ++i) {
         size_t shaderLen = 0;
@@ -91,11 +86,11 @@ bool UnpackCachedShaders(SkReadBuffer* reader,
             shaders[i].assign(shaderBuf, shaderLen);
         }
 
-        // GL, for example, only wants one Interface
-        if (i < numInterfaces) {
-            reader->readPad32(&interfaces[i], sizeof(interfaces[i]));
+        // GL, for example, only wants one set of Inputs
+        if (i < numInputs) {
+            reader->readPad32(&inputs[i], sizeof(inputs[i]));
         } else {
-            reader->skip(sizeof(SkSL::Program::Interface));
+            reader->skip(sizeof(SkSL::Program::Inputs));
         }
     }
     if (reader->readBool() && meta) {

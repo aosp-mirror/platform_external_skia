@@ -15,7 +15,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     const char* onGetName() override {

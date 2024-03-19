@@ -5,17 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "src/core/SkStringUtils.h"
-
 #include "include/core/SkString.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkFloatBits.h"
-#include "include/private/base/SkTArray.h"
 #include "src/base/SkUTF.h"
-
-#include <cstring>
-
-using namespace skia_private;
+#include "src/core/SkStringUtils.h"
 
 void SkAppendScalar(SkString* str, SkScalar value, SkScalarAsStringType asType) {
     switch (asType) {
@@ -86,37 +78,4 @@ SkString SkStringFromUTF16(const uint16_t* src, size_t count) {
         SkASSERT(out == ret.data() + n);
     }
     return ret;
-}
-
-void SkStrSplit(const char* str,
-                const char* delimiters,
-                SkStrSplitMode splitMode,
-                TArray<SkString>* out) {
-    if (splitMode == kCoalesce_SkStrSplitMode) {
-        // Skip any delimiters.
-        str += strspn(str, delimiters);
-    }
-    if (!*str) {
-        return;
-    }
-
-    while (true) {
-        // Find a token.
-        const size_t len = strcspn(str, delimiters);
-        if (splitMode == kStrict_SkStrSplitMode || len > 0) {
-            out->push_back().set(str, len);
-            str += len;
-        }
-
-        if (!*str) {
-            return;
-        }
-        if (splitMode == kCoalesce_SkStrSplitMode) {
-            // Skip any delimiters.
-            str += strspn(str, delimiters);
-        } else {
-            // Skip one delimiter.
-            str += 1;
-        }
-    }
 }

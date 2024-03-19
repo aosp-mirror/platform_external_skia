@@ -10,10 +10,7 @@
 
 #include "include/core/SkRect.h"
 #include "include/core/SkString.h"
-#include "src/base/SkBitmaskEnum.h"  // IWYU pragma: keep
-
-#include <cstdint>
-#include <type_traits>
+#include "include/private/SkBitmaskEnum.h"
 
 /** \class SkAdvancedTypefaceMetrics
 

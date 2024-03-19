@@ -17,7 +17,6 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 
 #include <emscripten/bind.h>
 #include <emscripten/emscripten.h>
@@ -128,12 +127,12 @@ public:
         GrBackendRenderTarget backendRenderTarget(fWidth, fHeight, 1, 8, rtInfo);
         SkSurfaceProps surfaceProps(0, kRGB_H_SkPixelGeometry);
 
-        sk_sp<SkSurface> surface = SkSurfaces::WrapBackendRenderTarget(fContext.get(),
-                                                                       backendRenderTarget,
-                                                                       kTopLeft_GrSurfaceOrigin,
-                                                                       kN32_SkColorType,
-                                                                       nullptr,
-                                                                       &surfaceProps);
+        sk_sp<SkSurface> surface = SkSurface::MakeFromBackendRenderTarget(fContext.get(),
+                                                                          backendRenderTarget,
+                                                                          kTopLeft_GrSurfaceOrigin,
+                                                                          kN32_SkColorType,
+                                                                          nullptr,
+                                                                          &surfaceProps);
 
         SkPaint paint;
         if (fDemoKind == DemoKind::SOLID_COLOR) {
@@ -146,7 +145,7 @@ public:
 
         // Schedule the recorded commands and wait until the GPU has executed them.
         surface->getCanvas()->drawPaint(paint);
-        fContext->flushAndSubmit(surface, true);
+        surface->flushAndSubmit(true);
         fFrameCount++;
     }
 

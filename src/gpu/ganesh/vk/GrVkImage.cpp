@@ -7,13 +7,11 @@
 
 #include "src/gpu/ganesh/vk/GrVkImage.h"
 
-#include "include/gpu/vk/VulkanMutableTextureState.h"
 #include "src/gpu/ganesh/vk/GrVkGpu.h"
 #include "src/gpu/ganesh/vk/GrVkImageView.h"
 #include "src/gpu/ganesh/vk/GrVkTexture.h"
 #include "src/gpu/ganesh/vk/GrVkUtil.h"
 #include "src/gpu/vk/VulkanMemory.h"
-#include "src/gpu/vk/VulkanMutableTextureStatePriv.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
 
 #define VK_CALL(GPU, X) GR_VK_CALL(GPU->vkInterface(), X)
@@ -163,8 +161,8 @@ sk_sp<GrVkImage> GrVkImage::Make(GrVkGpu* gpu,
         return nullptr;
     }
 
-    auto mutableState = sk_make_sp<skgpu::MutableTextureState>(
-            skgpu::MutableTextureStates::MakeVulkan(info.fImageLayout, info.fCurrentQueueFamily));
+    sk_sp<skgpu::MutableTextureStateRef> mutableState(
+            new skgpu::MutableTextureStateRef(info.fImageLayout, info.fCurrentQueueFamily));
     return sk_sp<GrVkImage>(new GrVkImage(gpu,
                                           dimensions,
                                           attachmentUsages,
@@ -179,7 +177,7 @@ sk_sp<GrVkImage> GrVkImage::Make(GrVkGpu* gpu,
 sk_sp<GrVkImage> GrVkImage::MakeWrapped(GrVkGpu* gpu,
                                         SkISize dimensions,
                                         const GrVkImageInfo& info,
-                                        sk_sp<skgpu::MutableTextureState> mutableState,
+                                        sk_sp<skgpu::MutableTextureStateRef> mutableState,
                                         UsageFlags attachmentUsages,
                                         GrWrapOwnership ownership,
                                         GrWrapCacheable cacheable,
@@ -214,7 +212,7 @@ GrVkImage::GrVkImage(GrVkGpu* gpu,
                      SkISize dimensions,
                      UsageFlags supportedUsages,
                      const GrVkImageInfo& info,
-                     sk_sp<skgpu::MutableTextureState> mutableState,
+                     sk_sp<skgpu::MutableTextureStateRef> mutableState,
                      sk_sp<const GrVkImageView> framebufferView,
                      sk_sp<const GrVkImageView> textureView,
                      skgpu::Budgeted budgeted,
@@ -223,7 +221,7 @@ GrVkImage::GrVkImage(GrVkGpu* gpu,
                        dimensions,
                        supportedUsages,
                        info.fSampleCount,
-                       info.fLevelCount > 1 ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo,
+                       info.fLevelCount > 1 ? GrMipmapped::kYes : GrMipmapped::kNo,
                        info.fProtected,
                        label,
                        info.fAlloc.fFlags & skgpu::VulkanAlloc::kLazilyAllocated_Flag
@@ -243,7 +241,7 @@ GrVkImage::GrVkImage(GrVkGpu* gpu,
                      SkISize dimensions,
                      UsageFlags supportedUsages,
                      const GrVkImageInfo& info,
-                     sk_sp<skgpu::MutableTextureState> mutableState,
+                     sk_sp<skgpu::MutableTextureStateRef> mutableState,
                      sk_sp<const GrVkImageView> framebufferView,
                      sk_sp<const GrVkImageView> textureView,
                      GrBackendObjectOwnership ownership,
@@ -254,7 +252,7 @@ GrVkImage::GrVkImage(GrVkGpu* gpu,
                        dimensions,
                        supportedUsages,
                        info.fSampleCount,
-                       info.fLevelCount > 1 ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo,
+                       info.fLevelCount > 1 ? GrMipmapped::kYes : GrMipmapped::kNo,
                        info.fProtected,
                        label)
         , fInfo(info)
@@ -268,8 +266,8 @@ GrVkImage::GrVkImage(GrVkGpu* gpu,
 }
 
 void GrVkImage::init(GrVkGpu* gpu, bool forSecondaryCB) {
-    SkASSERT(skgpu::MutableTextureStates::GetVkImageLayout(fMutableState.get()) == fInfo.fImageLayout);
-    SkASSERT(skgpu::MutableTextureStates::GetVkQueueFamilyIndex(fMutableState.get()) == fInfo.fCurrentQueueFamily);
+    SkASSERT(fMutableState->getImageLayout() == fInfo.fImageLayout);
+    SkASSERT(fMutableState->getQueueFamilyIndex() == fInfo.fCurrentQueueFamily);
 #ifdef SK_DEBUG
     if (fInfo.fImageUsageFlags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
         SkASSERT(SkToBool(fInfo.fImageUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT));
@@ -472,8 +470,7 @@ bool GrVkImage::InitImageInfo(GrVkGpu* gpu, const ImageDesc& imageDesc, GrVkImag
     if (0 == imageDesc.fWidth || 0 == imageDesc.fHeight) {
         return false;
     }
-    if ((imageDesc.fIsProtected == GrProtected::kYes) &&
-        !gpu->vkCaps().supportsProtectedContent()) {
+    if ((imageDesc.fIsProtected == GrProtected::kYes) && !gpu->vkCaps().supportsProtectedMemory()) {
         return false;
     }
 
@@ -525,12 +522,7 @@ bool GrVkImage::InitImageInfo(GrVkGpu* gpu, const ImageDesc& imageDesc, GrVkImag
     bool useLazyAllocation =
             SkToBool(imageDesc.fUsageFlags & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
 
-    auto checkResult = [gpu, isProtected, forceDedicatedMemory, useLazyAllocation](
-                               VkResult result) {
-        GR_VK_LOG_IF_NOT_SUCCESS(gpu, result, "skgpu::VulkanMemory::AllocImageMemory"
-                                 " (isProtected:%d, forceDedicatedMemory:%d, useLazyAllocation:%d)",
-                                 (int)isProtected, (int)forceDedicatedMemory,
-                                 (int)useLazyAllocation);
+    auto checkResult = [gpu](VkResult result) {
         return gpu->checkVkResult(result);
     };
     auto allocator = gpu->memoryAllocator();
@@ -714,8 +706,9 @@ GrVkGpu* GrVkImage::getVkGpu() const {
     return static_cast<GrVkGpu*>(this->getGpu());
 }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 void GrVkImage::setCurrentQueueFamilyToGraphicsQueue(GrVkGpu* gpu) {
-    skgpu::MutableTextureStates::SetVkQueueFamilyIndex(fMutableState.get(), gpu->queueIndex());
+    fMutableState->setQueueFamilyIndex(gpu->queueIndex());
 }
 #endif
+

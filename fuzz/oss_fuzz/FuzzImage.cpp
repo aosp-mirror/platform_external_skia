@@ -11,13 +11,13 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
 
-bool FuzzImageDecode(const uint8_t *data, size_t size) {
-    auto img = SkImages::DeferredFromEncodedData(SkData::MakeWithoutCopy(data, size));
+bool FuzzImageDecode(sk_sp<SkData> bytes) {
+    auto img = SkImage::MakeFromEncoded(bytes);
     if (nullptr == img.get()) {
         return false;
     }
 
-    auto s = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(128, 128));
+    auto s = SkSurface::MakeRasterN32Premul(128, 128);
     if (!s) {
         // May return nullptr in memory-constrained fuzzing environments
         return false;
@@ -27,12 +27,14 @@ bool FuzzImageDecode(const uint8_t *data, size_t size) {
     return true;
 }
 
-#if defined(SK_BUILD_FOR_LIBFUZZER)
+// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
+#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 10240) {
         return 0;
     }
-    FuzzImageDecode(data, size);
+    auto bytes = SkData::MakeWithoutCopy(data, size);
+    FuzzImageDecode(bytes);
     return 0;
 }
 #endif

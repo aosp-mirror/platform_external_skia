@@ -113,8 +113,8 @@ public:
 private:
     // fRects and fOrders are parallel, but kept separate to avoid wasting padding since Rect is
     // an over-aligned type.
-    SkTBlockList<Rect, 16> fRects{SkBlockAllocator::GrowthPolicy::kFibonacci};
-    SkTBlockList<CompressedPaintersOrder, 16> fOrders{SkBlockAllocator::GrowthPolicy::kFibonacci};
+    SkTBlockList<Rect> fRects{16, SkBlockAllocator::GrowthPolicy::kFibonacci};
+    SkTBlockList<CompressedPaintersOrder> fOrders{16, SkBlockAllocator::GrowthPolicy::kFibonacci};
 };
 
 // A BoundsManager that tracks highest CompressedPaintersOrder over a uniform spatial grid.
@@ -134,29 +134,19 @@ public:
         return Make(deviceSize, {gridSize, gridSize});
     }
 
-    static std::unique_ptr<GridBoundsManager> MakeRes(SkISize deviceSize,
-                                                      int gridCellSize,
-                                                      int maxGridSize=0) {
+    static std::unique_ptr<GridBoundsManager> MakeRes(const SkISize& deviceSize, int gridCellSize) {
         SkASSERT(deviceSize.width() > 0 && deviceSize.height() > 0);
         SkASSERT(gridCellSize >= 1);
 
         int gridWidth = SkScalarCeilToInt(deviceSize.width() / (float) gridCellSize);
-        if (maxGridSize > 0 && gridWidth > maxGridSize) {
-            // We'd have too many sizes so clamp the grid resolution, leave the device size alone
-            // since the grid cell size can't be preserved anyways.
-            gridWidth = maxGridSize;
-        } else {
-             // Pad out the device size to keep cell size the same
-            deviceSize.fWidth = gridWidth * gridCellSize;
-        }
-
         int gridHeight = SkScalarCeilToInt(deviceSize.height() / (float) gridCellSize);
-        if (maxGridSize > 0 && gridHeight > maxGridSize) {
-            gridHeight = maxGridSize;
-        } else {
-            deviceSize.fHeight = gridHeight * gridCellSize;
-        }
-        return Make(deviceSize, {gridWidth, gridHeight});
+
+        // This keeps the grid cells exactly at the requested resolution, but pads the right and
+        // bottom edges out to a multiple of the cell size. The alternative is pass in the unpadded
+        // device size, which would mean the actual cell size will be smaller than the requested
+        // (by (deviceSize % gridCellSize)/gridDims).
+        SkISize paddedDeviceSize = {gridWidth * gridCellSize, gridHeight * gridCellSize};
+        return Make(paddedDeviceSize, {gridWidth, gridHeight});
     }
 
     ~GridBoundsManager() override {}
@@ -244,12 +234,10 @@ class HybridBoundsManager : public BoundsManager {
 public:
     HybridBoundsManager(const SkISize& deviceSize,
                         int gridCellSize,
-                        int maxBruteForceN,
-                        int maxGridSize=0)
+                        int maxBruteForceN)
             : fDeviceSize(deviceSize)
             , fGridCellSize(gridCellSize)
             , fMaxBruteForceN(maxBruteForceN)
-            , fMaxGridSize(maxGridSize)
             , fCurrentManager(&fBruteForceManager) {
         SkASSERT(deviceSize.width() >= 1 && deviceSize.height() >= 1 &&
                  gridCellSize >= 1 && maxBruteForceN >= 1);
@@ -287,7 +275,6 @@ private:
     const SkISize fDeviceSize;
     const int     fGridCellSize;
     const int     fMaxBruteForceN;
-    const int     fMaxGridSize;
 
     BoundsManager* fCurrentManager;
 
@@ -308,7 +295,7 @@ private:
         }
         // Else we need to switch from the brute force manager to the grid manager
         if (!fGridManager) {
-            fGridManager = GridBoundsManager::MakeRes(fDeviceSize, fGridCellSize, fMaxGridSize);
+            fGridManager = GridBoundsManager::MakeRes(fDeviceSize, fGridCellSize);
         }
         fCurrentManager = fGridManager.get();
 

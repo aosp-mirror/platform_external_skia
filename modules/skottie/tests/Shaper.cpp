@@ -6,10 +6,9 @@
  */
 
 #include "include/core/SkFontMgr.h"
-#include "modules/skottie/include/TextShaper.h"
+#include "modules/skottie/src/text/SkottieShaper.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 using namespace skottie;
 
@@ -19,7 +18,7 @@ DEF_TEST(Skottie_Shaper_Clusters, r) {
     auto check_clusters = [](skiatest::Reporter* r, const SkString& text, Shaper::Flags flags,
                              const std::vector<size_t>& expected_clusters) {
         const Shaper::TextDesc desc = {
-            ToolUtils::CreatePortableTypeface("Serif", SkFontStyle()),
+            ToolUtils::create_portable_typeface("Serif", SkFontStyle()),
             18,
             0, 18,
             18,
@@ -32,11 +31,10 @@ DEF_TEST(Skottie_Shaper_Clusters, r) {
             Shaper::Direction::kLTR,
             Shaper::Capitalization::kNone,
             0,
-            flags,
-            nullptr,
+            flags
         };
-        const auto result =
-                Shaper::Shape(text, desc, SkRect::MakeWH(1000, 1000), ToolUtils::TestFontMgr());
+        const auto result = Shaper::Shape(text, desc, SkRect::MakeWH(1000, 1000),
+                                          SkFontMgr::RefDefault());
         REPORTER_ASSERT(r, !result.fFragments.empty());
 
         size_t i = 0;
@@ -65,7 +63,7 @@ DEF_TEST(Skottie_Shaper_Clusters, r) {
 }
 
 DEF_TEST(Skottie_Shaper_HAlign, reporter) {
-    sk_sp<SkTypeface> typeface = ToolUtils::DefaultTypeface();
+    auto typeface = SkTypeface::MakeDefault();
     REPORTER_ASSERT(reporter, typeface);
 
     static constexpr struct {
@@ -108,13 +106,10 @@ DEF_TEST(Skottie_Shaper_HAlign, reporter) {
                 Shaper::LinebreakPolicy::kExplicit,
                 Shaper::Direction::kLTR,
                 Shaper::Capitalization::kNone,
-                0,
-                0,
-                nullptr
             };
 
-            const auto shape_result =
-                    Shaper::Shape(text, desc, text_point, ToolUtils::TestFontMgr());
+            const auto shape_result = Shaper::Shape(text, desc, text_point,
+                                                    SkFontMgr::RefDefault());
             REPORTER_ASSERT(reporter, shape_result.fFragments.size() == 1ul);
             REPORTER_ASSERT(reporter, !shape_result.fFragments[0].fGlyphs.fRuns.empty());
 
@@ -138,7 +133,7 @@ DEF_TEST(Skottie_Shaper_HAlign, reporter) {
 }
 
 DEF_TEST(Skottie_Shaper_VAlign, reporter) {
-    sk_sp<SkTypeface> typeface = ToolUtils::DefaultTypeface();
+    auto typeface = SkTypeface::MakeDefault();
     REPORTER_ASSERT(reporter, typeface);
 
     static constexpr struct {
@@ -181,12 +176,9 @@ DEF_TEST(Skottie_Shaper_VAlign, reporter) {
                 Shaper::LinebreakPolicy::kParagraph,
                 Shaper::Direction::kLTR,
                 Shaper::Capitalization::kNone,
-                0,
-                0,
-                nullptr
             };
 
-            const auto shape_result = Shaper::Shape(text, desc, text_box, ToolUtils::TestFontMgr());
+            const auto shape_result = Shaper::Shape(text, desc, text_box, SkFontMgr::RefDefault());
             REPORTER_ASSERT(reporter, shape_result.fFragments.size() == 1ul);
             REPORTER_ASSERT(reporter, !shape_result.fFragments[0].fGlyphs.fRuns.empty());
 
@@ -212,7 +204,7 @@ DEF_TEST(Skottie_Shaper_VAlign, reporter) {
 
 DEF_TEST(Skottie_Shaper_FragmentGlyphs, reporter) {
     skottie::Shaper::TextDesc desc = {
-        ToolUtils::DefaultTypeface(),
+        SkTypeface::MakeDefault(),
         18,
         0, 18,
         18,
@@ -224,30 +216,25 @@ DEF_TEST(Skottie_Shaper_FragmentGlyphs, reporter) {
         Shaper::LinebreakPolicy::kParagraph,
         Shaper::Direction::kLTR,
         Shaper::Capitalization::kNone,
-        0,
-        0,
-        nullptr
     };
 
     const SkString text("Foo bar baz");
     const auto text_box = SkRect::MakeWH(100, 100);
 
     {
-        const auto shape_result = Shaper::Shape(text, desc, text_box, ToolUtils::TestFontMgr());
+        const auto shape_result = Shaper::Shape(text, desc, text_box, SkFontMgr::RefDefault());
         // Default/consolidated mode => single blob result.
         REPORTER_ASSERT(reporter, shape_result.fFragments.size() == 1ul);
-        SkASSERT(!shape_result.fFragments.empty());
         REPORTER_ASSERT(reporter, !shape_result.fFragments[0].fGlyphs.fRuns.empty());
     }
 
     {
         desc.fFlags = Shaper::Flags::kFragmentGlyphs;
-        const auto shape_result =
-                skottie::Shaper::Shape(text, desc, text_box, ToolUtils::TestFontMgr());
+        const auto shape_result = skottie::Shaper::Shape(text, desc, text_box,
+                                                         SkFontMgr::RefDefault());
         // Fragmented mode => one blob per glyph.
         const size_t expectedSize = text.size();
         REPORTER_ASSERT(reporter, shape_result.fFragments.size() == expectedSize);
-        SkASSERT(!shape_result.fFragments.empty());
         for (size_t i = 0; i < expectedSize; ++i) {
             REPORTER_ASSERT(reporter, !shape_result.fFragments[i].fGlyphs.fRuns.empty());
         }
@@ -266,22 +253,22 @@ DEF_TEST(Skottie_Shaper_ExplicitFontMgr, reporter) {
         void onGetFamilyName(int index, SkString* familyName) const override {
             SkDEBUGFAIL("onGetFamilyName called with bad index");
         }
-        sk_sp<SkFontStyleSet> onCreateStyleSet(int index) const override {
+        SkFontStyleSet* onCreateStyleSet(int index) const override {
             SkDEBUGFAIL("onCreateStyleSet called with bad index");
             return nullptr;
         }
-        sk_sp<SkFontStyleSet> onMatchFamily(const char[]) const override {
+        SkFontStyleSet* onMatchFamily(const char[]) const override {
             return SkFontStyleSet::CreateEmpty();
         }
 
-        sk_sp<SkTypeface> onMatchFamilyStyle(const char[], const SkFontStyle&) const override {
+        SkTypeface* onMatchFamilyStyle(const char[], const SkFontStyle&) const override {
             return nullptr;
         }
-        sk_sp<SkTypeface> onMatchFamilyStyleCharacter(const char familyName[],
-                                                      const SkFontStyle& style,
-                                                      const char* bcp47[],
-                                                      int bcp47Count,
-                                                      SkUnichar character) const override {
+        SkTypeface* onMatchFamilyStyleCharacter(const char familyName[],
+                                                const SkFontStyle& style,
+                                                const char* bcp47[],
+                                                int bcp47Count,
+                                                SkUnichar character) const override {
             fFallbackCount++;
             return nullptr;
         }
@@ -309,7 +296,7 @@ DEF_TEST(Skottie_Shaper_ExplicitFontMgr, reporter) {
     auto fontmgr = sk_make_sp<CountingFontMgr>();
 
     skottie::Shaper::TextDesc desc = {
-        ToolUtils::DefaultPortableTypeface(),
+        ToolUtils::create_portable_typeface(),
         18,
         0, 18,
         18,
@@ -321,9 +308,6 @@ DEF_TEST(Skottie_Shaper_ExplicitFontMgr, reporter) {
         Shaper::LinebreakPolicy::kParagraph,
         Shaper::Direction::kLTR,
         Shaper::Capitalization::kNone,
-        0,
-        0,
-        nullptr
     };
 
     const auto text_box = SkRect::MakeWH(100, 100);

@@ -10,8 +10,8 @@
 
 #include "include/core/SkPoint.h"
 #include "include/core/SkTypes.h"
-#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkDebug.h"
 #include "src/base/SkArenaAlloc.h"
 #include "src/pathops/SkPathOpsCubic.h"
 #include "src/pathops/SkPathOpsDebug.h"
@@ -132,7 +132,7 @@ struct SkDQuad {
     void dumpID(int id) const;
     void dumpInner() const;
 
-    SkDEBUGCODE(SkOpGlobalState* fDebugGlobalState;)
+    SkDEBUGCODE(SkOpGlobalState* fDebugGlobalState);
 };
 
 

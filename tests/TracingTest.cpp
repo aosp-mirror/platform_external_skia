@@ -14,6 +14,7 @@
 #include "tests/Test.h"
 #include "tools/flags/CommandLineFlags.h"
 
+#include <atomic>
 #include <cstdint>
 
 static DEFINE_bool(slowTracingTest, false,

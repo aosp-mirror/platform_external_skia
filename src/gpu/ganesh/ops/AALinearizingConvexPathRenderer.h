@@ -10,7 +10,7 @@
 
 #include "src/gpu/ganesh/PathRenderer.h"
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 class AALinearizingConvexPathRenderer final : public PathRenderer {
 public:
@@ -24,6 +24,6 @@ private:
     bool onDrawPath(const DrawPathArgs&) override;
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // AALinearizingConvexPathRenderer_DEFINED

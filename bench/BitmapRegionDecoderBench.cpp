@@ -34,7 +34,7 @@ const char* BitmapRegionDecoderBench::onGetName() {
 }
 
 bool BitmapRegionDecoderBench::isSuitableFor(Backend backend) {
-    return Backend::kNonRendering == backend;
+    return kNonRendering_Backend == backend;
 }
 
 void BitmapRegionDecoderBench::onDelayedSetup() {

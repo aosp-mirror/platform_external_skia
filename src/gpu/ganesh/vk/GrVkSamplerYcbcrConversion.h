@@ -11,7 +11,7 @@
 #include "src/gpu/ganesh/vk/GrVkManagedResource.h"
 
 #include "include/gpu/vk/GrVkTypes.h"
-#include "src/core/SkChecksum.h"
+#include "src/core/SkOpts.h"
 
 #include <cinttypes>
 
@@ -23,19 +23,18 @@ public:
 
     VkSamplerYcbcrConversion ycbcrConversion() const { return fYcbcrConversion; }
 
-    SK_BEGIN_REQUIRE_DENSE
     struct Key {
-        Key() = default;
+        Key() : fVkFormat(VK_FORMAT_UNDEFINED), fExternalFormat(0), fConversionKey(0) {}
         Key(VkFormat vkFormat, uint64_t externalFormat, uint8_t conversionKey) {
+            memset(this, 0, sizeof(Key));
             fVkFormat = vkFormat;
             fExternalFormat = externalFormat;
             fConversionKey = conversionKey;
         }
 
-        VkFormat fVkFormat = VK_FORMAT_UNDEFINED;
-        uint8_t  fConversionKey = 0;
-        uint8_t  fPadding[3] = {0, 0, 0};
-        uint64_t fExternalFormat = 0;
+        VkFormat fVkFormat;
+        uint64_t fExternalFormat;
+        uint8_t  fConversionKey;
 
         bool operator==(const Key& that) const {
             return this->fVkFormat == that.fVkFormat &&
@@ -43,7 +42,6 @@ public:
                    this->fConversionKey == that.fConversionKey;
         }
     };
-    SK_END_REQUIRE_DENSE
 
     // Helpers for hashing GrVkSamplerYcbcrConversion
     static Key GenerateKey(const GrVkYcbcrConversionInfo& ycbcrInfo);
@@ -52,7 +50,7 @@ public:
         return ycbcrConversion.fKey;
     }
     static uint32_t Hash(const Key& key) {
-        return SkChecksum::Hash32(&key, sizeof(Key));
+        return SkOpts::hash(reinterpret_cast<const uint32_t*>(&key), sizeof(Key));
     }
 
 #ifdef SK_TRACE_MANAGED_RESOURCES

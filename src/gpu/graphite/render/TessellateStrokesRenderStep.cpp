@@ -8,9 +8,9 @@
 #include "src/gpu/graphite/render/TessellateStrokesRenderStep.h"
 
 #include "include/core/SkM44.h"
+#include "include/private/SkSLString.h"
 #include "src/base/SkVx.h"
 #include "src/core/SkGeometry.h"
-#include "src/sksl/SkSLString.h"
 
 #include "src/gpu/graphite/DrawParams.h"
 #include "src/gpu/graphite/DrawTypes.h"
@@ -52,14 +52,14 @@ using Writer = PatchWriter<DynamicInstancesPatchAllocator<FixedCountStrokes>,
 
 // The order of the attribute declarations must match the order used by
 // PatchWriter::emitPatchAttribs, i.e.:
-//     join << fanPoint << stroke << color << depth << curveType << ssboIndices
+//     join << fanPoint << stroke << color << depth << curveType << ssboIndex
 static constexpr Attribute kBaseAttributes[] = {
         {"p01", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"p23", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"prevPoint", VertexAttribType::kFloat2, SkSLType::kFloat2},
         {"stroke", VertexAttribType::kFloat2, SkSLType::kFloat2},
         {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
-        {"ssboIndices", VertexAttribType::kUShort2, SkSLType::kUShort2}};
+        {"ssboIndex", VertexAttribType::kInt, SkSLType::kInt}};
 
 static constexpr Attribute kAttributesWithCurveType[] = {
         {"p01", VertexAttribType::kFloat4, SkSLType::kFloat4},
@@ -68,7 +68,7 @@ static constexpr Attribute kAttributesWithCurveType[] = {
         {"stroke", VertexAttribType::kFloat2, SkSLType::kFloat2},
         {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
         {"curveType", VertexAttribType::kFloat, SkSLType::kFloat},
-        {"ssboIndices", VertexAttribType::kUShort2, SkSLType::kUShort2}};
+        {"ssboIndex", VertexAttribType::kInt, SkSLType::kInt}};
 
 static constexpr SkSpan<const Attribute> kAttributes[2] = {kAttributesWithCurveType,
                                                            kBaseAttributes};
@@ -111,7 +111,7 @@ std::string TessellateStrokesRenderStep::vertexSkSL() const {
 
 void TessellateStrokesRenderStep::writeVertices(DrawWriter* dw,
                                                 const DrawParams& params,
-                                                skvx::ushort2 ssboIndices) const {
+                                                int ssboIndex) const {
     SkPath path = params.geometry().shape().asPath(); // TODO: Iterate the Shape directly
 
     int patchReserveCount = FixedCountStrokes::PreallocCount(path.countVerbs());
@@ -126,7 +126,7 @@ void TessellateStrokesRenderStep::writeVertices(DrawWriter* dw,
                   kNullBinding,
                   patchReserveCount};
     writer.updatePaintDepthAttrib(params.order().depthAsFloat());
-    writer.updateSsboIndexAttrib(ssboIndices);
+    writer.updateSsboIndexAttrib(ssboIndex);
 
     // The vector xform approximates how the control points are transformed by the shader to
     // more accurately compute how many *parametric* segments are needed.
@@ -240,8 +240,7 @@ void TessellateStrokesRenderStep::writeVertices(DrawWriter* dw,
 
 void TessellateStrokesRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                                            PipelineDataGatherer* gatherer) const {
-    // TODO: Implement perspective
-    SkASSERT(params.transform().type() < Transform::Type::kPerspective);
+    SkASSERT(params.transform().type() < Transform::Type::kProjection); // TODO: Implement perspective
 
     SkDEBUGCODE(UniformExpectationsValidator uev(gatherer, this->uniforms());)
 

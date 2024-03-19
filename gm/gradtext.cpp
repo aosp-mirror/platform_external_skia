@@ -22,7 +22,6 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 namespace {
 
@@ -50,9 +49,9 @@ static sk_sp<SkShader> make_chrome_solid() {
 
 // Replicate chrome layout test - clipped pathed gradient-shaded text
 class ChromeGradTextGM1 : public skiagm::GM {
-    SkString getName() const override { return SkString("chrome_gradtext1"); }
+    SkString onShortName() override { return SkString("chrome_gradtext1"); }
 
-    SkISize getISize() override { return {500, 480}; }
+    SkISize onISize() override { return {500, 480}; }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
@@ -66,7 +65,7 @@ class ChromeGradTextGM1 : public skiagm::GM {
         // Minimal repro doesn't require AA, LCD, or a nondefault typeface
         paint.setShader(make_chrome_solid());
 
-        SkFont font(ToolUtils::DefaultPortableTypeface(), 500);
+        SkFont font(ToolUtils::create_portable_typeface(), 500);
         font.setEdging(SkFont::Edging::kAlias);
 
         canvas->drawString("I", 0, 100, font, paint);
@@ -75,13 +74,13 @@ class ChromeGradTextGM1 : public skiagm::GM {
 
 // Replicate chrome layout test - switching between solid & gradient text
 class ChromeGradTextGM2 : public skiagm::GM {
-    SkString getName() const override { return SkString("chrome_gradtext2"); }
+    SkString onShortName() override { return SkString("chrome_gradtext2"); }
 
-    SkISize getISize() override { return {500, 480}; }
+    SkISize onISize() override { return {500, 480}; }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
-        SkFont  font = ToolUtils::DefaultPortableFont();
+        SkFont  font(ToolUtils::create_portable_typeface());
         font.setEdging(SkFont::Edging::kAlias);
 
         paint.setStyle(SkPaint::kFill_Style);
@@ -105,7 +104,7 @@ DEF_GM( return new ChromeGradTextGM2; )
 
 DEF_SIMPLE_GM(gradtext, canvas, 500, 480) {
     static constexpr float kTextSize = 26.0f;
-    SkFont                 font(ToolUtils::DefaultPortableTypeface(), kTextSize);
+    SkFont                 font(ToolUtils::create_portable_typeface(), kTextSize);
 
     canvas->drawRect({0, 0, 500, 240}, SkPaint());
     canvas->translate(20.0f, kTextSize);

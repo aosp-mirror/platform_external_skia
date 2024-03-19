@@ -10,11 +10,10 @@
 
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
-#include "include/private/base/SkAssert.h"
 
-#include <cstdint>
 #include <vector>
 
+class SkCanvas;
 class SkMatrix;
 
 namespace sksg {
@@ -36,9 +35,6 @@ public:
     // Returns the bounding box for the DAG fragment.
     const SkRect& revalidate(InvalidationController*, const SkMatrix&);
 
-    // Tag this node for invalidation and optional damage.
-    void invalidate(bool damage = true);
-
 protected:
     enum InvalTraits {
         // Nodes with this trait never generate direct damage -- instead,
@@ -57,6 +53,8 @@ protected:
         return fBounds;
     }
 
+    // Tag this node for invalidation and optional damage.
+    void invalidate(bool damage = true);
     bool hasInval() const { return fFlags & kInvalidated_Flag; }
 
     // Dispatched on revalidation.  Subclasses are expected to recompute/cache their properties

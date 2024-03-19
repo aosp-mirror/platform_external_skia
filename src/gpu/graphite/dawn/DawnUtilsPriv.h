@@ -1,50 +1,49 @@
 /*
- * Copyright 2023 Google LLC
+ * Copyright 2022 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
-#ifndef skgpu_DawnUtilsPriv_DEFINED
-#define skgpu_DawnUtilsPriv_DEFINED
+#ifndef skgpu_graphite_DawnUtilsPriv_DEFINED
+#define skgpu_graphite_DawnUtilsPriv_DEFINED
 
-#include "src/gpu/PipelineUtils.h"
-#include "src/sksl/codegen/SkSLWGSLCodeGenerator.h"
-#include "webgpu/webgpu_cpp.h"  // NO_G3_REWRITE
+#include "include/core/SkImageInfo.h"
+#include "include/private/SkSLProgramKind.h"
+#include "src/gpu/graphite/ResourceTypes.h"
+#include "src/sksl/ir/SkSLProgram.h"
+
+#include "webgpu/webgpu_cpp.h"
 
 namespace SkSL {
-
-enum class ProgramKind : int8_t;
-struct ProgramInterface;
+class Compiler;
 struct ProgramSettings;
-struct ShaderCaps;
-
-}  // namespace SkSL
-
-namespace skgpu {
-
-class ShaderErrorHandler;
-
-inline bool SkSLToWGSL(const SkSL::ShaderCaps* caps,
-                       const std::string& sksl,
-                       SkSL::ProgramKind programKind,
-                       const SkSL::ProgramSettings& settings,
-                       std::string* wgsl,
-                       SkSL::ProgramInterface* outInterface,
-                       ShaderErrorHandler* errorHandler) {
-    return SkSLToBackend(caps, &SkSL::ToWGSL, "WGSL",
-                         sksl, programKind, settings, wgsl, outInterface, errorHandler);
 }
 
-namespace graphite {
+namespace skgpu {
+class ShaderErrorHandler;
+}
 
+namespace skgpu::graphite {
 class DawnSharedContext;
 
-size_t DawnFormatBytesPerBlock(wgpu::TextureFormat format);
+bool DawnFormatIsDepthOrStencil(wgpu::TextureFormat);
+bool DawnFormatIsDepth(wgpu::TextureFormat);
+bool DawnFormatIsStencil(wgpu::TextureFormat);
 
-uint32_t DawnFormatChannels(wgpu::TextureFormat format);
+wgpu::TextureFormat DawnDepthStencilFlagsToFormat(SkEnumBitMask<DepthStencilFlags>);
 
-}  // namespace graphite
-}  // namespace skgpu
+bool SkSLToSPIRV(SkSL::Compiler*,
+                 const std::string& sksl,
+                 SkSL::ProgramKind kind,
+                 const SkSL::ProgramSettings& settings,
+                 std::string* spirv,
+                 SkSL::Program::Inputs* outInputs,
+                 ShaderErrorHandler* errorHandler);
 
-#endif // skgpu_DawnUtilsPriv_DEFINED
+wgpu::ShaderModule DawnCompileSPIRVShaderModule(const DawnSharedContext* sharedContext,
+                                                const std::string& spirv,
+                                                ShaderErrorHandler* errorHandler);
+} // namespace skgpu::graphite
+
+#endif // skgpu_graphite_DawnUtilsPriv_DEFINED

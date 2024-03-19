@@ -12,8 +12,7 @@
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/AtlasTypes.h"
-#include "src/gpu/ganesh/Device.h"
-#include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/Device_v1.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
 
 class GrAtlasManager;
@@ -26,7 +25,7 @@ class GrRenderTargetProxy;
 class GrSemaphore;
 class GrSurfaceProxy;
 
-class GrDeferredDisplayList;
+class SkDeferredDisplayList;
 class SkTaskGroup;
 
 /** Class that adds methods to GrDirectContext that are only intended for use internal to Skia.
@@ -34,22 +33,6 @@ class SkTaskGroup;
     data members or virtual methods. */
 class GrDirectContextPriv : public GrRecordingContextPriv {
 public:
-    static sk_sp<GrDirectContext> Make(GrBackendApi backend,
-                                       const GrContextOptions& options,
-                                       sk_sp<GrContextThreadSafeProxy> proxy) {
-        return sk_sp<GrDirectContext>(new GrDirectContext(backend, options, std::move(proxy)));
-    }
-
-    static bool Init(const sk_sp<GrDirectContext>& ctx) {
-        SkASSERT(ctx);
-        return ctx->init();
-    }
-
-    static void SetGpu(const sk_sp<GrDirectContext>& ctx, std::unique_ptr<GrGpu> gpu) {
-        SkASSERT(ctx);
-        ctx->fGpu = std::move(gpu);
-    }
-
     GrDirectContext* context() { return static_cast<GrDirectContext*>(fContext); }
     const GrDirectContext* context() const { return static_cast<const GrDirectContext*>(fContext); }
 
@@ -66,17 +49,17 @@ public:
      * surface or using it as a texture.
      */
     GrSemaphoresSubmitted flushSurfaces(
-            SkSpan<GrSurfaceProxy*>,
-            SkSurfaces::BackendSurfaceAccess = SkSurfaces::BackendSurfaceAccess::kNoAccess,
-            const GrFlushInfo& = {},
-            const skgpu::MutableTextureState* newState = nullptr);
+                SkSpan<GrSurfaceProxy*>,
+                SkSurface::BackendSurfaceAccess = SkSurface::BackendSurfaceAccess::kNoAccess,
+                const GrFlushInfo& = {},
+                const skgpu::MutableTextureState* newState = nullptr);
 
     /** Version of above that flushes for a single proxy. Null is allowed. */
     GrSemaphoresSubmitted flushSurface(
-            GrSurfaceProxy* proxy,
-            SkSurfaces::BackendSurfaceAccess access = SkSurfaces::BackendSurfaceAccess::kNoAccess,
-            const GrFlushInfo& info = {},
-            const skgpu::MutableTextureState* newState = nullptr) {
+                GrSurfaceProxy* proxy,
+                SkSurface::BackendSurfaceAccess access = SkSurface::BackendSurfaceAccess::kNoAccess,
+                const GrFlushInfo& info = {},
+                const skgpu::MutableTextureState* newState = nullptr) {
         size_t size = proxy ? 1 : 0;
         return this->flushSurfaces({&proxy, size}, access, info, newState);
     }
@@ -112,13 +95,14 @@ public:
 
     // This accessor should only ever be called by the GrOpFlushState.
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
-    skgpu::ganesh::SmallPathAtlasMgr* getSmallPathAtlasMgr() {
+    skgpu::v1::SmallPathAtlasMgr* getSmallPathAtlasMgr() {
         return this->context()->onGetSmallPathAtlasMgr();
     }
 #endif
 
-    void createDDLTask(sk_sp<const GrDeferredDisplayList>,
-                       sk_sp<GrRenderTargetProxy> newDest);
+    void createDDLTask(sk_sp<const SkDeferredDisplayList>,
+                       sk_sp<GrRenderTargetProxy> newDest,
+                       SkIPoint offset);
 
     bool compile(const GrProgramDesc&, const GrProgramInfo&);
 
@@ -139,27 +123,24 @@ public:
         }
     }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     /** Reset GPU stats */
     void resetGpuStats() const;
 
     /** Prints cache stats to the string if GR_CACHE_STATS == 1. */
     void dumpCacheStats(SkString*) const;
-    void dumpCacheStatsKeyValuePairs(
-            skia_private::TArray<SkString>* keys, skia_private::TArray<double>* values) const;
+    void dumpCacheStatsKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const;
     void printCacheStats() const;
 
     /** Prints GPU stats to the string if GR_GPU_STATS == 1. */
     void dumpGpuStats(SkString*) const;
-    void dumpGpuStatsKeyValuePairs(
-            skia_private::TArray<SkString>* keys, skia_private::TArray<double>* values) const;
+    void dumpGpuStatsKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const;
     void printGpuStats() const;
 
     /** These are only active if GR_GPU_STATS == 1. */
     void resetContextStats();
     void dumpContextStats(SkString*) const;
-    void dumpContextStatsKeyValuePairs(
-            skia_private::TArray<SkString>* keys, skia_private::TArray<double>* values) const;
+    void dumpContextStatsKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const;
     void printContextStats() const;
 
     /** Get pointer to atlas texture for given mask format. Note that this wraps an

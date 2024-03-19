@@ -20,7 +20,6 @@ DEF_SIMPLE_GM_BG(imagefiltersunpremul, canvas, 64, 64, SK_ColorBLACK) {
     bitmap.allocPixels(SkImageInfo::Make(64, 64, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType));
     bitmap.eraseColor(SkColorSetARGB(50, 255, 0, 0));
     SkPaint paint;
-    paint.setImageFilter(SkImageFilters::Image(SkImages::RasterFromBitmap(bitmap),
-                                               SkCubicResampler::Mitchell()));
+    paint.setImageFilter(SkImageFilters::Image(SkImage::MakeFromBitmap(bitmap)));
     canvas->drawPaint(paint);
 }

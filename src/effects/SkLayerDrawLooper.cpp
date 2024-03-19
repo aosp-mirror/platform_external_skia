@@ -22,6 +22,7 @@
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkStringUtils.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/core/SkXfermodePriv.h"
 
 SkLayerDrawLooper::LayerInfo::LayerInfo() {
     fPaintBits = 0;                     // ignore our paint fields

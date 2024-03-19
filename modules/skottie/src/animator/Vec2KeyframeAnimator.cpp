@@ -6,28 +6,13 @@
  */
 
 #include "include/core/SkContourMeasure.h"
-#include "include/core/SkCubicMap.h"
-#include "include/core/SkM44.h"
 #include "include/core/SkPathBuilder.h"
-#include "include/core/SkPoint.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkString.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkTo.h"
-#include "modules/skottie/include/Skottie.h"
-#include "modules/skottie/include/SlotManager.h"
 #include "modules/skottie/src/SkottieJson.h"
-#include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/animator/KeyframeAnimator.h"
-#include "src/utils/SkJSON.h"
 
-#include <algorithm>
 #include <cmath>
-#include <utility>
-#include <vector>
 
 namespace skottie::internal {
 
@@ -98,18 +83,7 @@ private:
             // arc length.
             SkPoint  pos;
             SkVector tan;
-            const float len = v0.cmeasure->length(),
-                   distance = len * lerp_info.weight;
-            if (v0.cmeasure->getPosTan(distance, &pos, &tan)) {
-                // Easing can yield a sub/super normal weight, which in turn can cause the
-                // interpolation position to become negative or larger than the path length.
-                // In those cases the expectation is to extrapolate using the endpoint tangent.
-                if (distance < 0 || distance > len) {
-                    const float overshoot = std::copysign(std::max(-distance, distance - len),
-                                                          distance);
-                    pos += tan * overshoot;
-                }
-
+            if (v0.cmeasure->getPosTan(lerp_info.weight * v0.cmeasure->length(), &pos, &tan)) {
                 return this->update({ pos.fX, pos.fY }, {tan.fX, tan.fY});
             }
         }
@@ -182,7 +156,7 @@ class Vec2AnimatorBuilder final : public AnimatorBuilder {
         }
 
         bool parseValue(const AnimationBuilder&, const skjson::Value& jv) const override {
-            return ::skottie::Parse(jv, fVecTarget);
+            return Parse(jv, fVecTarget);
         }
 
     private:
@@ -233,7 +207,7 @@ class Vec2AnimatorBuilder final : public AnimatorBuilder {
                           const skjson::Value& jv,
                           Keyframe::Value* v) override {
             Vec2KeyframeAnimator::SpatialValue val;
-            if (!::skottie::Parse(jv, &val.v2)) {
+            if (!Parse(jv, &val.v2)) {
                 return false;
             }
 
@@ -272,11 +246,6 @@ bool AnimatablePropertyContainer::bindAutoOrientable(const AnimationBuilder& abu
                                                      Vec2Value* v, float* orientation) {
     if (!jprop) {
         return false;
-    }
-
-    if (const auto* sid = ParseSlotID(jprop)) {
-        fHasSlotID = true;
-        abuilder.fSlotManager->trackVec2Value(SkString(sid->begin()), v, sk_ref_sp(this));
     }
 
     if (!ParseDefault<bool>((*jprop)["s"], false)) {

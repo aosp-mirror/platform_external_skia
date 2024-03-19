@@ -43,11 +43,11 @@ public:
         }
     }
 
-    sk_sp<SkTypeface> createTypeface(int index) override {
-        return fTypefaces[index].fTypeface;
+    SkTypeface* createTypeface(int index) override {
+        return SkRef(fTypefaces[index].fTypeface.get());
     }
 
-    sk_sp<SkTypeface> matchStyle(const SkFontStyle& pattern) override {
+    SkTypeface* matchStyle(const SkFontStyle& pattern) override {
         return this->matchStyleCSS3(pattern);
     }
 
@@ -94,12 +94,12 @@ public:
         *familyName = fFamilies[index]->getFamilyName();
     }
 
-    sk_sp<SkFontStyleSet> onCreateStyleSet(int index) const override {
+    SkFontStyleSet* onCreateStyleSet(int index) const override {
         sk_sp<SkFontStyleSet> ref = fFamilies[index];
-        return ref;
+        return ref.release();
     }
 
-    sk_sp<SkFontStyleSet> onMatchFamily(const char familyName[]) const override {
+    SkFontStyleSet* onMatchFamily(const char familyName[]) const override {
         if (familyName) {
             if (strstr(familyName, "ono")) {
                 return this->createStyleSet(0);
@@ -122,17 +122,17 @@ public:
         return nullptr;
     }
 
-    sk_sp<SkTypeface> onMatchFamilyStyle(const char         familyName[],
-                                         const SkFontStyle& style) const override {
+    SkTypeface* onMatchFamilyStyle(const char         familyName[],
+                                   const SkFontStyle& style) const override {
         sk_sp<SkFontStyleSet> styleSet(this->matchFamily(familyName));
         return styleSet->matchStyle(style);
     }
 
-    sk_sp<SkTypeface> onMatchFamilyStyleCharacter(const char         familyName[],
-                                                  const SkFontStyle& style,
-                                                  const char*        bcp47[],
-                                                  int                bcp47Count,
-                                                  SkUnichar          character) const override {
+    SkTypeface* onMatchFamilyStyleCharacter(const char         familyName[],
+                                            const SkFontStyle& style,
+                                            const char*        bcp47[],
+                                            int                bcp47Count,
+                                            SkUnichar          character) const override {
         (void)bcp47;
         (void)bcp47Count;
         (void)character;

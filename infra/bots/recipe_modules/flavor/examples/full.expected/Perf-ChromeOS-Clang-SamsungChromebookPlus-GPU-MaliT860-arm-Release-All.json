@@ -248,13 +248,23 @@
   },
   {
     "cmd": [
-      "python3",
-      "RECIPE_MODULE[skia::flavor]/resources/scp.py",
+      "python",
+      "\nimport subprocess\nimport sys\nsrc = sys.argv[1] + '/*'\ndest   = sys.argv[2]\nprint(subprocess.check_output(\n    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))\n",
       "[START_DIR]/skia/resources",
       "foo@127.0.0.1:/home/chronos/user/resources"
     ],
     "infra_step": true,
-    "name": "scp -r [START_DIR]/skia/resources foo@127.0.0.1:/home/chronos/user/resources"
+    "name": "scp -r [START_DIR]/skia/resources foo@127.0.0.1:/home/chronos/user/resources",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@python.inline@@@@",
+      "@@@STEP_LOG_LINE@python.inline@import subprocess@@@",
+      "@@@STEP_LOG_LINE@python.inline@import sys@@@",
+      "@@@STEP_LOG_LINE@python.inline@src = sys.argv[1] + '/*'@@@",
+      "@@@STEP_LOG_LINE@python.inline@dest   = sys.argv[2]@@@",
+      "@@@STEP_LOG_LINE@python.inline@print(subprocess.check_output(@@@",
+      "@@@STEP_LOG_LINE@python.inline@    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))@@@",
+      "@@@STEP_LOG_END@python.inline@@@"
+    ]
   },
   {
     "cmd": [
@@ -369,13 +379,23 @@
   },
   {
     "cmd": [
-      "python3",
-      "RECIPE_MODULE[skia::flavor]/resources/scp.py",
+      "python",
+      "\nimport subprocess\nimport sys\nsrc = sys.argv[1] + '/*'\ndest   = sys.argv[2]\nprint(subprocess.check_output(\n    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))\n",
       "[START_DIR]/skp",
       "foo@127.0.0.1:/home/chronos/user/skps"
     ],
     "infra_step": true,
-    "name": "scp -r [START_DIR]/skp foo@127.0.0.1:/home/chronos/user/skps"
+    "name": "scp -r [START_DIR]/skp foo@127.0.0.1:/home/chronos/user/skps",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@python.inline@@@@",
+      "@@@STEP_LOG_LINE@python.inline@import subprocess@@@",
+      "@@@STEP_LOG_LINE@python.inline@import sys@@@",
+      "@@@STEP_LOG_LINE@python.inline@src = sys.argv[1] + '/*'@@@",
+      "@@@STEP_LOG_LINE@python.inline@dest   = sys.argv[2]@@@",
+      "@@@STEP_LOG_LINE@python.inline@print(subprocess.check_output(@@@",
+      "@@@STEP_LOG_LINE@python.inline@    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))@@@",
+      "@@@STEP_LOG_END@python.inline@@@"
+    ]
   },
   {
     "cmd": [
@@ -503,13 +523,23 @@
   },
   {
     "cmd": [
-      "python3",
-      "RECIPE_MODULE[skia::flavor]/resources/scp.py",
+      "python",
+      "\nimport subprocess\nimport sys\nsrc = sys.argv[1] + '/*'\ndest   = sys.argv[2]\nprint(subprocess.check_output(\n    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))\n",
       "[START_DIR]/skimage",
       "foo@127.0.0.1:/home/chronos/user/images"
     ],
     "infra_step": true,
-    "name": "scp -r [START_DIR]/skimage foo@127.0.0.1:/home/chronos/user/images"
+    "name": "scp -r [START_DIR]/skimage foo@127.0.0.1:/home/chronos/user/images",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@python.inline@@@@",
+      "@@@STEP_LOG_LINE@python.inline@import subprocess@@@",
+      "@@@STEP_LOG_LINE@python.inline@import sys@@@",
+      "@@@STEP_LOG_LINE@python.inline@src = sys.argv[1] + '/*'@@@",
+      "@@@STEP_LOG_LINE@python.inline@dest   = sys.argv[2]@@@",
+      "@@@STEP_LOG_LINE@python.inline@print(subprocess.check_output(@@@",
+      "@@@STEP_LOG_LINE@python.inline@    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))@@@",
+      "@@@STEP_LOG_END@python.inline@@@"
+    ]
   },
   {
     "cmd": [
@@ -637,13 +667,23 @@
   },
   {
     "cmd": [
-      "python3",
-      "RECIPE_MODULE[skia::flavor]/resources/scp.py",
+      "python",
+      "\nimport subprocess\nimport sys\nsrc = sys.argv[1] + '/*'\ndest   = sys.argv[2]\nprint(subprocess.check_output(\n    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))\n",
       "[START_DIR]/svg",
       "foo@127.0.0.1:/home/chronos/user/svgs"
     ],
     "infra_step": true,
-    "name": "scp -r [START_DIR]/svg foo@127.0.0.1:/home/chronos/user/svgs"
+    "name": "scp -r [START_DIR]/svg foo@127.0.0.1:/home/chronos/user/svgs",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@python.inline@@@@",
+      "@@@STEP_LOG_LINE@python.inline@import subprocess@@@",
+      "@@@STEP_LOG_LINE@python.inline@import sys@@@",
+      "@@@STEP_LOG_LINE@python.inline@src = sys.argv[1] + '/*'@@@",
+      "@@@STEP_LOG_LINE@python.inline@dest   = sys.argv[2]@@@",
+      "@@@STEP_LOG_LINE@python.inline@print(subprocess.check_output(@@@",
+      "@@@STEP_LOG_LINE@python.inline@    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))@@@",
+      "@@@STEP_LOG_END@python.inline@@@"
+    ]
   },
   {
     "cmd": [
@@ -678,13 +718,23 @@
   },
   {
     "cmd": [
-      "python3",
-      "RECIPE_MODULE[skia::flavor]/resources/scp.py",
+      "python",
+      "\nimport subprocess\nimport sys\nsrc = sys.argv[1] + '/*'\ndest   = sys.argv[2]\nprint(subprocess.check_output(\n    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))\n",
       "foo@127.0.0.1:/home/chronos/user/perf",
       "[START_DIR]/[SWARM_OUT_DIR]"
     ],
     "infra_step": true,
-    "name": "scp -r foo@127.0.0.1:/home/chronos/user/perf [START_DIR]/[SWARM_OUT_DIR]"
+    "name": "scp -r foo@127.0.0.1:/home/chronos/user/perf [START_DIR]/[SWARM_OUT_DIR]",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@python.inline@@@@",
+      "@@@STEP_LOG_LINE@python.inline@import subprocess@@@",
+      "@@@STEP_LOG_LINE@python.inline@import sys@@@",
+      "@@@STEP_LOG_LINE@python.inline@src = sys.argv[1] + '/*'@@@",
+      "@@@STEP_LOG_LINE@python.inline@dest   = sys.argv[2]@@@",
+      "@@@STEP_LOG_LINE@python.inline@print(subprocess.check_output(@@@",
+      "@@@STEP_LOG_LINE@python.inline@    'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))@@@",
+      "@@@STEP_LOG_END@python.inline@@@"
+    ]
   },
   {
     "name": "$result"

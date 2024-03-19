@@ -38,8 +38,6 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/SkColorData.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkFloatingPoint.h"
@@ -48,8 +46,7 @@
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/ganesh/Device.h"
-#include "src/gpu/ganesh/GrCanvas.h"
+#include "src/gpu/ganesh/Device_v1.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
@@ -60,15 +57,14 @@
 #include "src/gpu/ganesh/GrTextureProxy.h"
 #include "src/gpu/ganesh/SurfaceContext.h"
 #include "src/gpu/ganesh/SurfaceFillContext.h"
-#include "src/gpu/ganesh/image/GrImageUtils.h"
-#include "src/gpu/ganesh/surface/SkSurface_Ganesh.h"
 #include "src/image/SkImage_Base.h"
+#include "src/image/SkImage_Gpu.h"
+#include "src/image/SkSurface_Gpu.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tests/TestHarness.h"
 #include "tools/RuntimeBlendUtils.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/gpu/BackendSurfaceFactory.h"
 #include "tools/gpu/ManagedBackendTexture.h"
 #include "tools/gpu/ProxyUtils.h"
@@ -93,7 +89,7 @@ static sk_sp<SkSurface> create_surface(SkAlphaType at = kPremul_SkAlphaType,
     if (requestedInfo) {
         *requestedInfo = info;
     }
-    return SkSurfaces::Raster(info);
+    return SkSurface::MakeRaster(info);
 }
 static sk_sp<SkSurface> create_direct_surface(SkAlphaType at = kPremul_SkAlphaType,
                                               SkImageInfo* requestedInfo = nullptr) {
@@ -103,7 +99,9 @@ static sk_sp<SkSurface> create_direct_surface(SkAlphaType at = kPremul_SkAlphaTy
     }
     const size_t rowBytes = info.minRowBytes();
     void* storage = sk_malloc_throw(info.computeByteSize(rowBytes));
-    return SkSurfaces::WrapPixels(info, storage, rowBytes, release_direct_surface_storage, storage);
+    return SkSurface::MakeRasterDirectReleaseProc(info, storage, rowBytes,
+                                                  release_direct_surface_storage,
+                                                  storage);
 }
 static sk_sp<SkSurface> create_gpu_surface(GrRecordingContext* rContext,
                                            SkAlphaType at = kPremul_SkAlphaType,
@@ -112,7 +110,7 @@ static sk_sp<SkSurface> create_gpu_surface(GrRecordingContext* rContext,
     if (requestedInfo) {
         *requestedInfo = info;
     }
-    return SkSurfaces::RenderTarget(rContext, skgpu::Budgeted::kNo, info);
+    return SkSurface::MakeRenderTarget(rContext, skgpu::Budgeted::kNo, info);
 }
 static sk_sp<SkSurface> create_gpu_scratch_surface(GrRecordingContext* rContext,
                                                    SkAlphaType at = kPremul_SkAlphaType,
@@ -121,13 +119,14 @@ static sk_sp<SkSurface> create_gpu_scratch_surface(GrRecordingContext* rContext,
     if (requestedInfo) {
         *requestedInfo = info;
     }
-    return SkSurfaces::RenderTarget(rContext, skgpu::Budgeted::kYes, info);
+    return SkSurface::MakeRenderTarget(rContext, skgpu::Budgeted::kYes, info);
 }
 
 DEF_TEST(SurfaceEmpty, reporter) {
     const SkImageInfo info = SkImageInfo::Make(0, 0, kN32_SkColorType, kPremul_SkAlphaType);
-    REPORTER_ASSERT(reporter, nullptr == SkSurfaces::Raster(info));
-    REPORTER_ASSERT(reporter, nullptr == SkSurfaces::WrapPixels(info, nullptr, 0));
+    REPORTER_ASSERT(reporter, nullptr == SkSurface::MakeRaster(info));
+    REPORTER_ASSERT(reporter, nullptr == SkSurface::MakeRasterDirect(info, nullptr, 0));
+
 }
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceEmpty_Gpu,
                                        reporter,
@@ -135,7 +134,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceEmpty_Gpu,
                                        CtsEnforcement::kApiLevel_T) {
     const SkImageInfo info = SkImageInfo::Make(0, 0, kN32_SkColorType, kPremul_SkAlphaType);
     REPORTER_ASSERT(reporter,
-                    nullptr == SkSurfaces::RenderTarget(
+                    nullptr == SkSurface::MakeRenderTarget(
                                        ctxInfo.directContext(), skgpu::Budgeted::kNo, info));
 }
 
@@ -143,11 +142,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface,
                                        reporter,
                                        ctxInfo,
                                        CtsEnforcement::kApiLevel_T) {
-    using namespace skgpu;
-
     auto context = ctxInfo.directContext();
-
-    Protected isProtected = Protected(context->priv().caps()->supportsProtectedContent());
 
     for (int ct = 0; ct < kLastEnum_SkColorType; ++ct) {
         static constexpr int kSize = 10;
@@ -157,7 +152,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface,
 
         {
             bool can = context->colorTypeSupportedAsSurface(colorType);
-            auto surf = SkSurfaces::RenderTarget(context, Budgeted::kYes, info, 1, nullptr);
+            auto surf =
+                    SkSurface::MakeRenderTarget(context, skgpu::Budgeted::kYes, info, 1, nullptr);
             REPORTER_ASSERT(reporter, can == SkToBool(surf), "ct: %d, can: %d, surf: %d",
                             colorType, can, SkToBool(surf));
 
@@ -165,10 +161,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface,
                                                           {kSize, kSize},
                                                           kTopLeft_GrSurfaceOrigin,
                                                           /*sample cnt*/ 1,
-                                                          colorType,
-                                                          /* colorSpace= */ nullptr,
-                                                          Mipmapped::kNo,
-                                                          isProtected);
+                                                          colorType);
             REPORTER_ASSERT(reporter, can == SkToBool(surf), "ct: %d, can: %d, surf: %d",
                             colorType, can, SkToBool(surf));
         }
@@ -178,20 +171,19 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface,
             static constexpr int kSampleCnt = 2;
 
             bool can = context->maxSurfaceSampleCountForColorType(colorType) >= kSampleCnt;
-            auto surf = SkSurfaces::RenderTarget(
-                    context, Budgeted::kYes, info, kSampleCnt, nullptr);
+            auto surf = SkSurface::MakeRenderTarget(
+                    context, skgpu::Budgeted::kYes, info, kSampleCnt, nullptr);
             REPORTER_ASSERT(reporter, can == SkToBool(surf), "ct: %d, can: %d, surf: %d",
                             colorType, can, SkToBool(surf));
 
             surf = sk_gpu_test::MakeBackendTextureSurface(
-                    context, {kSize, kSize}, kTopLeft_GrSurfaceOrigin, kSampleCnt, colorType,
-                    /* colorSpace= */ nullptr, Mipmapped::kNo, isProtected);
+                    context, {kSize, kSize}, kTopLeft_GrSurfaceOrigin, kSampleCnt, colorType);
             REPORTER_ASSERT(reporter, can == SkToBool(surf),
                             "colorTypeSupportedAsSurface:%d, surf:%d, ct:%d", can, SkToBool(surf),
                             colorType);
             // Ensure that the sample count stored on the resulting SkSurface is a valid value.
             if (surf) {
-                auto rtp = skgpu::ganesh::TopDeviceTargetProxy(surf->getCanvas());
+                auto rtp = SkCanvasPriv::TopDeviceTargetProxy(surf->getCanvas());
                 int storedCnt = rtp->numSamples();
                 const GrBackendFormat& format = rtp->backendFormat();
                 int allowedCnt =
@@ -207,9 +199,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface,
                                                                     {16, 16},
                                                                     kTopLeft_GrSurfaceOrigin,
                                                                     sampleCnt,
-                                                                    colorType,
-                                                                    /* colorSpace= */ nullptr,
-                                                                    isProtected);
+                                                                    colorType);
             bool can = context->colorTypeSupportedAsSurface(colorType) &&
                        context->maxSurfaceSampleCountForColorType(colorType) >= sampleCnt;
             if (!surf && can && colorType == kBGRA_8888_SkColorType && sampleCnt > 1 &&
@@ -226,7 +216,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface,
             REPORTER_ASSERT(reporter, can == SkToBool(surf), "ct: %d, sc: %d, can: %d, surf: %d",
                             colorType, sampleCnt, can, SkToBool(surf));
             if (surf) {
-                auto rtp = skgpu::ganesh::TopDeviceTargetProxy(surf->getCanvas());
+                auto rtp = SkCanvasPriv::TopDeviceTargetProxy(surf->getCanvas());
                 int storedCnt = rtp->numSamples();
                 const GrBackendFormat& backendFormat = rtp->backendFormat();
                 int allowedCnt = context->priv().caps()->getRenderTargetSampleCount(storedCnt,
@@ -243,11 +233,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrContext_maxSurfaceSamplesForColorType,
                                        reporter,
                                        ctxInfo,
                                        CtsEnforcement::kApiLevel_T) {
-    using namespace skgpu;
-
     auto context = ctxInfo.directContext();
-
-    Protected isProtected = Protected(context->priv().caps()->supportsProtectedContent());
 
     static constexpr int kSize = 10;
 
@@ -264,12 +250,13 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrContext_maxSurfaceSamplesForColorType,
 
         auto info = SkImageInfo::Make(kSize, kSize, colorType, kOpaque_SkAlphaType, nullptr);
         auto surf = sk_gpu_test::MakeBackendTextureSurface(
-                context, info, kTopLeft_GrSurfaceOrigin, maxSampleCnt, Mipmapped::kNo, isProtected);
+                context, info, kTopLeft_GrSurfaceOrigin, maxSampleCnt);
         if (!surf) {
             ERRORF(reporter, "Could not make surface of color type %d.", colorType);
             continue;
         }
-        int sampleCnt = ((SkSurface_Ganesh*)(surf.get()))->getDevice()->targetProxy()->numSamples();
+        int sampleCnt =
+            ((SkSurface_Gpu*)(surf.get()))->getDevice()->targetProxy()->numSamples();
         REPORTER_ASSERT(reporter, sampleCnt == maxSampleCnt, "Exected: %d, actual: %d",
                         maxSampleCnt, sampleCnt);
     }
@@ -354,10 +341,10 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceSnapshotAlphaType_Gpu,
 
 static void test_backend_texture_access_copy_on_write(
     skiatest::Reporter* reporter, SkSurface* surface, SkSurface::BackendHandleAccess access) {
-    GrBackendTexture tex1 = SkSurfaces::GetBackendTexture(surface, access);
+    GrBackendTexture tex1 = surface->getBackendTexture(access);
     sk_sp<SkImage> snap1(surface->makeImageSnapshot());
 
-    GrBackendTexture tex2 = SkSurfaces::GetBackendTexture(surface, access);
+    GrBackendTexture tex2 = surface->getBackendTexture(access);
     sk_sp<SkImage> snap2(surface->makeImageSnapshot());
 
     // If the access mode triggers CoW, then the backend objects should reflect it.
@@ -366,10 +353,10 @@ static void test_backend_texture_access_copy_on_write(
 
 static void test_backend_rendertarget_access_copy_on_write(
     skiatest::Reporter* reporter, SkSurface* surface, SkSurface::BackendHandleAccess access) {
-    GrBackendRenderTarget rt1 = SkSurfaces::GetBackendRenderTarget(surface, access);
+    GrBackendRenderTarget rt1 = surface->getBackendRenderTarget(access);
     sk_sp<SkImage> snap1(surface->makeImageSnapshot());
 
-    GrBackendRenderTarget rt2 = SkSurfaces::GetBackendRenderTarget(surface, access);
+    GrBackendRenderTarget rt2 = surface->getBackendRenderTarget(access);
     sk_sp<SkImage> snap2(surface->makeImageSnapshot());
 
     // If the access mode triggers CoW, then the backend objects should reflect it.
@@ -381,10 +368,10 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceBackendSurfaceAccessCopyOnWrite_Gp
                                        reporter,
                                        ctxInfo,
                                        CtsEnforcement::kApiLevel_T) {
-    const SkSurfaces::BackendHandleAccess accessModes[] = {
-            SkSurfaces::BackendHandleAccess::kFlushRead,
-            SkSurfaces::BackendHandleAccess::kFlushWrite,
-            SkSurfaces::BackendHandleAccess::kDiscardWrite,
+    const SkSurface::BackendHandleAccess accessModes[] = {
+        SkSurface::kFlushRead_BackendHandleAccess,
+        SkSurface::kFlushWrite_BackendHandleAccess,
+        SkSurface::kDiscardWrite_BackendHandleAccess,
     };
 
     for (auto& surface_func : { &create_gpu_surface, &create_gpu_scratch_surface }) {
@@ -401,23 +388,23 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceBackendSurfaceAccessCopyOnWrite_Gp
     }
 }
 
-template <typename Type, Type (*func)(SkSurface*, SkSurface::BackendHandleAccess)>
+template<typename Type, Type(SkSurface::*func)(SkSurface::BackendHandleAccess)>
 static void test_backend_unique_id(skiatest::Reporter* reporter, SkSurface* surface) {
     sk_sp<SkImage> image0(surface->makeImageSnapshot());
 
-    Type obj = func(surface, SkSurfaces::BackendHandleAccess::kFlushRead);
+    Type obj = (surface->*func)(SkSurface::kFlushRead_BackendHandleAccess);
     REPORTER_ASSERT(reporter, obj.isValid());
     sk_sp<SkImage> image1(surface->makeImageSnapshot());
     // just read access should not affect the snapshot
     REPORTER_ASSERT(reporter, image0->uniqueID() == image1->uniqueID());
 
-    obj = func(surface, SkSurfaces::BackendHandleAccess::kFlushWrite);
+    obj = (surface->*func)(SkSurface::kFlushWrite_BackendHandleAccess);
     REPORTER_ASSERT(reporter, obj.isValid());
     sk_sp<SkImage> image2(surface->makeImageSnapshot());
     // expect a new image, since we claimed we would write
     REPORTER_ASSERT(reporter, image0->uniqueID() != image2->uniqueID());
 
-    obj = func(surface, SkSurfaces::BackendHandleAccess::kDiscardWrite);
+    obj = (surface->*func)(SkSurface::kDiscardWrite_BackendHandleAccess);
     REPORTER_ASSERT(reporter, obj.isValid());
     sk_sp<SkImage> image3(surface->makeImageSnapshot());
     // expect a new(er) image, since we claimed we would write
@@ -433,13 +420,13 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceBackendHandleAccessIDs_Gpu,
     for (auto& surface_func : { &create_gpu_surface, &create_gpu_scratch_surface }) {
         {
             auto surface(surface_func(ctxInfo.directContext(), kPremul_SkAlphaType, nullptr));
-            test_backend_unique_id<GrBackendTexture, &SkSurfaces::GetBackendTexture>(reporter,
-                                                                                     surface.get());
+            test_backend_unique_id<GrBackendTexture, &SkSurface::getBackendTexture>(reporter,
+                                                                                    surface.get());
         }
         {
             auto surface(surface_func(ctxInfo.directContext(), kPremul_SkAlphaType, nullptr));
-            test_backend_unique_id<GrBackendRenderTarget, &SkSurfaces::GetBackendRenderTarget>(
-                    reporter, surface.get());
+            test_backend_unique_id<GrBackendRenderTarget, &SkSurface::getBackendRenderTarget>(
+                                                                reporter, surface.get());
         }
     }
 }
@@ -455,7 +442,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceAbandonPostFlush_Gpu,
         return;
     }
     // This flush can put command buffer refs on the GrGpuResource for the surface.
-    direct->flush(surface.get());
+    surface->flush();
     direct->abandonContext();
     // We pass the test if we don't hit any asserts or crashes when the ref on the surface goes away
     // after we abanonded the context. One thing specifically this checks is to make sure we're
@@ -473,22 +460,20 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceBackendAccessAbandoned_Gpu,
         return;
     }
 
-    GrBackendRenderTarget beRT = SkSurfaces::GetBackendRenderTarget(
-            surface.get(), SkSurfaces::BackendHandleAccess::kFlushRead);
+    GrBackendRenderTarget beRT =
+            surface->getBackendRenderTarget(SkSurface::kFlushRead_BackendHandleAccess);
     REPORTER_ASSERT(reporter, beRT.isValid());
-    GrBackendTexture beTex = SkSurfaces::GetBackendTexture(
-            surface.get(), SkSurfaces::BackendHandleAccess::kFlushRead);
+    GrBackendTexture beTex =
+            surface->getBackendTexture(SkSurface::kFlushRead_BackendHandleAccess);
     REPORTER_ASSERT(reporter, beTex.isValid());
 
-    dContext->flush(surface.get());
+    surface->flush();
     dContext->abandonContext();
 
     // After abandoning the context none of the backend surfaces should be valid.
-    beRT = SkSurfaces::GetBackendRenderTarget(surface.get(),
-                                              SkSurfaces::BackendHandleAccess::kFlushRead);
+    beRT = surface->getBackendRenderTarget(SkSurface::kFlushRead_BackendHandleAccess);
     REPORTER_ASSERT(reporter, !beRT.isValid());
-    beTex = SkSurfaces::GetBackendTexture(surface.get(),
-                                          SkSurfaces::BackendHandleAccess::kFlushRead);
+    beTex = surface->getBackendTexture(SkSurface::kFlushRead_BackendHandleAccess);
     REPORTER_ASSERT(reporter, !beTex.isValid());
 }
 
@@ -547,7 +532,7 @@ static void test_copy_on_write(skiatest::Reporter* reporter, SkSurface* surface)
     EXPECT_COPY_ON_WRITE(drawPath(testPath, testPaint))
     EXPECT_COPY_ON_WRITE(drawImage(testBitmap.asImage(), 0, 0))
     EXPECT_COPY_ON_WRITE(drawImageRect(testBitmap.asImage(), testRect, SkSamplingOptions()))
-    EXPECT_COPY_ON_WRITE(drawString(testText, 0, 1, ToolUtils::DefaultPortableFont(), testPaint))
+    EXPECT_COPY_ON_WRITE(drawString(testText, 0, 1, SkFont(), testPaint))
 }
 DEF_TEST(SurfaceCopyOnWrite, reporter) {
     test_copy_on_write(reporter, create_surface().get());
@@ -591,7 +576,7 @@ static void test_crbug263329(skiatest::Reporter* reporter,
     // This is a regression test for crbug.com/263329
     // Bug was caused by onCopyOnWrite releasing the old surface texture
     // back to the scratch texture pool even though the texture is used
-    // by and active SkImage_Ganesh.
+    // by and active SkImage_Gpu.
     SkCanvas* canvas1 = surface1->getCanvas();
     SkCanvas* canvas2 = surface2->getCanvas();
     canvas1->clear(1);
@@ -651,21 +636,17 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfacepeekTexture_Gpu,
         sk_sp<SkImage> image(surface->makeImageSnapshot());
 
         REPORTER_ASSERT(reporter, as_IB(image)->isTextureBacked());
-        GrBackendTexture backendTex;
-        bool ok = SkImages::GetBackendTextureFromImage(image, &backendTex, false);
-        REPORTER_ASSERT(reporter, ok);
+        GrBackendTexture backendTex = image->getBackendTexture(false);
         REPORTER_ASSERT(reporter, backendTex.isValid());
         surface->notifyContentWillChange(SkSurface::kDiscard_ContentChangeMode);
         REPORTER_ASSERT(reporter, as_IB(image)->isTextureBacked());
-        GrBackendTexture backendTex2;
-        ok = SkImages::GetBackendTextureFromImage(image, &backendTex2, false);
-        REPORTER_ASSERT(reporter, ok);
+        GrBackendTexture backendTex2 = image->getBackendTexture(false);
         REPORTER_ASSERT(reporter, GrBackendTexture::TestingOnly_Equals(backendTex, backendTex2));
     }
 }
 
 static skgpu::Budgeted is_budgeted(const sk_sp<SkSurface>& surf) {
-    SkSurface_Ganesh* gsurf = (SkSurface_Ganesh*)surf.get();
+    SkSurface_Gpu* gsurf = (SkSurface_Gpu*)surf.get();
 
     GrRenderTargetProxy* proxy = gsurf->getDevice()->targetProxy();
     return proxy->isBudgeted();
@@ -682,7 +663,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceBudget,
     SkImageInfo info = SkImageInfo::MakeN32Premul(8,8);
     GrDirectContext* dContext = ctxInfo.directContext();
     for (auto budgeted : {skgpu::Budgeted::kNo, skgpu::Budgeted::kYes}) {
-        auto surface(SkSurfaces::RenderTarget(dContext, budgeted, info));
+        auto surface(SkSurface::MakeRenderTarget(dContext, budgeted, info));
         SkASSERT(surface);
         REPORTER_ASSERT(reporter, budgeted == is_budgeted(surface));
 
@@ -768,22 +749,22 @@ static void check_rowbytes_remain_consistent(SkSurface* surface, skiatest::Repor
 DEF_TEST(surface_rowbytes, reporter) {
     const SkImageInfo info = SkImageInfo::MakeN32Premul(100, 100);
 
-    auto surf0(SkSurfaces::Raster(info));
+    auto surf0(SkSurface::MakeRaster(info));
     check_rowbytes_remain_consistent(surf0.get(), reporter);
 
     // specify a larger rowbytes
-    auto surf1(SkSurfaces::Raster(info, 500, nullptr));
+    auto surf1(SkSurface::MakeRaster(info, 500, nullptr));
     check_rowbytes_remain_consistent(surf1.get(), reporter);
 
     // Try some illegal rowByte values
-    auto s = SkSurfaces::Raster(info, 396, nullptr);  // needs to be at least 400
+    auto s = SkSurface::MakeRaster(info, 396, nullptr);    // needs to be at least 400
     REPORTER_ASSERT(reporter, nullptr == s);
-    s = SkSurfaces::Raster(info, std::numeric_limits<size_t>::max(), nullptr);
+    s = SkSurface::MakeRaster(info, std::numeric_limits<size_t>::max(), nullptr);
     REPORTER_ASSERT(reporter, nullptr == s);
 }
 
 DEF_TEST(surface_raster_zeroinitialized, reporter) {
-    sk_sp<SkSurface> s(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(100, 100)));
+    sk_sp<SkSurface> s(SkSurface::MakeRasterN32Premul(100, 100));
     SkPixmap pixmap;
     REPORTER_ASSERT(reporter, s->peekPixels(&pixmap));
 
@@ -827,7 +808,7 @@ static sk_sp<SkSurface> create_gpu_surface_backend_texture(GrDirectContext* dCon
 }
 
 static bool supports_readpixels(const GrCaps* caps, SkSurface* surface) {
-    auto surfaceGpu = static_cast<SkSurface_Ganesh*>(surface);
+    auto surfaceGpu = static_cast<SkSurface_Gpu*>(surface);
     GrRenderTarget* rt = surfaceGpu->getDevice()->targetProxy()->peekRenderTarget();
     if (!rt) {
         return false;
@@ -855,7 +836,7 @@ static sk_sp<SkSurface> create_gpu_surface_backend_render_target(GrDirectContext
 
 static void test_surface_context_clear(skiatest::Reporter* reporter,
                                        GrDirectContext* dContext,
-                                       skgpu::ganesh::SurfaceContext* surfaceContext,
+                                       skgpu::v1::SurfaceContext* surfaceContext,
                                        uint32_t expectedValue) {
     int w = surfaceContext->width();
     int h = surfaceContext->height();
@@ -886,12 +867,16 @@ static void test_surface_context_clear(skiatest::Reporter* reporter,
     }
 }
 
-DEF_GANESH_TEST_FOR_GL_CONTEXT(SurfaceClear_Gpu, reporter, ctxInfo, CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(SurfaceClear_Gpu,
+                                          reporter,
+                                          ctxInfo,
+                                          CtsEnforcement::kApiLevel_T) {
     auto dContext = ctxInfo.directContext();
     // Snaps an image from a surface and then makes a SurfaceContext from the image's texture.
     auto makeImageSurfaceContext = [dContext](SkSurface* surface) {
         sk_sp<SkImage> i(surface->makeImageSnapshot());
-        auto [view, ct] = skgpu::ganesh::AsView(dContext, i, skgpu::Mipmapped::kNo);
+        auto gpuImage = static_cast<SkImage_Gpu*>(as_IB(i));
+        auto [view, ct] = gpuImage->asView(dContext, GrMipmapped::kNo);
         GrColorInfo colorInfo(ct, i->alphaType(), i->refColorSpace());
         return dContext->priv().makeSC(view, std::move(colorInfo));
     };
@@ -903,7 +888,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(SurfaceClear_Gpu, reporter, ctxInfo, CtsEnforceme
             ERRORF(reporter, "Could not create GPU SkSurface.");
             return;
         }
-        auto sfc = skgpu::ganesh::TopDeviceSurfaceFillContext(surface->getCanvas());
+        auto sfc = SkCanvasPriv::TopDeviceSurfaceFillContext(surface->getCanvas());
         if (!sfc) {
             ERRORF(reporter, "Could access surface context of GPU SkSurface.");
             return;
@@ -922,7 +907,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(SurfaceClear_Gpu, reporter, ctxInfo, CtsEnforceme
             ERRORF(reporter, "Could not create GPU SkSurface.");
             return;
         }
-        auto sfc = skgpu::ganesh::TopDeviceSurfaceFillContext(surface->getCanvas());
+        auto sfc = SkCanvasPriv::TopDeviceSurfaceFillContext(surface->getCanvas());
         if (!sfc) {
             ERRORF(reporter, "Could access surface context of GPU SkSurface.");
             return;
@@ -1035,13 +1020,13 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceWrappedWithRelease_Gpu,
         if (useTexture) {
             SkImageInfo ii = SkImageInfo::Make(kWidth, kHeight, SkColorType::kRGBA_8888_SkColorType,
                                                kPremul_SkAlphaType);
-            mbet = sk_gpu_test::ManagedBackendTexture::MakeFromInfo(
-                    ctx, ii, skgpu::Mipmapped::kNo, GrRenderable::kYes);
+            mbet = sk_gpu_test::ManagedBackendTexture::MakeFromInfo(ctx, ii, GrMipmapped::kNo,
+                                                                    GrRenderable::kYes);
             if (!mbet) {
                 continue;
             }
 
-            surface = SkSurfaces::WrapBackendTexture(
+            surface = SkSurface::MakeFromBackendTexture(
                     ctx,
                     mbet->texture(),
                     texOrigin,
@@ -1057,14 +1042,11 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceWrappedWithRelease_Gpu,
             if (!backendRT.isValid()) {
                 continue;
             }
-            surface = SkSurfaces::WrapBackendRenderTarget(ctx,
-                                                          backendRT,
-                                                          texOrigin,
-                                                          kRGBA_8888_SkColorType,
-                                                          nullptr,
-                                                          nullptr,
-                                                          ReleaseChecker::Release,
-                                                          &releaseChecker);
+            surface = SkSurface::MakeFromBackendRenderTarget(ctx, backendRT, texOrigin,
+                                                             kRGBA_8888_SkColorType,
+                                                             nullptr, nullptr,
+                                                             ReleaseChecker::Release,
+                                                             &releaseChecker);
         }
         if (!surface) {
             ERRORF(reporter, "Failed to create surface");
@@ -1072,8 +1054,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceWrappedWithRelease_Gpu,
         }
 
         surface->getCanvas()->clear(SK_ColorRED);
-        ctx->flush(surface.get());
-        ctx->submit(GrSyncCpu::kYes);
+        surface->flush();
+        ctx->submit(true);
 
         // Now exercise the release proc
         REPORTER_ASSERT(reporter, 0 == releaseChecker.fReleaseCount);
@@ -1086,10 +1068,10 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceWrappedWithRelease_Gpu,
     }
 }
 
-DEF_GANESH_TEST_FOR_GL_CONTEXT(SurfaceAttachStencil_Gpu,
-                               reporter,
-                               ctxInfo,
-                               CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(SurfaceAttachStencil_Gpu,
+                                          reporter,
+                                          ctxInfo,
+                                          CtsEnforcement::kApiLevel_T) {
     auto context = ctxInfo.directContext();
     const GrCaps* caps = context->priv().caps();
 
@@ -1113,7 +1095,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(SurfaceAttachStencil_Gpu,
 
             // Validate that we can attach a stencil buffer to an SkSurface created by either of
             // our surface functions.
-            auto rtp = skgpu::ganesh::TopDeviceTargetProxy(surface->getCanvas());
+            auto rtp = SkCanvasPriv::TopDeviceTargetProxy(surface->getCanvas());
             GrRenderTarget* rt = rtp->peekRenderTarget();
             REPORTER_ASSERT(reporter,
                             resourceProvider->attachStencilAttachment(rt, rt->numSamples() > 1));
@@ -1130,32 +1112,28 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ReplaceSurfaceBackendTexture,
     for (int sampleCnt : {1, 2}) {
         auto ii = SkImageInfo::Make(10, 10, kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr);
         auto mbet1 = sk_gpu_test::ManagedBackendTexture::MakeFromInfo(
-                context, ii, skgpu::Mipmapped::kNo, GrRenderable::kYes);
+                context, ii, GrMipmapped::kNo, GrRenderable::kYes);
         if (!mbet1) {
             continue;
         }
         auto mbet2 = sk_gpu_test::ManagedBackendTexture::MakeFromInfo(
-                context, ii, skgpu::Mipmapped::kNo, GrRenderable::kYes);
+                context, ii, GrMipmapped::kNo, GrRenderable::kYes);
         if (!mbet2) {
             ERRORF(reporter, "Expected to be able to make second texture");
             continue;
         }
         auto ii2 = ii.makeWH(8, 8);
         auto mbet3 = sk_gpu_test::ManagedBackendTexture::MakeFromInfo(
-                context, ii2, skgpu::Mipmapped::kNo, GrRenderable::kYes);
+                context, ii2, GrMipmapped::kNo, GrRenderable::kYes);
         GrBackendTexture backendTexture3;
         if (!mbet3) {
             ERRORF(reporter, "Couldn't create different sized texture.");
             continue;
         }
 
-        auto surf = SkSurfaces::WrapBackendTexture(context,
-                                                   mbet1->texture(),
-                                                   kTopLeft_GrSurfaceOrigin,
-                                                   sampleCnt,
-                                                   kRGBA_8888_SkColorType,
-                                                   ii.refColorSpace(),
-                                                   nullptr);
+        auto surf = SkSurface::MakeFromBackendTexture(
+                context, mbet1->texture(), kTopLeft_GrSurfaceOrigin, sampleCnt,
+                kRGBA_8888_SkColorType, ii.refColorSpace(), nullptr);
         if (!surf) {
             continue;
         }
@@ -1189,13 +1167,9 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ReplaceSurfaceBackendTexture,
             }
         }
         // The original texture should still be all blue.
-        surf = SkSurfaces::WrapBackendTexture(context,
-                                              mbet1->texture(),
-                                              kBottomLeft_GrSurfaceOrigin,
-                                              sampleCnt,
-                                              kRGBA_8888_SkColorType,
-                                              ii.refColorSpace(),
-                                              nullptr);
+        surf = SkSurface::MakeFromBackendTexture(
+                context, mbet1->texture(), kBottomLeft_GrSurfaceOrigin, sampleCnt,
+                kRGBA_8888_SkColorType, ii.refColorSpace(), nullptr);
         if (!surf) {
             ERRORF(reporter, "Could not create second surface.");
             continue;
@@ -1223,7 +1197,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ReplaceSurfaceBackendTexture,
         REPORTER_ASSERT(reporter,
                         !surf->replaceBackendTexture(mbet3->texture(), kTopLeft_GrSurfaceOrigin));
         // Can't replace texture of non-wrapped SkSurface.
-        surf = SkSurfaces::RenderTarget(context, skgpu::Budgeted::kYes, ii, sampleCnt, nullptr);
+        surf = SkSurface::MakeRenderTarget(context, skgpu::Budgeted::kYes, ii, sampleCnt, nullptr);
         REPORTER_ASSERT(reporter, surf);
         if (surf) {
             REPORTER_ASSERT(reporter, !surf->replaceBackendTexture(mbet1->texture(),
@@ -1261,11 +1235,11 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(OverdrawSurface_Gpu,
 }
 
 DEF_TEST(Surface_null, r) {
-    REPORTER_ASSERT(r, SkSurfaces::Null(0, 0) == nullptr);
+    REPORTER_ASSERT(r, SkSurface::MakeNull(0, 0) == nullptr);
 
     const int w = 37;
     const int h = 1000;
-    auto surf = SkSurfaces::Null(w, h);
+    auto surf = SkSurface::MakeNull(w, h);
     auto canvas = surf->getCanvas();
 
     canvas->drawPaint(SkPaint());   // should not crash, but don't expect anything to draw
@@ -1277,7 +1251,7 @@ DEF_TEST(Surface_null, r) {
 DEF_TEST(surface_image_unity, reporter) {
     auto do_test = [reporter](const SkImageInfo& info) {
         size_t rowBytes = info.minRowBytes();
-        auto surf = SkSurfaces::Raster(info, rowBytes, nullptr);
+        auto surf = SkSurface::MakeRaster(info, rowBytes, nullptr);
         if (surf) {
             auto img = surf->makeImageSnapshot();
             if ((false)) { // change to true to document the differences
@@ -1294,7 +1268,7 @@ DEF_TEST(surface_image_unity, reporter) {
 
             char tempPixel = 0;    // just need a valid address (not a valid size)
             SkPixmap pmap = { info, &tempPixel, rowBytes };
-            img = SkImages::RasterFromPixmap(pmap, nullptr, nullptr);
+            img = SkImage::MakeFromRaster(pmap, nullptr, nullptr);
             REPORTER_ASSERT(reporter, img != nullptr);
         }
     };
@@ -1310,4 +1284,40 @@ DEF_TEST(surface_image_unity, reporter) {
             }
         }
     }
+}
+
+DEF_TEST(VMBlitterInfiniteColorShader, r) {
+    // This replicates the underlying problem of oss-fuzz:49391.
+    // Steps:
+    //   - Force the blitter chooser to use SkVM (done here with a runtime blender)
+    //   - Have a paint with no shader (so the blitter tries to construct a color shader from the
+    //     paint color)
+    //   - Have a color filter that, when applied to the paint color, produces a color with a tiny
+    //     (but nonzero) alpha value. This triggers overflow when the filtered color is unpremuled,
+    //     resulting in infinite RGB values.
+    //   - With infinite color, the color-shader factory rejects the color, and returns nullptr,
+    //     breaking the assumptions in the blitter that a shader will - always - be constructed.
+    SkPaint paint;
+
+    // This ensures that we will use SkVMBlitter
+    paint.setBlender(GetRuntimeBlendForBlendMode(SkBlendMode::kSrc));
+
+    // Start with a simple color
+    paint.setColor4f({ 1, 1, 1, 1 });
+
+    // Color filter that will set alpha to a tiny value. 1/X is not representable in float.
+    SkColorMatrix cm;
+    cm.setScale(1.0f, 1.0f, 1.0f, 7.4E-40f);
+    paint.setColorFilter(SkColorFilters::Matrix(cm));
+
+    // Confirm that our color filter produces infinite RGB when applied to the paint color
+    SkColor4f filtered =
+            paint.getColorFilter()->filterColor4f(paint.getColor4f(), nullptr, nullptr);
+    REPORTER_ASSERT(r, !sk_float_isfinite(filtered.fR));
+    // ... and that we therefore can't construct a color shader from the result
+    REPORTER_ASSERT(r, !SkShaders::Color(filtered, nullptr));
+
+    // Now try to draw this paint. Before the fixing the bug, this would crash (null dereference)
+    auto surface = SkSurface::MakeRasterN32Premul(8, 8);
+    surface->getCanvas()->drawPaint(paint);
 }

@@ -5,48 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkBlendMode.h"
-#include "include/core/SkCanvas.h"
-#include "include/core/SkColor.h"
-#include "include/core/SkM44.h"
-#include "include/core/SkMatrix.h"
-#include "include/core/SkPaint.h"
-#include "include/core/SkPicture.h"
-#include "include/core/SkPictureRecorder.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkSamplingOptions.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkShader.h"
-#include "include/core/SkSize.h"
-#include "include/core/SkString.h"
-#include "include/core/SkTileMode.h"
-#include "include/effects/SkRuntimeEffect.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkPoint_impl.h"
-#include "include/private/base/SkTPin.h"
-#include "modules/skottie/src/Adapter.h"
-#include "modules/skottie/src/SkottiePriv.h"
-#include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/effects/Effects.h"
-#include "modules/sksg/include/SkSGNode.h"
+
+#include "include/core/SkCanvas.h"
+#include "include/core/SkM44.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/effects/SkRuntimeEffect.h"
+#include "modules/skottie/src/Adapter.h"
+#include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
 
 #include <array>
-#include <cmath>
-#include <cstdio>
-#include <utility>
-#include <vector>
-
-namespace skjson {
-class ArrayValue;
-}
-namespace sksg {
-class InvalidationController;
-}
 
 namespace skottie::internal {
-namespace {
+
+#ifdef SK_ENABLE_SKSL
+
+namespace  {
 
 // This shader maps its child shader onto a sphere.  To simplify things, we set it up such that:
 //
@@ -426,7 +402,7 @@ private:
                 fRotOrder = 1,
                 fRender   = 1;
 
-    ColorValue  fLightColor;
+    VectorValue fLightColor;
     ScalarValue fLightIntensity =   0,
                 fLightHeight    =   0,
                 fLightDirection =   0,
@@ -440,11 +416,18 @@ private:
 
 } // namespace
 
+#endif  // SK_ENABLE_SKSL
+
 sk_sp<sksg::RenderNode> EffectBuilder::attachSphereEffect(
         const skjson::ArrayValue& jprops, sk_sp<sksg::RenderNode> layer) const {
+#ifdef SK_ENABLE_SKSL
     auto sphere = sk_make_sp<SphereNode>(std::move(layer), fLayerSize);
 
     return fBuilder->attachDiscardableAdapter<SphereAdapter>(jprops, fBuilder, std::move(sphere));
+#else
+    // TODO(skia:12197)
+    return layer;
+#endif
 }
 
 } // namespace skottie::internal

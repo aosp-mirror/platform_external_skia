@@ -7,27 +7,13 @@
 
 #include "modules/skottie/src/Layer.h"
 
-#include "include/core/SkBlendMode.h"
-#include "include/core/SkColor.h"
-#include "include/core/SkM44.h"
-#include "include/core/SkPathTypes.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkTileMode.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkTArray.h"
-#include "include/private/base/SkTo.h"
-#include "modules/skottie/include/Skottie.h"
-#include "modules/skottie/include/SkottieProperty.h"
+#include "modules/skottie/src/Camera.h"
 #include "modules/skottie/src/Composition.h"
 #include "modules/skottie/src/SkottieJson.h"
-#include "modules/skottie/src/SkottieValue.h"
-#include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/effects/Effects.h"
 #include "modules/skottie/src/effects/MotionBlurEffect.h"
 #include "modules/sksg/include/SkSGClipEffect.h"
 #include "modules/sksg/include/SkSGDraw.h"
-#include "modules/sksg/include/SkSGGeometryNode.h"
 #include "modules/sksg/include/SkSGGroup.h"
 #include "modules/sksg/include/SkSGMaskEffect.h"
 #include "modules/sksg/include/SkSGMerge.h"
@@ -37,14 +23,6 @@
 #include "modules/sksg/include/SkSGRenderEffect.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
 #include "modules/sksg/include/SkSGTransform.h"
-#include "src/utils/SkJSON.h"
-
-#include <utility>
-#include <vector>
-
-struct SkSize;
-
-using namespace skia_private;
 
 namespace skottie {
 namespace internal {
@@ -164,7 +142,7 @@ sk_sp<sksg::RenderNode> AttachMask(const skjson::ArrayValue* jmask,
         sksg::Merge::Mode  merge_mode;   // for clipping
     };
 
-    STArray<4, MaskRecord, true> mask_stack;
+    SkSTArray<4, MaskRecord, true> mask_stack;
     bool has_effect = false;
 
     for (const skjson::ObjectValue* m : *jmask) {
@@ -488,7 +466,7 @@ sk_sp<sksg::RenderNode> LayerBuilder::buildRenderTree(const AnimationBuilder& ab
 
     // Clip layers with explicit dimensions.
     float w = 0, h = 0;
-    if (::skottie::Parse<float>(fJlayer["w"], &w) && ::skottie::Parse<float>(fJlayer["h"], &h)) {
+    if (Parse<float>(fJlayer["w"], &w) && Parse<float>(fJlayer["h"], &h)) {
         layer = sksg::ClipEffect::Make(std::move(layer),
                                        sksg::Rect::Make(SkRect::MakeWH(w, h)),
 #ifdef SK_LEGACY_SKOTTIE_CLIPPING

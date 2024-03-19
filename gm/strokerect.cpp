@@ -60,9 +60,14 @@ public:
     StrokeRectGM() {}
 
 protected:
-    SkString getName() const override { return SkString("strokerect"); }
 
-    SkISize getISize() override { return SkISize::Make(1400, 740); }
+    SkString onShortName() override {
+        return SkString("strokerect");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(1400, 740);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->drawColor(SK_ColorWHITE);

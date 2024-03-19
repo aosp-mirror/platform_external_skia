@@ -135,10 +135,7 @@ func (b *jobBuilder) genTasksForJob() {
 		b.checkGeneratedFiles()
 		return
 	}
-	if b.Name == "Housekeeper-PerCommit-GoLinters" {
-		b.goLinters()
-		return
-	}
+
 	if b.Name == "Housekeeper-PerCommit-RunGnToBp" {
 		b.checkGnToBp()
 		return
@@ -181,6 +178,10 @@ func (b *jobBuilder) genTasksForJob() {
 			return
 		}
 		b.dm()
+		return
+	}
+	if b.role("FM") {
+		b.fm()
 		return
 	}
 

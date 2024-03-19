@@ -8,9 +8,9 @@
 #include <Carbon/Carbon.h>
 
 #include "include/core/SkTypes.h"
+#include "tools/sk_app/mac/WindowContextFactory_mac.h"
 #include "tools/sk_app/mac/Window_mac.h"
 #include "tools/skui/ModifierKey.h"
-#include "tools/window/mac/WindowContextFactory_mac.h"
 
 @interface WindowDelegate : NSObject<NSWindowDelegate>
 
@@ -119,15 +119,13 @@ void Window_mac::show() {
 bool Window_mac::attach(BackendType attachType) {
     this->initWindow();
 
-    skwindow::MacWindowInfo info;
+    window_context_factory::MacWindowInfo info;
     info.fMainView = [fWindow contentView];
     switch (attachType) {
-#if SK_ANGLE
-        case kANGLE_BackendType:
-            fWindowContext = skwindow::MakeANGLEForMac(info, fRequestedDisplayParams);
-            break;
-#endif
 #ifdef SK_DAWN
+        case kDawn_BackendType:
+            fWindowContext = MakeDawnMTLForMac(info, fRequestedDisplayParams);
+            break;
 #if defined(SK_GRAPHITE)
         case kGraphiteDawn_BackendType:
             fWindowContext = MakeGraphiteDawnMetalForMac(info, fRequestedDisplayParams);
@@ -166,7 +164,7 @@ bool Window_mac::attach(BackendType attachType) {
 }
 
 float Window_mac::scaleFactor() const {
-    return skwindow::GetBackingScaleFactor(fWindow.contentView);
+    return sk_app::GetBackingScaleFactor(fWindow.contentView);
 }
 
 void Window_mac::PaintWindows() {
@@ -193,7 +191,7 @@ void Window_mac::PaintWindows() {
 
 - (void)windowDidResize:(NSNotification *)notification {
     NSView* view = fWindow->window().contentView;
-    CGFloat scale = skwindow::GetBackingScaleFactor(view);
+    CGFloat scale = sk_app::GetBackingScaleFactor(view);
     fWindow->onResize(view.bounds.size.width * scale, view.bounds.size.height * scale);
     fWindow->inval();
 }
@@ -415,7 +413,7 @@ static skui::ModifierKey get_modifiers(const NSEvent* event) {
 
 - (void)mouseDown:(NSEvent *)event {
     NSView* view = fWindow->window().contentView;
-    CGFloat backingScaleFactor = skwindow::GetBackingScaleFactor(view);
+    CGFloat backingScaleFactor = sk_app::GetBackingScaleFactor(view);
 
     skui::ModifierKey modifiers = [self updateModifierKeys:event];
 
@@ -427,7 +425,7 @@ static skui::ModifierKey get_modifiers(const NSEvent* event) {
 
 - (void)mouseUp:(NSEvent *)event {
     NSView* view = fWindow->window().contentView;
-    CGFloat backingScaleFactor = skwindow::GetBackingScaleFactor(view);
+    CGFloat backingScaleFactor = sk_app::GetBackingScaleFactor(view);
 
     skui::ModifierKey modifiers = [self updateModifierKeys:event];
 
@@ -444,7 +442,7 @@ static skui::ModifierKey get_modifiers(const NSEvent* event) {
 
 - (void)mouseMoved:(NSEvent *)event {
     NSView* view = fWindow->window().contentView;
-    CGFloat backingScaleFactor = skwindow::GetBackingScaleFactor(view);
+    CGFloat backingScaleFactor = sk_app::GetBackingScaleFactor(view);
 
     skui::ModifierKey modifiers = [self updateModifierKeys:event];
 
@@ -455,18 +453,10 @@ static skui::ModifierKey get_modifiers(const NSEvent* event) {
 }
 
 - (void)scrollWheel:(NSEvent *)event {
-    NSView* view = fWindow->window().contentView;
-    CGFloat backingScaleFactor = skwindow::GetBackingScaleFactor(view);
-
     skui::ModifierKey modifiers = [self updateModifierKeys:event];
 
     // TODO: support hasPreciseScrollingDeltas?
-    const NSPoint pos = [event locationInWindow];
-    const NSRect rect = [view frame];
-    fWindow->onMouseWheel([event scrollingDeltaY],
-                          pos.x * backingScaleFactor,
-                          (rect.size.height - pos.y) * backingScaleFactor,
-                          modifiers);
+    fWindow->onMouseWheel([event scrollingDeltaY], modifiers);
 }
 
 - (void)drawRect:(NSRect)rect {

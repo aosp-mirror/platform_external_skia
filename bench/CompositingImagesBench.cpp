@@ -8,11 +8,11 @@
 #include <memory>
 
 #include "bench/Benchmark.h"
-#include "bench/GpuTools.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkSurface.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkRandom.h"
 
@@ -90,7 +90,7 @@ public:
         }
     }
 
-    bool isSuitableFor(Backend backend) override { return Backend::kGanesh == backend; }
+    bool isSuitableFor(Backend backend) override { return kGPU_Backend == backend; }
 
 protected:
     const char* onGetName() override { return fName.c_str(); }
@@ -220,7 +220,10 @@ protected:
                 }
             }
             // Prevent any batching between composited "frames".
-            skgpu::Flush(canvas->getSurface());
+            auto surface = canvas->getSurface();
+            if (surface) {
+                surface->flush();
+            }
         }
         canvas->restore();
     }
@@ -248,11 +251,11 @@ private:
         return m;
     }
 
-    SkISize onGetSize() override {
+    SkIPoint onGetSize() override {
         SkRect size = SkRect::MakeWH(1.25f * fTileSize.fWidth * fTileGridSize.fWidth,
                                      1.25f * fTileSize.fHeight * fTileGridSize.fHeight);
         this->getTransform().mapRect(&size);
-        return SkISize::Make(SkScalarCeilToInt(size.width()), SkScalarCeilToInt(size.height()));
+        return SkIPoint::Make(SkScalarCeilToInt(size.width()), SkScalarCeilToInt(size.height()));
     }
 
     unsigned getEdgeFlags(int x, int y) const {

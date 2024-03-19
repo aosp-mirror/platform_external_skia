@@ -10,9 +10,7 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkSurface.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
-#include "tools/fonts/FontToolUtils.h"
 
 static const skcms_TransferFunction gTFs[] = {
     SkNamedTransferFn::kSRGB,
@@ -67,17 +65,16 @@ namespace {
 }
 
 static void draw_colorspace_gm(Strategy strategy, SkCanvas* canvas) {
-    SkFont font = ToolUtils::DefaultPortableFont();
     if (!canvas->imageInfo().colorSpace()) {
         canvas->drawString("This GM only makes sense with color-managed drawing.",
-                           W,H, font, SkPaint{});
+                           W,H, SkFont{}, SkPaint{});
         return;
     }
 
-    sk_sp<SkImage> img = ToolUtils::GetResourceAsImage("images/mandrill_128.png");
+    sk_sp<SkImage> img = GetResourceAsImage("images/mandrill_128.png");
     if (!img) {
         canvas->drawString("Could not load our test image!",
-                           W,H, font, SkPaint{});
+                           W,H, SkFont{}, SkPaint{});
         return;
     }
 
@@ -92,7 +89,7 @@ static void draw_colorspace_gm(Strategy strategy, SkCanvas* canvas) {
 
             switch (strategy) {
                 case SkImage_makeColorSpace: {
-                    canvas->drawImage(img->makeColorSpace(nullptr, midCS), 0,0);
+                    canvas->drawImage(img->makeColorSpace(midCS), 0,0);
                 } break;
 
                 case SkCanvas_makeSurface: {
@@ -100,7 +97,7 @@ static void draw_colorspace_gm(Strategy strategy, SkCanvas* canvas) {
                         canvas->makeSurface(canvas->imageInfo().makeColorSpace(midCS));
                     if (!offscreen) {
                         canvas->drawString("Could not allocate offscreen surface!",
-                                           W,H, font, SkPaint{});
+                                           W,H, SkFont{}, SkPaint{});
                         return;
                     }
                     offscreen->getCanvas()->drawImage(img, 0,0);

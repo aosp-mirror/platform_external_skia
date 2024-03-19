@@ -7,6 +7,7 @@
 
 #include "fuzz/Fuzz.h"
 #include "fuzz/FuzzCommon.h"
+#include "include/core/SkData.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkRegion.h"
 
@@ -35,12 +36,14 @@ void FuzzRegionSetPath(Fuzz* fuzz) {
     }
 }
 
-#if defined(SK_BUILD_FOR_LIBFUZZER)
+// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
+#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 512) {
         return 0;
     }
-    Fuzz fuzz(data, size);
+    sk_sp<SkData> bytes(SkData::MakeWithoutCopy(data, size));
+    Fuzz fuzz(bytes);
     FuzzRegionSetPath(&fuzz);
     return 0;
 }

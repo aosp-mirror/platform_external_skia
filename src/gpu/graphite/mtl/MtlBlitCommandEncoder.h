@@ -31,8 +31,6 @@ public:
                                                                       std::move(encoder)));
     }
 
-    const char* getResourceType() const override { return "Metal Blit Command Encoder"; }
-
     void pushDebugGroup(NSString* string) {
         [(*fCommandEncoder) pushDebugGroup:string];
     }
@@ -87,8 +85,7 @@ public:
     void copyTextureToTexture(id<MTLTexture> srcTexture,
                               SkIRect srcRect,
                               id<MTLTexture> dstTexture,
-                              SkIPoint dstPoint,
-                              int mipLevel) {
+                              SkIPoint dstPoint) {
         [(*fCommandEncoder) copyFromTexture: srcTexture
                                 sourceSlice: 0
                                 sourceLevel: 0
@@ -96,7 +93,7 @@ public:
                                  sourceSize: MTLSizeMake(srcRect.width(), srcRect.height(), 1)
                                   toTexture: dstTexture
                            destinationSlice: 0
-                           destinationLevel: mipLevel
+                           destinationLevel: 0
                           destinationOrigin: MTLOriginMake(dstPoint.fX, dstPoint.fY, 0)];
     }
 
@@ -119,11 +116,7 @@ public:
 private:
     MtlBlitCommandEncoder(const SharedContext* sharedContext,
                           sk_cfp<id<MTLBlitCommandEncoder>> encoder)
-            : Resource(sharedContext,
-                       Ownership::kOwned,
-                       skgpu::Budgeted::kYes,
-                       /*gpuMemorySize=*/0,
-                       /*label=*/"MtlBlitCommandEncoder")
+            : Resource(sharedContext, Ownership::kOwned, skgpu::Budgeted::kYes)
             , fCommandEncoder(std::move(encoder)) {}
 
     void freeGpuData() override {

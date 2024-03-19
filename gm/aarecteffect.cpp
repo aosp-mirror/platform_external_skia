@@ -18,7 +18,6 @@
 #include "include/core/SkString.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
 #include "src/gpu/ganesh/GrPaint.h"
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
@@ -40,14 +39,14 @@ public:
     AARectEffect() { this->setBGColor(0xFFFFFFFF); }
 
 protected:
-    SkString getName() const override { return SkString("aa_rect_effect"); }
+    SkString onShortName() override { return SkString("aa_rect_effect"); }
 
-    SkISize getISize() override { return SkISize::Make(210, 250); }
+    SkISize onISize() override { return SkISize::Make(210, 250); }
 
     void onOnceBeforeDraw() override {}
 
     DrawResult onDraw(GrRecordingContext* rContext, SkCanvas* canvas, SkString* errorMsg) override {
-        auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
+        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
         if (!sdc) {
             *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
             return DrawResult::kSkip;

@@ -20,9 +20,7 @@ public:
     ~VerticesRenderStep() override;
 
     std::string vertexSkSL() const override;
-    void writeVertices(DrawWriter* writer,
-                       const DrawParams& params,
-                       skvx::ushort2 ssboIndices) const override;
+    void writeVertices(DrawWriter* writer, const DrawParams& params, int ssboIndex) const override;
     void writeUniformsAndTextures(const DrawParams&, PipelineDataGatherer*) const override;
     const char* fragmentColorSkSL() const override;
 

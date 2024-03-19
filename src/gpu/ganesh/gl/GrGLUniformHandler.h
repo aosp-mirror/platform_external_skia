@@ -78,7 +78,7 @@ private:
 
     UniformInfoArray         fUniforms;
     UniformInfoArray         fSamplers;
-    skia_private::TArray<skgpu::Swizzle> fSamplerSwizzles;
+    SkTArray<skgpu::Swizzle> fSamplerSwizzles;
 
     friend class GrGLProgramBuilder;
 

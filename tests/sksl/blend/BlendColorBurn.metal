@@ -1,8 +1,5 @@
 #include <metal_stdlib>
 #include <simd/simd.h>
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wall"
-#endif
 using namespace metal;
 constant const half sk_PrivkGuardedDivideEpsilon = half(false ? 1e-08 : 0.0);
 struct Uniforms {

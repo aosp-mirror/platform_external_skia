@@ -17,8 +17,6 @@
 #include <algorithm>
 #include <cstdint>
 
-using namespace skia_private;
-
 // A node in the graph. This corresponds to an opsTask in the MDB world.
 class Node : public SkRefCnt {
 public:
@@ -249,7 +247,7 @@ private:
 
     // Move 'node' to the index-th slot of the sort. The index-th slot should not have a current
     // occupant.
-    void moveNodeInSort(const sk_sp<Node>& node, int index) {
+    void moveNodeInSort(sk_sp<Node> node, int index) {
         SkASSERT(!fNodes[index]);
         fNodes[index] = node;
         node->setIndexInSort(index);
@@ -311,14 +309,14 @@ private:
         }
     }
 
-    TArray<sk_sp<Node>> fNodes;
+    SkTArray<sk_sp<Node>> fNodes;
 
     struct StackInfo {
         sk_sp<Node> fNode;  // This gets a ref bc, in 'shift' it will be pulled out of 'fNodes'
         Node*       fDest;
     };
 
-    TArray<StackInfo>   fStack;     // only used in addEdges()
+    SkTArray<StackInfo>   fStack;     // only used in addEdges()
 
     skiatest::Reporter*   fReporter;
 };

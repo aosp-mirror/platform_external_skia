@@ -27,7 +27,6 @@
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPointPriv.h"
-#include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrGeometryProcessor.h"
@@ -220,12 +219,16 @@ protected:
     static const int kCellWidth = 128;
     static const int kCellHeight = 128;
 
-    SkString getName() const override { return SkString("bezier_conic_effects"); }
+    SkString onShortName() override {
+        return SkString("bezier_conic_effects");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kCellWidth, kNumConics * kCellHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kCellWidth, kNumConics*kCellHeight);
+    }
 
     DrawResult onDraw(GrRecordingContext* rContext, SkCanvas* canvas, SkString* errorMsg) override {
-        auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
+        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
         if (!sdc) {
             *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
             return DrawResult::kSkip;
@@ -422,12 +425,16 @@ protected:
     static const int kCellWidth = 128;
     static const int kCellHeight = 128;
 
-    SkString getName() const override { return SkString("bezier_quad_effects"); }
+    SkString onShortName() override {
+        return SkString("bezier_quad_effects");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kCellWidth, kNumQuads * kCellHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kCellWidth, kNumQuads*kCellHeight);
+    }
 
     DrawResult onDraw(GrRecordingContext* rContext, SkCanvas* canvas, SkString* errorMsg) override {
-        auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
+        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
         if (!sdc) {
             *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
             return DrawResult::kSkip;

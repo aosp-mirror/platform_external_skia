@@ -5,16 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "bench/GpuTools.h"
 #include "bench/SKPBench.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
-#include "src/gpu/ganesh/GrGpu.h"
 #include "tools/flags/CommandLineFlags.h"
 
-using namespace skia_private;
 
 // These CPU tile sizes are not good per se, but they are similar to what Chrome uses.
 static DEFINE_int(CPUbenchTileW, 256, "Tile width  used for CPU SKP playback.");
@@ -67,7 +63,7 @@ void SKPBench::onPerCanvasPreDraw(SkCanvas* canvas) {
     int xTiles = SkScalarCeilToInt(bounds.width()  / SkIntToScalar(tileW));
     int yTiles = SkScalarCeilToInt(bounds.height() / SkIntToScalar(tileH));
 
-    fSurfaces.reserve_exact(fSurfaces.size() + (xTiles * yTiles));
+    fSurfaces.reserve_back(xTiles * yTiles);
     fTileRects.reserve(xTiles * yTiles);
 
     SkImageInfo ii = canvas->imageInfo().makeWH(tileW, tileH);
@@ -104,11 +100,11 @@ void SKPBench::onPerCanvasPostDraw(SkCanvas* canvas) {
 }
 
 bool SKPBench::isSuitableFor(Backend backend) {
-    return backend != Backend::kNonRendering;
+    return backend != kNonRendering_Backend;
 }
 
-SkISize SKPBench::onGetSize() {
-    return SkISize::Make(fClip.width(), fClip.height());
+SkIPoint SKPBench::onGetSize() {
+    return SkIPoint::Make(fClip.width(), fClip.height());
 }
 
 void SKPBench::onDraw(int loops, SkCanvas* canvas) {
@@ -140,15 +136,16 @@ void SKPBench::drawPicture() {
     }
 
     for (int j = 0; j < fTileRects.size(); ++j) {
-        skgpu::Flush(fSurfaces[j].get());
+        fSurfaces[j]->flush();
     }
 }
 
+#include "src/gpu/ganesh/GrGpu.h"
 static void draw_pic_for_stats(SkCanvas* canvas,
                                GrDirectContext* dContext,
                                const SkPicture* picture,
-                               TArray<SkString>* keys,
-                               TArray<double>* values) {
+                               SkTArray<SkString>* keys,
+                               SkTArray<double>* values) {
     dContext->priv().resetGpuStats();
     dContext->priv().resetContextStats();
     canvas->drawPicture(picture);
@@ -159,7 +156,7 @@ static void draw_pic_for_stats(SkCanvas* canvas,
     dContext->priv().dumpContextStatsKeyValuePairs(keys, values);
 }
 
-void SKPBench::getGpuStats(SkCanvas* canvas, TArray<SkString>* keys, TArray<double>* values) {
+void SKPBench::getGpuStats(SkCanvas* canvas, SkTArray<SkString>* keys, SkTArray<double>* values) {
     // we do a special single draw and then dump the key / value pairs
     auto direct = canvas->recordingContext() ? canvas->recordingContext()->asDirectContext()
                                              : nullptr;

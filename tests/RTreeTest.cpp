@@ -80,7 +80,7 @@ DEF_TEST(RTree, reporter) {
     }
 
     SkRandom rand;
-    AutoTArray<SkRect> rects(NUM_RECTS);
+    AutoTMalloc<SkRect> rects(NUM_RECTS);
     for (size_t i = 0; i < NUM_ITERATIONS; ++i) {
         SkRTree rtree;
         REPORTER_ASSERT(reporter, 0 == rtree.getCount());
@@ -89,9 +89,10 @@ DEF_TEST(RTree, reporter) {
             rects[j] = random_rect(rand);
         }
 
-        rtree.insert(rects.data(), NUM_RECTS);
+        rtree.insert(rects.get(), NUM_RECTS);
+        SkASSERT(rects);  // SkRTree doesn't take ownership of rects.
 
-        run_queries(reporter, rand, rects.data(), rtree);
+        run_queries(reporter, rand, rects, rtree);
         REPORTER_ASSERT(reporter, NUM_RECTS == rtree.getCount());
         REPORTER_ASSERT(reporter, expectedDepthMin <= rtree.getDepth() &&
                                   expectedDepthMax >= rtree.getDepth());

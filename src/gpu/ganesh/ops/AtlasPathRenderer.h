@@ -19,7 +19,7 @@
 class GrOp;
 class GrRecordingContext;
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 class AtlasRenderTask;
 
@@ -42,7 +42,7 @@ public:
     // 128^2 total pixels if the surfaceDrawContext supports MSAA or DMSAA.)
     //
     // Also returns GrFPFailure() if the view matrix has perspective.
-    GrFPResult makeAtlasClipEffect(const skgpu::ganesh::SurfaceDrawContext*,
+    GrFPResult makeAtlasClipEffect(const skgpu::v1::SurfaceDrawContext*,
                                    const GrOp* opBeingClipped,
                                    std::unique_ptr<GrFragmentProcessor> inputFP,
                                    const SkIRect& drawBounds,
@@ -95,7 +95,7 @@ private:
 
     // A collection of all atlases we've created and used since the last flush. We instantiate these
     // at flush time during preFlush().
-    skia_private::STArray<4, sk_sp<AtlasRenderTask>> fAtlasRenderTasks;
+    SkSTArray<4, sk_sp<AtlasRenderTask>> fAtlasRenderTasks;
 
     // This simple cache remembers the locations of cacheable path masks in the most recent atlas.
     // Its main motivation is for clip paths.
@@ -108,13 +108,10 @@ private:
         uint32_t fPathGenID;
         float fAffineMatrix[6];
         uint32_t fFillRule;
-
-        using Hash = SkForceDirectHash<AtlasPathKey>;
     };
-
-    skia_private::THashMap<AtlasPathKey, SkIPoint16, AtlasPathKey::Hash> fAtlasPathCache;
+    SkTHashMap<AtlasPathKey, SkIPoint16> fAtlasPathCache;
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // GrAtlasPathRenderer_DEFINED

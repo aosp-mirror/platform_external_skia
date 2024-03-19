@@ -20,8 +20,6 @@
 #include "modules/svg/include/SkSVGNode.h"
 #include "modules/svg/include/SkSVGTypes.h"
 
-using namespace skia_private;
-
 namespace {
 
 SkScalar length_size_for_type(const SkSize& viewport, SkSVGLengthContext::LengthType t) {
@@ -120,7 +118,7 @@ static sk_sp<SkPathEffect> dash_effect(const SkSVGPresentationAttributes& props,
 
     const auto& da = *props.fStrokeDashArray;
     const auto count = da.dashArray().size();
-    STArray<128, SkScalar, true> intervals(count);
+    SkSTArray<128, SkScalar, true> intervals(count);
     for (const auto& dash : da.dashArray()) {
         intervals.push_back(lctx.resolve(dash, SkSVGLengthContext::LengthType::kOther));
     }

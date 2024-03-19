@@ -8,21 +8,13 @@
 #ifndef SkSGImage_DEFINED
 #define SkSGImage_DEFINED
 
-#include "include/core/SkImage.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkSamplingOptions.h"
-#include "modules/sksg/include/SkSGNode.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
 
-#include <utility>
+#include "include/core/SkSamplingOptions.h"
 
-class SkCanvas;
-class SkMatrix;
-struct SkPoint;
+class SkImage;
 
 namespace sksg {
-class InvalidationController;
 
 /**
  * Concrete rendering node, wrapping an SkImage.

@@ -20,7 +20,6 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
 #include "src/gpu/ganesh/GrPaint.h"
@@ -55,7 +54,7 @@ protected:
         this->setUpRRects();
     }
 
-    SkString getName() const override {
+    SkString onShortName() override {
         SkString name("rrect");
         switch (fType) {
             case kBW_Draw_Type:
@@ -77,10 +76,10 @@ protected:
         return name;
     }
 
-    SkISize getISize() override { return SkISize::Make(kImageWidth, kImageHeight); }
+    SkISize onISize() override { return SkISize::Make(kImageWidth, kImageHeight); }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
+        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
 
         auto rContext = canvas->recordingContext();
         if (kEffect_Type == fType && (!sdc || !rContext)) {
@@ -148,7 +147,7 @@ protected:
                                 bounds.outset(2.f, 2.f);
                             }
 
-                            sdc->addDrawOp(skgpu::ganesh::FillRectOp::MakeNonAARect(
+                            sdc->addDrawOp(skgpu::v1::FillRectOp::MakeNonAARect(
                                     rContext, std::move(grPaint), SkMatrix::I(), bounds));
                         } else {
                             drew = false;

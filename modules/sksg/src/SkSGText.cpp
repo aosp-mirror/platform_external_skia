@@ -8,13 +8,10 @@
 #include "modules/sksg/include/SkSGText.h"
 
 #include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
-#include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
-
-#include <utility>
-
-class SkMatrix;
+#include "include/private/base/SkTArray.h"
 
 namespace sksg {
 

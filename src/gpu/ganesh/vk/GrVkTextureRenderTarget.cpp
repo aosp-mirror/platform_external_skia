@@ -17,7 +17,6 @@
 
 #include "src/core/SkMipmap.h"
 
-#include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "include/gpu/vk/GrVkTypes.h"
 
 #define VK_CALL(GPU, X) GR_VK_CALL(GPU->vkInterface(), X)
@@ -71,7 +70,7 @@ bool create_rt_attachments(GrVkGpu* gpu, SkISize dimensions, VkFormat format, in
     if (sampleCnt > 1) {
         auto rp = gpu->getContext()->priv().resourceProvider();
         sk_sp<GrAttachment> msaaAttachment = rp->makeMSAAAttachment(
-                dimensions, GrBackendFormats::MakeVk(format), sampleCnt, isProtected,
+                dimensions, GrBackendFormat::MakeVk(format), sampleCnt, isProtected,
                 GrMemoryless::kNo);
         if (!msaaAttachment) {
             return false;
@@ -131,7 +130,7 @@ sk_sp<GrVkTextureRenderTarget> GrVkTextureRenderTarget::MakeWrappedTextureRender
         GrWrapOwnership wrapOwnership,
         GrWrapCacheable cacheable,
         const GrVkImageInfo& info,
-        sk_sp<skgpu::MutableTextureState> mutableState) {
+        sk_sp<skgpu::MutableTextureStateRef> mutableState) {
     // Adopted textures require both image and allocation because we're responsible for freeing
     SkASSERT(VK_NULL_HANDLE != info.fImage &&
              (kBorrow_GrWrapOwnership == wrapOwnership || VK_NULL_HANDLE != info.fAlloc.fMemory));
@@ -192,10 +191,8 @@ size_t GrVkTextureRenderTarget::onGpuMemorySize() const {
     if (this->numSamples() > 1) {
         // Msaa attachment should have a valid size
         SkASSERT(this->colorAttachment()->gpuMemorySize() ==
-                 GrSurface::ComputeSize(this->backendFormat(),
-                                        this->dimensions(),
-                                        this->numSamples(),
-                                        skgpu::Mipmapped::kNo));
+                 GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),
+                                        this->numSamples(), GrMipmapped::kNo));
     }
 #endif
     return GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),

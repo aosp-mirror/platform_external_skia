@@ -24,13 +24,8 @@
 #include "include/private/base/SkTDArray.h"
 #include "include/private/chromium/Slug.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
-#if defined(SK_GRAPHITE)
-#include "include/gpu/graphite/ContextOptions.h"
-#endif
-
-#if defined(SK_GANESH) || defined(SK_GRAPHITE)
+#if defined(SK_GANESH)
 #include "include/gpu/GrContextOptions.h"
 
 class SlugGM : public skiagm::GM {
@@ -42,14 +37,8 @@ protected:
         ctxOptions->fSupportBilerpFromGlyphAtlas = true;
     }
 
-#if defined(SK_GRAPHITE)
-    void modifyGraphiteContextOptions(skgpu::graphite::ContextOptions* options) const override {
-        options->fSupportBilerpFromGlyphAtlas = true;
-    }
-#endif
-
     void onOnceBeforeDraw() override {
-        fTypeface = ToolUtils::CreatePortableTypeface("serif", SkFontStyle());
+        fTypeface = ToolUtils::create_portable_typeface("serif", SkFontStyle());
         SkFont font(fTypeface);
         size_t txtLen = strlen(fText);
         int glyphCount = font.countText(fText, txtLen, SkTextEncoding::kUTF8);
@@ -58,9 +47,13 @@ protected:
         font.textToGlyphs(fText, txtLen, SkTextEncoding::kUTF8, fGlyphs.begin(), glyphCount);
     }
 
-    SkString getName() const override { return SkString("slug"); }
+    SkString onShortName() override {
+        return SkString("slug");
+    }
 
-    SkISize getISize() override { return SkISize::Make(1000, 480); }
+    SkISize onISize() override {
+        return SkISize::Make(1000, 480);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         sk_sp<SkTextBlob> blob(this->makeBlob());

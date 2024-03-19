@@ -19,7 +19,16 @@ struct SPIRV_Cross_Output
 
 void frag_main()
 {
-    sk_FragColor = float(((_13_u_skRTFlip.y > 0.0f) != gl_FrontFacing) ? 1 : (-1)).xxxx;
+    bool _25 = false;
+    if (_13_u_skRTFlip.y > 0.0f)
+    {
+        _25 = !gl_FrontFacing;
+    }
+    else
+    {
+        _25 = gl_FrontFacing;
+    }
+    sk_FragColor = float(_25 ? 1 : (-1)).xxxx;
 }
 
 SPIRV_Cross_Output main(SPIRV_Cross_Input stage_input)

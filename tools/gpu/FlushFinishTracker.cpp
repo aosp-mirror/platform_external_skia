@@ -18,14 +18,11 @@
 
 namespace sk_gpu_test {
 
-void FlushFinishTracker::waitTillFinished(std::function<void()> tick) {
+void FlushFinishTracker::waitTillFinished() {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     auto begin = std::chrono::steady_clock::now();
     auto end = begin;
     while (!fIsFinished && (end - begin) < std::chrono::seconds(2)) {
-        if (tick) {
-            tick();
-        }
         if (fContext) {
             fContext->checkAsyncWorkCompletion();
         } else {

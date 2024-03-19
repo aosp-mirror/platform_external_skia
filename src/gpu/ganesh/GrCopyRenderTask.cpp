@@ -59,11 +59,9 @@ void GrCopyRenderTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
     // fEndOfOpsTaskOpIndices will remain in sync), so we create a fake op# to capture the fact that
     // we read fSrcView and copy to target view.
     alloc->addInterval(fSrc.get(), alloc->curOp(), alloc->curOp(),
-                       GrResourceAllocator::ActualUse::kYes,
-                       GrResourceAllocator::AllowRecycling::kYes);
+                       GrResourceAllocator::ActualUse::kYes);
     alloc->addInterval(this->target(0), alloc->curOp(), alloc->curOp(),
-                       GrResourceAllocator::ActualUse::kYes,
-                       GrResourceAllocator::AllowRecycling::kYes);
+                       GrResourceAllocator::ActualUse::kYes);
     alloc->incOps();
 }
 

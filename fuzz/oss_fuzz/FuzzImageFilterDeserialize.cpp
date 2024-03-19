@@ -8,19 +8,21 @@
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageFilter.h"
 #include "include/core/SkPaint.h"
-#include "tools/fonts/FontToolUtils.h"
+#include "src/core/SkFontMgrPriv.h"
+#include "tools/fonts/TestFontMgr.h"
 
-void FuzzImageFilterDeserialize(const uint8_t *data, size_t size) {
+void FuzzImageFilterDeserialize(sk_sp<SkData> bytes) {
     const int BitmapSize = 24;
     SkBitmap bitmap;
     bitmap.allocN32Pixels(BitmapSize, BitmapSize);
     SkCanvas canvas(bitmap);
     canvas.clear(0x00000000);
 
-    auto flattenable = SkImageFilter::Deserialize(data, size);
+    auto flattenable = SkImageFilter::Deserialize(bytes->data(), bytes->size());
 
     if (flattenable != nullptr) {
         // Let's see if using the filters can cause any trouble...
@@ -37,13 +39,15 @@ void FuzzImageFilterDeserialize(const uint8_t *data, size_t size) {
     }
 }
 
-#if defined(SK_BUILD_FOR_LIBFUZZER)
+// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
+#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 10024) {
         return 0;
     }
-    ToolUtils::UsePortableFontMgr();
-    FuzzImageFilterDeserialize(data, size);
+    gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
+    auto bytes = SkData::MakeWithoutCopy(data, size);
+    FuzzImageFilterDeserialize(bytes);
     return 0;
 }
 #endif

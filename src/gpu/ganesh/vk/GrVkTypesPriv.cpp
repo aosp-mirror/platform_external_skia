@@ -5,25 +5,30 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/ganesh/vk/GrVkTypesPriv.h"
+#include "include/private/gpu/ganesh/GrVkTypesPriv.h"
 
-#include "include/gpu/MutableTextureState.h"
-#include "include/gpu/vk/VulkanMutableTextureState.h"
+#include "src/gpu/MutableTextureStateRef.h"
 #include "src/gpu/ganesh/vk/GrVkImageLayout.h"
 
-GrVkImageInfo GrVkImageInfoWithMutableState(const GrVkImageInfo& info,
-                                            const skgpu::MutableTextureState* mutableState) {
+void GrVkBackendSurfaceInfo::cleanup() {}
+
+void GrVkBackendSurfaceInfo::assign(const GrVkBackendSurfaceInfo& that, bool isThisValid) {
+    fImageInfo = that.fImageInfo;
+}
+
+GrVkImageInfo GrVkBackendSurfaceInfo::snapImageInfo(
+        const skgpu::MutableTextureStateRef* mutableState) const {
     SkASSERT(mutableState);
-    GrVkImageInfo newInfo = info;
-    newInfo.fImageLayout = skgpu::MutableTextureStates::GetVkImageLayout(mutableState);
-    newInfo.fCurrentQueueFamily = skgpu::MutableTextureStates::GetVkQueueFamilyIndex(mutableState);
+    GrVkImageInfo newInfo = fImageInfo;
+    newInfo.fImageLayout = mutableState->getImageLayout();
+    newInfo.fCurrentQueueFamily = mutableState->getQueueFamilyIndex();
     return newInfo;
 }
 
 GrVkSurfaceInfo GrVkImageSpecToSurfaceInfo(const GrVkImageSpec& vkSpec,
                                            uint32_t sampleCount,
                                            uint32_t levelCount,
-                                           skgpu::Protected isProtected) {
+                                           GrProtected isProtected) {
     GrVkSurfaceInfo info;
     // Shared info
     info.fSampleCount = sampleCount;
@@ -39,3 +44,17 @@ GrVkSurfaceInfo GrVkImageSpecToSurfaceInfo(const GrVkImageSpec& vkSpec,
 
     return info;
 }
+
+#if GR_TEST_UTILS
+bool GrVkBackendSurfaceInfo::operator==(const GrVkBackendSurfaceInfo& that) const {
+    GrVkImageInfo cpyInfoThis = fImageInfo;
+    GrVkImageInfo cpyInfoThat = that.fImageInfo;
+    // We don't care about the fImageLayout or fCurrentQueueFamily here since we require they use
+    // the same mutableState.
+    cpyInfoThis.fImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    cpyInfoThat.fImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    cpyInfoThis.fCurrentQueueFamily = VK_QUEUE_FAMILY_IGNORED;
+    cpyInfoThat.fCurrentQueueFamily = VK_QUEUE_FAMILY_IGNORED;
+    return cpyInfoThis == cpyInfoThat;
+}
+#endif

@@ -5,24 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkBlendMode.h"
-#include "include/core/SkColor.h"
-#include "include/core/SkRefCnt.h"
-#include "include/private/base/SkTPin.h"
-#include "modules/skottie/src/SkottiePriv.h"
-#include "modules/skottie/src/SkottieValue.h"
-#include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/effects/Effects.h"
+
+#include "include/private/base/SkTPin.h"
+#include "modules/skottie/src/Adapter.h"
+#include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGColorFilter.h"
 #include "modules/sksg/include/SkSGPaint.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
-
-#include <cstddef>
-#include <utility>
-
-namespace skjson {
-class ArrayValue;
-}
+#include "src/utils/SkJSON.h"
 
 namespace skottie {
 namespace internal {
@@ -60,6 +50,7 @@ private:
         EffectBinder(jprops, abuilder, this)
             .bind(  kColor_Index, fColor  )
             .bind(kOpacity_Index, fOpacity);
+
         abuilder.dispatchColorProperty(fColorNode);
     }
 
@@ -73,7 +64,7 @@ private:
     const sk_sp<sksg::Color>           fColorNode;
     const sk_sp<sksg::ModeColorFilter> fFilterNode;
 
-    ColorValue  fColor;
+    VectorValue fColor;
     ScalarValue fOpacity = 1;
 };
 

@@ -7,9 +7,6 @@
 
 #include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
-#include "include/codec/SkEncodedImageFormat.h"
-#include "include/codec/SkGifDecoder.h"
-#include "include/codec/SkPngChunkReader.h"
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
@@ -17,11 +14,13 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
-#include "include/core/SkDataTable.h"
+#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageEncoder.h"
 #include "include/core/SkImageGenerator.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
+#include "include/core/SkPngChunkReader.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
@@ -33,8 +32,8 @@
 #include "include/encode/SkWebpEncoder.h"
 #include "include/private/base/SkAlign.h"
 #include "include/private/base/SkDebug.h"
-#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkMalloc.h"
 #include "modules/skcms/skcms.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/base/SkRandom.h"
@@ -44,7 +43,6 @@
 #include "src/core/SkStreamPriv.h"
 #include "tests/FakeStreams.h"
 #include "tests/Test.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -790,16 +788,14 @@ DEF_TEST(Codec_pngChunkReader, r) {
                  PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
-#define PNG_BYTES(str) reinterpret_cast<png_byte*>(const_cast<char*>(str))
-
     // Create some chunks that match the Android framework's use.
     static png_unknown_chunk gUnknowns[] = {
-        { "npOl", PNG_BYTES("outline"), sizeof("outline"), PNG_HAVE_IHDR },
-        { "npLb", PNG_BYTES("layoutBounds"), sizeof("layoutBounds"), PNG_HAVE_IHDR },
-        { "npTc", PNG_BYTES("ninePatchData"), sizeof("ninePatchData"), PNG_HAVE_IHDR },
+        { "npOl", (png_byte*)"outline", sizeof("outline"), PNG_HAVE_IHDR },
+        { "npLb", (png_byte*)"layoutBounds", sizeof("layoutBounds"), PNG_HAVE_IHDR },
+        { "npTc", (png_byte*)"ninePatchData", sizeof("ninePatchData"), PNG_HAVE_IHDR },
     };
 
-    png_set_keep_unknown_chunks(png, PNG_HANDLE_CHUNK_ALWAYS, PNG_BYTES("npOl\0npLb\0npTc\0"), 3);
+    png_set_keep_unknown_chunks(png, PNG_HANDLE_CHUNK_ALWAYS, (png_byte*)"npOl\0npLb\0npTc\0", 3);
     png_set_unknown_chunks(png, info, gUnknowns, std::size(gUnknowns));
 #if PNG_LIBPNG_VER < 10600
     /* Deal with unknown chunk location bug in 1.5.x and earlier */
@@ -1129,10 +1125,9 @@ static void check_round_trip(skiatest::Reporter* r, SkCodec* origCodec, const Sk
     REPORTER_ASSERT(r, SkCodec::kSuccess == result);
 
     // Encode the image to png.
-    SkDynamicMemoryWStream stream;
-    SkASSERT_RELEASE(SkPngEncoder::Encode(&stream, bm1.pixmap(), {}));
+    auto data = SkEncodeBitmap(bm1, SkEncodedImageFormat::kPNG, 100);
 
-    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(stream.detachAsData()));
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
     REPORTER_ASSERT(r, color_type_match(info.colorType(), codec->getInfo().colorType()));
     REPORTER_ASSERT(r, alpha_type_match(info.alphaType(), codec->getInfo().alphaType()));
 
@@ -1745,11 +1740,58 @@ DEF_TEST(Codec_ossfuzz6274, r) {
     }
 
     const char* file = "invalid_images/ossfuzz6274.gif";
-    auto image = ToolUtils::GetResourceAsImage(file);
+    auto image = GetResourceAsImage(file);
 
+#ifdef SK_HAS_WUFFS_LIBRARY
+    // We are transitioning from an old GIF implementation to a new (Wuffs) GIF
+    // implementation.
+    //
+    // This test (without SK_HAS_WUFFS_LIBRARY) is overly specific to the old
+    // implementation. In the new implementation, the MakeFromStream factory
+    // method returns a nullptr SkImage*, instead of returning a non-null but
+    // otherwise all-transparent SkImage*.
+    //
+    // Either way, the end-to-end result is the same - the source input is
+    // rejected as an invalid GIF image - but the two implementations differ in
+    // how that's represented.
+    //
+    // Once the transition is complete, we can remove the #ifdef and delete the
+    // rest of the test function.
+    //
+    // See Codec_GifTruncated3 for the equivalent of the rest of the test
+    // function, on different (but still truncated) source data.
     if (image) {
         ERRORF(r, "Invalid data gave non-nullptr image");
     }
+    return;
+#else
+    if (!image) {
+        ERRORF(r, "Missing %s", file);
+        return;
+    }
+
+    REPORTER_ASSERT(r, image->width()  == 32);
+    REPORTER_ASSERT(r, image->height() == 32);
+
+    SkBitmap bm;
+    if (!bm.tryAllocPixels(SkImageInfo::MakeN32Premul(32, 32))) {
+        ERRORF(r, "Failed to allocate pixels");
+        return;
+    }
+
+    bm.eraseColor(SK_ColorTRANSPARENT);
+
+    SkCanvas canvas(bm);
+    canvas.drawImage(image, 0, 0);
+
+    for (int i = 0; i < image->width();  ++i)
+    for (int j = 0; j < image->height(); ++j) {
+        SkColor actual = SkUnPreMultiply::PMColorToColor(*bm.getAddr32(i, j));
+        if (actual != SK_ColorTRANSPARENT) {
+            ERRORF(r, "did not initialize pixels! %i, %i is %x", i, j, actual);
+        }
+    }
+#endif
 }
 
 DEF_TEST(Codec_78329453, r) {
@@ -1813,7 +1855,7 @@ DEF_TEST(Codec_crbug807324, r) {
     }
 
     const char* file = "images/crbug807324.png";
-    auto image = ToolUtils::GetResourceAsImage(file);
+    auto image = GetResourceAsImage(file);
     if (!image) {
         ERRORF(r, "Missing %s", file);
         return;
@@ -1908,102 +1950,10 @@ DEF_TEST(Codec_kBGR_101010x_XR_SkColorType_supported, r) {
             .makeAlphaType(kOpaque_SkAlphaType);
     SkImageInfo dstInfo = srcInfo.makeColorType(kBGR_101010x_XR_SkColorType);
     srcBm.allocPixels(srcInfo);
-    SkDynamicMemoryWStream stream;
-    SkASSERT_RELEASE(SkPngEncoder::Encode(&stream, srcBm.pixmap(), {}));
-    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(stream.detachAsData()));
+    auto data = SkEncodeBitmap(srcBm, SkEncodedImageFormat::kPNG, 100);
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
     SkBitmap dstBm;
     dstBm.allocPixels(dstInfo);
     bool success = codec->getPixels(dstInfo, dstBm.getPixels(), dstBm.rowBytes());
     REPORTER_ASSERT(r, SkCodec::kSuccess == success);
-}
-
-DEF_TEST(Codec_gif_notseekable, r) {
-    constexpr char path[] = "images/flightAnim.gif";
-    sk_sp<SkData> data(GetResourceAsData(path));
-    if (!data) {
-        SkDebugf("Missing resource '%s'\n", path);
-        return;
-    }
-
-    // Verify that using a non-seekable stream works the same as a seekable one for
-    // decoding the first frame.
-    const SkMD5::Digest goodDigest = [data, &r]() {
-        auto codec = SkCodec::MakeFromStream(std::make_unique<SkMemoryStream>(data),
-                                             nullptr, nullptr,
-                                             SkCodec::SelectionPolicy::kPreferAnimation);
-        REPORTER_ASSERT(r, codec->getFrameCount() == 60);
-        const auto info = codec->getInfo();
-
-        SkBitmap bm;
-        bm.allocPixels(info);
-
-        SkCodec::Result result = codec->getPixels(info, bm.getPixels(), bm.rowBytes());
-        REPORTER_ASSERT(r, result == SkCodec::kSuccess);
-        return md5(bm);
-    }();
-
-    auto codec = SkCodec::MakeFromStream(std::make_unique<NonseekableStream>(std::move(data)),
-                                         nullptr, nullptr,
-                                         SkCodec::SelectionPolicy::kPreferStillImage);
-    REPORTER_ASSERT(r, codec->getFrameCount() == 1);
-
-    test_info(r, codec.get(), codec->getInfo(), SkCodec::kSuccess, &goodDigest);
-}
-
-DEF_TEST(Codec_gif_notseekable2, r) {
-    constexpr char path[] = "images/flightAnim.gif";
-    sk_sp<SkData> data(GetResourceAsData(path));
-    if (!data) {
-        SkDebugf("Missing resource '%s'\n", path);
-        return;
-    }
-
-    // Verify that using a non-seekable stream works the same as a seekable one for
-    // decoding a later frame.
-    SkCodec::Options options;
-    options.fFrameIndex = 5;
-
-    const SkMD5::Digest goodDigest = [data, &r, &options]() {
-        auto codec = SkCodec::MakeFromStream(std::make_unique<SkMemoryStream>(data),
-                                             nullptr, nullptr,
-                                             SkCodec::SelectionPolicy::kPreferAnimation);
-        REPORTER_ASSERT(r, codec->getFrameCount() == 60);
-        const auto info = codec->getInfo();
-
-        SkBitmap bm;
-        bm.allocPixels(info);
-
-        SkCodec::Result result = codec->getPixels(info, bm.getPixels(), bm.rowBytes(), &options);
-        REPORTER_ASSERT(r, result == SkCodec::kSuccess);
-        return md5(bm);
-    }();
-
-    // This should copy the non seekable stream.
-    auto codec = SkCodec::MakeFromStream(std::make_unique<NonseekableStream>(std::move(data)),
-                                         nullptr, nullptr,
-                                         SkCodec::SelectionPolicy::kPreferAnimation);
-    REPORTER_ASSERT(r, codec->getFrameCount() == 60);
-
-    SkBitmap bm;
-    bm.allocPixels(codec->getInfo());
-
-    SkCodec::Result result = codec->getPixels(codec->getInfo(), bm.getPixels(), bm.rowBytes(),
-                                              &options);
-    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
-    compare_to_good_digest(r, goodDigest, bm);
-}
-
-DEF_TEST(Codec_gif_null_param, r) {
-    constexpr char path[] = "images/flightAnim.gif";
-    sk_sp<SkData> data(GetResourceAsData(path));
-    if (!data) {
-        SkDebugf("Missing resource '%s'\n", path);
-        return;
-    }
-
-    SkCodec::Result result;
-    auto codec = SkGifDecoder::Decode(std::make_unique<SkMemoryStream>(std::move(data)),
-                                      &result, nullptr);
-    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
-    REPORTER_ASSERT(r, codec);
 }

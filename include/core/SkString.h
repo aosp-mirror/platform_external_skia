@@ -11,13 +11,14 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTo.h"
 #include "include/private/base/SkTypeTraits.h"
 
 #include <atomic>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -82,14 +83,14 @@ static inline bool SkStrContains(const char string[], const char subchar) {
  */
 
 static constexpr int kSkStrAppendU32_MaxSize = 10;
-char* SkStrAppendU32(char buffer[], uint32_t);
+char*   SkStrAppendU32(char buffer[], uint32_t);
 static constexpr int kSkStrAppendU64_MaxSize = 20;
-char* SkStrAppendU64(char buffer[], uint64_t, int minDigits);
+char*   SkStrAppendU64(char buffer[], uint64_t, int minDigits);
 
 static constexpr int kSkStrAppendS32_MaxSize = kSkStrAppendU32_MaxSize + 1;
-char* SkStrAppendS32(char buffer[], int32_t);
+char*   SkStrAppendS32(char buffer[], int32_t);
 static constexpr int kSkStrAppendS64_MaxSize = kSkStrAppendU64_MaxSize + 1;
-char* SkStrAppendS64(char buffer[], int64_t, int minDigits);
+char*   SkStrAppendS64(char buffer[], int64_t, int minDigits);
 
 /**
  *  Floats have at most 8 significant digits, so we limit our %g to that.
@@ -270,10 +271,8 @@ private:
     static_assert(::sk_is_trivially_relocatable<decltype(fRec)>::value);
 
 #ifdef SK_DEBUG
-          SkString& validate();
     const SkString& validate() const;
 #else
-          SkString& validate()       { return *this; }
     const SkString& validate() const { return *this; }
 #endif
 
@@ -281,13 +280,31 @@ private:
 };
 
 /// Creates a new string and writes into it using a printf()-style format.
-SK_API SkString SkStringPrintf(const char* format, ...) SK_PRINTF_LIKE(1, 2);
+SkString SkStringPrintf(const char* format, ...) SK_PRINTF_LIKE(1, 2);
 /// This makes it easier to write a caller as a VAR_ARGS function where the format string is
 /// optional.
 static inline SkString SkStringPrintf() { return SkString(); }
 
 static inline void swap(SkString& a, SkString& b) {
     a.swap(b);
+}
+
+enum SkStrSplitMode {
+    // Strictly return all results. If the input is ",," and the separator is ',' this will return
+    // an array of three empty strings.
+    kStrict_SkStrSplitMode,
+
+    // Only nonempty results will be added to the results. Multiple separators will be
+    // coalesced. Separators at the beginning and end of the input will be ignored.  If the input is
+    // ",," and the separator is ',', this will return an empty vector.
+    kCoalesce_SkStrSplitMode
+};
+
+// Split str on any characters in delimiters into out.  (Think, strtok with a sane API.)
+void SkStrSplit(const char* str, const char* delimiters, SkStrSplitMode splitMode,
+                SkTArray<SkString>* out);
+inline void SkStrSplit(const char* str, const char* delimiters, SkTArray<SkString>* out) {
+    SkStrSplit(str, delimiters, kCoalesce_SkStrSplitMode, out);
 }
 
 #endif

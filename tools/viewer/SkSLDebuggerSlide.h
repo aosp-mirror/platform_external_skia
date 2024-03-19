@@ -8,20 +8,9 @@
 #ifndef SkSLDebuggerSlide_DEFINED
 #define SkSLDebuggerSlide_DEFINED
 
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
-#include "src/sksl/tracing/SkSLDebugTracePlayer.h"
-#include "src/sksl/tracing/SkSLDebugTracePriv.h"
+#include "src/sksl/tracing/SkVMDebugTrace.h"
+#include "src/sksl/tracing/SkVMDebugTracePlayer.h"
 #include "tools/viewer/Slide.h"
-
-class SkCanvas;
-
-namespace skui {
-enum class InputState;
-enum class ModifierKey;
-}  // namespace sk
-
-#ifdef SKSL_ENABLE_TRACING
 
 class SkSLDebuggerSlide : public Slide {
 public:
@@ -47,12 +36,11 @@ private:
 
     static constexpr int kNumTopRows = 12;
 
-    sk_sp<SkSL::DebugTracePriv> fTrace;
-    SkSL::SkSLDebugTracePlayer fPlayer;
+    sk_sp<SkSL::SkVMDebugTrace> fTrace;
+    SkSL::SkVMDebugTracePlayer fPlayer;
     bool fRefresh = false;
 
-    char fTraceFile[256] = "SkSLDebugTrace.json";
+    char fTraceFile[256] = "SkVMDebugTrace.json";
 };
 
-#endif
 #endif

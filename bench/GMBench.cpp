@@ -13,7 +13,7 @@
 GMBench::GMBench(std::unique_ptr<skiagm::GM> gm) : fGM(std::move(gm)) {
     fGM->setMode(skiagm::GM::kBench_Mode);
 
-    fName.printf("GM_%s", fGM->getName().c_str());
+    fName.printf("GM_%s", fGM->getName());
 }
 
 const char* GMBench::onGetName() {
@@ -21,12 +21,11 @@ const char* GMBench::onGetName() {
 }
 
 bool GMBench::isSuitableFor(Backend backend) {
-    return Backend::kNonRendering != backend;
+    return kNonRendering_Backend != backend;
 }
 
 void GMBench::onPerCanvasPreDraw(SkCanvas* canvas) {
-    SkString msg;
-    if (fGM->gpuSetup(canvas, &msg) != skiagm::DrawResult::kOk) {
+    if (fGM->gpuSetup(canvas) != skiagm::DrawResult::kOk) {
         fGpuSetupFailed = true;
     }
 
@@ -52,6 +51,7 @@ void GMBench::onDraw(int loops, SkCanvas* canvas) {
     }
 }
 
-SkISize GMBench::onGetSize() {
-    return fGM->getISize();
+SkIPoint GMBench::onGetSize() {
+    SkISize size = fGM->getISize();
+    return SkIPoint::Make(size.fWidth, size.fHeight);
 }

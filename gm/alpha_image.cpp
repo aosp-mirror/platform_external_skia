@@ -17,7 +17,6 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkShader.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 static SkBitmap make_alpha_image(int w, int h) {
@@ -110,7 +109,7 @@ DEF_SIMPLE_GM(alpha_bitmap_is_coverage_ANDROID, canvas, 128, 128) {
     offscreenBitmap.allocN32Pixels(128, 128);
     {
         SkCanvas offscreenCanvas(offscreenBitmap);
-        offscreenCanvas.drawImage(ToolUtils::GetResourceAsImage("images/mandrill_128.png"), 0, 0);
+        offscreenCanvas.drawImage(GetResourceAsImage("images/mandrill_128.png"), 0, 0);
 
         SkPaint clearPaint;
         clearPaint.setAntiAlias(true);

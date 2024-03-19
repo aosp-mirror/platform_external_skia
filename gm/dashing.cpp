@@ -22,7 +22,6 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkDashPathEffect.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <math.h>
 #include <initializer_list>
@@ -62,9 +61,9 @@ static void show_zero_len_dash(SkCanvas* canvas) {
 }
 
 class DashingGM : public skiagm::GM {
-    SkString getName() const override { return SkString("dashing"); }
+    SkString onShortName() override { return SkString("dashing"); }
 
-    SkISize getISize() override { return {640, 340}; }
+    SkISize onISize() override { return {640, 340}; }
 
     void onDraw(SkCanvas* canvas) override {
         struct Intervals {
@@ -140,9 +139,9 @@ static SkPath make_path_star(const SkRect& bounds) {
 }
 
 class Dashing2GM : public skiagm::GM {
-    SkString getName() const override { return SkString("dashing2"); }
+    SkString onShortName() override { return SkString("dashing2"); }
 
-    SkISize getISize() override { return {640, 480}; }
+    SkISize onISize() override { return {640, 480}; }
 
     void onDraw(SkCanvas* canvas) override {
         constexpr int gIntervals[] = {
@@ -190,9 +189,9 @@ class Dashing2GM : public skiagm::GM {
 
 // Test out the on/off line dashing Chrome if fond of
 class Dashing3GM : public skiagm::GM {
-    SkString getName() const override { return SkString("dashing3"); }
+    SkString onShortName() override { return SkString("dashing3"); }
 
-    SkISize getISize() override { return {640, 480}; }
+    SkISize onISize() override { return {640, 480}; }
 
     // Draw a 100x100 block of dashed lines. The horizontal ones are BW
     // while the vertical ones are AA.
@@ -313,9 +312,9 @@ class Dashing3GM : public skiagm::GM {
 //////////////////////////////////////////////////////////////////////////////
 
 class Dashing4GM : public skiagm::GM {
-    SkString getName() const override { return SkString("dashing4"); }
+    SkString onShortName() override { return SkString("dashing4"); }
 
-    SkISize getISize() override { return {640, 1100}; }
+    SkISize onISize() override { return {640, 1100}; }
 
     void onDraw(SkCanvas* canvas) override {
         struct Intervals {
@@ -411,9 +410,9 @@ public:
 private:
     bool runAsBench() const override { return true; }
 
-    SkString getName() const override { return SkString(fDoAA ? "dashing5_aa" : "dashing5_bw"); }
+    SkString onShortName() override { return SkString(fDoAA ?  "dashing5_aa" : "dashing5_bw"); }
 
-    SkISize getISize() override { return {400, 200}; }
+    SkISize onISize() override { return {400, 200}; }
 
     void onDraw(SkCanvas* canvas) override {
         constexpr int kOn = 4;
@@ -574,7 +573,7 @@ DEF_SIMPLE_GM(dashtextcaps, canvas, 512, 512) {
     p.setStrokeJoin(SkPaint::kRound_Join);
     p.setARGB(0xff, 0xbb, 0x00, 0x00);
 
-    SkFont font(ToolUtils::DefaultPortableTypeface(), 100);
+    SkFont font(ToolUtils::create_portable_typeface(), 100);
 
     const SkScalar intervals[] = { 12, 12 };
     p.setPathEffect(SkDashPathEffect::Make(intervals, std::size(intervals), 0));

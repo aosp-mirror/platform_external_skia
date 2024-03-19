@@ -13,14 +13,12 @@
 #include "src/gpu/ResourceKey.h"
 #include "src/gpu/ganesh/GrTextureProxy.h"
 
-class GrBackendRenderTarget;
-class GrContextThreadSafeProxy;
 class GrImageContext;
 class GrSurfaceProxyView;
+class GrBackendRenderTarget;
+struct GrVkDrawableInfo;
 class SkBitmap;
 class SkImage;
-enum class SkTextureCompressionType;
-struct GrVkDrawableInfo;
 
 /*
  * A factory for creating GrSurfaceProxy-derived objects.
@@ -79,7 +77,7 @@ public:
      * The bitmap is uploaded to the texture proxy assuming a kTopLeft_GrSurfaceOrigin.
      */
     sk_sp<GrTextureProxy> createProxyFromBitmap(const SkBitmap&,
-                                                skgpu::Mipmapped,
+                                                GrMipmapped,
                                                 SkBackingFit,
                                                 skgpu::Budgeted);
 
@@ -90,7 +88,7 @@ public:
                                       SkISize dimensions,
                                       GrRenderable,
                                       int renderTargetSampleCnt,
-                                      skgpu::Mipmapped,
+                                      GrMipmapped,
                                       SkBackingFit,
                                       skgpu::Budgeted,
                                       GrProtected,
@@ -103,9 +101,9 @@ public:
      */
     sk_sp<GrTextureProxy> createCompressedTextureProxy(SkISize dimensions,
                                                        skgpu::Budgeted,
-                                                       skgpu::Mipmapped,
+                                                       GrMipmapped,
                                                        GrProtected,
-                                                       SkTextureCompressionType,
+                                                       SkImage::CompressionType,
                                                        sk_sp<SkData> data);
 
     // These match the definitions in SkImage & GrTexture.h, for whence they came
@@ -142,13 +140,16 @@ public:
     sk_sp<GrSurfaceProxy> wrapBackendRenderTarget(const GrBackendRenderTarget&,
                                                   sk_sp<skgpu::RefCntedCallback> releaseHelper);
 
+    sk_sp<GrRenderTargetProxy> wrapVulkanSecondaryCBAsRenderTarget(const SkImageInfo&,
+                                                                   const GrVkDrawableInfo&);
+
     using LazyInstantiationKeyMode = GrSurfaceProxy::LazyInstantiationKeyMode;
     using LazySurfaceDesc = GrSurfaceProxy::LazySurfaceDesc;
     using LazyCallbackResult = GrSurfaceProxy::LazyCallbackResult;
     using LazyInstantiateCallback = GrSurfaceProxy::LazyInstantiateCallback;
 
     struct TextureInfo {
-        skgpu::Mipmapped fMipmapped;
+        GrMipmapped fMipmapped;
         GrTextureType fTextureType;
     };
 
@@ -160,7 +161,7 @@ public:
                                                     LazyInstantiateCallback&&,
                                                     const GrBackendFormat&,
                                                     SkISize dimensions,
-                                                    skgpu::Mipmapped);
+                                                    GrMipmapped);
 
     /**
      * Creates a texture proxy that will be instantiated by a user-supplied callback during flush.
@@ -175,7 +176,7 @@ public:
     sk_sp<GrTextureProxy> createLazyProxy(LazyInstantiateCallback&&,
                                           const GrBackendFormat&,
                                           SkISize dimensions,
-                                          skgpu::Mipmapped,
+                                          GrMipmapped,
                                           GrMipmapStatus,
                                           GrInternalSurfaceFlags,
                                           SkBackingFit,
@@ -234,8 +235,6 @@ public:
     const GrCaps* caps() const;
     sk_sp<const GrCaps> refCaps() const;
 
-    GrResourceProvider* resourceProvider() const;
-
     int numUniqueKeyProxies_TestOnly() const;
 
     // This is called on a DDL's proxyprovider when the DDL is finished. The uniquely keyed
@@ -250,9 +249,8 @@ public:
      * instantiated immediately.
      */
     bool renderingDirectly() const;
-    bool isAbandoned() const;
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     /**
      * Create a texture proxy that is backed by an instantiated GrSurface.
      */
@@ -285,6 +283,8 @@ private:
     enum class RemoveTableEntry { kNo, kYes };
     void processInvalidUniqueKeyImpl(const skgpu::UniqueKey&, GrTextureProxy*,
                                      InvalidateGPUResource, RemoveTableEntry);
+
+    bool isAbandoned() const;
 
     /*
      * Create an un-mipmapped texture proxy for the bitmap.

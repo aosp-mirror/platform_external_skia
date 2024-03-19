@@ -11,7 +11,6 @@
 #include "include/gpu/GrTypes.h"
 #include "include/gpu/vk/GrVkTypes.h"
 #include "include/private/base/SkMacros.h"
-#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrColor.h"
 #include "src/gpu/ganesh/GrDataUtils.h"
 #include "src/gpu/vk/VulkanInterface.h"
@@ -23,20 +22,13 @@ class GrVkGpu;
 // makes a Vk call on the interface
 #define GR_VK_CALL(IFACE, X) (IFACE)->fFunctions.f##X
 
-// Note: must be called before checkVkResult, since this does not log if the GPU is already
-// considering the device to be lost.
-#define GR_VK_LOG_IF_NOT_SUCCESS(GPU, RESULT, X, ...)                                   \
-    do {                                                                                \
-        if (RESULT != VK_SUCCESS && !GPU->isDeviceLost()) {                             \
-            SkDebugf("Failed vulkan call. Error: %d, " X "\n", RESULT, ##__VA_ARGS__);  \
-        }                                                                               \
-    } while (false)
-
 #define GR_VK_CALL_RESULT(GPU, RESULT, X)                                 \
     do {                                                                  \
         (RESULT) = GR_VK_CALL(GPU->vkInterface(), X);                     \
         SkASSERT(VK_SUCCESS == RESULT || VK_ERROR_DEVICE_LOST == RESULT); \
-        GR_VK_LOG_IF_NOT_SUCCESS(GPU, RESULT, #X);                        \
+        if (RESULT != VK_SUCCESS && !GPU->isDeviceLost()) {               \
+            SkDebugf("Failed vulkan call. Error: %d," #X "\n", RESULT);   \
+        }                                                                 \
         GPU->checkVkResult(RESULT);                                       \
     } while (false)
 
@@ -63,8 +55,6 @@ static constexpr GrColorFormatDesc GrVkFormatDesc(VkFormat vkFormat) {
         case VK_FORMAT_B8G8R8A8_UNORM:
             return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
         case VK_FORMAT_R5G6B5_UNORM_PACK16:
-            return GrColorFormatDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_B5G6R5_UNORM_PACK16:
             return GrColorFormatDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
         case VK_FORMAT_R16G16B16A16_SFLOAT:
             return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
@@ -114,7 +104,7 @@ bool GrCompileVkShaderModule(GrVkGpu* gpu,
                              VkPipelineShaderStageCreateInfo* stageInfo,
                              const SkSL::ProgramSettings& settings,
                              std::string* outSPIRV,
-                             SkSL::Program::Interface* outInterface);
+                             SkSL::Program::Inputs* outInputs);
 
 bool GrInstallVkShaderModule(GrVkGpu* gpu,
                              const std::string& spirv,

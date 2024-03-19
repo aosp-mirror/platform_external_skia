@@ -29,14 +29,14 @@ NSString* kBufferTypeNames[kBufferTypeCount] = {
 sk_sp<Buffer> MtlBuffer::Make(const MtlSharedContext* sharedContext,
                               size_t size,
                               BufferType type,
-                              AccessPattern accessPattern) {
+                              PrioritizeGpuReads prioritizeGpuReads) {
     if (size <= 0) {
         return nullptr;
     }
 
     NSUInteger options = 0;
-    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
-        if (accessPattern == AccessPattern::kHostVisible) {
+    if (@available(macOS 10.11, iOS 9.0, *)) {
+        if (prioritizeGpuReads == PrioritizeGpuReads::kNo) {
 #ifdef SK_BUILD_FOR_MAC
             const MtlCaps& mtlCaps = sharedContext->mtlCaps();
             if (mtlCaps.isMac()) {

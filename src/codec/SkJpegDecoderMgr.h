@@ -15,7 +15,8 @@
 #include "src/codec/SkJpegSourceMgr.h"
 
 extern "C" {
-    #include "jpeglib.h"  // NO_G3_REWRITE
+    #include "jpeglib.h"
+    #include "jmorecfg.h"
 }
 
 #include <memory>

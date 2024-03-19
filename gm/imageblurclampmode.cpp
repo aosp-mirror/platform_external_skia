@@ -62,9 +62,14 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("imageblurclampmode"); }
 
-    SkISize getISize() override { return SkISize::Make(850, 920); }
+    SkString onShortName() override {
+        return SkString("imageblurclampmode");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(850, 920);
+    }
 
     bool runAsBench() const override { return true; }
 
@@ -79,20 +84,17 @@ protected:
             canvas->save();
 
             // x-only blur
-            filter =  SkImageFilters::Blur(
-                    sigma, 0.0f, SkTileMode::kClamp, nullptr, image->bounds());
+            filter =  SkImageFilters::Blur(sigma, 0.0f, SkTileMode::kClamp, nullptr);
             draw_image(canvas, image, std::move(filter));
             canvas->translate(image->width() + 20, 0);
 
             // y-only blur
-            filter = SkImageFilters::Blur(
-                    0.0f, sigma, SkTileMode::kClamp, nullptr, image->bounds());
+            filter = SkImageFilters::Blur(0.0f, sigma, SkTileMode::kClamp, nullptr);
             draw_image(canvas, image, std::move(filter));
             canvas->translate(image->width() + 20, 0);
 
             // both directions
-            filter = SkImageFilters::Blur(
-                    sigma, sigma, SkTileMode::kClamp, nullptr, image->bounds());
+            filter = SkImageFilters::Blur(sigma, sigma, SkTileMode::kClamp, nullptr);
             draw_image(canvas, image, std::move(filter));
             canvas->translate(image->width() + 20, 0);
 

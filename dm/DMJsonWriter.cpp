@@ -17,11 +17,9 @@
 #include "src/utils/SkOSPath.h"
 #include "tools/ProcStats.h"
 
-using namespace skia_private;
-
 namespace DM {
 
-TArray<JsonWriter::BitmapResult> gBitmapResults;
+SkTArray<JsonWriter::BitmapResult> gBitmapResults;
 static SkMutex& bitmap_result_mutex() {
     static SkMutex& mutex = *(new SkMutex);
     return mutex;

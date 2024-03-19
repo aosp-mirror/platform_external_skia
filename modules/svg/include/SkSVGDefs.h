@@ -10,7 +10,7 @@
 
 #include "modules/svg/include/SkSVGHiddenContainer.h"
 
-class SK_API SkSVGDefs : public SkSVGHiddenContainer {
+class SkSVGDefs : public SkSVGHiddenContainer {
 public:
     static sk_sp<SkSVGDefs> Make() { return sk_sp<SkSVGDefs>(new SkSVGDefs()); }
 

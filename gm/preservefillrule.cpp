@@ -38,12 +38,12 @@ public:
     PreserveFillRuleGM(bool big) : fBig(big) , fStarSize((big) ? 200 : 20) {}
 
 private:
-    SkString getName() const override {
+    SkString onShortName() override {
         SkString name("preservefillrule");
         name += (fBig) ? "_big" : "_little";
         return name;
     }
-    SkISize getISize() override { return SkISize::Make(fStarSize * 2, fStarSize * 2); }
+    SkISize onISize() override { return SkISize::Make(fStarSize * 2, fStarSize * 2); }
 
     void modifyGrContextOptions(GrContextOptions* ctxOptions) override {
         ctxOptions->fAllowPathMaskCaching = true;

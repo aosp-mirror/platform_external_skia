@@ -9,7 +9,6 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
 #include "include/effects/SkGradientShader.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/Slide.h"
 
 #include <vector>
@@ -78,19 +77,16 @@ public:
             const char* fLabel;
         };
         static const Config kConfigs[] = {
-            { CS::kDestination,         "Destination" },
-            { CS::kSRGB,                "sRGB" },
-            { CS::kSRGBLinear,          "Linear sRGB" },
-            { CS::kLab,                 "CIELAB" },
-            { CS::kOKLab,               "Oklab" },
-            { CS::kOKLabGamutMap,       "OklabGamutMap" },
-            { CS::kLCH,                 "LCH" },
-            { CS::kOKLCH,               "Oklch" },
-            { CS::kOKLCHGamutMap,       "OklchGamutMap" },
-            { CS::kHSL,                 "HSL" },
-            { CS::kHWB,                 "HWB" },
+            { CS::kDestination, "Destination" },
+            { CS::kSRGB,        "sRGB" },
+            { CS::kSRGBLinear,  "Linear sRGB" },
+            { CS::kLab,         "CIELAB" },
+            { CS::kOKLab,       "Oklab" },
+            { CS::kLCH,         "LCH" },
+            { CS::kOKLCH,       "Oklch" },
+            { CS::kHSL,         "HSL" },
+            { CS::kHWB,         "HWB" },
         };
-        SkFont font = ToolUtils::DefaultFont();
 
         for (const Config& config : kConfigs) {
             fInterpolation.fColorSpace = config.fColorSpace;
@@ -101,7 +97,7 @@ public:
                                                          fInterpolation, nullptr));
             canvas->drawRect(r, paint);
             canvas->drawSimpleText(config.fLabel, strlen(config.fLabel), SkTextEncoding::kUTF8,
-                                   266, 20, font, labelPaint);
+                                   266, 20, SkFont{}, labelPaint);
             canvas->translate(0, 42);
         }
         canvas->restore();

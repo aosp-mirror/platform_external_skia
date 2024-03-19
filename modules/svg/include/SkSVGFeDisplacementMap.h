@@ -11,7 +11,7 @@
 #include "modules/svg/include/SkSVGFe.h"
 #include "modules/svg/include/SkSVGTypes.h"
 
-class SK_API SkSVGFeDisplacementMap : public SkSVGFe {
+class SkSVGFeDisplacementMap : public SkSVGFe {
 public:
     using ChannelSelector = SkColorChannel;
 

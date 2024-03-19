@@ -12,24 +12,22 @@
 #include "src/gpu/ganesh/vk/GrVkGpu.h"
 #include "src/gpu/ganesh/vk/GrVkUniformHandler.h"
 
-using namespace skia_private;
-
 #if defined(SK_ENABLE_SCOPED_LSAN_SUPPRESSIONS)
 #include <sanitizer/lsan_interface.h>
 #endif
 
 GrVkDescriptorSetManager* GrVkDescriptorSetManager::CreateUniformManager(GrVkGpu* gpu) {
-    STArray<1, uint32_t> visibilities;
+    SkSTArray<1, uint32_t> visibilities;
     uint32_t stages = kVertex_GrShaderFlag | kFragment_GrShaderFlag;
     visibilities.push_back(stages);
-    TArray<const GrVkSampler*> samplers;
+    SkTArray<const GrVkSampler*> samplers;
     return Create(gpu, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, visibilities, samplers);
 }
 
 GrVkDescriptorSetManager* GrVkDescriptorSetManager::CreateSamplerManager(
         GrVkGpu* gpu, VkDescriptorType type, const GrVkUniformHandler& uniformHandler) {
-    STArray<4, uint32_t> visibilities;
-    STArray<4, const GrVkSampler*> immutableSamplers;
+    SkSTArray<4, uint32_t> visibilities;
+    SkSTArray<4, const GrVkSampler*> immutableSamplers;
     SkASSERT(type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
     for (int i = 0 ; i < uniformHandler.numSamplers(); ++i) {
         visibilities.push_back(uniformHandler.samplerVisibility(i));
@@ -39,15 +37,15 @@ GrVkDescriptorSetManager* GrVkDescriptorSetManager::CreateSamplerManager(
 }
 
 GrVkDescriptorSetManager* GrVkDescriptorSetManager::CreateZeroSamplerManager(GrVkGpu* gpu) {
-    TArray<uint32_t> visibilities;
-    TArray<const GrVkSampler*> immutableSamplers;
+    SkTArray<uint32_t> visibilities;
+    SkTArray<const GrVkSampler*> immutableSamplers;
     return Create(gpu, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, visibilities, immutableSamplers);
 }
 
 GrVkDescriptorSetManager* GrVkDescriptorSetManager::CreateInputManager(GrVkGpu* gpu) {
-    STArray<1, uint32_t> visibilities;
+    SkSTArray<1, uint32_t> visibilities;
     visibilities.push_back(kFragment_GrShaderFlag);
-    TArray<const GrVkSampler*> samplers;
+    SkTArray<const GrVkSampler*> samplers;
     return Create(gpu, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, visibilities, samplers);
 }
 
@@ -65,8 +63,8 @@ VkShaderStageFlags visibility_to_vk_stage_flags(uint32_t visibility) {
 
 static bool get_layout_and_desc_count(GrVkGpu* gpu,
                                       VkDescriptorType type,
-                                      const TArray<uint32_t>& visibilities,
-                                      const TArray<const GrVkSampler*>& immutableSamplers,
+                                      const SkTArray<uint32_t>& visibilities,
+                                      const SkTArray<const GrVkSampler*>& immutableSamplers,
                                       VkDescriptorSetLayout* descSetLayout,
                                       uint32_t* descCountPerSet) {
     if (VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER == type ||
@@ -188,8 +186,8 @@ static bool get_layout_and_desc_count(GrVkGpu* gpu,
 
 GrVkDescriptorSetManager* GrVkDescriptorSetManager::Create(
         GrVkGpu* gpu, VkDescriptorType type,
-        const TArray<uint32_t>& visibilities,
-        const TArray<const GrVkSampler*>& immutableSamplers) {
+        const SkTArray<uint32_t>& visibilities,
+        const SkTArray<const GrVkSampler*>& immutableSamplers) {
 #ifdef SK_DEBUG
     if (type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
         SkASSERT(visibilities.size() == immutableSamplers.size());
@@ -210,8 +208,8 @@ GrVkDescriptorSetManager* GrVkDescriptorSetManager::Create(
 
 GrVkDescriptorSetManager::GrVkDescriptorSetManager(
         GrVkGpu* gpu, VkDescriptorType type, VkDescriptorSetLayout descSetLayout,
-        uint32_t descCountPerSet, const TArray<uint32_t>& visibilities,
-        const TArray<const GrVkSampler*>& immutableSamplers)
+        uint32_t descCountPerSet, const SkTArray<uint32_t>& visibilities,
+        const SkTArray<const GrVkSampler*>& immutableSamplers)
     : fPoolManager(descSetLayout, type, descCountPerSet) {
     for (int i = 0; i < visibilities.size(); ++i) {
         fBindingVisibilities.push_back(visibilities[i]);

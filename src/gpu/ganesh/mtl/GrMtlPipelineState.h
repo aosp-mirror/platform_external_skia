@@ -111,7 +111,7 @@ private:
     GrStencilSettings fStencil;
 
     int fNumSamplers;
-    skia_private::TArray<SamplerBindings> fSamplerBindings;
+    SkTArray<SamplerBindings> fSamplerBindings;
 
     std::unique_ptr<GrGeometryProcessor::ProgramImpl>              fGPImpl;
     std::unique_ptr<GrXferProcessor::ProgramImpl>                  fXPImpl;

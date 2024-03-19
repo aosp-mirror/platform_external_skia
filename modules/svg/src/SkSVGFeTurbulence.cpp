@@ -65,11 +65,11 @@ sk_sp<SkImageFilter> SkSVGFeTurbulence::onMakeImageFilter(const SkSVGRenderConte
     sk_sp<SkShader> shader;
     switch (fTurbulenceType.fType) {
         case SkSVGFeTurbulenceType::Type::kTurbulence:
-            shader = SkShaders::MakeTurbulence(
+            shader = SkPerlinNoiseShader::MakeTurbulence(
                     fBaseFrequency.freqX(), fBaseFrequency.freqY(), fNumOctaves, fSeed, tileSize);
             break;
         case SkSVGFeTurbulenceType::Type::kFractalNoise:
-            shader = SkShaders::MakeFractalNoise(
+            shader = SkPerlinNoiseShader::MakeFractalNoise(
                     fBaseFrequency.freqX(), fBaseFrequency.freqY(), fNumOctaves, fSeed, tileSize);
             break;
     }

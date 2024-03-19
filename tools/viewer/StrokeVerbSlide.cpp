@@ -14,7 +14,6 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "src/core/SkGeometry.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 
 enum class VerbType {
@@ -107,7 +106,7 @@ void StrokeVerbSlide::draw(SkCanvas* canvas) {
         canvas->drawPoints(SkCanvas::kPoints_PointMode, 1, fPoints + 3, pointsPaint);
     }
 
-    SkFont font(ToolUtils::DefaultTypeface(), 20);
+    SkFont font(nullptr, 20);
     SkPaint captionPaint;
     captionPaint.setColor(SK_ColorWHITE);
     canvas->drawString(caption, 10, 30, font, captionPaint);

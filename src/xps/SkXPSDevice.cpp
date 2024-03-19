@@ -24,7 +24,9 @@
 
 #include "include/core/SkColor.h"
 #include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageEncoder.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPathEffect.h"
 #include "include/core/SkPathUtils.h"
@@ -33,15 +35,13 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkVertices.h"
-#include "include/encode/SkPngEncoder.h"
 #include "include/pathops/SkPathOps.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTo.h"
-#include "src/base/SkEndian.h"
 #include "src/base/SkTLazy.h"
 #include "src/base/SkUtils.h"
 #include "src/core/SkDraw.h"
-#include "src/core/SkFontPriv.h"
+#include "src/core/SkEndian.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMaskFilterBase.h"
@@ -50,7 +50,6 @@
 #include "src/image/SkImage_Base.h"
 #include "src/sfnt/SkSFNTHeader.h"
 #include "src/sfnt/SkTTCFHeader.h"
-#include "src/shaders/SkColorShader.h"
 #include "src/shaders/SkShaderBase.h"
 #include "src/text/GlyphRun.h"
 #include "src/utils/SkClipStackUtils.h"
@@ -120,9 +119,9 @@ HRESULT SkXPSDevice::createId(wchar_t* buffer, size_t bufferSize, wchar_t sep) {
 }
 
 SkXPSDevice::SkXPSDevice(SkISize s)
-        : SkClipStackDevice(SkImageInfo::MakeUnknown(s.width(), s.height()), SkSurfaceProps())
-        , fCurrentPage(0)
-        , fTopTypefaces(&fTypefaces) {}
+    : INHERITED(SkImageInfo::MakeUnknown(s.width(), s.height()),
+                SkSurfaceProps(0, kUnknown_SkPixelGeometry))
+    , fCurrentPage(0), fTopTypefaces(&fTypefaces) {}
 
 SkXPSDevice::~SkXPSDevice() {}
 
@@ -342,7 +341,7 @@ static HRESULT subset_typeface(const SkXPSDevice::TypefaceUse& current) {
     unsigned long fontPackageBufferSize;
     unsigned long bytesWritten;
     unsigned long result = CreateFontPackage(
-        (const unsigned char *) current.fontData->getMemoryBase(),
+        (unsigned char *) current.fontData->getMemoryBase(),
         (unsigned long) current.fontData->getLength(),
         &fontPackageBufferRaw,
         &fontPackageBufferSize,
@@ -629,13 +628,13 @@ static XPS_TILE_MODE SkToXpsTileMode(SkTileMode tmx, SkTileMode tmy) {
 }
 
 HRESULT SkXPSDevice::createXpsImageBrush(
-        const SkPixmap& bitmap,
+        const SkBitmap& bitmap,
         const SkMatrix& localMatrix,
         const SkTileMode (&xy)[2],
         const SkAlpha alpha,
         IXpsOMTileBrush** xpsBrush) {
     SkDynamicMemoryWStream write;
-    if (!SkPngEncoder::Encode(&write, bitmap, {})) {
+    if (!SkEncodeImage(&write, bitmap, SkEncodedImageFormat::kPNG, 100)) {
         HRM(E_FAIL, "Unable to encode bitmap as png.");
     }
     SkTScopedComPtr<IStream> read;
@@ -978,16 +977,22 @@ HRESULT SkXPSDevice::createXpsBrush(const SkPaint& skPaint,
     }
 
     //Gradient shaders.
-    auto shaderBase = as_SB(shader);
+    SkShaderBase::GradientInfo info;
+    SkShaderBase::GradientType gradientType = as_SB(shader)->asGradient(&info);
 
-    if (shaderBase->type() == SkShaderBase::ShaderType::kColor) {
-        auto colorShader = static_cast<const SkColorShader*>(shader);
+    if (gradientType == SkShaderBase::GradientType::kNone) {
+        //Nothing to see, move along.
+
+    } else if (gradientType == SkShaderBase::GradientType::kColor) {
+        SkASSERT(1 == info.fColorCount);
+        SkColor color;
+        info.fColors = &color;
+        as_SB(shader)->asGradient(&info);
         SkAlpha alpha = skPaint.getAlpha();
-        HR(this->createXpsSolidColorBrush(colorShader->color(), alpha, brush));
+        HR(this->createXpsSolidColorBrush(color, alpha, brush));
         return S_OK;
-    } else if (shaderBase->type() == SkShaderBase::ShaderType::kGradientBase) {
-        SkShaderBase::GradientInfo info;
-        SkShaderBase::GradientType gradientType = shaderBase->asGradient(&info);
+
+    } else {
         if (info.fColorCount == 0) {
             const SkColor color = skPaint.getColor();
             HR(this->createXpsSolidColorBrush(color, 0xFF, brush));
@@ -999,7 +1004,7 @@ HRESULT SkXPSDevice::createXpsBrush(const SkPaint& skPaint,
         AutoTArray<SkScalar> colorOffsets(info.fColorCount);
         info.fColors = colors.get();
         info.fColorOffsets = colorOffsets.get();
-        shaderBase->asGradient(&info, &localMatrix);
+        as_SB(shader)->asGradient(&info, &localMatrix);
 
         if (1 == info.fColorCount) {
             SkColor color = info.fColors[0];
@@ -1051,8 +1056,7 @@ HRESULT SkXPSDevice::createXpsBrush(const SkPaint& skPaint,
         }
 
         SkTScopedComPtr<IXpsOMTileBrush> tileBrush;
-        HR(this->createXpsImageBrush(outTexture.pixmap(), outMatrix, xy, skPaint.getAlpha(),
-                                     &tileBrush));
+        HR(this->createXpsImageBrush(outTexture, outMatrix, xy, skPaint.getAlpha(), &tileBrush));
 
         HRM(tileBrush->QueryInterface<IXpsOMBrush>(brush), "QI failed.");
     } else {
@@ -1167,11 +1171,14 @@ void SkXPSDevice::drawRRect(const SkRRect& rr,
     this->drawPath(path, paint, true);
 }
 
+static SkIRect size(const SkBaseDevice& dev) { return {0, 0, dev.width(), dev.height()}; }
+
 void SkXPSDevice::internalDrawRect(const SkRect& r,
                                    bool transformRect,
                                    const SkPaint& paint) {
     //Exit early if there is nothing to draw.
-    if (this->isClipEmpty() || (paint.getAlpha() == 0 && paint.isSrcOver())) {
+    if (this->cs().isEmpty(size(*this)) ||
+        (paint.getAlpha() == 0 && paint.isSrcOver())) {
         return;
     }
 
@@ -1408,12 +1415,11 @@ HRESULT SkXPSDevice::applyMask(const SkMask& mask,
     xy[0] = (SkTileMode)3;
     xy[1] = (SkTileMode)3;
 
-    SkASSERT(mask.fFormat == SkMask::kA8_Format);
-    SkPixmap pm(SkImageInfo::MakeA8(mask.fBounds.width(), mask.fBounds.height()),
-                mask.fImage, mask.fRowBytes);
+    SkBitmap bm;
+    bm.installMaskPixels(mask);
 
     SkTScopedComPtr<IXpsOMTileBrush> maskBrush;
-    HR(this->createXpsImageBrush(pm, m, xy, 0xFF, &maskBrush));
+    HR(this->createXpsImageBrush(bm, m, xy, 0xFF, &maskBrush));
     HRM(shadedPath->SetOpacityMaskBrushLocal(maskBrush.get()),
         "Could not set mask.");
 
@@ -1491,7 +1497,8 @@ void SkXPSDevice::drawPath(const SkPath& platonicPath,
     SkTCopyOnFirstWrite<SkPaint> paint(origPaint);
 
     // nothing to draw
-    if (this->isClipEmpty() || (paint->getAlpha() == 0 && paint->isSrcOver())) {
+    if (this->cs().isEmpty(size(*this)) ||
+        (paint->getAlpha() == 0 && paint->isSrcOver())) {
         return;
     }
 
@@ -1561,7 +1568,7 @@ void SkXPSDevice::drawPath(const SkPath& platonicPath,
         this->convertToPpm(filter,
                            &matrix,
                            &ppuScale,
-                           this->devClipBounds(),
+                           this->cs().bounds(size(*this)).roundOut(),
                            &clipIRect);
 
         //[Fillable-path -> Pixel-path]
@@ -1576,25 +1583,25 @@ void SkXPSDevice::drawPath(const SkPath& platonicPath,
                                             ? SkStrokeRec::kFill_InitStyle
                                             : SkStrokeRec::kHairline_InitStyle;
         //[Pixel-path -> Mask]
-        SkMaskBuilder rasteredMask;
+        SkMask rasteredMask;
         if (SkDraw::DrawToMask(
                         *pixelPath,
                         clipIRect,
                         filter,  //just to compute how much to draw.
                         &matrix,
                         &rasteredMask,
-                        SkMaskBuilder::kComputeBoundsAndRenderImage_CreateMode,
+                        SkMask::kComputeBoundsAndRenderImage_CreateMode,
                         style)) {
 
-            SkAutoMaskFreeImage rasteredAmi(rasteredMask.image());
+            SkAutoMaskFreeImage rasteredAmi(rasteredMask.fImage);
             mask = &rasteredMask;
 
             //[Mask -> Mask]
-            SkMaskBuilder filteredMask;
+            SkMask filteredMask;
             if (as_MFB(filter)->filterMask(&filteredMask, rasteredMask, matrix, nullptr)) {
                 mask = &filteredMask;
             }
-            SkAutoMaskFreeImage filteredAmi(filteredMask.image());
+            SkAutoMaskFreeImage filteredAmi(filteredMask.fImage);
 
             //Draw mask.
             HRV(this->applyMask(*mask, ppuScale, shadedPath.get()));
@@ -1687,7 +1694,7 @@ HRESULT SkXPSDevice::clip(IXpsOMVisual* xpsVisual) {
         return S_OK;
     }
     SkPath clipPath;
-    // clipPath.addRect(this->devClipBounds()));
+    // clipPath.addRect(this->cs().bounds(size(*this)));
     SkClipStack_AsPath(this->cs(), &clipPath);
     // TODO: handle all the kinds of paths, like drawPath does
     return this->clipToPath(xpsVisual, clipPath, XPS_FILL_RULE_EVENODD);
@@ -1720,7 +1727,7 @@ HRESULT SkXPSDevice::clipToPath(IXpsOMVisual* xpsVisual,
 
 HRESULT SkXPSDevice::CreateTypefaceUse(const SkFont& font,
                                        TypefaceUse** typefaceUse) {
-    SkTypeface* typeface = font.getTypeface();
+    SkTypeface* typeface = font.getTypefaceOrDefault();
 
     //Check cache.
     const SkTypefaceID typefaceID = typeface->uniqueID();
@@ -1765,10 +1772,10 @@ HRESULT SkXPSDevice::CreateTypefaceUse(const SkFont& font,
         "Could not create font resource.");
 
     //TODO: change openStream to return -1 for non-ttc, get rid of this.
-    const uint8_t* data = (const uint8_t*)fontData->getMemoryBase();
+    uint8_t* data = (uint8_t*)fontData->getMemoryBase();
     bool isTTC = (data &&
                   fontData->getLength() >= sizeof(SkTTCFHeader) &&
-                  ((const SkTTCFHeader*)data)->ttcTag == SkTTCFHeader::TAG);
+                  ((SkTTCFHeader*)data)->ttcTag == SkTTCFHeader::TAG);
 
     int glyphCount = typeface->countGlyphs();
 
@@ -1955,7 +1962,7 @@ void SkXPSDevice::onDrawGlyphRunList(SkCanvas*,
     }
 }
 
-void SkXPSDevice::drawDevice(SkDevice* dev, const SkSamplingOptions&, const SkPaint&) {
+void SkXPSDevice::drawDevice(SkBaseDevice* dev, const SkSamplingOptions&, const SkPaint&) {
     SkXPSDevice* that = static_cast<SkXPSDevice*>(dev);
     SkASSERT(that->fTopTypefaces == this->fTopTypefaces);
 
@@ -1973,8 +1980,19 @@ void SkXPSDevice::drawDevice(SkDevice* dev, const SkSamplingOptions&, const SkPa
          "Could not add layer to current visuals.");
 }
 
-sk_sp<SkDevice> SkXPSDevice::createDevice(const CreateInfo& info, const SkPaint*) {
-    sk_sp<SkXPSDevice> dev = sk_make_sp<SkXPSDevice>(info.fInfo.dimensions());
+SkBaseDevice* SkXPSDevice::onCreateDevice(const CreateInfo& info, const SkPaint*) {
+//Conditional for bug compatibility with PDF device.
+#if 0
+    if (SkBaseDevice::kGeneral_Usage == info.fUsage) {
+        return nullptr;
+        //To what stream do we write?
+        //SkXPSDevice* dev = new SkXPSDevice(this);
+        //SkSize s = SkSize::Make(width, height);
+        //dev->BeginCanvas(s, s, SkMatrix::I());
+        //return dev;
+    }
+#endif
+    SkXPSDevice* dev = new SkXPSDevice(info.fInfo.dimensions());
     dev->fXpsFactory.reset(SkRefComPtr(fXpsFactory.get()));
     dev->fCurrentCanvasSize = this->fCurrentCanvasSize;
     dev->fCurrentUnitsPerMeter = this->fCurrentUnitsPerMeter;

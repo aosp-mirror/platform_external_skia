@@ -20,9 +20,7 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
-#include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 
@@ -75,23 +73,15 @@ static void check_pixels(skiatest::Reporter* reporter, const SkBitmap& bitmap,
 static void run_test(skiatest::Reporter* reporter,
                      GrDirectContext* context,
                      GrSurfaceOrigin origin) {
-    using namespace skgpu;
-
-    Protected isProtected = Protected(context->priv().caps()->supportsProtectedContent());
-
-    auto beTexture = context->createBackendTexture(8,
-                                                   8,
-                                                   kRGBA_8888_SkColorType,
-                                                   Mipmapped::kNo,
-                                                   GrRenderable::kYes,
-                                                   isProtected);
+    auto beTexture = context->createBackendTexture(8, 8, kRGBA_8888_SkColorType, GrMipmapped::kNo,
+                                                   GrRenderable::kYes, GrProtected::kNo);
     REPORTER_ASSERT(reporter, beTexture.isValid());
     if (!beTexture.isValid()) {
         return;
     }
 
-    auto surface = SkSurfaces::WrapBackendTexture(
-            context, beTexture, origin, 0, kRGBA_8888_SkColorType, nullptr, nullptr);
+    auto surface = SkSurface::MakeFromBackendTexture(context, beTexture, origin, 0,
+                                                     kRGBA_8888_SkColorType, nullptr, nullptr);
     REPORTER_ASSERT(reporter, surface);
     if (!surface) {
         return;

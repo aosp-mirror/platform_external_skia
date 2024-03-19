@@ -26,12 +26,9 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GpuTypes.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -45,13 +42,17 @@ public:
 
 protected:
     void onOnceBeforeDraw() override {
-        fEmojiTypeface = ToolUtils::EmojiTypeface();
-        fEmojiText     = ToolUtils::EmojiSampleText();
+        fEmojiTypeface = ToolUtils::emoji_typeface();
+        fEmojiText     = ToolUtils::emoji_sample_text();
     }
 
-    SkString getName() const override { return SkString("dftext"); }
+    SkString onShortName() override {
+        return SkString("dftext");
+    }
 
-    SkISize getISize() override { return SkISize::Make(1024, 768); }
+    SkISize onISize() override {
+        return SkISize::Make(1024, 768);
+    }
 
     void onDraw(SkCanvas* inputCanvas) override {
         SkScalar textSizes[] = { 9.0f, 9.0f*2.0f, 9.0f*5.0f, 9.0f*2.0f*5.0f };
@@ -59,14 +60,14 @@ protected:
 
         // set up offscreen rendering with distance field text
         auto ctx = inputCanvas->recordingContext();
-        SkISize size = getISize();
+        SkISize size = onISize();
         SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(), kPremul_SkAlphaType,
                                                 inputCanvas->imageInfo().refColorSpace());
         SkSurfaceProps inputProps;
         inputCanvas->getProps(&inputProps);
         SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag | inputProps.flags(),
                              inputProps.pixelGeometry());
-        auto surface(SkSurfaces::RenderTarget(ctx, skgpu::Budgeted::kNo, info, 0, &props));
+        auto surface(SkSurface::MakeRenderTarget(ctx, skgpu::Budgeted::kNo, info, 0, &props));
         SkCanvas* canvas = surface ? surface->getCanvas() : inputCanvas;
         // init our new canvas with the old canvas's matrix
         canvas->setMatrix(inputCanvas->getLocalToDeviceAs3x3());
@@ -77,7 +78,7 @@ protected:
         SkPaint paint;
         paint.setAntiAlias(true);
 
-        SkFont font(ToolUtils::CreatePortableTypeface("serif", SkFontStyle()));
+        SkFont font(ToolUtils::create_portable_typeface("serif", SkFontStyle()));
         font.setSubpixel(true);
 
         const char* text = "Hamburgefons";

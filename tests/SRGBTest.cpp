@@ -65,7 +65,7 @@ DEF_TEST(srgb_edge_cases, r) {
 
     SkSTArenaAlloc<256> alloc;
     SkRasterPipeline p(&alloc);
-    p.appendConstantColor(&alloc, color);
+    p.append_constant_color(&alloc, color);
     steps.apply(&p);
     p.append(SkRasterPipelineOp::store_f32, &dst);
     p.run(0,0,4,1);

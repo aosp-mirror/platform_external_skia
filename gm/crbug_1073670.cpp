@@ -11,7 +11,6 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/effects/SkGradientShader.h"
-#include "tools/fonts/FontToolUtils.h"
 
 DEF_SIMPLE_GM(crbug_1073670, canvas, 250, 250) {
     SkPoint pts[] = {{0, 0}, {0, 250}};
@@ -20,7 +19,7 @@ DEF_SIMPLE_GM(crbug_1073670, canvas, 250, 250) {
     SkPaint p;
     p.setShader(sh);
 
-    SkFont f = ToolUtils::DefaultPortableFont();
+    SkFont f;
     f.setSize(325);
     f.setEdging(SkFont::Edging::kAntiAlias);
 

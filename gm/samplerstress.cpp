@@ -23,7 +23,6 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypeface.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 namespace skiagm {
 
@@ -39,9 +38,14 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("gpusamplerstress"); }
 
-    SkISize getISize() override { return SkISize::Make(640, 480); }
+    SkString onShortName() override {
+        return SkString("gpusamplerstress");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(640, 480);
+    }
 
     /**
      * Create a red & green stripes on black texture
@@ -105,7 +109,7 @@ protected:
         paint.setAntiAlias(true);
         paint.setShader(fShader);
         paint.setMaskFilter(fMaskFilter);
-        SkFont font(ToolUtils::DefaultPortableTypeface(), 72);
+        SkFont font(ToolUtils::create_portable_typeface(), 72);
 
         SkRect temp;
         temp.setLTRB(115, 75, 144, 110);

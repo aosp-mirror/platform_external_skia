@@ -13,7 +13,7 @@
 
 struct SkRect;
 
-class SK_API SkSVGEllipse final : public SkSVGShape {
+class SkSVGEllipse final : public SkSVGShape {
 public:
     static sk_sp<SkSVGEllipse> Make() { return sk_sp<SkSVGEllipse>(new SkSVGEllipse()); }
 

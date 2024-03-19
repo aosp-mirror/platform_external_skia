@@ -12,9 +12,9 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrTypes.h"
-#include "src/gpu/GpuRefCnt.h"
 #include "src/gpu/ganesh/GrBuffer.h"
 #include "src/gpu/ganesh/GrManagedResource.h"
+#include "src/gpu/ganesh/GrRefCnt.h"
 #include "src/gpu/ganesh/GrSurface.h"
 #include "src/gpu/ganesh/mtl/GrMtlRenderCommandEncoder.h"
 #include "src/gpu/ganesh/mtl/GrMtlUtil.h"
@@ -54,7 +54,7 @@ public:
         [fCmdBuffer addCompletedHandler:block];
     }
 
-    void addResource(const sk_sp<const GrManagedResource>& resource) {
+    void addResource(sk_sp<const GrManagedResource> resource) {
 // Disable generic resource tracking for now
 //        SkASSERT(resource);
 //        fTrackedResources.push_back(std::move(resource));
@@ -81,13 +81,13 @@ public:
     void callFinishedCallbacks() { fFinishedCallbacks.clear(); }
 
     void pushDebugGroup(NSString* string) {
-        if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
+        if (@available(macOS 10.13, iOS 11.0, *)) {
             [fCmdBuffer pushDebugGroup:string];
         }
     }
 
     void popDebugGroup() {
-        if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
+        if (@available(macOS 10.13, iOS 11.0, *)) {
             [fCmdBuffer popDebugGroup];
         }
     }
@@ -104,10 +104,9 @@ private:
 
     static const int kInitialTrackedResourcesCount = 32;
 
-    skia_private::STArray<
-        kInitialTrackedResourcesCount, sk_sp<const GrManagedResource>> fTrackedResources;
-    skia_private::STArray<kInitialTrackedResourcesCount, sk_sp<const GrBuffer>> fTrackedGrBuffers;
-    skia_private::STArray<16, gr_cb<const GrSurface>> fTrackedGrSurfaces;
+    SkSTArray<kInitialTrackedResourcesCount, sk_sp<const GrManagedResource>> fTrackedResources;
+    SkSTArray<kInitialTrackedResourcesCount, sk_sp<const GrBuffer>> fTrackedGrBuffers;
+    SkSTArray<16, gr_cb<const GrSurface>> fTrackedGrSurfaces;
 
     id<MTLCommandBuffer>        fCmdBuffer;
     id<MTLBlitCommandEncoder>   fActiveBlitCommandEncoder;
@@ -115,7 +114,7 @@ private:
     MTLRenderPassDescriptor*    fPreviousRenderPassDescriptor;
     bool                        fHasWork;
 
-    skia_private::TArray<sk_sp<skgpu::RefCntedCallback>> fFinishedCallbacks;
+    SkTArray<sk_sp<skgpu::RefCntedCallback>> fFinishedCallbacks;
 
 };
 

@@ -24,8 +24,6 @@
 #include "include/core/SkTypeface.h"
 #include "include/utils/SkTextUtils.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
-
 #include <stdint.h>
 #include <string.h>
 
@@ -36,11 +34,13 @@ public:
     Xfermodes2GM(bool grayscale) : fGrayscale(grayscale) {}
 
 protected:
-    SkString getName() const override {
+    SkString onShortName() override {
         return fGrayscale ? SkString("xfermodes2_gray") : SkString("xfermodes2");
     }
 
-    SkISize getISize() override { return SkISize::Make(455, 475); }
+    SkISize onISize() override {
+        return SkISize::Make(455, 475);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
@@ -48,7 +48,7 @@ protected:
         const SkScalar w = SkIntToScalar(kSize);
         const SkScalar h = SkIntToScalar(kSize);
 
-        SkFont font = ToolUtils::DefaultPortableFont();
+        SkFont font(ToolUtils::create_portable_typeface());
 
         const int W = 6;
 

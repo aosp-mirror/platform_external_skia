@@ -9,11 +9,9 @@
 
 #include "bench/Benchmark.h"
 #include "include/core/SkFont.h"
-#include "include/core/SkFontTypes.h"
 #include "include/core/SkTypeface.h"
 #include "src/base/SkUTF.h"
 #include "src/base/SkUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 // From Project Guttenberg. This is UTF-8 text.
 static const char* atext[] = {
@@ -225,7 +223,7 @@ protected:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     void onDelayedSetup() override {
@@ -235,7 +233,7 @@ protected:
             maxGlyphs = std::max(maxGlyphs, fLines.back()->glyphCount);
         }
         fGlyphIds.insert(fGlyphIds.begin(), maxGlyphs, 0);
-        fTypeface = ToolUtils::CreateTestTypeface("monospace", SkFontStyle());
+        fTypeface = SkTypeface::MakeFromName("monospace", SkFontStyle());
     }
 
     void onDraw(int loops, SkCanvas* canvas) override {

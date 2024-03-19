@@ -8,33 +8,39 @@
 #ifndef sktext_gpu_TextBlob_DEFINED
 #define sktext_gpu_TextBlob_DEFINED
 
-#include "include/core/SkColor.h"
-#include "include/core/SkMatrix.h"
-#include "include/core/SkPaint.h"
+#include <algorithm>
+#include <limits>
+
 #include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkSurfaceProps.h"
-#include "include/private/base/SkTo.h"
+#include "include/private/chromium/Slug.h"
 #include "src/base/SkTInternalLList.h"
 #include "src/core/SkMaskFilterBase.h"
-#include "src/text/gpu/SubRunAllocator.h"
 #include "src/text/gpu/SubRunContainer.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <tuple>
-
-class SkCanvas;
-struct SkPoint;
-struct SkStrikeDeviceInfo;
+class SkMatrixProvider;
+class SkStrikeClient;
+class SkSurfaceProps;
+class SkTextBlob;
+class SkTextBlobRunIterator;
 
 namespace sktext {
 class GlyphRunList;
-class StrikeForGPUCacheInterface;
+    namespace gpu {
+    class Glyph;
+    class StrikeCache;
+    }
 }
 
+#if defined(SK_GANESH)  // Ganesh support
+#include "src/gpu/ganesh/GrColor.h"
+#include "src/gpu/ganesh/ops/GrOp.h"
+class GrAtlasManager;
+class GrDeferredUploadTarget;
+class GrMeshDrawTarget;
+namespace skgpu::v1 { class SurfaceDrawContext; }
+#endif
+
 namespace sktext::gpu {
-class Slug;
 
 // -- TextBlob -----------------------------------------------------------------------------------
 // A TextBlob contains a fully processed SkTextBlob, suitable for nearly immediate drawing
@@ -106,19 +112,30 @@ public:
     const Key& key() { return fKey; }
 
     void addKey(const Key& key);
+    bool hasPerspective() const;
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const;
 
     const Key& key() const;
     size_t size() const { return SkTo<size_t>(fSize); }
 
+#if defined(SK_GANESH)
+    void draw(SkCanvas*,
+              const GrClip* clip,
+              const SkMatrixProvider& viewMatrix,
+              SkPoint drawOrigin,
+              const SkPaint& paint,
+              skgpu::v1::SurfaceDrawContext* sdc);
+#endif
+#if defined(SK_GRAPHITE)
     void draw(SkCanvas*,
               SkPoint drawOrigin,
               const SkPaint& paint,
-              const AtlasDrawDelegate&);
+              skgpu::graphite::Device* device);
+#endif
+    const AtlasSubRun* testingOnlyFirstSubRun() const;
 
 private:
-    friend class TextBlobTools;
     // The allocator must come first because it needs to be destroyed last. Other fields of this
     // structure may have pointers into it.
     SubRunAllocator fAlloc;
@@ -133,11 +150,14 @@ private:
     Key fKey;
 };
 
-sk_sp<sktext::gpu::Slug> MakeSlug(const SkMatrix& drawMatrix,
+}  // namespace sktext::gpu
+
+namespace skgpu::v1 {
+sk_sp<sktext::gpu::Slug> MakeSlug(const SkMatrixProvider& drawMatrix,
                                   const sktext::GlyphRunList& glyphRunList,
                                   const SkPaint& initialPaint,
                                   const SkPaint& drawingPaint,
                                   SkStrikeDeviceInfo strikeDeviceInfo,
                                   sktext::StrikeForGPUCacheInterface* strikeCache);
-}  // namespace sktext::gpu
+}  // namespace skgpu::v1
 #endif  // sktext_gpu_TextBlob_DEFINED

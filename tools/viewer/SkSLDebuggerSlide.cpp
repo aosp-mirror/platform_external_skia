@@ -8,36 +8,27 @@
 #include "tools/viewer/SkSLDebuggerSlide.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkColor.h"
 #include "include/core/SkStream.h"
-#include "include/core/SkString.h"
-#include "include/private/base/SkAssert.h"
-#include "tools/sk_app/Application.h"
+#include "tools/viewer/Viewer.h"
 
 #include <algorithm>
 #include <cstdio>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-
 #include "imgui.h"
 
-#ifdef SKSL_ENABLE_TRACING
-
 using namespace sk_app;
-using LineNumberMap = SkSL::SkSLDebugTracePlayer::LineNumberMap;
+using LineNumberMap = SkSL::SkVMDebugTracePlayer::LineNumberMap;
+
+///////////////////////////////////////////////////////////////////////////////
 
 SkSLDebuggerSlide::SkSLDebuggerSlide() {
     fName = "Debugger";
-    fTrace = sk_make_sp<SkSL::DebugTracePriv>();
+    fTrace = sk_make_sp<SkSL::SkVMDebugTrace>();
 }
 
 void SkSLDebuggerSlide::load(SkScalar winWidth, SkScalar winHeight) {}
 
 void SkSLDebuggerSlide::unload() {
-    fTrace = sk_make_sp<SkSL::DebugTracePriv>();
+    fTrace = sk_make_sp<SkSL::SkVMDebugTrace>();
     fPlayer.reset(nullptr);
     fPlayer.setBreakpoints(std::unordered_set<int>{});
 }
@@ -233,7 +224,7 @@ void SkSLDebuggerSlide::showVariableTable() {
             ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthStretch;
 
     int frame = fPlayer.getStackDepth() - 1;
-    std::vector<SkSL::SkSLDebugTracePlayer::VariableData> vars;
+    std::vector<SkSL::SkVMDebugTracePlayer::VariableData> vars;
     if (frame >= 0) {
         vars = fPlayer.getLocalVariables(frame);
     } else {
@@ -249,7 +240,7 @@ void SkSLDebuggerSlide::showVariableTable() {
             clipper.Begin(vars.size());
             while (clipper.Step()) {
                 for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
-                    const SkSL::SkSLDebugTracePlayer::VariableData& var = vars.at(row);
+                    const SkSL::SkVMDebugTracePlayer::VariableData& var = vars.at(row);
                     SkASSERT(var.fSlotIndex >= 0);
                     SkASSERT((size_t)var.fSlotIndex < fTrace->fSlotInfo.size());
                     const SkSL::SlotDebugInfo& slotInfo = fTrace->fSlotInfo[var.fSlotIndex];
@@ -292,5 +283,3 @@ void SkSLDebuggerSlide::draw(SkCanvas* canvas) {
 bool SkSLDebuggerSlide::animate(double nanos) {
     return true;
 }
-
-#endif  // SKSL_ENABLE_TRACING

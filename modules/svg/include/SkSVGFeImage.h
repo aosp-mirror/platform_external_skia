@@ -11,7 +11,7 @@
 #include "modules/svg/include/SkSVGFe.h"
 #include "modules/svg/include/SkSVGTypes.h"
 
-class SK_API SkSVGFeImage : public SkSVGFe {
+class SkSVGFeImage : public SkSVGFe {
 public:
     static sk_sp<SkSVGFeImage> Make() { return sk_sp<SkSVGFeImage>(new SkSVGFeImage()); }
 

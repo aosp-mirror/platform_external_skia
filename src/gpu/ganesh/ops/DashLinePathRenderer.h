@@ -10,9 +10,11 @@
 
 #include "src/gpu/ganesh/PathRenderer.h"
 
+class GrGpu;
+
 namespace skgpu::ganesh {
 
-class DashLinePathRenderer final : public skgpu::ganesh::PathRenderer {
+class DashLinePathRenderer final : public skgpu::v1::PathRenderer {
 public:
     DashLinePathRenderer() = default;
 
@@ -26,6 +28,8 @@ private:
     }
 
     bool onDrawPath(const DrawPathArgs&) override;
+
+    sk_sp<GrGpu> fGpu;
 };
 
 } // namespace skgpu::ganesh

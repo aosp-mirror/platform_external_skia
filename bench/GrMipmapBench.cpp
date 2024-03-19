@@ -11,8 +11,6 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
-#include "include/gpu/GpuTypes.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 
 class GrMipMapBench: public Benchmark {
     sk_sp<SkSurface> fSurface;
@@ -26,7 +24,7 @@ public:
 
 protected:
     bool isSuitableFor(Backend backend) override {
-        return Backend::kGanesh == backend;
+        return kGPU_Backend == backend;
     }
 
     const char* onGetName() override { return fName.c_str(); }
@@ -42,13 +40,13 @@ protected:
                     SkImageInfo::Make(fW, fH, kRGBA_8888_SkColorType, kPremul_SkAlphaType, srgb);
             // We're benching the regeneration of the mip levels not the need to allocate them every
             // frame. Thus we create the surface with mips to begin with.
-            fSurface = SkSurfaces::RenderTarget(context,
-                                                skgpu::Budgeted::kNo,
-                                                info,
-                                                /* sampleCount= */ 0,
-                                                kBottomLeft_GrSurfaceOrigin,
-                                                /* surfaceProps= */ nullptr,
-                                                /* shouldCreateWithMips= */ true);
+            fSurface = SkSurface::MakeRenderTarget(context,
+                                                   skgpu::Budgeted::kNo,
+                                                   info,
+                                                   0,
+                                                   kBottomLeft_GrSurfaceOrigin,
+                                                   nullptr,
+                                                   true);
         }
 
         // Clear surface once:

@@ -30,8 +30,8 @@ public:
         return fName.c_str();
     }
 
-    SkISize onGetSize() override {
-        return SkISize::Make(kSize, kSize);
+    SkIPoint onGetSize() override {
+        return SkIPoint::Make(kSize, kSize);
     }
 
     /*

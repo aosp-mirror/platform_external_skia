@@ -8,17 +8,14 @@
 #ifndef sktext_gpu_SDFTControl_DEFINED
 #define sktext_gpu_SDFTControl_DEFINED
 
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkFont.h"
 #include "include/core/SkScalar.h"
-#include "include/core/SkTypes.h"
 
 #include <tuple>
 
-class SkFont;
 class SkMatrix;
-class SkPaint;
-class SkReadBuffer;
-class SkWriteBuffer;
-struct SkPoint;
+class SkSurfaceProps;
 
 namespace sktext::gpu {
 

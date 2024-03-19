@@ -1,18 +1,10 @@
 // Copyright 2019 Google LLC.
-#include "modules/skparagraph/include/FontCollection.h"
-
 #include "include/core/SkTypeface.h"
+#include "modules/skparagraph/include/FontCollection.h"
 #include "modules/skparagraph/include/Paragraph.h"
 #include "modules/skparagraph/src/ParagraphImpl.h"
-#include "modules/skshaper/include/SkShaper_harfbuzz.h"
+#include "modules/skshaper/include/SkShaper.h"
 
-namespace {
-#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
-    const char* kColorEmojiFontMac = "Apple Color Emoji";
-#else
-    const char* kColorEmojiLocale = "und-Zsye";
-#endif
-}
 namespace skia {
 namespace textlayout {
 
@@ -40,15 +32,15 @@ FontCollection::FontCollection()
 size_t FontCollection::getFontManagersCount() const { return this->getFontManagerOrder().size(); }
 
 void FontCollection::setAssetFontManager(sk_sp<SkFontMgr> font_manager) {
-    fAssetFontManager = std::move(font_manager);
+    fAssetFontManager = font_manager;
 }
 
 void FontCollection::setDynamicFontManager(sk_sp<SkFontMgr> font_manager) {
-    fDynamicFontManager = std::move(font_manager);
+    fDynamicFontManager = font_manager;
 }
 
 void FontCollection::setTestFontManager(sk_sp<SkFontMgr> font_manager) {
-    fTestFontManager = std::move(font_manager);
+    fTestFontManager = font_manager;
 }
 
 void FontCollection::setDefaultFontManager(sk_sp<SkFontMgr> fontManager,
@@ -64,7 +56,7 @@ void FontCollection::setDefaultFontManager(sk_sp<SkFontMgr> fontManager,
 }
 
 void FontCollection::setDefaultFontManager(sk_sp<SkFontMgr> fontManager) {
-    fDefaultFontManager = std::move(fontManager);
+    fDefaultFontManager = fontManager;
 }
 
 // Return the available font managers in the order they should be queried.
@@ -150,9 +142,7 @@ sk_sp<SkTypeface> FontCollection::matchTypeface(const SkString& familyName, SkFo
 }
 
 // Find ANY font in available font managers that resolves the unicode codepoint
-sk_sp<SkTypeface> FontCollection::defaultFallback(SkUnichar unicode,
-                                                  SkFontStyle fontStyle,
-                                                  const SkString& locale) {
+sk_sp<SkTypeface> FontCollection::defaultFallback(SkUnichar unicode, SkFontStyle fontStyle, const SkString& locale) {
 
     for (const auto& manager : this->getFontManagerOrder()) {
         std::vector<const char*> bcp47;
@@ -160,41 +150,8 @@ sk_sp<SkTypeface> FontCollection::defaultFallback(SkUnichar unicode,
             bcp47.push_back(locale.c_str());
         }
         sk_sp<SkTypeface> typeface(manager->matchFamilyStyleCharacter(
-            nullptr, fontStyle, bcp47.data(), bcp47.size(), unicode));
-
+                nullptr, fontStyle, bcp47.data(), bcp47.size(), unicode));
         if (typeface != nullptr) {
-            return typeface;
-        }
-    }
-    return nullptr;
-}
-
-// Find ANY font in available font managers that resolves this emojiStart
-sk_sp<SkTypeface> FontCollection::defaultEmojiFallback(SkUnichar emojiStart,
-                                                       SkFontStyle fontStyle,
-                                                       const SkString& locale) {
-
-    for (const auto& manager : this->getFontManagerOrder()) {
-        std::vector<const char*> bcp47;
-#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
-        sk_sp<SkTypeface> emojiTypeface =
-            fDefaultFontManager->matchFamilyStyle(kColorEmojiFontMac, SkFontStyle());
-        if (emojiTypeface != nullptr) {
-            return emojiTypeface;
-        }
-#else
-          bcp47.push_back(kColorEmojiLocale);
-#endif
-        if (!locale.isEmpty()) {
-            bcp47.push_back(locale.c_str());
-        }
-
-        // Not really ideal since the first codepoint may not be the best one
-        // but we start from a good colored emoji at least
-        sk_sp<SkTypeface> typeface(manager->matchFamilyStyleCharacter(
-            nullptr, fontStyle, bcp47.data(), bcp47.size(), emojiStart));
-        if (typeface != nullptr) {
-            // ... and stop as soon as we find something in hope it will work for all of them
             return typeface;
         }
     }
@@ -206,14 +163,15 @@ sk_sp<SkTypeface> FontCollection::defaultFallback() {
         return nullptr;
     }
     for (const SkString& familyName : fDefaultFamilyNames) {
-        sk_sp<SkTypeface> match = fDefaultFontManager->matchFamilyStyle(familyName.c_str(),
-                                                                        SkFontStyle());
+        SkTypeface* match = fDefaultFontManager->matchFamilyStyle(familyName.c_str(),
+                                                                  SkFontStyle());
         if (match) {
-            return match;
+            return sk_sp<SkTypeface>(match);
         }
     }
     return nullptr;
 }
+
 
 void FontCollection::disableFontFallback() { fEnableFontFallback = false; }
 void FontCollection::enableFontFallback() { fEnableFontFallback = true; }
@@ -221,7 +179,7 @@ void FontCollection::enableFontFallback() { fEnableFontFallback = true; }
 void FontCollection::clearCaches() {
     fParagraphCache.reset();
     fTypefaces.reset();
-    SkShapers::HB::PurgeCaches();
+    SkShaper::PurgeCaches();
 }
 
 }  // namespace textlayout

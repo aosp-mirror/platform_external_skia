@@ -7,25 +7,9 @@
 
 #include "modules/skottie/src/text/TextValue.h"
 
-#include "include/core/SkColor.h"
-#include "include/core/SkPaint.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkString.h"
-#include "include/core/SkTypeface.h"
-#include "include/utils/SkTextUtils.h"
-#include "modules/skottie/include/Skottie.h"
-#include "modules/skottie/include/TextShaper.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
-#include "src/utils/SkJSON.h"
-
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <limits>
 
 namespace skottie::internal {
 
@@ -53,7 +37,6 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
     v->fTextSize   = **text_size;
     v->fLineHeight = **line_height;
     v->fTypeface   = font->fTypeface;
-    v->fFontFamily = font->fFamily;
     v->fAscent     = font->fAscentPct * -0.01f * v->fTextSize; // negative ascent per SkFontMetrics
     v->fLineShift  = ParseDefault((*jtxt)["ls"], 0.0f);
 
@@ -80,13 +63,6 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
                            ParseDefault<SkScalar>((*jps)[1], 0));
         }
     }
-
-    static constexpr Shaper::Direction gDirectionMap[] = {
-        Shaper::Direction::kLTR,  // 'd': 0
-        Shaper::Direction::kRTL,  // 'd': 1
-    };
-    v->fDirection = gDirectionMap[std::min(ParseDefault<size_t>((*jtxt)["d"], 0),
-                                           std::size(gDirectionMap) - 1)];
 
     static constexpr Shaper::ResizePolicy gResizeMap[] = {
         Shaper::ResizePolicy::kNone,           // 'rs': 0
@@ -178,8 +154,8 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
             return false;
         }
 
-        ColorValue color_vec;
-        if (!skottie::Parse(*jcolor, static_cast<VectorValue*>(&color_vec))) {
+        VectorValue color_vec;
+        if (!skottie::Parse(*jcolor, &color_vec)) {
             return false;
         }
 

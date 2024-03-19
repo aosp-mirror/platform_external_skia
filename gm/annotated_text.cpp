@@ -16,7 +16,6 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -40,7 +39,7 @@ DEF_SIMPLE_GM(annotated_text, canvas, 512, 512) {
     canvas->clear(SK_ColorWHITE);
     canvas->clipRect(SkRect::MakeXYWH(64, 64, 256, 256));
     canvas->clear(0xFFEEEEEE);
-    SkFont font = ToolUtils::DefaultPortableFont();
+    SkFont font;
     font.setEdging(SkFont::Edging::kAlias);
     font.setSize(40);
     const char text[] = "Click this link!";

@@ -43,7 +43,6 @@ class GrTextureProxy;
 enum class SkBackingFit;
 namespace skgpu {
 enum class Budgeted : bool;
-enum class Mipmapped : bool;
 }
 
 class GrSurfaceProxy : public SkNVRefCnt<GrSurfaceProxy> {
@@ -88,7 +87,7 @@ public:
         SkISize fDimensions;
         SkBackingFit fFit;
         GrRenderable fRenderable;
-        skgpu::Mipmapped fMipmapped;
+        GrMipmapped fMipmapped;
         int fSampleCnt;
         const GrBackendFormat& fFormat;
         GrTextureType fTextureType;
@@ -340,7 +339,7 @@ public:
     static sk_sp<GrSurfaceProxy> Copy(GrRecordingContext*,
                                       sk_sp<GrSurfaceProxy> src,
                                       GrSurfaceOrigin,
-                                      skgpu::Mipmapped,
+                                      GrMipmapped,
                                       SkIRect srcRect,
                                       SkBackingFit,
                                       skgpu::Budgeted,
@@ -352,13 +351,13 @@ public:
     static sk_sp<GrSurfaceProxy> Copy(GrRecordingContext*,
                                       sk_sp<GrSurfaceProxy> src,
                                       GrSurfaceOrigin,
-                                      skgpu::Mipmapped,
+                                      GrMipmapped,
                                       SkBackingFit,
                                       skgpu::Budgeted,
                                       std::string_view label,
                                       sk_sp<GrRenderTask>* outTask = nullptr);
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     int32_t testingOnly_getBackingRefCnt() const;
     GrInternalSurfaceFlags testingOnly_getFlags() const;
     SkString dump() const;
@@ -420,10 +419,8 @@ protected:
     virtual sk_sp<GrSurface> createSurface(GrResourceProvider*) const = 0;
     void assign(sk_sp<GrSurface> surface);
 
-    sk_sp<GrSurface> createSurfaceImpl(GrResourceProvider*,
-                                       int sampleCnt,
-                                       GrRenderable,
-                                       skgpu::Mipmapped) const;
+    sk_sp<GrSurface> createSurfaceImpl(GrResourceProvider*, int sampleCnt, GrRenderable,
+                                       GrMipmapped) const;
 
     // Once the dimensions of a fully-lazy proxy are decided, and before it gets instantiated, the
     // client can use this optional method to specify the proxy's dimensions. (A proxy's dimensions
@@ -435,11 +432,8 @@ protected:
         fDimensions = dimensions;
     }
 
-    bool instantiateImpl(GrResourceProvider* resourceProvider,
-                         int sampleCnt,
-                         GrRenderable,
-                         skgpu::Mipmapped,
-                         const skgpu::UniqueKey*);
+    bool instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt, GrRenderable,
+                         GrMipmapped, const skgpu::UniqueKey*);
 
     // For deferred proxies this will be null until the proxy is instantiated.
     // For wrapped proxies it will point to the wrapped resource.

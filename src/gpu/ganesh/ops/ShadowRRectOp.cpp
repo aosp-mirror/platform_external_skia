@@ -20,8 +20,6 @@
 #include "src/gpu/ganesh/effects/GrShadowGeoProc.h"
 #include "src/gpu/ganesh/ops/GrSimpleMeshDrawOpHelper.h"
 
-using namespace skia_private;
-
 namespace {
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -628,7 +626,7 @@ private:
         return CombineResult::kMerged;
     }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     SkString onDumpInfo() const override {
         SkString string;
         for (int i = 0; i < fGeoData.size(); ++i) {
@@ -645,13 +643,13 @@ private:
 #endif
 
     void visitProxies(const GrVisitProxyFunc& func) const override {
-        func(fFalloffView.proxy(), skgpu::Mipmapped(false));
+        func(fFalloffView.proxy(), GrMipmapped(false));
         if (fProgramInfo) {
             fProgramInfo->visitFPProxies(func);
         }
     }
 
-    STArray<1, Geometry, true> fGeoData;
+    SkSTArray<1, Geometry, true> fGeoData;
     int fVertCount;
     int fIndexCount;
     GrSurfaceProxyView fFalloffView;
@@ -666,7 +664,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-namespace skgpu::ganesh::ShadowRRectOp {
+namespace skgpu::v1::ShadowRRectOp {
 
 static GrSurfaceProxyView create_falloff_texture(GrRecordingContext* rContext) {
     static const skgpu::UniqueKey::Domain kDomain = skgpu::UniqueKey::GenerateDomain();
@@ -745,11 +743,11 @@ GrOp::Owner Make(GrRecordingContext* context,
                                              std::move(falloffView));
 }
 
-}  // namespace skgpu::ganesh::ShadowRRectOp
+}  // namespace skgpu::v1::ShadowRRectOp
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 
 #include "src/gpu/ganesh/GrDrawOpTest.h"
 
@@ -774,8 +772,8 @@ GR_DRAW_OP_TEST_DEFINE(ShadowRRectOp) {
         if (isCircle) {
             SkRect circle = GrTest::TestSquare(random);
             SkRRect rrect = SkRRect::MakeOval(circle);
-            if (auto op = skgpu::ganesh::ShadowRRectOp::Make(
-                        context, color, viewMatrix, rrect, blurWidth, insetWidth)) {
+            if (auto op = skgpu::v1::ShadowRRectOp::Make(
+                    context, color, viewMatrix, rrect, blurWidth, insetWidth)) {
                 return op;
             }
         } else {
@@ -784,12 +782,12 @@ GR_DRAW_OP_TEST_DEFINE(ShadowRRectOp) {
                 // This may return a rrect with elliptical corners, which will cause an assert.
                 rrect = GrTest::TestRRectSimple(random);
             } while (!SkRRectPriv::IsSimpleCircular(rrect));
-            if (auto op = skgpu::ganesh::ShadowRRectOp::Make(
-                        context, color, viewMatrix, rrect, blurWidth, insetWidth)) {
+            if (auto op = skgpu::v1::ShadowRRectOp::Make(
+                    context, color, viewMatrix, rrect, blurWidth, insetWidth)) {
                 return op;
             }
         }
     } while (true);
 }
 
-#endif // defined(GR_TEST_UTILS)
+#endif // GR_TEST_UTILS

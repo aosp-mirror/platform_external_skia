@@ -8,7 +8,6 @@
 #include "src/gpu/ganesh/ops/SoftwarePathRenderer.h"
 
 #include "include/gpu/GrDirectContext.h"
-#include "include/private/base/SkFixed.h"
 #include "include/private/base/SkSemaphore.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTraceEvent.h"
@@ -97,7 +96,7 @@ GrSurfaceProxyView make_deferred_mask_texture_view(GrRecordingContext* rContext,
                                             dimensions,
                                             GrRenderable::kNo,
                                             1,
-                                            skgpu::Mipmapped::kNo,
+                                            GrMipmapped::kNo,
                                             fit,
                                             skgpu::Budgeted::kYes,
                                             GrProtected::kNo,
@@ -108,7 +107,7 @@ GrSurfaceProxyView make_deferred_mask_texture_view(GrRecordingContext* rContext,
 
 } // anonymous namespace
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 ////////////////////////////////////////////////////////////////////////////////
 PathRenderer::CanDrawPath SoftwarePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
@@ -360,7 +359,7 @@ bool SoftwarePathRenderer::onDrawPath(const DrawPathArgs& args) {
                 if (helper.init(uploaderRaw->data().getMaskBounds())) {
                     helper.drawShape(uploaderRaw->data().getShape(),
                                      *uploaderRaw->data().getViewMatrix(),
-                                     uploaderRaw->data().getAA(), 0xFF);
+                                     SkRegion::kReplace_Op, uploaderRaw->data().getAA(), 0xFF);
                 } else {
                     SkDEBUGFAIL("Unable to allocate SW mask.");
                 }
@@ -373,7 +372,7 @@ bool SoftwarePathRenderer::onDrawPath(const DrawPathArgs& args) {
             if (!helper.init(*boundsForMask)) {
                 return false;
             }
-            helper.drawShape(*args.fShape, *args.fViewMatrix, aa, 0xFF);
+            helper.drawShape(*args.fShape, *args.fViewMatrix, SkRegion::kReplace_Op, aa, 0xFF);
             view = helper.toTextureView(args.fContext, fit);
         }
 
@@ -406,4 +405,4 @@ bool SoftwarePathRenderer::onDrawPath(const DrawPathArgs& args) {
     return true;
 }
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1

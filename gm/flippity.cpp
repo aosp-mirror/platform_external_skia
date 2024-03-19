@@ -29,16 +29,13 @@
 #include "include/private/base/SkTArray.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrPixmap.h"
-#include "src/gpu/ganesh/image/SkImage_Ganesh.h"
 #include "src/image/SkImage_Base.h"
+#include "src/image/SkImage_Gpu.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/gpu/ProxyUtils.h"
 
 #include <string.h>
 #include <utility>
-
-using namespace skia_private;
 
 static const int kNumMatrices = 6;
 static const int kImageSize = 128;
@@ -88,8 +85,9 @@ static sk_sp<SkImage> make_text_image(const char* text, SkColor color) {
     paint.setAntiAlias(true);
     paint.setColor(color);
 
-    SkFont font = ToolUtils::DefaultPortableFont();
+    SkFont font;
     font.setEdging(SkFont::Edging::kAntiAlias);
+    font.setTypeface(ToolUtils::create_portable_typeface());
     font.setSize(32);
 
     SkRect bounds;
@@ -97,7 +95,7 @@ static sk_sp<SkImage> make_text_image(const char* text, SkColor color) {
     const SkMatrix mat = SkMatrix::RectToRect(bounds, SkRect::MakeWH(kLabelSize, kLabelSize));
 
     const SkImageInfo ii = SkImageInfo::MakeN32Premul(kLabelSize, kLabelSize);
-    sk_sp<SkSurface> surf = SkSurfaces::Raster(ii);
+    sk_sp<SkSurface> surf = SkSurface::MakeRaster(ii);
 
     SkCanvas* canvas = surf->getCanvas();
 
@@ -111,7 +109,7 @@ static sk_sp<SkImage> make_text_image(const char* text, SkColor color) {
 // Create an image with each corner marked w/ "LL", "LR", etc., with the origin either bottom-left
 // or top-left.
 static sk_sp<SkImage> make_reference_image(SkCanvas* mainCanvas,
-                                           const TArray<sk_sp<SkImage>>& labels,
+                                           const SkTArray<sk_sp<SkImage>>& labels,
                                            bool bottomLeftOrigin) {
     SkASSERT(kNumLabels == labels.size());
 
@@ -143,11 +141,13 @@ static sk_sp<SkImage> make_reference_image(SkCanvas* mainCanvas,
             return nullptr;
         }
 
-        return sk_make_sp<SkImage_Ganesh>(
-                sk_ref_sp(dContext), kNeedNewImageUniqueID, std::move(view), ii.colorInfo());
+        return sk_make_sp<SkImage_Gpu>(sk_ref_sp(dContext),
+                                       kNeedNewImageUniqueID,
+                                       std::move(view),
+                                       ii.colorInfo());
     }
 
-    return SkImages::RasterFromBitmap(bm);
+    return SkImage::MakeFromBitmap(bm);
 }
 
 // Here we're converting from a matrix that is intended for UVs to a matrix that is intended
@@ -177,9 +177,13 @@ public:
     }
 
 private:
-    SkString getName() const override { return SkString("flippity"); }
+    SkString onShortName() override {
+        return SkString("flippity");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kGMWidth, kGMHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kGMWidth, kGMHeight);
+    }
 
     // Draw the reference image and the four corner labels in the matrix's coordinate space
     void drawImageWithMatrixAndLabels(SkCanvas* canvas, SkImage* image, int matIndex,
@@ -252,7 +256,7 @@ private:
         SkASSERT(kNumLabels == fLabels.size());
     }
 
-    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg, GraphiteTestContext*) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
         this->makeLabels();
         fReferenceImages[0] = make_reference_image(canvas, fLabels, false);
         fReferenceImages[1] = make_reference_image(canvas, fLabels, true);
@@ -304,7 +308,7 @@ private:
     }
 
 private:
-    TArray<sk_sp<SkImage>> fLabels;
+    SkTArray<sk_sp<SkImage>> fLabels;
     sk_sp<SkImage> fReferenceImages[2];
 
     using INHERITED = GM;

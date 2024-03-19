@@ -1,4 +1,4 @@
-/*#pragma settings DebugTrace*/
+/*#pragma settings SkVMDebugTrace*/
 
 uniform half4 colorRed, colorGreen;
 

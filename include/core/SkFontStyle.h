@@ -77,7 +77,6 @@ public:
     }
 
 private:
-    friend class SkTypefaceProxyPrototype;  // To serialize fValue
     int32_t fValue;
 };
 

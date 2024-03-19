@@ -34,7 +34,7 @@ public:
     }
 
     const char* onGetName() override { return fName.c_str(); }
-    bool isSuitableFor(Backend backend) final { return backend == Backend::kNonRendering; }
+    bool isSuitableFor(Backend backend) final { return backend == kNonRendering_Backend; }
 
 protected:
     void onDelayedSetup() override {
@@ -89,7 +89,7 @@ protected:
     virtual void doLoop() = 0;
 
     SkString fName;
-    TArray<SkPath> fPaths;
+    SkTArray<SkPath> fPaths;
     AutoTMalloc<char> fVertexData;
     size_t fVertexAllocSize = 0;
     SkArenaAllocWithReset fArena{GrTriangulator::kArenaDefaultChunkSize};

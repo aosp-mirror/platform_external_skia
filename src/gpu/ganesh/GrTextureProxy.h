@@ -24,6 +24,7 @@
 
 class GrBackendFormat;
 class GrDeferredProxyUploader;
+enum class GrProtected : bool;
 class GrProxyProvider;
 class GrResourceProvider;
 class GrTextureProxyPriv;
@@ -127,7 +128,7 @@ protected:
                    GrMipmapStatus,
                    SkBackingFit,
                    skgpu::Budgeted,
-                   skgpu::Protected,
+                   GrProtected,
                    GrInternalSurfaceFlags,
                    UseAllocator,
                    GrDDLProvider creatingProvider,
@@ -150,7 +151,7 @@ protected:
                    GrMipmapStatus,
                    SkBackingFit,
                    skgpu::Budgeted,
-                   skgpu::Protected,
+                   GrProtected,
                    GrInternalSurfaceFlags,
                    UseAllocator,
                    GrDDLProvider creatingProvider,

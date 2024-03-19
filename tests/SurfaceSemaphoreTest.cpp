@@ -24,17 +24,14 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
-#include "tools/gpu/ContextType.h"
 #include "tools/gpu/TestContext.h"
 
-#include <cstring>
+#include <string>
 #include <cstdint>
 #include <initializer_list>
 
@@ -47,8 +44,6 @@
 #endif
 
 #ifdef SK_VULKAN
-#include "include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
-#include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "src/gpu/ganesh/vk/GrVkCommandPool.h"
 #include "src/gpu/ganesh/vk/GrVkGpu.h"
 #include "src/gpu/ganesh/vk/GrVkUtil.h"
@@ -107,17 +102,17 @@ void draw_child(skiatest::Reporter* reporter,
                                                   kPremul_SkAlphaType);
 
     auto childDContext = childInfo.directContext();
-    sk_sp<SkSurface> childSurface(SkSurfaces::RenderTarget(
+    sk_sp<SkSurface> childSurface(SkSurface::MakeRenderTarget(
             childDContext, skgpu::Budgeted::kNo, childII, 0, kTopLeft_GrSurfaceOrigin, nullptr));
 
-    sk_sp<SkImage> childImage = SkImages::BorrowTextureFrom(childDContext,
-                                                            backendTexture,
-                                                            kTopLeft_GrSurfaceOrigin,
-                                                            kRGBA_8888_SkColorType,
-                                                            kPremul_SkAlphaType,
-                                                            nullptr,
-                                                            nullptr,
-                                                            nullptr);
+    sk_sp<SkImage> childImage = SkImage::MakeFromTexture(childDContext,
+                                                         backendTexture,
+                                                         kTopLeft_GrSurfaceOrigin,
+                                                         kRGBA_8888_SkColorType,
+                                                         kPremul_SkAlphaType,
+                                                         nullptr,
+                                                         nullptr,
+                                                         nullptr);
 
     SkCanvas* childCanvas = childSurface->getCanvas();
     childCanvas->clear(SK_ColorRED);
@@ -147,14 +142,14 @@ void surface_semaphore_test(skiatest::Reporter* reporter,
                             const sk_gpu_test::ContextInfo& childInfo2,
                             FlushType flushType) {
     auto mainCtx = mainInfo.directContext();
-    if (!mainCtx->priv().caps()->backendSemaphoreSupport()) {
+    if (!mainCtx->priv().caps()->semaphoreSupport()) {
         return;
     }
 
     const SkImageInfo ii = SkImageInfo::Make(MAIN_W, MAIN_H, kRGBA_8888_SkColorType,
                                              kPremul_SkAlphaType);
 
-    sk_sp<SkSurface> mainSurface(SkSurfaces::RenderTarget(
+    sk_sp<SkSurface> mainSurface(SkSurface::MakeRenderTarget(
             mainCtx, skgpu::Budgeted::kNo, ii, 0, kTopLeft_GrSurfaceOrigin, nullptr));
     SkCanvas* mainCanvas = mainSurface->getCanvas();
     auto blueSurface = mainSurface->makeSurface(ii);
@@ -178,7 +173,7 @@ void surface_semaphore_test(skiatest::Reporter* reporter,
         createInfo.flags = 0;
         GR_VK_CALL_ERRCHECK(gpu, CreateSemaphore(device, &createInfo, nullptr, &vkSem));
 
-        semaphores[1] = GrBackendSemaphores::MakeVk(vkSem);
+        semaphores[1].initVulkan(vkSem);
     }
 #endif
 
@@ -187,10 +182,10 @@ void surface_semaphore_test(skiatest::Reporter* reporter,
     info.fSignalSemaphores = semaphores.get();
     switch (flushType) {
         case FlushType::kSurface:
-            mainCtx->flush(mainSurface.get(), SkSurfaces::BackendSurfaceAccess::kNoAccess, info);
+            mainSurface->flush(SkSurface::BackendSurfaceAccess::kNoAccess, info);
             break;
         case FlushType::kImage:
-            mainCtx->flush(blueImage, info);
+            blueImage->flush(mainCtx, info);
             break;
         case FlushType::kContext:
             mainCtx->flush(info);
@@ -198,8 +193,8 @@ void surface_semaphore_test(skiatest::Reporter* reporter,
     }
     mainCtx->submit();
 
-    GrBackendTexture backendTexture = SkSurfaces::GetBackendTexture(
-            mainSurface.get(), SkSurface::BackendHandleAccess::kFlushRead);
+    GrBackendTexture backendTexture = mainSurface->getBackendTexture(
+            SkSurface::BackendHandleAccess::kFlushRead_BackendHandleAccess);
 
     draw_child(reporter, childInfo1, backendTexture, semaphores[0]);
 
@@ -208,42 +203,40 @@ void surface_semaphore_test(skiatest::Reporter* reporter,
         // In Vulkan we need to make sure we are sending the correct VkImageLayout in with the
         // backendImage. After the first child draw the layout gets changed to SHADER_READ, so
         // we just manually set that here.
-        GrBackendTextures::SetVkImageLayout(&backendTexture,
-                                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        backendTexture.setVkImageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 #endif
 
     draw_child(reporter, childInfo2, backendTexture, semaphores[1]);
 }
 
+#ifdef SK_GL
 DEF_GANESH_TEST(SurfaceSemaphores, reporter, options, CtsEnforcement::kApiLevel_T) {
 #if defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_WIN) || defined(SK_BUILD_FOR_MAC)
-    static constexpr auto kNativeGLType = skgpu::ContextType::kGL;
+    static constexpr auto kNativeGLType = sk_gpu_test::GrContextFactory::kGL_ContextType;
 #else
-    static constexpr auto kNativeGLType = skgpu::ContextType::kGLES;
+    static constexpr auto kNativeGLType = sk_gpu_test::GrContextFactory::kGLES_ContextType;
 #endif
 
-    for (int typeInt = 0; typeInt < skgpu::kContextTypeCount; ++typeInt) {
+    for (int typeInt = 0; typeInt < sk_gpu_test::GrContextFactory::kContextTypeCnt; ++typeInt) {
         for (auto flushType : {FlushType::kSurface, FlushType::kImage, FlushType::kContext}) {
-            skgpu::ContextType contextType = static_cast<skgpu::ContextType>(typeInt);
-#ifdef SK_GL
+            sk_gpu_test::GrContextFactory::ContextType contextType =
+                    (sk_gpu_test::GrContextFactory::ContextType) typeInt;
             // Use "native" instead of explicitly trying OpenGL and OpenGL ES. Do not use GLES on
             // desktop since tests do not account for not fixing http://skbug.com/2809
-            if (contextType == skgpu::ContextType::kGL ||
-                contextType == skgpu::ContextType::kGLES) {
+            if (contextType == sk_gpu_test::GrContextFactory::kGL_ContextType ||
+                contextType == sk_gpu_test::GrContextFactory::kGLES_ContextType) {
                 if (contextType != kNativeGLType) {
                     continue;
                 }
             }
-#else
-            sk_ignore_unused_variable(kNativeGLType);  // Do something to avoid unused variable
-#endif
             sk_gpu_test::GrContextFactory factory(options);
             sk_gpu_test::ContextInfo ctxInfo = factory.getContextInfo(contextType);
-            if (!skgpu::IsRenderingContext(contextType)) {
+            if (!sk_gpu_test::GrContextFactory::IsRenderingContext(contextType)) {
                 continue;
             }
-            skiatest::ReporterContext ctx(reporter, SkString(skgpu::ContextTypeName(contextType)));
+            skiatest::ReporterContext ctx(
+                   reporter, SkString(sk_gpu_test::GrContextFactory::ContextTypeName(contextType)));
             if (ctxInfo.directContext()) {
                 sk_gpu_test::ContextInfo child1 =
                         factory.getSharedContextInfo(ctxInfo.directContext(), 0);
@@ -258,34 +251,46 @@ DEF_GANESH_TEST(SurfaceSemaphores, reporter, options, CtsEnforcement::kApiLevel_
         }
     }
 }
+#endif
 
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(EmptySurfaceSemaphoreTest,
                                        reporter,
                                        ctxInfo,
                                        CtsEnforcement::kApiLevel_T) {
     auto ctx = ctxInfo.directContext();
-    if (!ctx->priv().caps()->backendSemaphoreSupport()) {
-        // For example, the GL backend does not support these.
+    if (!ctx->priv().caps()->semaphoreSupport()) {
         return;
     }
 
     const SkImageInfo ii = SkImageInfo::Make(MAIN_W, MAIN_H, kRGBA_8888_SkColorType,
                                              kPremul_SkAlphaType);
 
-    sk_sp<SkSurface> mainSurface(SkSurfaces::RenderTarget(
+    sk_sp<SkSurface> mainSurface(SkSurface::MakeRenderTarget(
             ctx, skgpu::Budgeted::kNo, ii, 0, kTopLeft_GrSurfaceOrigin, nullptr));
 
-    // Flush surface once without semaphores to make sure there is no pending IO for it.
-    ctx->flushAndSubmit(mainSurface.get(), GrSyncCpu::kNo);
+    // Flush surface once without semaphores to make sure there is no peneding IO for it.
+    mainSurface->flushAndSubmit();
 
     GrBackendSemaphore semaphore;
     GrFlushInfo flushInfo;
     flushInfo.fNumSemaphores = 1;
     flushInfo.fSignalSemaphores = &semaphore;
     GrSemaphoresSubmitted submitted =
-            ctx->flush(mainSurface.get(), SkSurfaces::BackendSurfaceAccess::kNoAccess, flushInfo);
+            mainSurface->flush(SkSurface::BackendSurfaceAccess::kNoAccess, flushInfo);
     REPORTER_ASSERT(reporter, GrSemaphoresSubmitted::kYes == submitted);
     ctx->submit();
+
+#ifdef SK_GL
+    if (GrBackendApi::kOpenGL == ctxInfo.backend()) {
+        GrGLGpu* gpu = static_cast<GrGLGpu*>(ctx->priv().getGpu());
+        const GrGLInterface* interface = gpu->glInterface();
+        GrGLsync sync = semaphore.glSync();
+        REPORTER_ASSERT(reporter, sync);
+        bool result;
+        GR_GL_CALL_RET(interface, result, IsSync(sync));
+        REPORTER_ASSERT(reporter, result);
+    }
+#endif
 
 #ifdef SK_VULKAN
     if (GrBackendApi::kVulkan == ctxInfo.backend()) {
@@ -334,7 +339,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(EmptySurfaceSemaphoreTest,
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.pNext = nullptr;
         submitInfo.waitSemaphoreCount = 1;
-        VkSemaphore vkSem = GrBackendSemaphores::GetVkSemaphore(semaphore);
+        VkSemaphore vkSem = semaphore.vkSemaphore();
         submitInfo.pWaitSemaphores = &vkSem;
         submitInfo.pWaitDstStageMask = &waitStages;
         submitInfo.commandBufferCount = 1;

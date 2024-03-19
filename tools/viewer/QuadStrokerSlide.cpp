@@ -32,12 +32,9 @@
 #include "src/core/SkPointPriv.h"
 #include "src/core/SkStroke.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 
 #include <cfloat>
-
-using namespace skia_private;
 
 class SkEvent;
 
@@ -64,7 +61,7 @@ static int getOnCurvePoints(const SkPath& path, SkPoint storage[]) {
     return count;
 }
 
-static void getContourCounts(const SkPath& path, TArray<int>* contourCounts) {
+static void getContourCounts(const SkPath& path, SkTArray<int>* contourCounts) {
     int count = 0;
     for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
         switch (verb) {
@@ -316,7 +313,7 @@ public:
 
         if (fTextButton.fEnabled) {
             path.reset();
-            SkFont font = ToolUtils::DefaultFont();
+            SkFont font;
             font.setSize(fTextSize);
             SkTextUtils::GetPath(fText.c_str(), fText.size(), SkTextEncoding::kUTF8,
                                  0, fTextSize, font, &path);
@@ -489,9 +486,9 @@ private:
         fShader = ToolUtils::create_checkerboard_shader(0xFFCCCCCC, 0xFFFFFFFF, zoom);
 
         SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
-        fMinSurface = SkSurfaces::Raster(info);
+        fMinSurface = SkSurface::MakeRaster(info);
         info = info.makeWH(width * zoom, height * zoom);
-        fMaxSurface = SkSurfaces::Raster(info);
+        fMaxSurface = SkSurface::MakeRaster(info);
     }
 
     void draw_points(SkCanvas* canvas, const SkPath& path, SkColor color,
@@ -503,7 +500,7 @@ private:
         int n = path.countPoints();
         std::unique_ptr<SkPoint[]> pts{new SkPoint[n]};
         if (show_lines && fDrawTangents) {
-            TArray<int> contourCounts;
+            SkTArray<int> contourCounts;
             getContourCounts(path, &contourCounts);
             SkPoint* ptPtr = pts.get();
             for (int i = 0; i < contourCounts.size(); ++i) {
@@ -530,7 +527,7 @@ private:
         SkPaint paint, labelP;
         paint.setColor(color);
         labelP.setColor(color & 0xff5f9f5f);
-        SkFont font = ToolUtils::DefaultFont();
+        SkFont font;
         SkPoint pos, tan;
         int index = 0;
         for (SkScalar dist = 0; dist <= total; dist += delta) {
@@ -605,10 +602,7 @@ private:
                 SkString label;
                 label.appendS32(index);
                 canvas->drawString(label,
-                                   pos.x() + tan.x() * 1.25f,
-                                   pos.y() + tan.y() * 1.25f,
-                                   ToolUtils::DefaultFont(),
-                                   paint);
+                    pos.x() + tan.x() * 1.25f, pos.y() + tan.y() * 1.25f, SkFont(), paint);
             }
         }
     }
@@ -714,7 +708,7 @@ private:
         canvas->drawRect(button.fBounds, paint);
         paint.setColor(button.fEnabled ? 0xFF3F0000 : 0x6F3F0000);
         paint.setStyle(SkPaint::kFill_Style);
-        SkFont font = ToolUtils::DefaultFont();
+        SkFont font;
         font.setSize(25.0f);
         SkTextUtils::Draw(canvas, &button.fLabel, 1, SkTextEncoding::kUTF8,
                 button.fBounds.centerX(), button.fBounds.fBottom - 5,
@@ -735,7 +729,7 @@ private:
         label.printf("%0.3g", value);
         paint.setColor(0xFF000000);
         paint.setStyle(SkPaint::kFill_Style);
-        SkFont font(ToolUtils::DefaultTypeface(), 11.0f);
+        SkFont font(nullptr, 11.0f);
         canvas->drawString(label, bounds.fLeft + 5, yPos - 5, font, paint);
         font.setSize(13.0f);
         canvas->drawString(name, bounds.fLeft, bounds.bottom() + 11, font, paint);

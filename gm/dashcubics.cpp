@@ -24,8 +24,6 @@
 #include <math.h>
 #include <utility>
 
-using namespace skia_private;
-
 /*
  *  Inspired by http://code.google.com/p/chromium/issues/detail?id=112145
  */
@@ -104,9 +102,11 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("trimpatheffect"); }
+    SkString onShortName() override { return SkString("trimpatheffect"); }
 
-    SkISize getISize() override { return SkISize::Make(1400, 1000); }
+    SkISize onISize() override {
+        return SkISize::Make(1400, 1000);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         static constexpr SkSize kCellSize = { 440, 150 };
@@ -170,7 +170,7 @@ protected:
     }
 
 private:
-    TArray<SkPath> fPaths;
+    SkTArray<SkPath> fPaths;
     SkScalar         fOffset = 0;
 
     using INHERITED = skiagm::GM;

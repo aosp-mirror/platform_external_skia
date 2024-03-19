@@ -1,6 +1,4 @@
-### Compilation failed:
 
-error: 2: unsized arrays are not permitted here
-    int[]h;
-    ^^^^^^
-1 error
+struct S {
+    int h[-1];
+};

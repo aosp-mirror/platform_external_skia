@@ -52,7 +52,7 @@ struct SkSVGTestTypefaceGlyphData {
 class TestSVGTypeface : public SkTypeface {
 public:
     ~TestSVGTypeface() override;
-    SkVector getAdvance(SkGlyphID) const;
+    void getAdvance(SkGlyph* glyph) const;
     void getFontMetrics(SkFontMetrics* metrics) const;
 
     static sk_sp<TestSVGTypeface> Default();
@@ -70,13 +70,12 @@ public:
     };
     struct GlyfInfo {
         GlyfInfo() : fBounds(SkIRect::MakeEmpty()) {}
-        SkIRect                             fBounds;
-        skia_private::TArray<GlyfLayerInfo> fLayers;
+        SkIRect                 fBounds;
+        SkTArray<GlyfLayerInfo> fLayers;
     };
 
 protected:
-    void exportTtxCommon(
-            SkWStream*, const char* type, const skia_private::TArray<GlyfInfo>* = nullptr) const;
+    void exportTtxCommon(SkWStream*, const char* type, const SkTArray<GlyfInfo>* = nullptr) const;
 
     std::unique_ptr<SkScalerContext> onCreateScalerContext(const SkScalerContextEffects&,
                                                            const SkDescriptor* desc) const override;
@@ -156,7 +155,7 @@ private:
     const SkFontMetrics              fFontMetrics;
     std::unique_ptr<Glyph[]>         fGlyphs;
     int                              fGlyphCount;
-    skia_private::THashMap<SkUnichar, SkGlyphID> fCMap;
+    SkTHashMap<SkUnichar, SkGlyphID> fCMap;
     friend class SkTestSVGScalerContext;
 };
 

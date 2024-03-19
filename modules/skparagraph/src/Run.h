@@ -124,7 +124,6 @@ public:
     SkScalar addSpacesEvenly(SkScalar space, Cluster* cluster);
     SkScalar addSpacesEvenly(SkScalar space);
     void shift(const Cluster* cluster, SkScalar offset);
-    void extend(const Cluster* cluster, SkScalar offset);
 
     SkScalar calculateHeight(LineMetricStyle ascentStyle, LineMetricStyle descentStyle) const {
         auto ascent = ascentStyle == LineMetricStyle::Typographic ? this->ascent()
@@ -188,19 +187,18 @@ private:
     // These fields are not modified after shaping completes and can safely be
     // shared among copies of the run that are held by different paragraphs.
     struct GlyphData {
-        skia_private::STArray<64, SkGlyphID, true> glyphs;
-        skia_private::STArray<64, SkPoint, true> positions;
-        skia_private::STArray<64, SkPoint, true> offsets;
-        skia_private::STArray<64, uint32_t, true> clusterIndexes;
+        SkSTArray<64, SkGlyphID, true> glyphs;
+        SkSTArray<64, SkPoint, true> positions;
+        SkSTArray<64, SkPoint, true> offsets;
+        SkSTArray<64, uint32_t, true> clusterIndexes;
     };
     std::shared_ptr<GlyphData> fGlyphData;
-    skia_private::STArray<64, SkGlyphID, true>& fGlyphs;
-    skia_private::STArray<64, SkPoint, true>& fPositions;
-    skia_private::STArray<64, SkPoint, true>& fOffsets;
-    skia_private::STArray<64, uint32_t, true>& fClusterIndexes;
+    SkSTArray<64, SkGlyphID, true>& fGlyphs;
+    SkSTArray<64, SkPoint, true>& fPositions;
+    SkSTArray<64, SkPoint, true>& fOffsets;
+    SkSTArray<64, uint32_t, true>& fClusterIndexes;
 
-    skia_private::STArray<64, SkPoint, true> fJustificationShifts; // For justification
-                                                                   // (current and prev shifts)
+    SkSTArray<64, SkPoint, true> fJustificationShifts; // For justification (current and prev shifts)
 
     SkFontMetrics fFontMetrics;
     const SkScalar fHeightMultiplier;
@@ -308,7 +306,6 @@ public:
     bool isWhitespaceBreak() const { return fIsWhiteSpaceBreak; }
     bool isIntraWordBreak() const { return fIsIntraWordBreak; }
     bool isHardBreak() const { return fIsHardBreak; }
-    bool isIdeographic() const { return fIsIdeographic; }
 
     bool isSoftBreak() const;
     bool isGraphemeBreak() const;
@@ -361,7 +358,6 @@ private:
     bool fIsWhiteSpaceBreak;
     bool fIsIntraWordBreak;
     bool fIsHardBreak;
-    bool fIsIdeographic;
 };
 
 class InternalLineMetrics {

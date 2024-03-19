@@ -15,9 +15,9 @@
 
 GR_NORETAIN_BEGIN
 
-std::unique_ptr<GrGpu> GrMtlTrampoline::MakeGpu(const GrMtlBackendContext& backendContext,
-                                                const GrContextOptions& options,
-                                                GrDirectContext* direct) {
+sk_sp<GrGpu> GrMtlTrampoline::MakeGpu(const GrMtlBackendContext& backendContext,
+                                      const GrContextOptions& options,
+                                      GrDirectContext* direct) {
     return GrMtlGpu::Make(backendContext, options, direct);
 }
 

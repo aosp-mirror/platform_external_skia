@@ -339,7 +339,7 @@ public:
     const char* onGetName() override { return fName.c_str(); }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     void onDraw(int loops, SkCanvas*) override {

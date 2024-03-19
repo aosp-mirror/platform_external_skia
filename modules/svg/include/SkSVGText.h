@@ -13,7 +13,7 @@
 #include "modules/svg/include/SkSVGTransformableNode.h"
 #include "modules/svg/include/SkSVGTypes.h"
 
-class SK_API SkSVGTextContext;
+class SkSVGTextContext;
 
 // Base class for text-rendering nodes.
 class SkSVGTextFragment : public SkSVGTransformableNode {

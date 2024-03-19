@@ -7,36 +7,23 @@
 
 #include "include/core/SkOverdrawCanvas.h"
 
-#include "include/core/SkBlendMode.h"
 #include "include/core/SkColorFilter.h"
-#include "include/core/SkColorType.h"
 #include "include/core/SkDrawable.h"
-#include "include/core/SkImage.h"
-#include "include/core/SkImageInfo.h"
-#include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkRRect.h"
 #include "include/core/SkRSXform.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkSurfaceProps.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkPoint_impl.h"
-#include "include/private/base/SkTDArray.h"
-#include "src/base/SkZip.h"
+#include "include/core/SkTextBlob.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkDrawShadowInfo.h"
-#include "src/core/SkGlyph.h"
+#include "src/core/SkGlyphBuffer.h"
 #include "src/core/SkGlyphRunPainter.h"
+#include "src/core/SkImagePriv.h"
 #include "src/core/SkLatticeIter.h"
-#include "src/core/SkMask.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/core/SkTextBlobPriv.h"
 #include "src/text/GlyphRun.h"
-
-class SkBitmap;
-class SkData;
-class SkPicture;
-class SkRRect;
-class SkRegion;
-class SkTextBlob;
-class SkVertices;
+#include "src/utils/SkPatchUtils.h"
 
 SkOverdrawCanvas::SkOverdrawCanvas(SkCanvas* canvas)
     : INHERITED(canvas->onImageInfo().width(), canvas->onImageInfo().height())
@@ -77,8 +64,8 @@ public:
         }
     }
 
-    void drawBitmap(const SkBitmap&, const SkMatrix&, const SkRect* dstOrNull,
-                    const SkSamplingOptions&, const SkPaint&) const override {}
+    void    drawBitmap(const SkBitmap&, const SkMatrix&, const SkRect* dstOrNull,
+                       const SkSamplingOptions&, const SkPaint&) const override {}
 
     void onDrawGlyphRunList(SkCanvas* canvas,
                             const sktext::GlyphRunList& glyphRunList,
@@ -105,7 +92,7 @@ void SkOverdrawCanvas::onDrawTextBlob(
 void SkOverdrawCanvas::onDrawGlyphRunList(
         const sktext::GlyphRunList& glyphRunList,
         const SkPaint& paint) {
-    SkSurfaceProps props;
+    SkSurfaceProps props{0, kUnknown_SkPixelGeometry};
     this->getProps(&props);
     TextDevice device{this, props};
 
@@ -221,6 +208,7 @@ void SkOverdrawCanvas::onDrawDrawable(SkDrawable* drawable, const SkMatrix* matr
 
 void SkOverdrawCanvas::onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) {
     SkASSERT(false);
+    return;
 }
 
 void SkOverdrawCanvas::onDrawAnnotation(const SkRect&, const char[], SkData*) {}

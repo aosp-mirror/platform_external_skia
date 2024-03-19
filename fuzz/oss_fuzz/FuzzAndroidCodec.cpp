@@ -8,14 +8,15 @@
 #include "include/codec/SkAndroidCodec.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/private/SkGainmapInfo.h"
 
 #include "fuzz/Fuzz.h"
 
-bool FuzzAndroidCodec(const uint8_t *fuzzData, size_t fuzzSize, uint8_t sampleSize) {
-    auto codec = SkAndroidCodec::MakeFromStream(SkMemoryStream::MakeDirect(fuzzData, fuzzSize));
+bool FuzzAndroidCodec(sk_sp<SkData> bytes, uint8_t sampleSize) {
+    auto codec = SkAndroidCodec::MakeFromData(bytes);
     if (!codec) {
         return false;
     }
@@ -54,7 +55,7 @@ bool FuzzAndroidCodec(const uint8_t *fuzzData, size_t fuzzSize, uint8_t sampleSi
         }
     }
 
-    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(size.width(), size.height()));
+    auto surface = SkSurface::MakeRasterN32Premul(size.width(), size.height());
     if (!surface) {
         // May return nullptr in memory-constrained fuzzing environments
         return false;
@@ -69,10 +70,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 10240) {
         return 0;
     }
-    Fuzz fuzz(data, size);
+    auto bytes = SkData::MakeWithoutCopy(data, size);
+    Fuzz fuzz(bytes);
     uint8_t sampleSize;
     fuzz.nextRange(&sampleSize, 1, 64);
-    FuzzAndroidCodec(fuzz.remainingData(), fuzz.remainingSize(), sampleSize);
+    bytes = SkData::MakeSubset(bytes.get(), 1, size - 1);
+    FuzzAndroidCodec(bytes, sampleSize);
     return 0;
 }
 #endif

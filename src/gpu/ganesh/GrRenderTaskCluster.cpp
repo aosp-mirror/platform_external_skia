@@ -10,8 +10,6 @@
 #include "src/core/SkTHash.h"
 #include "src/gpu/ganesh/GrRenderTask.h"
 
-using namespace skia_private;
-
 // Uncomment to get lots of logging.
 #define CLUSTER_DEBUGF(...) //SkDebugf(__VA_ARGS__)
 
@@ -45,7 +43,7 @@ static GrSurfaceProxy* first_target(GrRenderTask* task) { return task->target(0)
 static void validate(SkSpan<const sk_sp<GrRenderTask>> input,
                      const SkTInternalLList<GrRenderTask>& llist) {
     // Check that we didn't break dependencies.
-    THashSet<GrRenderTask*> seen;
+    SkTHashSet<GrRenderTask*> seen;
     for (GrRenderTask* t : llist) {
         seen.add(t);
         for (GrRenderTask* dep : t->dependencies()) {
@@ -90,7 +88,7 @@ static bool depends_on(GrRenderTask* depender, GrRenderTask* dependee) {
 
 // Returns whether reordering occurred.
 static bool task_cluster_visit(GrRenderTask* task, SkTInternalLList<GrRenderTask>* llist,
-                               THashMap<GrSurfaceProxy*, GrRenderTask*>* lastTaskMap) {
+                               SkTHashMap<GrSurfaceProxy*, GrRenderTask*>* lastTaskMap) {
     CLUSTER_DEBUGF("Cluster: ***Step***\nLooking at %s\n",
                    describe_task(task).c_str());
     if (task->numTargets() != 1) {
@@ -169,7 +167,7 @@ bool GrClusterRenderTasks(SkSpan<const sk_sp<GrRenderTask>> input,
 
     CLUSTER_DEBUGF("Cluster: Original order is %s\n", describe_tasks(input).c_str());
 
-    THashMap<GrSurfaceProxy*, GrRenderTask*> lastTaskMap;
+    SkTHashMap<GrSurfaceProxy*, GrRenderTask*> lastTaskMap;
     bool didReorder = false;
     for (const auto& t : input) {
         didReorder |= task_cluster_visit(t.get(), llist, &lastTaskMap);

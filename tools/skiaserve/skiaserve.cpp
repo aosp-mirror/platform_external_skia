@@ -22,7 +22,6 @@
 #include <arpa/inet.h>
 #endif
 
-using namespace skia_private;
 using namespace Response;
 
 static DEFINE_int(port, 8888, "The port to listen on.");
@@ -66,7 +65,7 @@ public:
     }
 
 private:
-    TArray<UrlHandler*> fHandlers;
+    SkTArray<UrlHandler*> fHandlers;
 };
 
 const UrlManager kUrlManager;

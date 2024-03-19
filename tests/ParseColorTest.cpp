@@ -10,7 +10,7 @@
 #include "include/utils/SkParse.h"
 #include "tests/Test.h"
 
-#include <cstring>
+#include <string>
 
 static constexpr struct {
     const char* fName;

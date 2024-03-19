@@ -8,7 +8,6 @@
 #ifndef GrVkGpu_DEFINED
 #define GrVkGpu_DEFINED
 
-#include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "include/gpu/vk/GrVkBackendContext.h"
 #include "include/gpu/vk/GrVkTypes.h"
 #include "src/gpu/ganesh/GrGpu.h"
@@ -21,29 +20,25 @@
 
 class GrDirectContext;
 class GrPipeline;
+
 class GrVkBuffer;
 class GrVkCommandPool;
 class GrVkFramebuffer;
-class GrVkOpsRenderPass;
 class GrVkPipeline;
 class GrVkPipelineState;
 class GrVkPrimaryCommandBuffer;
+class GrVkOpsRenderPass;
 class GrVkRenderPass;
 class GrVkSecondaryCommandBuffer;
 class GrVkTexture;
-enum class SkTextureCompressionType;
 
-namespace skgpu {
-class VulkanMemoryAllocator;
-class VulkanMutableTextureState;
-struct VulkanInterface;
-}
+namespace skgpu { struct VulkanInterface; }
+
+namespace skgpu { class VulkanMemoryAllocator; }
 
 class GrVkGpu : public GrGpu {
 public:
-    static std::unique_ptr<GrGpu> Make(const GrVkBackendContext&,
-                                       const GrContextOptions&,
-                                       GrDirectContext*);
+    static sk_sp<GrGpu> Make(const GrVkBackendContext&, const GrContextOptions&, GrDirectContext*);
 
     ~GrVkGpu() override;
 
@@ -78,7 +73,7 @@ public:
     const VkPhysicalDeviceMemoryProperties& physicalDeviceMemoryProperties() const {
         return fPhysDevMemProps;
     }
-    bool protectedContext() const { return fProtectedContext == skgpu::Protected::kYes; }
+    bool protectedContext() const { return fProtectedContext == GrProtected::kYes; }
 
     GrVkResourceProvider& resourceProvider() { return fResourceProvider; }
 
@@ -100,7 +95,7 @@ public:
 
     bool compile(const GrProgramDesc&, const GrProgramInfo&) override;
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
     GrBackendRenderTarget createTestingOnlyBackendRenderTarget(SkISize dimensions,
@@ -118,7 +113,7 @@ public:
                                               SkISize dimensions, int numStencilSamples) override;
 
     GrBackendFormat getPreferredStencilFormat(const GrBackendFormat&) override {
-        return GrBackendFormats::MakeVk(this->vkCaps().preferredStencilFormat());
+        return GrBackendFormat::MakeVk(this->vkCaps().preferredStencilFormat());
     }
 
     sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
@@ -156,7 +151,11 @@ public:
 
     void submit(GrOpsRenderPass*) override;
 
-    [[nodiscard]] std::unique_ptr<GrSemaphore> makeSemaphore(bool isOwned) override;
+    GrFence SK_WARN_UNUSED_RESULT insertFence() override;
+    bool waitFence(GrFence) override;
+    void deleteFence(GrFence) override;
+
+    std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
     std::unique_ptr<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore&,
                                                       GrSemaphoreWrapType,
                                                       GrWrapOwnership) override;
@@ -220,12 +219,12 @@ private:
     GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
                                             GrRenderable,
-                                            skgpu::Mipmapped,
+                                            GrMipmapped,
                                             GrProtected,
                                             std::string_view label) override;
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
-                                                      skgpu::Mipmapped,
+                                                      GrMipmapped,
                                                       GrProtected) override;
 
     bool onClearBackendTexture(const GrBackendTexture&,
@@ -238,10 +237,9 @@ private:
                                           size_t length) override;
 
     bool setBackendSurfaceState(GrVkImageInfo info,
-                                sk_sp<skgpu::MutableTextureState> currentState,
+                                sk_sp<skgpu::MutableTextureStateRef> currentState,
                                 SkISize dimensions,
-                                VkImageLayout newLayout,
-                                uint32_t newQueueFamilyIndex,
+                                const skgpu::VulkanMutableTextureState& newState,
                                 skgpu::MutableTextureState* previousState,
                                 sk_sp<skgpu::RefCntedCallback> finishedCallback);
 
@@ -257,7 +255,7 @@ private:
     sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
                                                const GrBackendFormat&,
                                                skgpu::Budgeted,
-                                               skgpu::Mipmapped,
+                                               GrMipmapped,
                                                GrProtected,
                                                const void* data,
                                                size_t dataSize) override;
@@ -332,15 +330,15 @@ private:
                                         const SkIRect&,
                                         const GrOpsRenderPass::LoadAndStoreInfo&,
                                         const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-                                        const skia_private::TArray<GrSurfaceProxy*, true>& sampledProxies,
+                                        const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
                                         GrXferBarrierFlags renderPassXferBarriers) override;
 
     void prepareSurfacesForBackendAccessAndStateUpdates(
             SkSpan<GrSurfaceProxy*> proxies,
-            SkSurfaces::BackendSurfaceAccess access,
+            SkSurface::BackendSurfaceAccess access,
             const skgpu::MutableTextureState* newState) override;
 
-    bool onSubmitToGpu(GrSyncCpu sync) override;
+    bool onSubmitToGpu(bool syncCpu) override;
 
     void onReportSubmitHistograms() override;
 
@@ -381,13 +379,9 @@ private:
                               GrColorType colorType,
                               const GrMipLevel texels[],
                               int mipLevelCount);
-    bool uploadTexDataCompressed(GrVkImage* tex,
-                                 SkTextureCompressionType compression,
-                                 VkFormat vkFormat,
-                                 SkISize dimensions,
-                                 skgpu::Mipmapped mipmapped,
-                                 const void* data,
-                                 size_t dataSize);
+    bool uploadTexDataCompressed(GrVkImage* tex, SkImage::CompressionType compression,
+                                 VkFormat vkFormat, SkISize dimensions, GrMipmapped mipmapped,
+                                 const void* data, size_t dataSize);
     void resolveImage(GrSurface* dst, GrVkRenderTarget* src, const SkIRect& srcRect,
                       const SkIPoint& dstPoint);
 
@@ -396,7 +390,7 @@ private:
                                         int sampleCnt,
                                         GrTexturable,
                                         GrRenderable,
-                                        skgpu::Mipmapped,
+                                        GrMipmapped,
                                         GrVkImageInfo*,
                                         GrProtected);
 
@@ -420,10 +414,10 @@ private:
     // just a raw pointer; object's lifespan is managed by fCmdPool
     GrVkPrimaryCommandBuffer*                             fMainCmdBuffer;
 
-    skia_private::STArray<1, GrVkSemaphore::Resource*>    fSemaphoresToWaitOn;
-    skia_private::STArray<1, GrVkSemaphore::Resource*>    fSemaphoresToSignal;
+    SkSTArray<1, GrVkSemaphore::Resource*>                fSemaphoresToWaitOn;
+    SkSTArray<1, GrVkSemaphore::Resource*>                fSemaphoresToSignal;
 
-    skia_private::TArray<std::unique_ptr<SkDrawable::GpuDrawHandler>> fDrawables;
+    SkTArray<std::unique_ptr<SkDrawable::GpuDrawHandler>> fDrawables;
 
     VkPhysicalDeviceProperties                            fPhysDevProps;
     VkPhysicalDeviceMemoryProperties                      fPhysDevMemProps;
@@ -432,12 +426,9 @@ private:
     // vulkan context.
     bool                                                  fDisconnected;
 
-    skgpu::Protected                                      fProtectedContext;
+    GrProtected                                           fProtectedContext;
 
     std::unique_ptr<GrVkOpsRenderPass>                    fCachedOpsRenderPass;
-
-    skgpu::VulkanDeviceLostContext                        fDeviceLostContext;
-    skgpu::VulkanDeviceLostProc                           fDeviceLostProc;
 
     using INHERITED = GrGpu;
 };

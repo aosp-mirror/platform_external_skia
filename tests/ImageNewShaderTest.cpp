@@ -22,10 +22,8 @@
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 #include <cstring>
@@ -116,8 +114,8 @@ static void run_shader_test(skiatest::Reporter* reporter, SkSurface* sourceSurfa
 DEF_TEST(ImageNewShader, reporter) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(5, 5);
 
-    auto sourceSurface(SkSurfaces::Raster(info));
-    auto destinationSurface(SkSurfaces::Raster(info));
+    auto sourceSurface(SkSurface::MakeRaster(info));
+    auto destinationSurface(SkSurface::MakeRaster(info));
 
     run_shader_test(reporter, sourceSurface.get(), destinationSurface.get(), info);
 }
@@ -125,8 +123,8 @@ DEF_TEST(ImageNewShader, reporter) {
 static void gpu_to_gpu(skiatest::Reporter* reporter, GrRecordingContext* rContext) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(5, 5);
 
-    auto sourceSurface(SkSurfaces::RenderTarget(rContext, skgpu::Budgeted::kNo, info));
-    auto destinationSurface(SkSurfaces::RenderTarget(rContext, skgpu::Budgeted::kNo, info));
+    auto sourceSurface(SkSurface::MakeRenderTarget(rContext, skgpu::Budgeted::kNo, info));
+    auto destinationSurface(SkSurface::MakeRenderTarget(rContext, skgpu::Budgeted::kNo, info));
 
     run_shader_test(reporter, sourceSurface.get(), destinationSurface.get(), info);
 }
@@ -134,8 +132,8 @@ static void gpu_to_gpu(skiatest::Reporter* reporter, GrRecordingContext* rContex
 static void raster_to_gpu(skiatest::Reporter* reporter, GrRecordingContext* rContext) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(5, 5);
 
-    auto sourceSurface(SkSurfaces::Raster(info));
-    auto destinationSurface(SkSurfaces::RenderTarget(rContext, skgpu::Budgeted::kNo, info));
+    auto sourceSurface(SkSurface::MakeRaster(info));
+    auto destinationSurface(SkSurface::MakeRenderTarget(rContext, skgpu::Budgeted::kNo, info));
 
     run_shader_test(reporter, sourceSurface.get(), destinationSurface.get(), info);
 }
@@ -156,12 +154,13 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageNewShader_GPU,
 }
 
 DEF_TEST(ImageRawShader, reporter) {
-    auto image = ToolUtils::GetResourceAsImage("images/mandrill_32.png");
+    auto image = GetResourceAsImage("images/mandrill_32.png");
     REPORTER_ASSERT(reporter, image);
 
     // We should be able to turn this into a "raw" image shader:
-    REPORTER_ASSERT(reporter, image->makeRawShader(SkFilterMode::kNearest));
+    REPORTER_ASSERT(reporter, image->makeRawShader(SkSamplingOptions{}));
 
     // ... but not if we request cubic filtering
-    REPORTER_ASSERT(reporter, !image->makeRawShader(SkCubicResampler::Mitchell()));
+    REPORTER_ASSERT(reporter,
+                    !image->makeRawShader(SkSamplingOptions{SkCubicResampler::Mitchell()}));
 }

@@ -18,25 +18,6 @@
         return floatArrayToRects(floatArray);
     }
 
-    function convertDirection(glyphInfo) {
-      if (glyphInfo) {
-        if (glyphInfo['dir'] === 0) {
-          glyphInfo['dir'] = CanvasKit.TextDirection.RTL;
-        } else {
-          glyphInfo['dir'] = CanvasKit.TextDirection.LTR;
-        }
-      }
-      return glyphInfo;
-    }
-
-    CanvasKit.Paragraph.prototype.getGlyphInfoAt = function(index) {
-      return convertDirection(this._getGlyphInfoAt(index));
-    }
-
-    CanvasKit.Paragraph.prototype.getClosestGlyphInfoAtCoordinate = function(dx, dy) {
-      return convertDirection(this._getClosestGlyphInfoAtCoordinate(dx, dy));
-    }
-
     function floatArrayToRects(floatArray) {
         if (!floatArray || !floatArray.length) {
             return [];
@@ -56,7 +37,7 @@
 
     // Registers the font (provided as an arrayBuffer) with the alias `family`.
     CanvasKit.TypefaceFontProvider.prototype.registerFont = function(font, family) {
-      var typeface = CanvasKit.Typeface.MakeTypefaceFromData(font);
+      var typeface = CanvasKit.Typeface.MakeFreeTypeFaceFromData(font);
       if (!typeface) {
           Debug('Could not decode font data');
           // We do not need to free the data since the C++ will do that for us
@@ -77,7 +58,7 @@
       if (s['ellipsis']) {
         var str = s['ellipsis'];
         s['_ellipsisPtr'] = cacheOrCopyString(str);
-        s['_ellipsisLen'] = lengthBytesUTF8(str);
+        s['_ellipsisLen'] = lengthBytesUTF8(str) + 1; // add 1 for the null terminator.
       } else {
         s['_ellipsisPtr'] = nullptr;
         s['_ellipsisLen'] = 0;
@@ -93,7 +74,6 @@
       s['textDirection'] = s['textDirection'] || CanvasKit.TextDirection.LTR;
       s['textHeightBehavior'] = s['textHeightBehavior'] || CanvasKit.TextHeightBehavior.All;
       s['textStyle'] = CanvasKit.TextStyle(s['textStyle']);
-      s['applyRoundingHack'] = s['applyRoundingHack'] !== false;
       return s;
     };
 
@@ -232,7 +212,7 @@
       if (textStyle['locale']) {
         var str = textStyle['locale'];
         textStyle['_localePtr'] = cacheOrCopyString(str);
-        textStyle['_localeLen'] = lengthBytesUTF8(str);
+        textStyle['_localeLen'] = lengthBytesUTF8(str) + 1; // add 1 for the null terminator.
       } else {
         textStyle['_localePtr'] = nullptr;
         textStyle['_localeLen'] = 0;
@@ -298,8 +278,6 @@
       CanvasKit._free(textStyle['_shadowBlurRadiiPtr']);
       CanvasKit._free(textStyle['_fontFeatureNamesPtr']);
       CanvasKit._free(textStyle['_fontFeatureValuesPtr']);
-      CanvasKit._free(textStyle['_fontVariationAxesPtr']);
-      CanvasKit._free(textStyle['_fontVariationValuesPtr']);
     }
 
     CanvasKit.ParagraphBuilder.Make = function(paragraphStyle, fontManager) {
@@ -314,15 +292,6 @@
         copyArrays(paragraphStyle['textStyle']);
 
         var result =  CanvasKit.ParagraphBuilder._MakeFromFontProvider(paragraphStyle, fontProvider);
-        freeArrays(paragraphStyle['textStyle']);
-        return result;
-    };
-
-    CanvasKit.ParagraphBuilder.MakeFromFontCollection = function(paragraphStyle, fontCollection) {
-        copyArrays(paragraphStyle['textStyle']);
-
-        var result = CanvasKit.ParagraphBuilder._MakeFromFontCollection(
-	    paragraphStyle, fontCollection);
         freeArrays(paragraphStyle['textStyle']);
         return result;
     };

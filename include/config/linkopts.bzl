@@ -10,15 +10,6 @@ because the relevant Skia source file was compiled in.
 
 """
 
-CORE_LINKOPTS = select({
-    "@platforms//os:android": [
-        "-landroid",
-        "-ldl",
-        "-llog",  # Provides __android_log_vprint, needed by //src/ports/SkDebug_android.cpp.
-    ],
-    "//conditions:default": [],
-})
-
 OPT_LEVEL = select({
     "//bazel/common_config_settings:debug_build": [],
     "//bazel/common_config_settings:fast_build_linux": [
@@ -32,7 +23,6 @@ OPT_LEVEL = select({
         "-Wl,--gc-sections",
         "-Wl,--strip-all",
     ],
-    "//conditions:default": [],
 })
 
-DEFAULT_LINKOPTS = CORE_LINKOPTS + OPT_LEVEL
+DEFAULT_LINKOPTS = OPT_LEVEL

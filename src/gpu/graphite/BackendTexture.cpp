@@ -7,34 +7,46 @@
 
 #include "include/gpu/graphite/BackendTexture.h"
 
-#include "include/gpu/MutableTextureState.h"
-#include "include/gpu/vk/VulkanMutableTextureState.h"
+#include "src/gpu/MutableTextureStateRef.h"
 
 namespace skgpu::graphite {
 
-BackendTexture::BackendTexture() = default;
+BackendTexture::BackendTexture() {}
 
-BackendTexture::~BackendTexture() = default;
+BackendTexture::~BackendTexture() {
+    if (!this->isValid()) {
+        return;
+    }
+#ifdef SK_DAWN
+    if (this->backend() == BackendApi::kDawn) {
+        // Only one of fDawnTexture and fDawnTextureView can be non null.
+        SkASSERT(!(fDawn.fTexture && fDawn.fTextureView));
+        // Release reference.
+        fDawn.fTexture = nullptr;
+        fDawn.fTextureView = nullptr;
+    }
+#endif
+}
 
 BackendTexture::BackendTexture(const BackendTexture& that) {
     *this = that;
 }
 
 BackendTexture& BackendTexture::operator=(const BackendTexture& that) {
+    bool valid = this->isValid();
     if (!that.isValid()) {
         fInfo = {};
         return *this;
+    } else if (valid && this->backend() != that.backend()) {
+        valid = false;
     }
-    // We shouldn't be mixing backends.
-    SkASSERT(!this->isValid() || this->backend() == that.backend());
     fDimensions = that.fDimensions;
     fInfo = that.fInfo;
 
     switch (that.backend()) {
 #ifdef SK_DAWN
         case BackendApi::kDawn:
-            fDawnTexture = that.fDawnTexture;
-            fDawnTextureView = that.fDawnTextureView;
+            fDawn = that.fDawn;
             break;
 #endif
 #ifdef SK_METAL
@@ -44,13 +56,11 @@ BackendTexture& BackendTexture::operator=(const BackendTexture& that) {
 #endif
 #ifdef SK_VULKAN
         case BackendApi::kVulkan:
-            fVkImage = that.fVkImage;
-            fMutableState = that.fMutableState;
-            fMemoryAlloc = that.fMemoryAlloc;
+            // TODO: Actually fill this out
             break;
 #endif
         default:
-            SK_ABORT("Unsupported Backend");
+            SK_ABORT("Unsupport Backend");
     }
     return *this;
 }
@@ -67,10 +77,7 @@ bool BackendTexture::operator==(const BackendTexture& that) const {
     switch (that.backend()) {
 #ifdef SK_DAWN
         case BackendApi::kDawn:
-            if (fDawnTexture != that.fDawnTexture) {
-                return false;
-            }
-            if (fDawnTextureView != that.fDawnTextureView) {
+            if (fDawn != that.fDawn) {
                 return false;
             }
             break;
@@ -84,13 +91,11 @@ bool BackendTexture::operator==(const BackendTexture& that) const {
 #endif
 #ifdef SK_VULKAN
         case BackendApi::kVulkan:
-            if (fVkImage != that.fVkImage) {
-                return false;
-            }
-            break;
+            // TODO: Actually fill this out
+            return false;
 #endif
         default:
-            SK_ABORT("Unsupported Backend");
+            SK_ABORT("Unsupport Backend");
     }
     return true;
 }
@@ -99,74 +104,42 @@ void BackendTexture::setMutableState(const skgpu::MutableTextureState& newState)
     fMutableState->set(newState);
 }
 
-sk_sp<MutableTextureState> BackendTexture::getMutableState() const {
-    return fMutableState;
-}
-
 #ifdef SK_DAWN
-BackendTexture::BackendTexture(WGPUTexture texture)
-        : fDimensions{static_cast<int32_t>(wgpuTextureGetWidth(texture)),
-                      static_cast<int32_t>(wgpuTextureGetHeight(texture))}
-        , fInfo(DawnTextureInfo(wgpu::Texture(texture)))
-        , fDawnTexture(texture)
-        , fDawnTextureView(nullptr) {}
-
-BackendTexture::BackendTexture(SkISize planeDimensions,
-                               const DawnTextureInfo& info,
-                               WGPUTexture texture)
-        : fDimensions(planeDimensions)
-        , fInfo(info)
-        , fDawnTexture(texture)
-        , fDawnTextureView(nullptr) {
-
-#if defined(__EMSCRIPTEN__)
-    SkASSERT(info.fAspect == wgpu::TextureAspect::All);
-#else
-    SkASSERT(info.fAspect == wgpu::TextureAspect::All ||
-             info.fAspect == wgpu::TextureAspect::Plane0Only ||
-             info.fAspect == wgpu::TextureAspect::Plane1Only ||
-             info.fAspect == wgpu::TextureAspect::Plane2Only);
-#endif
-}
-
-// When we only have a WGPUTextureView we can't actually take advantage of these TextureUsage bits
-// because they require having the WGPUTexture.
-static DawnTextureInfo strip_copy_usage(const DawnTextureInfo& info) {
-    DawnTextureInfo result = info;
-    result.fUsage &= ~(wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc);
-    return result;
-}
+BackendTexture::BackendTexture(wgpu::Texture texture)
+    : fDimensions{static_cast<int32_t>(texture.GetWidth()),
+                  static_cast<int32_t>(texture.GetHeight())}
+    , fInfo(DawnTextureInfo(texture))
+    , fDawn(std::move(texture)) {}
 
 BackendTexture::BackendTexture(SkISize dimensions,
                                const DawnTextureInfo& info,
-                               WGPUTextureView textureView)
+                               wgpu::TextureView textureView)
         : fDimensions(dimensions)
-        , fInfo(strip_copy_usage(info))
-        , fDawnTexture(nullptr)
-        , fDawnTextureView(textureView) {}
+        , fInfo(info)
+        , fDawn(std::move(textureView)) {}
 
-WGPUTexture BackendTexture::getDawnTexturePtr() const {
+wgpu::Texture BackendTexture::getDawnTexture() const {
     if (this->isValid() && this->backend() == BackendApi::kDawn) {
-        return fDawnTexture;
+        return fDawn.fTexture;
     }
     return {};
 }
 
-WGPUTextureView BackendTexture::getDawnTextureViewPtr() const {
+wgpu::TextureView BackendTexture::getDawnTextureView() const {
     if (this->isValid() && this->backend() == BackendApi::kDawn) {
-        return fDawnTextureView;
+        return fDawn.fTextureView;
     }
     return {};
 }
 #endif
 
 #ifdef SK_METAL
-BackendTexture::BackendTexture(SkISize dimensions, CFTypeRef mtlTexture)
+BackendTexture::BackendTexture(SkISize dimensions, MtlHandle mtlTexture)
         : fDimensions(dimensions)
         , fInfo(MtlTextureInfo(mtlTexture))
         , fMtlTexture(mtlTexture) {}
 
-CFTypeRef BackendTexture::getMtlTexture() const {
+MtlHandle BackendTexture::getMtlTexture() const {
     if (this->isValid() && this->backend() == BackendApi::kMetal) {
         return fMtlTexture;
     }
@@ -179,13 +152,10 @@ BackendTexture::BackendTexture(SkISize dimensions,
                                const VulkanTextureInfo& info,
                                VkImageLayout layout,
                                uint32_t queueFamilyIndex,
-                               VkImage image,
-                               VulkanAlloc vulkanMemoryAllocation)
+                               VkImage image)
         : fDimensions(dimensions)
         , fInfo(info)
-        , fMutableState(sk_make_sp<skgpu::MutableTextureState>(
-                  skgpu::MutableTextureStates::MakeVulkan(layout, queueFamilyIndex)))
-        , fMemoryAlloc(vulkanMemoryAllocation)
+        , fMutableState(new MutableTextureStateRef(layout, queueFamilyIndex))
         , fVkImage(image) {}
 
 VkImage BackendTexture::getVkImage() const {
@@ -198,7 +168,7 @@ VkImage BackendTexture::getVkImage() const {
 VkImageLayout BackendTexture::getVkImageLayout() const {
     if (this->isValid() && this->backend() == BackendApi::kVulkan) {
         SkASSERT(fMutableState);
-        return skgpu::MutableTextureStates::GetVkImageLayout(fMutableState.get());
+        return fMutableState->getImageLayout();
     }
     return VK_IMAGE_LAYOUT_UNDEFINED;
 }
@@ -206,16 +176,9 @@ VkImageLayout BackendTexture::getVkImageLayout() const {
 uint32_t BackendTexture::getVkQueueFamilyIndex() const {
     if (this->isValid() && this->backend() == BackendApi::kVulkan) {
         SkASSERT(fMutableState);
-        return skgpu::MutableTextureStates::GetVkQueueFamilyIndex(fMutableState.get());
+        return fMutableState->getQueueFamilyIndex();
     }
     return 0;
-}
-
-const VulkanAlloc* BackendTexture::getMemoryAlloc() const {
-    if (this->isValid() && this->backend() == BackendApi::kVulkan) {
-        return &fMemoryAlloc;
-    }
-    return {};
 }
 #endif // SK_VULKAN
 

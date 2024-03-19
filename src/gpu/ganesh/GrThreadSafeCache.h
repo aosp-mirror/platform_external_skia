@@ -9,8 +9,8 @@
 #define GrThreadSafeCache_DEFINED
 
 #include "include/core/SkRefCnt.h"
+#include "include/private/SkSpinlock.h"
 #include "src/base/SkArenaAlloc.h"
-#include "src/base/SkSpinlock.h"
 #include "src/base/SkTInternalLList.h"
 #include "src/core/SkTDynamicHash.h"
 #include "src/gpu/ganesh/GrGpuBuffer.h"
@@ -68,7 +68,7 @@ public:
     GrThreadSafeCache();
     ~GrThreadSafeCache();
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     int numEntries() const  SK_EXCLUDES(fSpinLock);
 
     size_t approxBytesUsedForHash() const  SK_EXCLUDES(fSpinLock);
@@ -81,8 +81,7 @@ public:
     void dropUniqueRefs(GrResourceCache* resourceCache)  SK_EXCLUDES(fSpinLock);
 
     // Drop uniquely held refs that were last accessed before 'purgeTime'
-    void dropUniqueRefsOlderThan(
-            skgpu::StdSteadyClock::time_point purgeTime)  SK_EXCLUDES(fSpinLock);
+    void dropUniqueRefsOlderThan(GrStdSteadyClock::time_point purgeTime)  SK_EXCLUDES(fSpinLock);
 
     SkDEBUGCODE(bool has(const skgpu::UniqueKey&)  SK_EXCLUDES(fSpinLock);)
 
@@ -121,7 +120,7 @@ public:
             // TODO: once we add the gpuBuffer we could free 'fVertices'. Deinstantiable
             // DDLs could throw a monkey wrench into that plan though.
             SkASSERT(!fGpuBuffer);
-            fGpuBuffer = std::move(gpuBuffer);
+            fGpuBuffer = gpuBuffer;
         }
 
         void reset() {
@@ -264,12 +263,12 @@ private:
         void set(const skgpu::UniqueKey& key, sk_sp<VertexData> vertData) {
             SkASSERT(fTag == kEmpty || fTag == kVertData);
             fKey = key;
-            fVertData = std::move(vertData);
+            fVertData = vertData;
             fTag = kVertData;
         }
 
         // The thread-safe cache gets to directly manipulate the llist and last-access members
-        skgpu::StdSteadyClock::time_point fLastAccess;
+        GrStdSteadyClock::time_point fLastAccess;
         SK_DECLARE_INTERNAL_LLIST_INTERFACE(Entry);
 
         // for SkTDynamicHash

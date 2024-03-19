@@ -8,10 +8,9 @@
 #ifndef Benchmark_DEFINED
 #define Benchmark_DEFINED
 
+#include "include/core/SkPoint.h"
 #include "include/core/SkRefCnt.h"
-#include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/private/base/SkTArray.h"
 #include "tools/Registry.h"
 
 #define DEF_BENCH3(code, N) \
@@ -39,29 +38,28 @@ public:
 
     const char* getName();
     const char* getUniqueName();
-    SkISize getSize();
+    SkIPoint getSize();
 
-    enum class Backend {
-        kNonRendering,
-        kRaster,
-        kGanesh,
-        kGraphite,
-        kPDF,
-        kHWUI,
+    enum Backend {
+        kNonRendering_Backend,
+        kRaster_Backend,
+        kGPU_Backend,
+        kGraphite_Backend,
+        kPDF_Backend,
+        kHWUI_Backend,
     };
 
     // Call to determine whether the benchmark is intended for
     // the rendering mode.
     virtual bool isSuitableFor(Backend backend) {
-        return backend != Backend::kNonRendering;
+        return backend != kNonRendering_Backend;
     }
 
     // Allows a benchmark to override options used to construct the GrContext.
     virtual void modifyGrContextOptions(GrContextOptions*) {}
 
-    // Whether or not this benchmark requires multiple samples to get a meaningful result.
-    virtual bool shouldLoop() const {
-        return true;
+    virtual int calculateLoops(int defaultLoops) const {
+        return defaultLoops;
     }
 
     // Call before draw, allows the benchmark to do setup work outside of the
@@ -81,9 +79,7 @@ public:
     // Bench framework can tune loops to be large enough for stable timing.
     void draw(int loops, SkCanvas*);
 
-    virtual void getGpuStats(SkCanvas*,
-                             skia_private::TArray<SkString>* keys,
-                             skia_private::TArray<double>* values) {}
+    virtual void getGpuStats(SkCanvas*, SkTArray<SkString>* keys, SkTArray<double>* values) {}
 
     // Replaces the GrRecordingContext's dmsaaStats() with a single frame of this benchmark.
     virtual bool getDMSAAStats(GrRecordingContext*) { return false; }
@@ -107,7 +103,7 @@ protected:
     //   for (int i = 0; i < loops; i++) { <work here> }
     virtual void onDraw(int loops, SkCanvas*) = 0;
 
-    virtual SkISize onGetSize();
+    virtual SkIPoint onGetSize();
 
 private:
     int fUnits = 1;

@@ -150,7 +150,7 @@ public:
     static GrProcessorSet MakeEmptySet();
     static constexpr Analysis EmptySetAnalysis() { return Analysis(Empty::kEmpty); }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     SkString dumpProcessors() const;
 #endif
 

@@ -11,7 +11,6 @@
 #include "src/core/SkClipStack.h"
 #include "src/gpu/ganesh/GrSurface.h"
 
-class GrCaps;
 class GrRenderTarget;
 
 /**
@@ -37,7 +36,7 @@ public:
 
     int numSamples() const { return fSampleCnt; }
 
-    skgpu::Mipmapped mipmapped() const { return fMipmapped; }
+    GrMipmapped mipmapped() const { return fMipmapped; }
 
     bool hasPerformedInitialClear() const { return fHasPerformedInitialClear; }
     void markHasPerformedInitialClear() { fHasPerformedInitialClear = true; }
@@ -52,7 +51,7 @@ public:
                                                  SkISize dimensions,
                                                  UsageFlags requiredUsage,
                                                  int sampleCnt,
-                                                 skgpu::Mipmapped mipmapped,
+                                                 GrMipmapped mipmapped,
                                                  GrProtected isProtected,
                                                  GrMemoryless memoryless,
                                                  skgpu::UniqueKey* key);
@@ -64,19 +63,14 @@ public:
                                   SkISize dimensions,
                                   UsageFlags requiredUsage,
                                   int sampleCnt,
-                                  skgpu::Mipmapped mipmapped,
+                                  GrMipmapped mipmapped,
                                   GrProtected,
                                   GrMemoryless,
                                   skgpu::ScratchKey* key);
 
 protected:
-    GrAttachment(GrGpu* gpu,
-                 SkISize dimensions,
-                 UsageFlags supportedUsages,
-                 int sampleCnt,
-                 skgpu::Mipmapped mipmapped,
-                 GrProtected isProtected,
-                 std::string_view label,
+    GrAttachment(GrGpu* gpu, SkISize dimensions, UsageFlags supportedUsages, int sampleCnt,
+                 GrMipmapped mipmapped, GrProtected isProtected, std::string_view label,
                  GrMemoryless memoryless = GrMemoryless::kNo)
             : INHERITED(gpu, dimensions, isProtected, label)
             , fSupportedUsages(supportedUsages)
@@ -102,7 +96,7 @@ private:
 
     UsageFlags fSupportedUsages;
     int fSampleCnt;
-    skgpu::Mipmapped fMipmapped;
+    GrMipmapped fMipmapped;
     bool fHasPerformedInitialClear = false;
     GrMemoryless fMemoryless;
 

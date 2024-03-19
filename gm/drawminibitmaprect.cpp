@@ -25,12 +25,11 @@
 #include "include/effects/SkGradientShader.h"
 #include "src/base/SkMathPriv.h"
 #include "src/base/SkRandom.h"
-#include "tools/GpuToolUtils.h"
 #include "tools/ToolUtils.h"
 
 static sk_sp<SkImage> makebm(int w, int h) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
-    auto surface(SkSurfaces::Raster(info));
+    auto surface(SkSurface::MakeRaster(info));
     SkCanvas* canvas = surface->getCanvas();
 
     const SkScalar wScalar = SkIntToScalar(w);
@@ -86,9 +85,9 @@ public:
     }
 
 protected:
-    SkString getName() const override { return fName; }
+    SkString onShortName() override { return fName; }
 
-    SkISize getISize() override { return SkISize::Make(gSize, gSize); }
+    SkISize onISize() override { return SkISize::Make(gSize, gSize); }
 
     void onDraw(SkCanvas* canvas) override {
         if (nullptr == fImage) {

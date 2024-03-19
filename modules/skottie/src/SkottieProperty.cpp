@@ -7,7 +7,6 @@
 
 #include "modules/skottie/include/SkottieProperty.h"
 
-#include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/Transform.h"
 #include "modules/skottie/src/text/TextAdapter.h"
 #include "modules/sksg/include/SkSGOpacityEffect.h"
@@ -37,9 +36,7 @@ bool TextPropertyValue::operator==(const TextPropertyValue& other) const {
         && fStrokeJoin == other.fStrokeJoin
         && fHasFill == other.fHasFill
         && fHasStroke == other.fHasStroke
-        && fDecorator == other.fDecorator
-        && fLocale == other.fLocale
-        && fFontFamily == other.fFontFamily;
+        && fDecorator == other.fDecorator;
 }
 
 bool TextPropertyValue::operator!=(const TextPropertyValue& other) const {
@@ -58,96 +55,51 @@ bool TransformPropertyValue::operator!=(const TransformPropertyValue& other) con
     return !(*this == other);
 }
 
-// The SK_API attributes are important here due o them being declared as a template.
+template <> SK_API
+PropertyHandle<ColorPropertyValue, sksg::Color>::~PropertyHandle() {}
 
 template <> SK_API
-ColorPropertyHandle::PropertyHandle(sk_sp<sksg::Color> node)
-    : fNode(std::move(node)), fRevalidator(nullptr) {}
-
-template <> SK_API
-ColorPropertyHandle::PropertyHandle(const ColorPropertyHandle& other)
-    : fNode(other.fNode), fRevalidator(other.fRevalidator) {}
-
-template <> SK_API
-ColorPropertyHandle::~PropertyHandle() {}
-
-template <> SK_API
-ColorPropertyValue ColorPropertyHandle::get() const {
+ColorPropertyValue PropertyHandle<ColorPropertyValue, sksg::Color>::get() const {
     return fNode->getColor();
 }
 
 template <> SK_API
-void ColorPropertyHandle::set(const ColorPropertyValue& c) {
+void PropertyHandle<ColorPropertyValue, sksg::Color>::set(const ColorPropertyValue& c) {
     fNode->setColor(c);
-
-    if (fRevalidator) {
-        fRevalidator->revalidate();
-    }
 }
 
 template <> SK_API
-OpacityPropertyHandle::PropertyHandle(sk_sp<sksg::OpacityEffect> node)
-    : fNode(std::move(node)), fRevalidator(nullptr) {}
+PropertyHandle<OpacityPropertyValue, sksg::OpacityEffect>::~PropertyHandle() {}
 
 template <> SK_API
-OpacityPropertyHandle::PropertyHandle(const OpacityPropertyHandle& other)
-    : fNode(other.fNode), fRevalidator(other.fRevalidator) {}
-
-template <> SK_API
-OpacityPropertyHandle::~PropertyHandle() {}
-
-template <> SK_API
-OpacityPropertyValue OpacityPropertyHandle::get() const {
+OpacityPropertyValue PropertyHandle<OpacityPropertyValue, sksg::OpacityEffect>::get() const {
     return fNode->getOpacity() * 100;
 }
 
 template <> SK_API
-void OpacityPropertyHandle::set(const OpacityPropertyValue& o) {
+void PropertyHandle<OpacityPropertyValue, sksg::OpacityEffect>::set(const OpacityPropertyValue& o) {
     fNode->setOpacity(o / 100);
-
-    if (fRevalidator) {
-        fRevalidator->revalidate();
-    }
 }
 
 template <> SK_API
-TextPropertyHandle::PropertyHandle(sk_sp<internal::TextAdapter> node)
-    : fNode(std::move(node)), fRevalidator(nullptr) {}
+PropertyHandle<TextPropertyValue, internal::TextAdapter>::~PropertyHandle() {}
 
 template <> SK_API
-TextPropertyHandle::PropertyHandle(const TextPropertyHandle& other)
-    : fNode(other.fNode), fRevalidator(other.fRevalidator) {}
-
-template <> SK_API
-TextPropertyHandle::~PropertyHandle() {}
-
-template <> SK_API
-TextPropertyValue TextPropertyHandle::get() const {
-    return fNode->getText();
+TextPropertyValue PropertyHandle<TextPropertyValue, internal::TextAdapter>::get() const {
+      return fNode->getText();
 }
 
 template<> SK_API
-void TextPropertyHandle::set(const TextPropertyValue& t) {
-    fNode->setText(t);
-
-    if (fRevalidator) {
-        fRevalidator->revalidate();
-    }
+void PropertyHandle<TextPropertyValue, internal::TextAdapter>::set(const TextPropertyValue& t) {
+      fNode->setText(t);
 }
 
 template <> SK_API
-TransformPropertyHandle::PropertyHandle(sk_sp<internal::TransformAdapter2D> node)
-    : fNode(std::move(node)), fRevalidator(nullptr) {}
+PropertyHandle<TransformPropertyValue, internal::TransformAdapter2D>::~PropertyHandle() {}
 
 template <> SK_API
-TransformPropertyHandle::PropertyHandle(const TransformPropertyHandle& other)
-    : fNode(other.fNode), fRevalidator(other.fRevalidator) {}
-
-template <> SK_API
-TransformPropertyHandle::~PropertyHandle() {}
-
-template <> SK_API
-TransformPropertyValue TransformPropertyHandle::get() const {
+TransformPropertyValue PropertyHandle<TransformPropertyValue,
+                                      internal::TransformAdapter2D>::get() const {
     return {
         fNode->getAnchorPoint(),
         fNode->getPosition(),
@@ -159,17 +111,14 @@ TransformPropertyValue TransformPropertyHandle::get() const {
 }
 
 template <> SK_API
-void TransformPropertyHandle::set(const TransformPropertyValue& t) {
+void PropertyHandle<TransformPropertyValue, internal::TransformAdapter2D>::set(
+        const TransformPropertyValue& t) {
     fNode->setAnchorPoint(t.fAnchorPoint);
     fNode->setPosition(t.fPosition);
     fNode->setScale(t.fScale);
     fNode->setRotation(t.fRotation);
     fNode->setSkew(t.fSkew);
     fNode->setSkewAxis(t.fSkewAxis);
-
-    if (fRevalidator) {
-        fRevalidator->revalidate();
-    }
 }
 
 void PropertyObserver::onColorProperty(const char[],

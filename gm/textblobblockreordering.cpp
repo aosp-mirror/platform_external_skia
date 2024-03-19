@@ -20,7 +20,6 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -37,7 +36,7 @@ protected:
 
         // make textblob
         // Large text is used to trigger atlas eviction
-        SkFont font(ToolUtils::DefaultPortableTypeface(), 56);
+        SkFont font(ToolUtils::create_portable_typeface(), 56);
         font.setEdging(SkFont::Edging::kAlias);
         const char* text = "AB";
 
@@ -51,9 +50,13 @@ protected:
         fBlob = builder.make();
     }
 
-    SkString getName() const override { return SkString("textblobblockreordering"); }
+    SkString onShortName() override {
+        return SkString("textblobblockreordering");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kWidth, kHeight);
+    }
 
     // This draws the same text blob 3 times.  The second draw used a different xfer mode so its
     // GrDrawOp doesn't get combined with the first and third. Ultimately, they will be flushed in

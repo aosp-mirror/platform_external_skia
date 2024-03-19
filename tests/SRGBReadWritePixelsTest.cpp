@@ -14,7 +14,6 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
@@ -33,9 +32,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <initializer_list>
 #include <memory>
+#include <string>
 
 class GrRecordingContext;
 struct GrContextOptions;
@@ -146,11 +145,9 @@ typedef bool (*CheckFn) (uint32_t orig, uint32_t actual, float error);
 
 void read_and_check_pixels(skiatest::Reporter* reporter,
                            GrDirectContext* dContext,
-                           skgpu::ganesh::SurfaceContext* sc,
+                           skgpu::v1::SurfaceContext* sc,
                            uint32_t* origData,
-                           const SkImageInfo& dstInfo,
-                           CheckFn checker,
-                           float error,
+                           const SkImageInfo& dstInfo, CheckFn checker, float error,
                            const char* subtestName) {
     auto [w, h] = dstInfo.dimensions();
     GrPixmap readPM = GrPixmap::Allocate(dstInfo);
@@ -214,8 +211,10 @@ static std::unique_ptr<uint32_t[]> make_data() {
     return data;
 }
 
-static std::unique_ptr<skgpu::ganesh::SurfaceContext> make_surface_context(
-        Encoding contextEncoding, GrRecordingContext* rContext, skiatest::Reporter* reporter) {
+static std::unique_ptr<skgpu::v1::SurfaceContext> make_surface_context(
+        Encoding contextEncoding,
+        GrRecordingContext* rContext,
+        skiatest::Reporter* reporter) {
     GrImageInfo info(GrColorType::kRGBA_8888,
                      kPremul_SkAlphaType,
                      encoding_as_color_space(contextEncoding),

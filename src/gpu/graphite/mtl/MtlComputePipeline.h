@@ -25,7 +25,7 @@ public:
     using MSLFunction = std::pair<id<MTLLibrary>, std::string>;
 
     static sk_sp<MtlComputePipeline> Make(const MtlSharedContext*,
-                                          const std::string& label,
+                                          std::string label,
                                           MSLFunction computeMain);
     ~MtlComputePipeline() override = default;
 

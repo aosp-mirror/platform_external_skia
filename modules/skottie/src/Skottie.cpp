@@ -10,58 +10,39 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
 #include "include/core/SkFontMgr.h"
-#include "include/core/SkMatrix.h"
-#include "include/core/SkRect.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkStream.h"
-#include "include/private/base/SkDebug.h"
-#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
 #include "modules/skottie/include/ExternalLayer.h"
 #include "modules/skottie/include/SkottieProperty.h"
-#include "modules/skottie/include/SlotManager.h"
-#include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/Composition.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
-#include "modules/skottie/src/Transform.h"  // IWYU pragma: keep
-#include "modules/skottie/src/animator/Animator.h"
+#include "modules/skottie/src/Transform.h"
 #include "modules/skottie/src/text/TextAdapter.h"
+#include "modules/sksg/include/SkSGInvalidationController.h"
 #include "modules/sksg/include/SkSGOpacityEffect.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
-#include "src/core/SkTHash.h"
+#include "modules/sksg/include/SkSGPaint.h"
+#include "modules/sksg/include/SkSGPath.h"
+#include "modules/sksg/include/SkSGRenderEffect.h"
+#include "modules/sksg/include/SkSGScene.h"
+#include "modules/sksg/include/SkSGTransform.h"
 #include "src/core/SkTraceEvent.h"
-#include "src/utils/SkJSON.h"
 
-#include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <cstdarg>
-#include <cstdio>
-#include <cstring>
-#include <functional>
 #include <memory>
-#include <ratio>
-#include <utility>
 
-namespace sksg {
-class Color;
-}
+#include <stdlib.h>
 
 namespace skottie {
 
 namespace internal {
-
-void SceneGraphRevalidator::setRoot(sk_sp<sksg::RenderNode> root) {
-    fRoot = std::move(root);
-}
-
-void SceneGraphRevalidator::revalidate() {
-    if (fRoot) {
-        fRoot->revalidate(nullptr, SkMatrix::I());
-    }
-}
 
 void AnimationBuilder::log(Logger::Level lvl, const skjson::Value* json,
                            const char fmt[], ...) const {
@@ -90,12 +71,14 @@ void AnimationBuilder::log(Logger::Level lvl, const skjson::Value* json,
     fLogger->log(lvl, buff, jsonstr.c_str());
 }
 
+namespace  {
+
 class OpacityAdapter final : public DiscardableAdapterBase<OpacityAdapter, sksg::OpacityEffect> {
 public:
     OpacityAdapter(const skjson::ObjectValue& jobject,
                    sk_sp<sksg::RenderNode> child,
                    const AnimationBuilder& abuilder)
-        : INHERITED(sksg::OpacityEffect::Make(std::move(child))) {
+        : INHERITED(sksg::OpacityEffect::Make(child)) {
         this->bind(abuilder, jobject["o"], fOpacity);
     }
 
@@ -109,6 +92,7 @@ private:
     using INHERITED = DiscardableAdapterBase<OpacityAdapter, sksg::OpacityEffect>;
 };
 
+} // namespace
 
 sk_sp<sksg::RenderNode> AnimationBuilder::attachOpacity(const skjson::ObjectValue& jobject,
                                                         sk_sp<sksg::RenderNode> child_node) const {
@@ -116,11 +100,10 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachOpacity(const skjson::ObjectValu
         return nullptr;
 
     auto adapter = OpacityAdapter::Make(jobject, child_node, *this);
+    const auto dispatched = this->dispatchOpacityProperty(adapter->node());
+
     if (adapter->isStatic()) {
         adapter->seek(0);
-    }
-    auto dispatched = this->dispatchOpacityProperty(adapter->node());
-    if (adapter->isStatic()) {
         if (!dispatched && adapter->node()->getOpacity() >= 1) {
             // No obeservable effects - we can discard.
             return child_node;
@@ -140,14 +123,12 @@ AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> 
                                    const SkSize& comp_size, float duration, float framerate,
                                    uint32_t flags)
     : fResourceProvider(std::move(rp))
-    , fFontMgr(std::move(fontmgr))
+    , fLazyFontMgr(std::move(fontmgr))
     , fPropertyObserver(std::move(pobserver))
     , fLogger(std::move(logger))
     , fMarkerObserver(std::move(mobserver))
     , fPrecompInterceptor(std::move(pi))
     , fExpressionManager(std::move(expressionmgr))
-    , fRevalidator(sk_make_sp<SceneGraphRevalidator>())
-    , fSlotManager(sk_make_sp<SlotManager>(fRevalidator))
     , fStats(stats)
     , fCompSize(comp_size)
     , fDuration(duration)
@@ -163,18 +144,13 @@ AnimationBuilder::AnimationInfo AnimationBuilder::parse(const skjson::ObjectValu
 
     this->parseAssets(jroot["assets"]);
     this->parseFonts(jroot["fonts"], jroot["chars"]);
-    fSlotsRoot = jroot["slots"];
 
     auto root = CompositionBuilder(*this, fCompSize, jroot).build(*this);
 
     auto animators = ascope.release();
     fStats->fAnimatorCount = animators.size();
 
-    // Point the revalidator to our final root, and perform initial revalidation.
-    fRevalidator->setRoot(root);
-    fRevalidator->revalidate();
-
-    return { std::move(root), std::move(animators), std::move(fSlotManager)};
+    return { sksg::Scene::Make(std::move(root)), std::move(animators) };
 }
 
 void AnimationBuilder::parseAssets(const skjson::ArrayValue* jassets) {
@@ -220,12 +196,12 @@ void AnimationBuilder::dispatchMarkers(const skjson::ArrayValue* jmarkers) const
 
 bool AnimationBuilder::dispatchColorProperty(const sk_sp<sksg::Color>& c) const {
     bool dispatched = false;
+
     if (fPropertyObserver) {
-        const char * node_name = fPropertyObserverContext;
-        fPropertyObserver->onColorProperty(node_name,
+        fPropertyObserver->onColorProperty(fPropertyObserverContext,
             [&]() {
                 dispatched = true;
-                return std::make_unique<ColorPropertyHandle>(c, fRevalidator);
+                return std::make_unique<ColorPropertyHandle>(c);
             });
     }
 
@@ -239,29 +215,21 @@ bool AnimationBuilder::dispatchOpacityProperty(const sk_sp<sksg::OpacityEffect>&
         fPropertyObserver->onOpacityProperty(fPropertyObserverContext,
             [&]() {
                 dispatched = true;
-                return std::make_unique<OpacityPropertyHandle>(o, fRevalidator);
+                return std::make_unique<OpacityPropertyHandle>(o);
             });
     }
 
     return dispatched;
 }
 
-bool AnimationBuilder::dispatchTextProperty(const sk_sp<TextAdapter>& t,
-                                            const skjson::ObjectValue* jtext) const {
+bool AnimationBuilder::dispatchTextProperty(const sk_sp<TextAdapter>& t) const {
     bool dispatched = false;
-
-    if (jtext) {
-        if (const skjson::StringValue* slotID = (*jtext)["sid"]) {
-            fSlotManager->trackTextValue(SkString(slotID->begin()), t);
-            dispatched = true;
-        }
-    }
 
     if (fPropertyObserver) {
         fPropertyObserver->onTextProperty(fPropertyObserverContext,
             [&]() {
                 dispatched = true;
-                return std::make_unique<TextPropertyHandle>(t, fRevalidator);
+                return std::make_unique<TextPropertyHandle>(t);
             });
     }
 
@@ -275,7 +243,7 @@ bool AnimationBuilder::dispatchTransformProperty(const sk_sp<TransformAdapter2D>
         fPropertyObserver->onTransformProperty(fPropertyObserverContext,
             [&]() {
                 dispatched = true;
-                return std::make_unique<TransformPropertyHandle>(t, fRevalidator);
+                return std::make_unique<TransformPropertyHandle>(t);
             });
     }
 
@@ -288,11 +256,15 @@ sk_sp<ExpressionManager> AnimationBuilder::expression_manager() const {
 
 void AnimationBuilder::AutoPropertyTracker::updateContext(PropertyObserver* observer,
                                                           const skjson::ObjectValue& obj) {
+
     const skjson::StringValue* name = obj["nm"];
-    fBuilder->fPropertyObserverContext = name ? name->begin() : fPrevContext;
+
+    fBuilder->fPropertyObserverContext = name ? name->begin() : nullptr;
 }
 
 } // namespace internal
+
+void Logger::log(Level, const char[], const char*) {}
 
 Animation::Builder::Builder(uint32_t flags) : fFlags(flags) {}
 Animation::Builder::~Builder() = default;
@@ -410,13 +382,11 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
                                        &fStats, size, duration, fps, fFlags);
     auto ainfo = builder.parse(json);
 
-    fSlotManager = ainfo.fSlotManager;
-
     const auto t2 = std::chrono::steady_clock::now();
     fStats.fSceneParseTimeMS = std::chrono::duration<float, std::milli>{t2-t1}.count();
     fStats.fTotalLoadTimeMS  = std::chrono::duration<float, std::milli>{t2-t0}.count();
 
-    if (!ainfo.fSceneRoot && fLogger) {
+    if (!ainfo.fScene && fLogger) {
         fLogger->log(Logger::Level::kError, "Could not parse animation.\n");
     }
 
@@ -425,7 +395,7 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
         flags |= Animation::Flags::kRequiresTopLevelIsolation;
     }
 
-    return sk_sp<Animation>(new Animation(std::move(ainfo.fSceneRoot),
+    return sk_sp<Animation>(new Animation(std::move(ainfo.fScene),
                                           std::move(ainfo.fAnimators),
                                           std::move(version),
                                           size,
@@ -443,11 +413,11 @@ sk_sp<Animation> Animation::Builder::makeFromFile(const char path[]) {
                 : nullptr;
 }
 
-Animation::Animation(sk_sp<sksg::RenderNode> scene_root,
+Animation::Animation(std::unique_ptr<sksg::Scene> scene,
                      std::vector<sk_sp<internal::Animator>>&& animators,
                      SkString version, const SkSize& size,
                      double inPoint, double outPoint, double duration, double fps, uint32_t flags)
-    : fSceneRoot(std::move(scene_root))
+    : fScene(std::move(scene))
     , fAnimators(std::move(animators))
     , fVersion(std::move(version))
     , fSize(size)
@@ -466,7 +436,7 @@ void Animation::render(SkCanvas* canvas, const SkRect* dstR) const {
 void Animation::render(SkCanvas* canvas, const SkRect* dstR, RenderFlags renderFlags) const {
     TRACE_EVENT0("skottie", TRACE_FUNC);
 
-    if (!fSceneRoot)
+    if (!fScene)
         return;
 
     SkAutoCanvasRestore restore(canvas, true);
@@ -487,13 +457,13 @@ void Animation::render(SkCanvas* canvas, const SkRect* dstR, RenderFlags renderF
         canvas->saveLayer(srcR, nullptr);
     }
 
-    fSceneRoot->render(canvas);
+    fScene->render(canvas);
 }
 
 void Animation::seekFrame(double t, sksg::InvalidationController* ic) {
     TRACE_EVENT0("skottie", TRACE_FUNC);
 
-    if (!fSceneRoot)
+    if (!fScene)
         return;
 
     // Per AE/Lottie semantics out_point is exclusive.
@@ -504,7 +474,7 @@ void Animation::seekFrame(double t, sksg::InvalidationController* ic) {
         anim->seek(comp_time);
     }
 
-    fSceneRoot->revalidate(ic, SkMatrix::I());
+    fScene->revalidate(ic);
 }
 
 void Animation::seekFrameTime(double t, sksg::InvalidationController* ic) {

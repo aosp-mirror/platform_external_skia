@@ -29,7 +29,6 @@ public:
         static std::unique_ptr<ICCProfile> Make(const skcms_ICCProfile&);
 
         const skcms_ICCProfile* profile() const { return &fProfile; }
-        sk_sp<SkData> data() const { return fData; }
     private:
         ICCProfile(const skcms_ICCProfile&, sk_sp<SkData> = nullptr);
 
@@ -197,10 +196,6 @@ public:
     const skcms_ICCProfile* profile() const {
         if (!fProfile) return nullptr;
         return fProfile->profile();
-    }
-    sk_sp<SkData> profileData() const {
-        if (!fProfile) return nullptr;
-        return fProfile->data();
     }
 
     uint8_t bitsPerComponent() const { return fBitsPerComponent; }

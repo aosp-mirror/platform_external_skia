@@ -9,14 +9,11 @@
 
 #include "include/gpu/graphite/GraphiteTypes.h"
 #include "include/gpu/graphite/Recorder.h"
-#include "include/private/base/SkAlign.h"
-#include "src/core/SkTraceEvent.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/BufferManager.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
-#include "src/gpu/graphite/CopyTask.h"
 #include "src/gpu/graphite/DrawContext.h"
 #include "src/gpu/graphite/DrawList.h"
 #include "src/gpu/graphite/DrawWriter.h"
@@ -32,6 +29,7 @@
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/Sampler.h"
 #include "src/gpu/graphite/Texture.h"
+#include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/gpu/graphite/geom/BoundsManager.h"
 
@@ -40,8 +38,6 @@
 
 #include <algorithm>
 #include <unordered_map>
-
-using namespace skia_private;
 
 namespace skgpu::graphite {
 
@@ -66,7 +62,8 @@ public:
 
     // See note below in GeometryUniformField. This value can be round-tripped within the SortKey
     // packing for all fields but will not be produced when recording actual draw data.
-    static constexpr Index kInvalidIndex{1 << SkNextLog2_portable(DrawList::kMaxRenderSteps)};
+    static constexpr Index kInvalidIndex{1 << SkNextLog2_portable(Renderer::kMaxRenderSteps *
+                                                                  DrawList::kMaxDraws)};
 
     bool empty() const { return fIndexToData.empty(); }
     size_t size() const { return fIndexToData.size(); }
@@ -88,18 +85,18 @@ public:
 
     SkSpan<V> data() { return {fIndexToData.data(), fIndexToData.size()}; }
 
-    TArray<V>&& detach() { return std::move(fIndexToData); }
+    SkTArray<V>&& detach() { return std::move(fIndexToData); }
 
 private:
-    THashMap<T, Index> fDataToIndex;
-    TArray<V> fIndexToData;
+    SkTHashMap<T, Index> fDataToIndex;
+    SkTArray<V> fIndexToData;
 };
 
 // Tracks uniform data on the CPU and then its transition to storage in a GPU buffer (ubo or ssbo).
 struct CpuOrGpuData {
     union {
         const UniformDataBlock* fCpuData;
-        BindUniformBufferInfo fGpuData;
+        BindBufferInfo fGpuData;
     };
 
     // Can only start from CPU data
@@ -124,7 +121,7 @@ struct TextureBinding {
     }
 };
 
-using UniformCache = DenseBiMap<const UniformDataBlock*, CpuOrGpuData>;
+using UniformSsboCache = DenseBiMap<const UniformDataBlock*, CpuOrGpuData>;
 using TextureBindingCache = DenseBiMap<TextureBinding>;
 using GraphicsPipelineCache = DenseBiMap<GraphicsPipelineDesc>;
 
@@ -173,8 +170,8 @@ public:
         }
     }
 
-    TArray<sk_sp<TextureProxy>>&& detachTextures() { return fProxyCache.detach(); }
-    TArray<SamplerDesc>&& detachSamplers() { return fSamplerCache.detach(); }
+    SkTArray<sk_sp<TextureProxy>>&& detachTextures() { return fProxyCache.detach(); }
+    SkTArray<SamplerDesc>&& detachSamplers() { return fSamplerCache.detach(); }
 
 private:
     struct ProxyRef {
@@ -194,16 +191,16 @@ private:
 
 // Collects and writes uniform data either to uniform buffers or to shared storage buffers, and
 // tracks when bindings need to change between draws.
-class UniformTracker {
+class UniformSsboTracker {
 public:
-    UniformTracker(bool useStorageBuffers) : fUseStorageBuffers(useStorageBuffers) {}
+    UniformSsboTracker(bool useStorageBuffers) : fUseStorageBuffers(useStorageBuffers) {}
 
-    // Maps a given {pipeline index, uniform data cache index} pair to a buffer index within the
+    // Maps a given {pipeline index, uniform data cache index} pair to an SSBO index within the
     // pipeline's accumulated array of uniforms.
-    UniformCache::Index trackUniforms(GraphicsPipelineCache::Index pipelineIndex,
-                                      const UniformDataBlock* cpuData) {
+    UniformSsboCache::Index trackUniforms(GraphicsPipelineCache::Index pipelineIndex,
+                                          const UniformDataBlock* cpuData) {
         if (!cpuData) {
-            return UniformCache::kInvalidIndex;
+            return UniformSsboCache::kInvalidIndex;
         }
 
         if (pipelineIndex >= SkToU32(fPerPipelineCaches.size())) {
@@ -214,11 +211,11 @@ public:
     }
 
     // Writes all tracked uniform data into buffers, tracking the bindings for the written buffers
-    // by GraphicsPipelineCache::Index and possibly the UniformCache::Index (when not using SSBOs).
-    // When using SSBOs, the buffer is the same for all UniformCache::Indices that share the same
-    // pipeline (and is stored in index 0).
+    // by GraphicsPipelineCache::Index and possibly the UniformSsboCache::Index (when not using
+    // SSBOs). When using SSBos, the buffer is the same for all UniformSsboCache::Indices that share
+    // the same pipeline (and is stored in index 0).
     void writeUniforms(DrawBufferManager* bufferMgr) {
-        for (UniformCache& cache : fPerPipelineCaches) {
+        for (UniformSsboCache& cache : fPerPipelineCaches) {
             if (cache.empty()) {
                 continue;
             }
@@ -233,48 +230,35 @@ public:
                     fUseStorageBuffers ? bufferMgr->getSsboWriter(udbSize * cache.size())
                                        : bufferMgr->getUniformWriter(udbSize * cache.size());
 
-            uint32_t bindingSize;
-            if (fUseStorageBuffers) {
-                // For storage buffer we will always bind all the blocks.
-                bindingSize = static_cast<uint32_t>(udbSize * cache.size());
-            }
-            else {
-                // For uniform buffer we will bind one block at a time.
-                bindingSize = static_cast<uint32_t>(udbSize);
-            }
-
             for (CpuOrGpuData& dataBlock : cache.data()) {
                 SkASSERT(dataBlock.fCpuData->size() == udbDataSize);
                 writer.write(dataBlock.fCpuData->data(), udbDataSize);
                 // Swap from tracking the CPU data to the location of the GPU data
-                dataBlock.fGpuData.fBuffer = bufferInfo.fBuffer;
-                dataBlock.fGpuData.fOffset = bufferInfo.fOffset;
-                dataBlock.fGpuData.fBindingSize = bindingSize;
-
+                dataBlock.fGpuData = bufferInfo;
                 if (!fUseStorageBuffers) {
-                    bufferInfo.fOffset += bindingSize;
-                    writer.skipBytes(bindingSize - udbDataSize);
+                    bufferInfo.fOffset += udbSize;
+                    writer.skipBytes(udbSize - udbDataSize);
                 } // else keep bufferInfo pointing to the start of the array
             }
         }
     }
 
-    // Updates the current tracked pipeline and uniform index and returns whether or not
-    // bindBuffers() needs to be called, depending on if 'fUseStorageBuffers' is true or not.
+    // Updates the current tracked pipeline and ssbo index and returns whether or not bindBuffers()
+    // needs to be called, depending on if 'fUseStorageBuffers' is true or not.
     bool setCurrentUniforms(GraphicsPipelineCache::Index pipelineIndex,
-                            UniformCache::Index uniformIndex) {
-        if (uniformIndex >= UniformCache::kInvalidIndex) {
+                            UniformSsboCache::Index ssboIndex) {
+        if (ssboIndex >= UniformSsboCache::kInvalidIndex) {
             return false;
         }
         SkASSERT(pipelineIndex < SkToU32(fPerPipelineCaches.size()) &&
-                 uniformIndex < fPerPipelineCaches[pipelineIndex].size());
+                 ssboIndex < fPerPipelineCaches[pipelineIndex].size());
 
         if (fUseStorageBuffers) {
-            uniformIndex = 0; // The specific index has no effect on binding
+            ssboIndex = 0; // The specific index has no effect on binding
         }
-        if (fLastPipeline != pipelineIndex || fLastIndex != uniformIndex) {
+        if (fLastPipeline != pipelineIndex || fLastIndex != ssboIndex) {
             fLastPipeline = pipelineIndex;
-            fLastIndex = uniformIndex;
+            fLastIndex = ssboIndex;
             return true;
         } else {
             return false;
@@ -285,23 +269,23 @@ public:
     // data cache index.
     void bindUniforms(UniformSlot slot, DrawPassCommands::List* commandList) {
         SkASSERT(fLastPipeline < GraphicsPipelineCache::kInvalidIndex &&
-                 fLastIndex < UniformCache::kInvalidIndex);
+                 fLastIndex < UniformSsboCache::kInvalidIndex);
         SkASSERT(!fUseStorageBuffers || fLastIndex == 0);
-        const BindUniformBufferInfo& binding =
+        const BindBufferInfo& binding =
                 fPerPipelineCaches[fLastPipeline].lookup(fLastIndex).fGpuData;
         commandList->bindUniformBuffer(binding, slot);
     }
 
 private:
-    // Access first by pipeline index. The final UniformCache::Index is either used to select the
-    // BindBufferInfo for a draw using UBOs, or it's the real index into a packed array of uniforms
-    // in a storage buffer object (whose binding is stored in index 0).
-    TArray<UniformCache> fPerPipelineCaches;
+    // Access first by pipeline index. The final UniformSsboCache::Index is either used to select
+    // the BindBufferInfo for a draw using UBOs, or it's the real index into a packed array of
+    // uniforms in a storage buffer object (whose binding is stored in index 0).
+    SkTArray<UniformSsboCache> fPerPipelineCaches;
 
     const bool fUseStorageBuffers;
 
     GraphicsPipelineCache::Index fLastPipeline = GraphicsPipelineCache::kInvalidIndex;
-    UniformCache::Index fLastIndex = UniformCache::kInvalidIndex;
+    UniformSsboCache::Index fLastIndex = UniformSsboCache::kInvalidIndex;
 };
 
 } // namespace
@@ -336,15 +320,15 @@ public:
     SortKey(const DrawList::Draw* draw,
             int renderStep,
             GraphicsPipelineCache::Index pipelineIndex,
-            UniformCache::Index geomUniformIndex,
-            UniformCache::Index shadingUniformIndex,
+            UniformSsboCache::Index geomSsboIndex,
+            UniformSsboCache::Index shadingSsboIndex,
             TextureBindingCache::Index textureBindingIndex)
         : fPipelineKey(ColorDepthOrderField::set(draw->fDrawParams.order().paintOrder().bits()) |
                        StencilIndexField::set(draw->fDrawParams.order().stencilIndex().bits())  |
                        RenderStepField::set(static_cast<uint32_t>(renderStep))                  |
                        PipelineField::set(pipelineIndex))
-        , fUniformKey(GeometryUniformField::set(geomUniformIndex)   |
-                      ShadingUniformField::set(shadingUniformIndex) |
+        , fUniformKey(GeometryUniformField::set(geomSsboIndex)   |
+                      ShadingUniformField::set(shadingSsboIndex) |
                       TextureBindingsField::set(textureBindingIndex))
         , fDraw(draw) {
         SkASSERT(pipelineIndex < GraphicsPipelineCache::kInvalidIndex);
@@ -365,10 +349,10 @@ public:
     GraphicsPipelineCache::Index pipelineIndex() const {
         return PipelineField::get(fPipelineKey);
     }
-    UniformCache::Index geometryUniformIndex() const {
+    UniformSsboCache::Index geometrySsboIndex() const {
         return GeometryUniformField::get(fUniformKey);
     }
-    UniformCache::Index shadingUniformIndex() const {
+    UniformSsboCache::Index shadingSsboIndex() const {
         return ShadingUniformField::get(fUniformKey);
     }
     TextureBindingCache::Index textureBindingIndex() const {
@@ -382,15 +366,15 @@ private:
     using ColorDepthOrderField = Bitfield<16, 48>; // sizeof(CompressedPaintersOrder)
     using StencilIndexField    = Bitfield<16, 32>; // sizeof(DisjointStencilIndex)
     using RenderStepField      = Bitfield<2,  30>; // bits >= log2(Renderer::kMaxRenderSteps)
-    using PipelineField        = Bitfield<30, 0>;  // bits >= log2(max total steps in draw list)
+    using PipelineField        = Bitfield<30, 0>;  // bits >= log2(max steps*DrawList::kMaxDraws)
     uint64_t fPipelineKey;
 
     // The uniform/texture index fields need 1 extra bit to encode "no-data". Values that are
     // greater than or equal to 2^(bits-1) represent "no-data", while values between
     // [0, 2^(bits-1)-1] can access data arrays without extra logic.
-    using GeometryUniformField = Bitfield<17, 47>; // bits >= 1+log2(max total steps)
-    using ShadingUniformField  = Bitfield<17, 30>; // bits >= 1+log2(max total steps)
-    using TextureBindingsField = Bitfield<30, 0>;  // bits >= 1+log2(max total steps)
+    using GeometryUniformField = Bitfield<22, 42>; // bits >= 1+log2(max steps * max draw count)
+    using ShadingUniformField  = Bitfield<21, 21>; // bits >= 1+log2(max steps * max draw count)
+    using TextureBindingsField = Bitfield<21, 0>;  // bits >= 1+log2(max steps * max draw count)
     uint64_t fUniformKey;
 
     // Backpointer to the draw that produced the sort key
@@ -399,39 +383,17 @@ private:
     static_assert(ColorDepthOrderField::kBits >= sizeof(CompressedPaintersOrder));
     static_assert(StencilIndexField::kBits    >= sizeof(DisjointStencilIndex));
     static_assert(RenderStepField::kBits      >= SkNextLog2_portable(Renderer::kMaxRenderSteps));
-    static_assert(PipelineField::kBits        >= SkNextLog2_portable(DrawList::kMaxRenderSteps));
-    static_assert(GeometryUniformField::kBits >= 1+SkNextLog2_portable(DrawList::kMaxRenderSteps));
-    static_assert(ShadingUniformField::kBits  >= 1+SkNextLog2_portable(DrawList::kMaxRenderSteps));
-    static_assert(TextureBindingsField::kBits >= 1+SkNextLog2_portable(DrawList::kMaxRenderSteps));
+    static_assert(PipelineField::kBits        >=
+                          SkNextLog2_portable(Renderer::kMaxRenderSteps * DrawList::kMaxDraws));
+    static_assert(GeometryUniformField::kBits >=
+                          1 + SkNextLog2_portable(Renderer::kMaxRenderSteps * DrawList::kMaxDraws));
+    static_assert(ShadingUniformField::kBits  >=
+                          1 + SkNextLog2_portable(Renderer::kMaxRenderSteps * DrawList::kMaxDraws));
+    static_assert(TextureBindingsField::kBits >=
+                          1 + SkNextLog2_portable(Renderer::kMaxRenderSteps * DrawList::kMaxDraws));
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-sk_sp<TextureProxy> add_copy_target_task(Recorder* recorder,
-                                         sk_sp<TextureProxy> target,
-                                         const SkImageInfo& targetInfo,
-                                         const SkIPoint& targetOffset) {
-    SkASSERT(recorder->priv().caps()->isTexturable(target->textureInfo()));
-    SkIRect dstSrcRect = SkIRect::MakePtSize(targetOffset, targetInfo.dimensions());
-    sk_sp<TextureProxy> copy = TextureProxy::Make(recorder->priv().caps(),
-                                                  targetInfo.dimensions(),
-                                                  target->textureInfo(),
-                                                  skgpu::Budgeted::kYes);
-    if (!copy) {
-        SKGPU_LOG_W("Failed to create destination copy texture for dst read.");
-        return nullptr;
-    }
-
-    sk_sp<CopyTextureToTextureTask> copyTask = CopyTextureToTextureTask::Make(
-            std::move(target), dstSrcRect, copy, /*dstPoint=*/{0, 0});
-    if (!copyTask) {
-        SKGPU_LOG_W("Failed to create destination copy task for dst read.");
-        return nullptr;
-    }
-
-    recorder->priv().add(std::move(copyTask));
-    return copy;
-}
 
 DrawPass::DrawPass(sk_sp<TextureProxy> target,
                    std::pair<LoadOp, StoreOp> ops,
@@ -463,14 +425,11 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     //    indirection and does not work as well with SkTBlockList.
     // In pseudo tests, manipulating the pointer or having to mask out indices was about 15% slower
     // than an 8 byte key and unmodified pointer.
-    static_assert(sizeof(DrawPass::SortKey) ==
-                  SkAlignTo(16 + sizeof(void*), alignof(DrawPass::SortKey)));
-
-    TRACE_EVENT1("skia.gpu", TRACE_FUNC, "draw count", draws->fDraws.count());
+    static_assert(sizeof(DrawPass::SortKey) == 16 + sizeof(void*));
 
     // The DrawList is converted directly into the DrawPass' data structures, but once the DrawPass
     // is returned from Make(), it is considered immutable.
-    std::unique_ptr<DrawPass> drawPass(new DrawPass(target, ops, clearColor));
+    std::unique_ptr<DrawPass> drawPass(new DrawPass(std::move(target), ops, clearColor));
 
     Rect passBounds = Rect::InfiniteInverted();
 
@@ -483,14 +442,15 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     GraphicsPipelineCache pipelineCache;
 
     // Geometry uniforms are currently always UBO-backed.
-    const bool useStorageBuffers = recorder->priv().caps()->storageBufferPreferred();
     const ResourceBindingRequirements& bindingReqs =
             recorder->priv().caps()->resourceBindingRequirements();
-    Layout uniformLayout =
-            useStorageBuffers ? bindingReqs.fStorageBufferLayout : bindingReqs.fUniformBufferLayout;
+    Layout geometryUniformLayout = bindingReqs.fUniformBufferLayout;
+    UniformSsboTracker geometrySsboTracker(/*useStorageBuffers=*/false);
 
-    UniformTracker geometryUniformTracker(useStorageBuffers);
-    UniformTracker shadingUniformTracker(useStorageBuffers);
+    bool useStorageBuffers = recorder->priv().caps()->storageBufferPreferred();
+    Layout shadingUniformLayout =
+            useStorageBuffers ? bindingReqs.fStorageBufferLayout : bindingReqs.fUniformBufferLayout;
+    UniformSsboTracker shadingSsboTracker(useStorageBuffers);
     TextureBindingTracker textureBindingTracker;
 
     ShaderCodeDictionary* dict = recorder->priv().shaderCodeDictionary();
@@ -498,27 +458,10 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
 
     // The initial layout we pass here is not important as it will be re-assigned when writing
     // shading and geometry uniforms below.
-    PipelineDataGatherer gatherer(uniformLayout);
-
-    // Copy of destination, if needed.
-    sk_sp<TextureProxy> dst;
-    SkIPoint dstOffset;
-    if (!draws->dstCopyBounds().isEmptyNegativeOrNaN()) {
-        TRACE_EVENT_INSTANT0("skia.gpu", "DrawPass requires dst copy", TRACE_EVENT_SCOPE_THREAD);
-
-        SkIRect dstCopyPixelBounds = draws->dstCopyBounds().makeRoundOut().asSkIRect();
-        dstOffset = dstCopyPixelBounds.topLeft();
-        dst = add_copy_target_task(
-                recorder, target, targetInfo.makeDimensions(dstCopyPixelBounds.size()), dstOffset);
-        if (!dst) {
-            SKGPU_LOG_W("Failed to copy destination for reading. Dropping draw pass!");
-            return nullptr;
-        }
-    }
+    PipelineDataGatherer gatherer(shadingUniformLayout);
 
     std::vector<SortKey> keys;
     keys.reserve(draws->renderStepCount());
-
     for (const DrawList::Draw& draw : draws->fDraws.items()) {
         // If we have two different descriptors, such that the uniforms from the PaintParams can be
         // bound independently of those used by the rest of the RenderStep, then we can upload now
@@ -527,19 +470,13 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         const UniformDataBlock* shadingUniforms = nullptr;
         const TextureDataBlock* paintTextures = nullptr;
         if (draw.fPaintParams.has_value()) {
-            sk_sp<TextureProxy> curDst =
-                    draw.fPaintParams->dstReadRequirement() == DstReadRequirement::kTextureCopy
-                            ? dst
-                            : nullptr;
             std::tie(shaderID, shadingUniforms, paintTextures) =
                     ExtractPaintData(recorder,
                                      &gatherer,
                                      &builder,
-                                     uniformLayout,
+                                     shadingUniformLayout,
                                      draw.fDrawParams.transform(),
                                      draw.fPaintParams.value(),
-                                     curDst,
-                                     dstOffset,
                                      targetInfo.colorInfo());
         } // else depth-only
 
@@ -552,19 +489,19 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
             auto [geometryUniforms, stepTextures] = ExtractRenderStepData(&geometryUniformDataCache,
                                                                           textureDataCache,
                                                                           &gatherer,
-                                                                          uniformLayout,
+                                                                          geometryUniformLayout,
                                                                           step,
                                                                           draw.fDrawParams);
 
-            UniformCache::Index geomUniformIndex = geometryUniformTracker.trackUniforms(
+            UniformSsboCache::Index geomSsboIndex = geometrySsboTracker.trackUniforms(
                     pipelineIndex, geometryUniforms);
-            UniformCache::Index shadingUniformIndex = shadingUniformTracker.trackUniforms(
+            UniformSsboCache::Index shadingSsboIndex = shadingSsboTracker.trackUniforms(
                     pipelineIndex, performsShading ? shadingUniforms : nullptr);
             TextureBindingCache::Index textureIndex = textureBindingTracker.trackTextures(
                     performsShading ? paintTextures : nullptr, stepTextures);
 
             keys.push_back({&draw, stepIndex, pipelineIndex,
-                            geomUniformIndex, shadingUniformIndex, textureIndex});
+                            geomSsboIndex, shadingSsboIndex, textureIndex});
         }
 
         passBounds.join(draw.fDrawParams.clip().drawBounds());
@@ -572,8 +509,8 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         drawPass->fRequiresMSAA |= draw.fRenderer->requiresMSAA();
     }
 
-    geometryUniformTracker.writeUniforms(bufferMgr);
-    shadingUniformTracker.writeUniforms(bufferMgr);
+    geometrySsboTracker.writeUniforms(bufferMgr);
+    shadingSsboTracker.writeUniforms(bufferMgr);
 
     // TODO: Explore sorting algorithms; in all likelihood this will be mostly sorted already, so
     // algorithms that approach O(n) in that condition may be favorable. Alternatively, could
@@ -589,7 +526,7 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     GraphicsPipelineCache::Index lastPipeline = GraphicsPipelineCache::kInvalidIndex;
     SkIRect lastScissor = SkIRect::MakeSize(targetInfo.dimensions());
 
-    SkASSERT(drawPass->fTarget->isFullyLazy() ||
+    SkASSERT(!drawPass->fTarget->isInstantiated() ||
              SkIRect::MakeSize(drawPass->fTarget->dimensions()).contains(lastScissor));
     drawPass->fCommandList.setScissor(lastScissor);
 
@@ -599,10 +536,10 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
 
         const bool pipelineChange = key.pipelineIndex() != lastPipeline;
 
-        const bool geomBindingChange    = geometryUniformTracker.setCurrentUniforms(
-                key.pipelineIndex(), key.geometryUniformIndex());
-        const bool shadingBindingChange  = shadingUniformTracker.setCurrentUniforms(
-                key.pipelineIndex(), key.shadingUniformIndex());
+        const bool geomBindingChange    = geometrySsboTracker.setCurrentUniforms(
+                key.pipelineIndex(), key.geometrySsboIndex());
+        const bool shadingBindingChange  = shadingSsboTracker.setCurrentUniforms(
+                key.pipelineIndex(), key.shadingSsboIndex());
         const bool textureBindingsChange = textureBindingTracker.setCurrentTextureBindings(
                 key.textureBindingIndex());
         const SkIRect* newScissor        = draw.fDrawParams.clip().scissor() != lastScissor ?
@@ -630,11 +567,10 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         }
         if (stateChange) {
             if (geomBindingChange) {
-                geometryUniformTracker.bindUniforms(UniformSlot::kRenderStep,
-                                                    &drawPass->fCommandList);
+                geometrySsboTracker.bindUniforms(UniformSlot::kRenderStep, &drawPass->fCommandList);
             }
             if (shadingBindingChange) {
-                shadingUniformTracker.bindUniforms(UniformSlot::kPaint, &drawPass->fCommandList);
+                shadingSsboTracker.bindUniforms(UniformSlot::kPaint, &drawPass->fCommandList);
             }
             if (textureBindingsChange) {
                 textureBindingTracker.bindTextures(&drawPass->fCommandList);
@@ -645,16 +581,7 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
             }
         }
 
-        UniformCache::Index geometrySsboIndex =
-                (key.geometryUniformIndex() == UniformCache::kInvalidIndex)
-                        ? 0
-                        : key.geometryUniformIndex();
-        UniformCache::Index shadingSsboIndex =
-                (key.shadingUniformIndex() == UniformCache::kInvalidIndex)
-                        ? 0
-                        : key.shadingUniformIndex();
-        skvx::ushort2 ssboIndices = {SkToU16(geometrySsboIndex), SkToU16(shadingSsboIndex)};
-        renderStep.writeVertices(&drawWriter, draw.fDrawParams, ssboIndices);
+        renderStep.writeVertices(&drawWriter, draw.fDrawParams, key.shadingSsboIndex());
     }
     // Finish recording draw calls for any collected data at the end of the loop
     drawWriter.flush();
@@ -665,19 +592,13 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     drawPass->fSamplerDescs    = textureBindingTracker.detachSamplers();
     drawPass->fSampledTextures = textureBindingTracker.detachTextures();
 
-    TRACE_COUNTER1("skia.gpu", "# pipelines", drawPass->fPipelineDescs.size());
-    TRACE_COUNTER1("skia.gpu", "# textures", drawPass->fSampledTextures.size());
-    TRACE_COUNTER1("skia.gpu", "# commands", drawPass->fCommandList.count());
-
     return drawPass;
 }
 
 bool DrawPass::prepareResources(ResourceProvider* resourceProvider,
                                 const RuntimeEffectDictionary* runtimeDict,
                                 const RenderPassDesc& renderPassDesc) {
-    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-
-    fFullPipelines.reserve(fFullPipelines.size() + fPipelineDescs.size());
+    fFullPipelines.reserve_back(fPipelineDescs.size());
     for (const GraphicsPipelineDesc& pipelineDesc : fPipelineDescs) {
         auto pipeline = resourceProvider->findOrCreateGraphicsPipeline(runtimeDict,
                                                                        pipelineDesc,
@@ -706,12 +627,12 @@ bool DrawPass::prepareResources(ResourceProvider* resourceProvider,
         }
     }
 
-    fSamplers.reserve(fSamplers.size() + fSamplerDescs.size());
+    fSamplers.reserve_back(fSamplerDescs.size());
     for (int i = 0; i < fSamplerDescs.size(); ++i) {
         sk_sp<Sampler> sampler = resourceProvider->findOrCreateCompatibleSampler(
-                fSamplerDescs[i].samplingOptions(),
-                fSamplerDescs[i].tileModeX(),
-                fSamplerDescs[i].tileModeY());
+                fSamplerDescs[i].fSamplingOptions,
+                fSamplerDescs[i].fTileModes[0],
+                fSamplerDescs[i].fTileModes[1]);
         if (!sampler) {
             SKGPU_LOG_W("Failed to create sampler. Will not create renderpass!");
             return false;
@@ -730,7 +651,7 @@ void DrawPass::addResourceRefs(CommandBuffer* commandBuffer) const {
         commandBuffer->trackResource(fFullPipelines[i]);
     }
     for (int i = 0; i < fSampledTextures.size(); ++i) {
-        commandBuffer->trackCommandBufferResource(fSampledTextures[i]->refTexture());
+        commandBuffer->trackResource(fSampledTextures[i]->refTexture());
     }
     for (int i = 0; i < fSamplers.size(); ++i) {
         commandBuffer->trackResource(fSamplers[i]);

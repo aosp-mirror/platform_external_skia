@@ -7,14 +7,7 @@
 
 #include "src/text/gpu/DistanceFieldAdjustTable.h"
 
-#include "include/core/SkTypes.h"
-#include "include/private/base/SkDebug.h"
-#include "include/private/base/SkTemplates.h"
-#include "src/base/SkNoDestructor.h"
 #include "src/core/SkScalerContext.h"
-
-#include <cstddef>
-#include <cstdint>
 
 using namespace skia_private;
 
@@ -60,7 +53,12 @@ SkScalar* build_distance_adjust_table(SkScalar paintGamma, SkScalar deviceGamma)
 
     int width, height;
     size_t size;
+
+#ifdef SK_GAMMA_CONTRAST
     SkScalar contrast = SK_GAMMA_CONTRAST;
+#else
+    SkScalar contrast = 0.5f;
+#endif
 
     size = SkScalerContext::GetGammaLUTSize(contrast, paintGamma, deviceGamma,
         &width, &height);
@@ -105,8 +103,8 @@ SkScalar* build_distance_adjust_table(SkScalar paintGamma, SkScalar deviceGamma)
 }
 
 const DistanceFieldAdjustTable* DistanceFieldAdjustTable::Get() {
-    static const SkNoDestructor<DistanceFieldAdjustTable> dfat;
-    return dfat.get();
+    static const DistanceFieldAdjustTable* dfat = new DistanceFieldAdjustTable;
+    return dfat;
 }
 
 DistanceFieldAdjustTable::DistanceFieldAdjustTable() {

@@ -15,16 +15,14 @@
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGTransform.h"
 
-#include <utility>
-
 namespace skjson {
+
 class ObjectValue;
 
-}  // namespace skjson
+} // namespace skjson
 
 namespace skottie {
 namespace internal {
-class AnimationBuilder;
 
 class TransformAdapter2D final : public DiscardableAdapterBase<TransformAdapter2D,
                                                                sksg::Matrix<SkMatrix>> {

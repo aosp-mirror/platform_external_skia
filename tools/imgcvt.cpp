@@ -10,13 +10,11 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
-#include "include/encode/SkPngEncoder.h"
 #include "modules/skcms/skcms.h"
 #include "src/core/SkColorSpacePriv.h"
 
 static void write_png(const char* path, sk_sp<SkImage> img) {
-    sk_sp<SkData> png = SkPngEncoder::Encode(nullptr, img.get(), {});
-    SkASSERT(png);
+    sk_sp<SkData>  png = img->encodeToData();
     SkFILEWStream(path).write(png->data(), png->size());
 }
 
@@ -73,7 +71,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    sk_sp<SkImage> image = SkImages::DeferredFromEncodedData(blob);
+    sk_sp<SkImage> image = SkImage::MakeFromEncoded(blob);
     if (!image) {
         SkDebugf("Couldn't decode %s as an SkImage or an ICC profile.\n", source_path);
         return 1;
@@ -137,11 +135,11 @@ int main(int argc, char** argv) {
         }
         pixmap.setColorSpace(dst_cs);
 
-        write_png("transformed-skcms.png", SkImages::RasterFromPixmapCopy(pixmap));
+        write_png("transformed-skcms.png", SkImage::MakeRasterCopy(pixmap));
     }
 
     { // transform with writePixels()
-        sk_sp<SkSurface> surface = SkSurfaces::Raster(pixmap.info().makeColorSpace(dst_cs));
+        sk_sp<SkSurface> surface = SkSurface::MakeRaster(pixmap.info().makeColorSpace(dst_cs));
         if (!surface) {
             SkDebugf("couldn't create a surface\n");
             return 1;
@@ -153,7 +151,7 @@ int main(int argc, char** argv) {
     }
 
     { // transform by drawing
-        sk_sp<SkSurface> surface = SkSurfaces::Raster(pixmap.info().makeColorSpace(dst_cs));
+        sk_sp<SkSurface> surface = SkSurface::MakeRaster(pixmap.info().makeColorSpace(dst_cs));
         if (!surface) {
             SkDebugf("couldn't create a surface\n");
             return 1;

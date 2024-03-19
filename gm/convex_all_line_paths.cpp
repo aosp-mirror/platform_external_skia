@@ -174,13 +174,13 @@ public:
     }
 
 protected:
-    SkString getName() const override {
+    SkString onShortName() override {
         if (fDoStrokeAndFill) {
             return SkString("convex-lineonly-paths-stroke-and-fill");
         }
         return SkString("convex-lineonly-paths");
     }
-    SkISize getISize() override { return SkISize::Make(kGMWidth, kGMHeight); }
+    SkISize onISize() override { return SkISize::Make(kGMWidth, kGMHeight); }
     bool runAsBench() const override { return true; }
 
     static SkPath GetPath(int index, SkPathDirection dir) {

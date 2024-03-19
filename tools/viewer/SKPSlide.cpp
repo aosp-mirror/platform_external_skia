@@ -8,13 +8,8 @@
 #include "tools/viewer/SKPSlide.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkPicture.h"
 #include "include/core/SkStream.h"
-#include "include/core/SkString.h"
-#include "include/private/base/SkDebug.h"
-#include "include/private/base/SkTo.h"
-
-#include <utility>
+#include "src/core/SkOSFile.h"
 
 SKPSlide::SKPSlide(const SkString& name, const SkString& path)
         : SKPSlide(name, SkStream::MakeFromFile(path.c_str())) {

@@ -10,15 +10,15 @@
 #include "bench/Benchmark.h"
 
 #include "include/core/SkCanvas.h"
+#include "include/core/SkDeferredDisplayListRecorder.h"
+#include "include/core/SkSurfaceCharacterization.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/private/chromium/GrDeferredDisplayListRecorder.h"
-#include "include/private/chromium/GrSurfaceCharacterization.h"
 
-static GrSurfaceCharacterization create_characterization(GrDirectContext* direct) {
+static SkSurfaceCharacterization create_characterization(GrDirectContext* direct) {
     size_t maxResourceBytes = direct->getResourceCacheLimit();
 
     if (!direct->colorTypeSupportedAsSurface(kRGBA_8888_SkColorType)) {
-        return GrSurfaceCharacterization();
+        return SkSurfaceCharacterization();
     }
 
     SkImageInfo ii = SkImageInfo::Make(32, 32, kRGBA_8888_SkColorType,
@@ -27,19 +27,14 @@ static GrSurfaceCharacterization create_characterization(GrDirectContext* direct
     GrBackendFormat backendFormat = direct->defaultBackendFormat(kRGBA_8888_SkColorType,
                                                                  GrRenderable::kYes);
     if (!backendFormat.isValid()) {
-        return GrSurfaceCharacterization();
+        return SkSurfaceCharacterization();
     }
 
     SkSurfaceProps props(0x0, kUnknown_SkPixelGeometry);
 
-    GrSurfaceCharacterization c =
-            direct->threadSafeProxy()->createCharacterization(maxResourceBytes,
-                                                              ii,
-                                                              backendFormat,
-                                                              1,
-                                                              kTopLeft_GrSurfaceOrigin,
-                                                              props,
-                                                              skgpu::Mipmapped::kNo);
+    SkSurfaceCharacterization c = direct->threadSafeProxy()->createCharacterization(
+                                                        maxResourceBytes, ii, backendFormat, 1,
+                                                        kTopLeft_GrSurfaceOrigin, props, false);
     return c;
 }
 
@@ -51,7 +46,7 @@ public:
     DDLRecorderBench() { }
 
 protected:
-    bool isSuitableFor(Backend backend) override { return Backend::kGanesh == backend; }
+    bool isSuitableFor(Backend backend) override { return kGPU_Backend == backend; }
 
     const char* onGetName() override { return "DDLRecorder"; }
 
@@ -80,9 +75,9 @@ private:
             return;
         }
 
-        GrSurfaceCharacterization c = create_characterization(context);
+        SkSurfaceCharacterization c = create_characterization(context);
 
-        fRecorder = std::make_unique<GrDeferredDisplayListRecorder>(c);
+        fRecorder = std::make_unique<SkDeferredDisplayListRecorder>(c);
     }
 
     // We defer the clean up of the DDLs so it is done outside of the timing loop
@@ -90,8 +85,8 @@ private:
         fDDLs.clear();
     }
 
-    std::unique_ptr<GrDeferredDisplayListRecorder>      fRecorder = nullptr;
-    std::vector<sk_sp<GrDeferredDisplayList>>           fDDLs;
+    std::unique_ptr<SkDeferredDisplayListRecorder>      fRecorder = nullptr;
+    std::vector<sk_sp<SkDeferredDisplayList>>           fDDLs;
 
     using INHERITED = Benchmark;
 };

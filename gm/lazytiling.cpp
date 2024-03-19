@@ -13,10 +13,8 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/base/SkRectMemcpy.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkConvertPixels.h"
-#include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrPaint.h"
@@ -43,9 +41,10 @@ static GrSurfaceProxyView create_view(GrDirectContext* dContext,
         }
 
         sk_sp<GrTextureProxy> proxy = GrProxyProvider::MakeFullyLazyProxy(
-                [src](GrResourceProvider* rp, const GrSurfaceProxy::LazySurfaceDesc& desc)
-                        -> GrSurfaceProxy::LazyCallbackResult {
-                    SkASSERT(desc.fMipmapped == skgpu::Mipmapped::kNo);
+                [src](GrResourceProvider* rp,
+                      const GrSurfaceProxy::LazySurfaceDesc& desc)
+                            -> GrSurfaceProxy::LazyCallbackResult {
+                    SkASSERT(desc.fMipmapped == GrMipmapped::kNo);
                     GrMipLevel mipLevel = {src.getPixels(), src.rowBytes(), nullptr};
                     auto colorType = SkColorTypeToGrColorType(src.colorType());
 
@@ -61,11 +60,7 @@ static GrSurfaceProxyView create_view(GrDirectContext* dContext,
                                              mipLevel,
                                              desc.fLabel);
                 },
-                format,
-                GrRenderable::kNo,
-                1,
-                GrProtected::kNo,
-                *dContext->priv().caps(),
+                format, GrRenderable::kNo, 1, GrProtected::kNo, *dContext->priv().caps(),
                 GrSurfaceProxy::UseAllocator::kYes);
 
         if (!proxy) {
@@ -153,7 +148,7 @@ static SkBitmap create_bitmap(SkIRect contentRect, SkISize fullSize, GrSurfaceOr
 }
 
 static void draw_texture(const GrCaps* caps,
-                         skgpu::ganesh::SurfaceDrawContext* sdc,
+                         skgpu::v1::SurfaceDrawContext* sdc,
                          const GrSurfaceProxyView& src,
                          const SkIRect& srcRect,
                          const SkIRect& drawRect,
@@ -185,13 +180,16 @@ public:
     }
 
 protected:
-    SkString getName() const override {
+
+    SkString onShortName() override {
         return SkStringPrintf("lazytiling_%s", fOrigin == kTopLeft_GrSurfaceOrigin ? "tl" : "bl");
     }
 
-    SkISize getISize() override { return SkISize::Make(kTotalWidth, kTotalHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kTotalWidth, kTotalHeight);
+    }
 
-    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg, GraphiteTestContext*) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
         auto dContext = GrAsDirectContext(canvas->recordingContext());
         if (!dContext || dContext->abandoned()) {
             return DrawResult::kSkip;
@@ -212,7 +210,7 @@ protected:
     }
 
     DrawResult onDraw(GrRecordingContext* rContext, SkCanvas* canvas, SkString* errorMsg) override {
-        auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
+        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
         if (!sdc) {
             *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
             return DrawResult::kSkip;

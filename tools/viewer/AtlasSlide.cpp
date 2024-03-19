@@ -14,7 +14,6 @@
 #include "include/utils/SkTextUtils.h"
 #include "src/base/SkRandom.h"
 #include "src/core/SkPaintPriv.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/Slide.h"
 
 typedef void (*DrawAtlasProc)(SkCanvas*, SkImage*, const SkRSXform[], const SkRect[],
@@ -45,7 +44,7 @@ static void draw_atlas_sim(SkCanvas* canvas, SkImage* atlas, const SkRSXform xfo
 
 static sk_sp<SkImage> make_atlas(int atlasSize, int cellSize) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(atlasSize, atlasSize);
-    auto surface(SkSurfaces::Raster(info));
+    auto surface(SkSurface::MakeRaster(info));
     SkCanvas* canvas = surface->getCanvas();
 
     SkPaint paint;
@@ -53,7 +52,7 @@ static sk_sp<SkImage> make_atlas(int atlasSize, int cellSize) {
 
     const SkScalar half = cellSize * SK_ScalarHalf;
     const char* s = "01234567890!@#$%^&*=+<>?abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    SkFont font(ToolUtils::DefaultTypeface(), 28);
+    SkFont font(nullptr, 28);
 
     int i = 0;
     for (int y = 0; y < atlasSize; y += cellSize) {
@@ -201,6 +200,9 @@ protected:
         r.outset(border, border);
         return r;
     }
+
+private:
+    using INHERITED = SkDrawable;
 };
 
 class DrawAtlasSlide : public Slide {

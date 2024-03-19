@@ -7,5 +7,5 @@ void func() {
 }
 
 /*%%*
-expected '}', but found 'default'
+expected expression, but found 'default'
 *%%*/

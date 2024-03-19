@@ -25,7 +25,6 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
-#include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
@@ -37,10 +36,8 @@
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/core/SkFontPriv.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <initializer_list>
 
@@ -72,9 +69,14 @@ public:
     DrawAtlasGM() {}
 
 protected:
-    SkString getName() const override { return SkString("draw-atlas"); }
 
-    SkISize getISize() override { return SkISize::Make(640, 480); }
+    SkString onShortName() override {
+        return SkString("draw-atlas");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(640, 480);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         const SkRect target = { 50, 50, 80, 90 };
@@ -189,7 +191,7 @@ static void drawTextPath(SkCanvas* canvas, bool doStroke) {
     const int N = sizeof(text0) - 1;
     SkPoint pos[N];
 
-    SkFont font = ToolUtils::DefaultPortableFont();
+    SkFont font;
     font.setSize(100);
 
     SkPaint paint;
@@ -235,7 +237,8 @@ DEF_SIMPLE_GM(drawTextRSXform, canvas, 430, 860) {
 
 // Exercise xform blob and its bounds
 DEF_SIMPLE_GM(blob_rsxform, canvas, 500, 100) {
-    SkFont font = ToolUtils::DefaultPortableFont();
+    SkFont font;
+    font.setTypeface(ToolUtils::create_portable_typeface());
     font.setSize(50);
 
     const char text[] = "CrazyXform";
@@ -265,16 +268,13 @@ DEF_SIMPLE_GM(blob_rsxform_distortable, canvas, 500, 100) {
     sk_sp<SkTypeface> typeface;
     std::unique_ptr<SkStreamAsset> distortable(GetResourceAsStream("fonts/Distortable.ttf"));
     if (distortable) {
-        sk_sp<SkFontMgr> fm = ToolUtils::TestFontMgr();
+        sk_sp<SkFontMgr> fm = SkFontMgr::RefDefault();
         const SkFontArguments::VariationPosition::Coordinate position[] = {
             { SkSetFourByteTag('w','g','h','t'), 1.618033988749895f }
         };
         SkFontArguments params;
         params.setVariationDesignPosition({position, std::size(position)});
         typeface = fm->makeFromStream(std::move(distortable), params);
-    }
-    if (!typeface) {
-        typeface = ToolUtils::DefaultPortableTypeface();
     }
 
     SkFont font(typeface, 50);
@@ -326,7 +326,7 @@ DEF_SIMPLE_GM(compare_atlas_vertices, canvas, 560, 585) {
     const SkRSXform xform = SkRSXform::Make(1, 0, 0, 0);
     const SkColor color = 0x884488CC;
 
-    auto image = ToolUtils::GetResourceAsImage("images/mandrill_128.png");
+    auto image = GetResourceAsImage("images/mandrill_128.png");
     auto verts = make_vertices(image, tex, color);
     const sk_sp<SkColorFilter> filters[] = {
         nullptr,

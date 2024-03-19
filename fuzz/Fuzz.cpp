@@ -11,19 +11,19 @@
 
 // UBSAN reminds us that bool can only legally hold 0 or 1.
 void Fuzz::next(bool* b) {
-    uint8_t n;
-    this->next(&n);
-    *b = (n & 1) == 1;
+  uint8_t n;
+  this->next(&n);
+  *b = (n & 1) == 1;
 }
 
 void Fuzz::nextBytes(void* n, size_t size) {
-    if ((fNextByte + size) > fSize) {
+    if ((fNextByte + size) > fBytes->size()) {
         sk_bzero(n, size);
-        memcpy(n, fData + fNextByte, fSize - fNextByte);
-        fNextByte = fSize;
+        memcpy(n, fBytes->bytes() + fNextByte, fBytes->size() - fNextByte);
+        fNextByte = fBytes->size();
         return;
     }
-    memcpy(n, fData + fNextByte, size);
+    memcpy(n, fBytes->bytes() + fNextByte, size);
     fNextByte += size;
 }
 

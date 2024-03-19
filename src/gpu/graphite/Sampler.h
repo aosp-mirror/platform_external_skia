@@ -16,8 +16,6 @@ class Sampler : public Resource {
 public:
     ~Sampler() override;
 
-    const char* getResourceType() const override { return "Sampler"; }
-
 protected:
     Sampler(const SharedContext*);
 

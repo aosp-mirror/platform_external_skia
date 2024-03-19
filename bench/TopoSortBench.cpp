@@ -12,8 +12,6 @@
 
 #include "tools/ToolUtils.h"
 
-using namespace skia_private;
-
 class TopoSortBench : public Benchmark {
 public:
     TopoSortBench() { }
@@ -22,7 +20,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return Backend::kNonRendering == backend;
+        return kNonRendering_Backend == backend;
     }
 
 protected:
@@ -68,7 +66,7 @@ private:
     static const int kNumElements = 1000;
     static const int kMaxEdges = 5;
 
-    TArray<sk_sp<ToolUtils::TopoTestNode>> fGraph;
+    SkTArray<sk_sp<ToolUtils::TopoTestNode>> fGraph;
     SkRandom fRand;
 
     using INHERITED = Benchmark;

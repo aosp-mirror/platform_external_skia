@@ -16,7 +16,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "modules/skresources/src/SkAnimCodecPlayer.h"
+#include "include/utils/SkAnimCodecPlayer.h"
 #include "src/core/SkOSFile.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
@@ -26,8 +26,6 @@
 #include <memory>
 #include <utility>
 #include <vector>
-
-#if defined(SK_ENABLE_SKOTTIE)
 
 static DEFINE_string(animatedGif, "images/test640x479.gif", "Animated gif in resources folder");
 
@@ -81,9 +79,11 @@ public:
     , fTotalFrames (-1) {}
 
 private:
-    SkString getName() const override { return SkString("animatedGif"); }
+    SkString onShortName() override {
+        return SkString("animatedGif");
+    }
 
-    SkISize getISize() override {
+    SkISize onISize() override {
         if (this->initCodec()) {
             SkISize dim = fCodec->getInfo().dimensions();
             // Wide enough to display all the frames.
@@ -174,7 +174,8 @@ private:
         return true;
     }
 };
-DEF_GM(return new AnimatedGifGM;)
+DEF_GM(return new AnimatedGifGM);
+
 
 static std::unique_ptr<SkCodec> load_codec(const char filename[]) {
     return SkCodec::MakeFromData(SkData::MakeFromFileName(filename));
@@ -201,9 +202,13 @@ public:
     }
 
 private:
-    SkString getName() const override { return SkString("AnimCodecPlayer"); }
+    SkString onShortName() override {
+        return SkString("AnimCodecPlayer");
+    }
 
-    SkISize getISize() override { return {1024, 768}; }
+    SkISize onISize() override {
+        return { 1024, 768 };
+    }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->scale(0.25f, 0.25f);
@@ -223,7 +228,7 @@ private:
         return true;
     }
 };
-DEF_GM(return new AnimCodecPlayerGM;)
+DEF_GM(return new AnimCodecPlayerGM);
 
 class AnimCodecPlayerExifGM : public skiagm::GM {
     const char* fPath;
@@ -254,11 +259,11 @@ class AnimCodecPlayerExifGM : public skiagm::GM {
         }
     }
 
-    SkString getName() const override {
+    SkString onShortName() override {
         return SkStringPrintf("AnimCodecPlayerExif_%s", strrchr(fPath, '/') + 1);
     }
 
-    SkISize getISize() override {
+    SkISize onISize() override {
         this->init();
         return fSize;
     }
@@ -296,5 +301,3 @@ public:
 DEF_GM(return new AnimCodecPlayerExifGM("images/required.webp");)
 DEF_GM(return new AnimCodecPlayerExifGM("images/required.gif");)
 DEF_GM(return new AnimCodecPlayerExifGM("images/stoplight_h.webp");)
-
-#endif

@@ -14,16 +14,16 @@
 #include "include/core/SkString.h"
 #include "include/private/base/SkTArray.h"
 
-using namespace skia_private;
-
 namespace skiagm {
 
 // this GM tests hairlines which fill nearly the entire render target
 class StLouisArchGM : public GM {
 protected:
-    SkString getName() const override { return SkString("stlouisarch"); }
+    SkString onShortName() override {
+        return SkString("stlouisarch");
+    }
 
-    SkISize getISize() override { return SkISize::Make((int)kWidth, (int)kHeight); }
+    SkISize onISize() override { return SkISize::Make((int)kWidth, (int)kHeight); }
 
     void onOnceBeforeDraw() override {
         {
@@ -90,7 +90,7 @@ protected:
     const SkScalar kHeight = 256;
 
 private:
-    TArray<SkPath> fPaths;
+    SkTArray<SkPath> fPaths;
     using INHERITED = GM;
 };
 

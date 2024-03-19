@@ -13,7 +13,7 @@
 
 struct SkPoint;
 
-class SK_API SkSVGLine final : public SkSVGShape {
+class SkSVGLine final : public SkSVGShape {
 public:
     static sk_sp<SkSVGLine> Make() { return sk_sp<SkSVGLine>(new SkSVGLine()); }
 

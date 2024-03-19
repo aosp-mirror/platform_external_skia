@@ -14,8 +14,6 @@
 #include <initializer_list>
 #include <utility>
 
-using namespace skia_private;
-
 // This class is used to test SkTArray's behavior with classes containing a vtable.
 
 namespace {
@@ -35,11 +33,11 @@ public:
 
 }  // namespace
 
-// Tests the TArray<T> class template.
+// Tests the SkTArray<T> class template.
 
 template <typename T, bool MEM_MOVE>
 static void TestTSet_basic(skiatest::Reporter* reporter) {
-    TArray<T, MEM_MOVE> a;
+    SkTArray<T, MEM_MOVE> a;
 
     // Starts empty.
     REPORTER_ASSERT(reporter, a.empty());
@@ -195,7 +193,7 @@ static void test_skstarray_compatibility(skiatest::Reporter* reporter) {
 }
 
 template <typename T> static void test_swap(skiatest::Reporter* reporter,
-                                            TArray<T>* (&arrays)[4],
+                                            SkTArray<T>* (&arrays)[4],
                                             int (&sizes)[7])
 {
     for (auto a : arrays) {
@@ -231,11 +229,11 @@ template <typename T> static void test_swap(skiatest::Reporter* reporter,
 static void test_swap(skiatest::Reporter* reporter) {
     int sizes[] = {0, 1, 5, 10, 15, 20, 25};
 
-    TArray<int> arr;
-    STArray< 5, int> arr5;
-    STArray<10, int> arr10;
-    STArray<20, int> arr20;
-    TArray<int>* arrays[] = { &arr, &arr5, &arr10, &arr20 };
+    SkTArray<int> arr;
+    SkSTArray< 5, int> arr5;
+    SkSTArray<10, int> arr10;
+    SkSTArray<20, int> arr20;
+    SkTArray<int>* arrays[] = { &arr, &arr5, &arr10, &arr20 };
     test_swap(reporter, arrays, sizes);
 
     struct MoveOnlyInt {
@@ -245,74 +243,74 @@ static void test_swap(skiatest::Reporter* reporter) {
         int fInt;
     };
 
-    TArray<MoveOnlyInt> moi;
-    STArray< 5, MoveOnlyInt> moi5;
-    STArray<10, MoveOnlyInt> moi10;
-    STArray<20, MoveOnlyInt> moi20;
-    TArray<MoveOnlyInt>* arraysMoi[] = { &moi, &moi5, &moi10, &moi20 };
+    SkTArray<MoveOnlyInt> moi;
+    SkSTArray< 5, MoveOnlyInt> moi5;
+    SkSTArray<10, MoveOnlyInt> moi10;
+    SkSTArray<20, MoveOnlyInt> moi20;
+    SkTArray<MoveOnlyInt>* arraysMoi[] = { &moi, &moi5, &moi10, &moi20 };
     test_swap(reporter, arraysMoi, sizes);
 }
 
 void test_unnecessary_alloc(skiatest::Reporter* reporter) {
     {
-        TArray<int> a;
+        SkTArray<int> a;
         REPORTER_ASSERT(reporter, a.capacity() == 0);
     }
     {
-        STArray<10, int> a;
+        SkSTArray<10, int> a;
         REPORTER_ASSERT(reporter, a.capacity() == 10);
     }
     {
-        TArray<int> a(1);
+        SkTArray<int> a(1);
         REPORTER_ASSERT(reporter, a.capacity() >= 1);
     }
     {
-        TArray<int> a, b;
+        SkTArray<int> a, b;
         b = a;
         REPORTER_ASSERT(reporter, b.capacity() == 0);
     }
     {
-        STArray<10, int> a;
-        TArray<int> b;
+        SkSTArray<10, int> a;
+        SkTArray<int> b;
         b = a;
         REPORTER_ASSERT(reporter, b.capacity() == 0);
     }
     {
-        TArray<int> a;
-        TArray<int> b(a);  // NOLINT(performance-unnecessary-copy-initialization)
+        SkTArray<int> a;
+        SkTArray<int> b(a);  // NOLINT(performance-unnecessary-copy-initialization)
         REPORTER_ASSERT(reporter, b.capacity() == 0);
     }
     {
-        STArray<10, int> a;
-        TArray<int> b(a);  // NOLINT(performance-unnecessary-copy-initialization)
+        SkSTArray<10, int> a;
+        SkTArray<int> b(a);  // NOLINT(performance-unnecessary-copy-initialization)
         REPORTER_ASSERT(reporter, b.capacity() == 0);
     }
     {
-        TArray<int> a;
-        TArray<int> b(std::move(a));
+        SkTArray<int> a;
+        SkTArray<int> b(std::move(a));
         REPORTER_ASSERT(reporter, b.capacity() == 0);
     }
     {
-        STArray<10, int> a;
-        TArray<int> b(std::move(a));
+        SkSTArray<10, int> a;
+        SkTArray<int> b(std::move(a));
         REPORTER_ASSERT(reporter, b.capacity() == 0);
     }
     {
-        TArray<int> a;
-        TArray<int> b;
+        SkTArray<int> a;
+        SkTArray<int> b;
         b = std::move(a);
         REPORTER_ASSERT(reporter, b.capacity() == 0);
     }
     {
-        STArray<10, int> a;
-        TArray<int> b;
+        SkSTArray<10, int> a;
+        SkTArray<int> b;
         b = std::move(a);
         REPORTER_ASSERT(reporter, b.capacity() == 0);
     }
 }
 
 static void test_self_assignment(skiatest::Reporter* reporter) {
-    TArray<int> a;
+    SkTArray<int> a;
     a.push_back(1);
     REPORTER_ASSERT(reporter, !a.empty());
     REPORTER_ASSERT(reporter, a.size() == 1);
@@ -353,58 +351,21 @@ template<typename Array> static void test_reserve(skiatest::Reporter* reporter) 
 
         // Test setting reserve after constructor.
         Array array2;
-        array2.reserve(reserveCount);
+        array2.reserve_back(reserveCount);
         test_array_reserve(reporter, &array2, reserveCount);
 
         // Test increasing reserve after constructor.
         Array array3(reserveCount/2);
-        array3.reserve(reserveCount);
+        array3.reserve_back(reserveCount);
         test_array_reserve(reporter, &array3, reserveCount);
 
         // Test setting reserve on non-empty array.
         Array array4;
         array4.push_back_n(reserveCount);
-        array4.reserve(2 * reserveCount);
+        array4.reserve_back(reserveCount);
         array4.pop_back_n(reserveCount);
         test_array_reserve(reporter, &array4, 2 * reserveCount);
     }
-}
-
-template <typename T>
-static void test_inner_push(skiatest::Reporter* reporter) {
-    T a;
-    a.push_back(12345);
-    for (int x=0; x<50; ++x) {
-        a.push_back(a.front());
-    }
-    for (int x=0; x<50; ++x) {
-        a.push_back(a.back());
-    }
-
-    REPORTER_ASSERT(reporter, a.size() == 101);
-    REPORTER_ASSERT(reporter, std::count(a.begin(), a.end(), 12345) == a.size());
-}
-
-struct EmplaceStruct {
-    EmplaceStruct(int v) : fValue(v) {}
-    int fValue;
-};
-
-template <typename T>
-static void test_inner_emplace(skiatest::Reporter* reporter) {
-    T a;
-    a.emplace_back(12345);
-    for (int x=0; x<50; ++x) {
-        a.emplace_back(a.front().fValue);
-    }
-    for (int x=0; x<50; ++x) {
-        a.emplace_back(a.back().fValue);
-    }
-
-    REPORTER_ASSERT(reporter, a.size() == 101);
-    REPORTER_ASSERT(reporter, std::all_of(a.begin(), a.end(), [](const EmplaceStruct& s) {
-                        return s.fValue == 12345;
-                    }));
 }
 
 DEF_TEST(TArray, reporter) {
@@ -421,49 +382,32 @@ DEF_TEST(TArray, reporter) {
 
     test_self_assignment(reporter);
 
-    test_reserve<TArray<int>>(reporter);
-    test_reserve<STArray<1, int>>(reporter);
-    test_reserve<STArray<2, int>>(reporter);
-    test_reserve<STArray<16, int>>(reporter);
+    test_reserve<SkTArray<int>>(reporter);
+    test_reserve<SkSTArray<1, int>>(reporter);
+    test_reserve<SkSTArray<2, int>>(reporter);
+    test_reserve<SkSTArray<16, int>>(reporter);
 
-    test_reserve<TArray<TestClass>>(reporter);
-    test_reserve<STArray<1, TestClass>>(reporter);
-    test_reserve<STArray<2, TestClass>>(reporter);
-    test_reserve<STArray<16, TestClass>>(reporter);
+    test_reserve<SkTArray<TestClass>>(reporter);
+    test_reserve<SkSTArray<1, TestClass>>(reporter);
+    test_reserve<SkSTArray<2, TestClass>>(reporter);
+    test_reserve<SkSTArray<16, TestClass>>(reporter);
 
-    test_construction<TArray<int>>(reporter);
-    test_construction<TArray<double>>(reporter);
-    test_construction<TArray<TestClass>>(reporter);
-    test_construction<STArray<1, int>>(reporter);
-    test_construction<STArray<5, char>>(reporter);
-    test_construction<STArray<7, TestClass>>(reporter);
-    test_construction<STArray<10, float>>(reporter);
+    test_construction<SkTArray<int>>(reporter);
+    test_construction<SkTArray<double>>(reporter);
+    test_construction<SkTArray<TestClass>>(reporter);
+    test_construction<SkSTArray<1, int>>(reporter);
+    test_construction<SkSTArray<5, char>>(reporter);
+    test_construction<SkSTArray<7, TestClass>>(reporter);
+    test_construction<SkSTArray<10, float>>(reporter);
 
-    test_inner_push<TArray<int>>(reporter);
-    test_inner_push<STArray<1, int>>(reporter);
-    test_inner_push<STArray<99, int>>(reporter);
-    test_inner_push<STArray<200, int>>(reporter);
-
-    test_inner_emplace<TArray<EmplaceStruct>>(reporter);
-    test_inner_emplace<STArray<1, EmplaceStruct>>(reporter);
-    test_inner_emplace<STArray<99, EmplaceStruct>>(reporter);
-    test_inner_emplace<STArray<200, EmplaceStruct>>(reporter);
-
-    test_skstarray_compatibility<STArray<1, int>, TArray<int>>(reporter);
-    test_skstarray_compatibility<STArray<5, char>, TArray<char>>(reporter);
-    test_skstarray_compatibility<STArray<10, float>, TArray<float>>(reporter);
-    test_skstarray_compatibility<TArray<int>, STArray<1, int>>(reporter);
-    test_skstarray_compatibility<TArray<char>, STArray<5, char>>(reporter);
-    test_skstarray_compatibility<TArray<float>, STArray<10, float>>(reporter);
-    test_skstarray_compatibility<STArray<10, uint8_t>, STArray<1, uint8_t>>(reporter);
-    test_skstarray_compatibility<STArray<1, long>, STArray<10, long>>(reporter);
-    test_skstarray_compatibility<STArray<3, double>, STArray<4, double>>(reporter);
-    test_skstarray_compatibility<STArray<2, short>, STArray<1, short>>(reporter);
-}
-
-DEF_TEST(TArray_BoundsCheck, reporter) {
-#if 0  // The v[0] fails
-    TArray<int> v;
-    v[0];
-#endif
+    test_skstarray_compatibility<SkSTArray<1, int>, SkTArray<int>>(reporter);
+    test_skstarray_compatibility<SkSTArray<5, char>, SkTArray<char>>(reporter);
+    test_skstarray_compatibility<SkSTArray<10, float>, SkTArray<float>>(reporter);
+    test_skstarray_compatibility<SkTArray<int>, SkSTArray<1, int>>(reporter);
+    test_skstarray_compatibility<SkTArray<char>, SkSTArray<5, char>>(reporter);
+    test_skstarray_compatibility<SkTArray<float>, SkSTArray<10, float>>(reporter);
+    test_skstarray_compatibility<SkSTArray<10, uint8_t>, SkSTArray<1, uint8_t>>(reporter);
+    test_skstarray_compatibility<SkSTArray<1, long>, SkSTArray<10, long>>(reporter);
+    test_skstarray_compatibility<SkSTArray<3, double>, SkSTArray<4, double>>(reporter);
+    test_skstarray_compatibility<SkSTArray<2, short>, SkSTArray<1, short>>(reporter);
 }

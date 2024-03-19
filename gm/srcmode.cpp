@@ -26,7 +26,6 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #define W   SkIntToScalar(80)
 #define H   SkIntToScalar(60)
@@ -75,15 +74,15 @@ class SrcModeGM : public skiagm::GM {
 
     void onOnceBeforeDraw() override { this->setBGColor(SK_ColorBLACK); }
 
-    SkString getName() const override { return SkString("srcmode"); }
+    SkString onShortName() override { return SkString("srcmode"); }
 
-    SkISize getISize() override { return {640, 760}; }
+    SkISize onISize() override { return {640, 760}; }
 
     void drawContent(SkCanvas* canvas) {
         canvas->translate(SkIntToScalar(20), SkIntToScalar(20));
 
         SkPaint paint;
-        SkFont  font(ToolUtils::DefaultPortableTypeface(), H / 4);
+        SkFont  font(ToolUtils::create_portable_typeface(), H / 4);
         paint.setColor(0x80F60000);
 
         const Proc procs[] = {
@@ -125,7 +124,7 @@ class SrcModeGM : public skiagm::GM {
         sk_sp<SkSurface> surface = canvas->makeSurface(info);
         if (nullptr == surface) {
             // picture canvas will return null, so fall-back to raster
-            surface = SkSurfaces::Raster(info);
+            surface = SkSurface::MakeRaster(info);
         }
         return surface;
     }

@@ -9,6 +9,7 @@
 #include "tests/Test.h"
 
 #include <memory>
+#include <utility>
 
 struct Value {
     Value(int value, int* counter)

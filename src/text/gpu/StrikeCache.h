@@ -8,19 +8,14 @@
 #ifndef sktext_gpu_StrikeCache_DEFINED
 #define sktext_gpu_StrikeCache_DEFINED
 
-#include "include/core/SkRefCnt.h"
 #include "src/base/SkArenaAlloc.h"
-#include "src/core/SkDescriptor.h"
 #include "src/core/SkStrikeSpec.h"
 #include "src/core/SkTHash.h"
-
-#include <cstdint>
-
-struct SkPackedGlyphID;
 
 namespace sktext::gpu {
 
 class Glyph;
+class StrikeCache;
 
 // The TextStrike manages an SkArenaAlloc for Glyphs. The SkStrike is what actually creates
 // the mask. The TextStrike may outlive the generating SkStrike. However, it retains a copy
@@ -42,7 +37,7 @@ private:
         static uint32_t Hash(SkPackedGlyphID key);
     };
     // Map SkPackedGlyphID -> Glyph*.
-    skia_private::THashTable<Glyph*, SkPackedGlyphID, HashTraits> fCache;
+    SkTHashTable<Glyph*, SkPackedGlyphID, HashTraits> fCache;
 
     // Store for the glyph information.
     SkArenaAlloc fAlloc{512};
@@ -69,7 +64,7 @@ private:
         static uint32_t Hash(const SkDescriptor& strikeSpec);
     };
 
-    using StrikeHash = skia_private::THashTable<sk_sp<TextStrike>, const SkDescriptor&, HashTraits>;
+    using StrikeHash = SkTHashTable<sk_sp<TextStrike>, const SkDescriptor&, HashTraits>;
 
     StrikeHash fCache;
 };

@@ -14,27 +14,15 @@
 
 namespace skgpu::graphite {
 
-class VulkanCommandBuffer;
-
 class VulkanBuffer final : public Buffer {
 public:
-    static sk_sp<Buffer> Make(const VulkanSharedContext*, size_t, BufferType, AccessPattern);
+    static sk_sp<Buffer> Make(const VulkanSharedContext*, size_t, BufferType, PrioritizeGpuReads);
     void freeGpuData() override;
     VkBuffer vkBuffer() const { return fBuffer; }
-    VkBufferUsageFlags bufferUsageFlags() const { return fBufferUsageFlags; }
-
-    void setBufferAccess(VulkanCommandBuffer* buffer,
-                         VkAccessFlags dstAccessMask,
-                         VkPipelineStageFlags dstStageMask) const;
 
 private:
-    VulkanBuffer(const VulkanSharedContext*,
-                 size_t,
-                 BufferType,
-                 AccessPattern,
-                 VkBuffer,
-                 const skgpu::VulkanAlloc&,
-                 VkBufferUsageFlags);
+    VulkanBuffer(const VulkanSharedContext*, size_t, BufferType, PrioritizeGpuReads, VkBuffer,
+                 const skgpu::VulkanAlloc&);
 
     void onMap() override;
     void onUnmap() override;
@@ -48,13 +36,8 @@ private:
         return static_cast<const VulkanSharedContext*>(this->sharedContext());
     }
 
-    static VkPipelineStageFlags AccessMaskToPipelineSrcStageFlags(const VkAccessFlags accessFlags);
-
     VkBuffer fBuffer;
     skgpu::VulkanAlloc fAlloc;
-    const VkBufferUsageFlags fBufferUsageFlags;
-    mutable VkAccessFlags fCurrentAccessMask = 0;
-
     /**
      * Buffers can either be mapped for:
      * 1) Reading from the CPU (The effect of writing would be undefined)

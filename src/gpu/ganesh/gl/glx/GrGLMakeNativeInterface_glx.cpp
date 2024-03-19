@@ -8,6 +8,4 @@
 #include "include/gpu/gl/GrGLInterface.h"
 #include "include/gpu/gl/glx/GrGLMakeGLXInterface.h"
 
-#if !defined(SK_DISABLE_LEGACY_GL_MAKE_NATIVE_INTERFACE)
-sk_sp<const GrGLInterface> GrGLMakeNativeInterface() { return GrGLInterfaces::MakeGLX(); }
-#endif
+sk_sp<const GrGLInterface> GrGLMakeNativeInterface() { return GrGLMakeGLXInterface(); }

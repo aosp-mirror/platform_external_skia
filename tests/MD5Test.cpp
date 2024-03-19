@@ -8,10 +8,9 @@
 #include "src/core/SkMD5.h"
 #include "tests/Test.h"
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
+#include <string>
 
 static bool digests_equal(const SkMD5::Digest& expectedDigest, const SkMD5::Digest& computedDigest) {
     for (size_t i = 0; i < std::size(expectedDigest.data); ++i) {

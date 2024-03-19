@@ -5,14 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "include/codec/SkCodec.h"
-#include "include/codec/SkJpegDecoder.h"
-#include "include/codec/SkPngDecoder.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkOpenTypeSVGDecoder.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
+#include "include/utils/SkBase64.h"
 #include "modules/skresources/include/SkResources.h"
 #include "modules/svg/include/SkSVGDOM.h"
 #include "modules/svg/include/SkSVGNode.h"
@@ -20,12 +18,9 @@
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGSVG.h"
 #include "modules/svg/include/SkSVGUse.h"
-#include "src/base/SkBase64.h"
 #include "src/core/SkEnumerate.h"
 
 #include <memory>
-
-using namespace skia_private;
 
 namespace {
 class DataResourceProvider final : public skresources::ResourceProvider {
@@ -38,21 +33,7 @@ public:
                                                   const char rname[],
                                                   const char rid[]) const override {
         if (auto data = decode_datauri("data:image/", rname)) {
-            std::unique_ptr<SkCodec> codec = nullptr;
-            if (SkPngDecoder::IsPng(data->bytes(), data->size())) {
-                codec = SkPngDecoder::Decode(data, nullptr);
-            } else if (SkJpegDecoder::IsJpeg(data->bytes(), data->size())) {
-                codec = SkJpegDecoder::Decode(data, nullptr);
-            } else {
-                // The spec says only JPEG or PNG should be used to encode the embedded data.
-                // https://learn.microsoft.com/en-us/typography/opentype/spec/svg#svg-capability-requirements-and-restrictions
-                SkDEBUGFAIL("Unsupported codec");
-                return nullptr;
-            }
-            if (!codec) {
-                return nullptr;
-            }
-            return skresources::MultiFrameImageAsset::Make(std::move(codec));
+            return skresources::MultiFrameImageAsset::Make(std::move(data));
         }
         return nullptr;
     }
@@ -131,7 +112,7 @@ bool SkSVGOpenTypeSVGDecoder::render(SkCanvas& canvas, int upem, SkGlyphID glyph
     SkSVGPresentationContext pctx;
     pctx.fInherited.fColor.set(foregroundColor);
 
-    THashMap<SkString, SkSVGColorType> namedColors;
+    SkTHashMap<SkString, SkSVGColorType> namedColors;
     if (palette.size()) {
         for (auto&& [i, color] : SkMakeEnumerate(palette)) {
             constexpr const size_t colorStringLen = sizeof("color") - 1;

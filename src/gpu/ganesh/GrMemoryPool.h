@@ -33,10 +33,10 @@ public:
     // https://github.com/emscripten-core/emscripten/issues/10072
     // Since Skia does not use "long double" (16 bytes), we should be ok to force it back to 8 bytes
     // until emscripten is fixed.
-    static constexpr size_t kAlignment = 8;
+    inline static constexpr size_t kAlignment = 8;
 #else
     // Guaranteed alignment of pointer returned by allocate().
-    static constexpr size_t kAlignment = alignof(std::max_align_t);
+    inline static constexpr size_t kAlignment = alignof(std::max_align_t);
 #endif
 
     // Smallest block size allocated on the heap (not the smallest reservation via allocate()).
@@ -126,11 +126,11 @@ private:
 
 #ifdef SK_DEBUG
     // Because this exists preallocSize wants to use offsetof, so keep GrMemoryPool standard layout
-    // without depending on THashSet being standard layout. Note that std::unique_ptr may not be
+    // without depending on SkTHashSet being standard layout. Note that std::unique_ptr may not be
     // standard layout.
     struct Debug{
-        skia_private::THashSet<int> fAllocatedIDs;
-        int                         fAllocationCount;
+        SkTHashSet<int>  fAllocatedIDs;
+        int              fAllocationCount;
     };
     Debug* fDebug{nullptr};
 #endif

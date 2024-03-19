@@ -9,14 +9,9 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPath.h"
-#include "include/core/SkPathTypes.h"
-#include "include/core/SkScalar.h"
-#include "include/private/base/SkAssert.h"
-
-class SkMatrix;
-struct SkPoint;
 
 namespace sksg {
+
 Plane::Plane() = default;
 
 void Plane::onClip(SkCanvas*, bool) const {}
@@ -40,4 +35,4 @@ SkPath Plane::onAsPath() const {
     return path;
 }
 
-}  // namespace sksg
+} // namespace sksg

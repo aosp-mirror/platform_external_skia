@@ -8,17 +8,9 @@
 #include "tools/viewer/MSKPSlide.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkColor.h"
-#include "include/core/SkImage.h"
-#include "include/core/SkPaint.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
 #include "include/core/SkStream.h"
 #include "include/private/base/SkTPin.h"
-
-#include <cstddef>
-#include <utility>
-
+#include "src/core/SkOSFile.h"
 #include "imgui.h"
 
 MSKPSlide::MSKPSlide(const SkString& name, const SkString& path)

@@ -9,12 +9,12 @@
 
 #if defined(SK_ENABLE_SVG)
 
-#include "include/codec/SkEncodedImageFormat.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkData.h"
 #include "include/core/SkDrawable.h"
+#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
@@ -27,7 +27,6 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
-#include "include/encode/SkPngEncoder.h"
 #include "include/pathops/SkPathOps.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTemplates.h"
@@ -86,10 +85,6 @@ void TestSVGTypeface::Glyph::withSVG(Fn&& fn) const {
             return;
         }
 
-        // We expressly *do not want* to set a SkFontMgr when parsing these SVGs.
-        // 1) The SVGs we are processing have no <text> tags in them.
-        // 2) Trying to use ToolUtils::TestFontMgr() is a problem because the portable
-        //    SkFontMgr *calls* this function as it creates the typefaces.
         sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromStream(*stream);
         if (!svg) {
             return;
@@ -126,9 +121,12 @@ TestSVGTypeface::~TestSVGTypeface() {}
 TestSVGTypeface::Glyph::Glyph() : fOrigin{0, 0}, fAdvance(0) {}
 TestSVGTypeface::Glyph::~Glyph() {}
 
-SkVector TestSVGTypeface::getAdvance(SkGlyphID glyphID) const {
-    glyphID = glyphID < fGlyphCount ? glyphID : 0;
-    return {fGlyphs[glyphID].fAdvance, 0};
+void TestSVGTypeface::getAdvance(SkGlyph* glyph) const {
+    SkGlyphID glyphID = glyph->getGlyphID();
+    glyphID           = glyphID < fGlyphCount ? glyphID : 0;
+
+    glyph->fAdvanceX = fGlyphs[glyphID].fAdvance;
+    glyph->fAdvanceY = 0;
 }
 
 void TestSVGTypeface::getFontMetrics(SkFontMetrics* metrics) const { *metrics = fFontMetrics; }
@@ -190,18 +188,24 @@ protected:
         return static_cast<TestSVGTypeface*>(this->getTypeface());
     }
 
-    SkVector computeAdvance(SkGlyphID glyphID) {
-        auto advance = this->getTestSVGTypeface()->getAdvance(glyphID);
-        return fMatrix.mapXY(advance.fX, advance.fY);
+    bool generateAdvance(SkGlyph* glyph) override {
+        this->getTestSVGTypeface()->getAdvance(glyph);
+
+        const SkVector advance =
+                fMatrix.mapXY(SkFloatToScalar(glyph->fAdvanceX), SkFloatToScalar(glyph->fAdvanceY));
+        glyph->fAdvanceX = SkScalarToFloat(advance.fX);
+        glyph->fAdvanceY = SkScalarToFloat(advance.fY);
+        return true;
     }
 
-    GlyphMetrics generateMetrics(const SkGlyph& glyph, SkArenaAlloc*) override {
-        SkGlyphID glyphID = glyph.getGlyphID();
+    void generateMetrics(SkGlyph* glyph, SkArenaAlloc* alloc) override {
+        SkGlyphID glyphID = glyph->getGlyphID();
         glyphID           = glyphID < this->getTestSVGTypeface()->fGlyphCount ? glyphID : 0;
 
-        GlyphMetrics mx(SkMask::kARGB32_Format);
-        mx.neverRequestPath = true;
-        mx.advance = this->computeAdvance(glyph.getGlyphID());
+        glyph->zeroMetrics();
+        glyph->fMaskFormat = SkMask::kARGB32_Format;
+        glyph->setPath(alloc, nullptr, false);
+        this->generateAdvance(glyph);
 
         TestSVGTypeface::Glyph& glyphData = this->getTestSVGTypeface()->fGlyphs[glyphID];
 
@@ -211,21 +215,27 @@ protected:
                                             containerSize.fWidth,
                                             containerSize.fHeight);
         fMatrix.mapRect(&newBounds);
-        SkScalar dx = SkFixedToScalar(glyph.getSubXFixed());
-        SkScalar dy = SkFixedToScalar(glyph.getSubYFixed());
+        SkScalar dx = SkFixedToScalar(glyph->getSubXFixed());
+        SkScalar dy = SkFixedToScalar(glyph->getSubYFixed());
         newBounds.offset(dx, dy);
-        newBounds.roundOut(&mx.bounds);
-        return mx;
+
+        SkIRect ibounds;
+        newBounds.roundOut(&ibounds);
+        glyph->fLeft   = ibounds.fLeft;
+        glyph->fTop    = ibounds.fTop;
+        glyph->fWidth  = ibounds.width();
+        glyph->fHeight = ibounds.height();
     }
 
-    void generateImage(const SkGlyph& glyph, void* imageBuffer) override {
+    void generateImage(const SkGlyph& glyph) override {
         SkGlyphID glyphID = glyph.getGlyphID();
         glyphID           = glyphID < this->getTestSVGTypeface()->fGlyphCount ? glyphID : 0;
 
         SkBitmap bm;
         // TODO: this should be SkImageInfo::MakeS32 when that passes all the tests.
-        bm.installPixels(SkImageInfo::MakeN32(glyph.width(), glyph.height(), kPremul_SkAlphaType),
-                         imageBuffer, glyph.rowBytes());
+        bm.installPixels(SkImageInfo::MakeN32(glyph.fWidth, glyph.fHeight, kPremul_SkAlphaType),
+                         glyph.fImage,
+                         glyph.rowBytes());
         bm.eraseColor(0);
 
         TestSVGTypeface::Glyph& glyphData = this->getTestSVGTypeface()->fGlyphs[glyphID];
@@ -234,7 +244,7 @@ protected:
         SkScalar dy = SkFixedToScalar(glyph.getSubYFixed());
 
         SkCanvas canvas(bm);
-        canvas.translate(-glyph.left(), -glyph.top());
+        canvas.translate(-glyph.fLeft, -glyph.fTop);
         canvas.translate(dx, dy);
         canvas.concat(fMatrix);
         canvas.translate(glyphData.fOrigin.fX, -glyphData.fOrigin.fY);
@@ -445,7 +455,7 @@ sk_sp<TestSVGTypeface> TestSVGTypeface::Planets() {
 
 void TestSVGTypeface::exportTtxCommon(SkWStream*                out,
                                       const char*               type,
-                                      const TArray<GlyfInfo>* glyfInfo) const {
+                                      const SkTArray<GlyfInfo>* glyfInfo) const {
     int totalGlyphs = fGlyphCount;
     out->writeText("  <GlyphOrder>\n");
     for (int i = 0; i < fGlyphCount; ++i) {
@@ -775,7 +785,7 @@ void TestSVGTypeface::exportTtxCbdt(SkWStream* out, SkSpan<unsigned> strikeSizes
     this->getFamilyName(&name);
 
     // The CBDT/CBLC format is quite restrictive. Only write strikes which fully fit.
-    STArray<8, int> goodStrikeSizes;
+    SkSTArray<8, int> goodStrikeSizes;
     for (size_t strikeIndex = 0; strikeIndex < strikeSizes.size(); ++strikeIndex) {
         font.setSize(strikeSizes[strikeIndex]);
 
@@ -839,7 +849,7 @@ void TestSVGTypeface::exportTtxCbdt(SkWStream* out, SkSpan<unsigned> strikeSizes
                 continue;
             }
             SkImageInfo image_info = SkImageInfo::MakeN32Premul(ibounds.width(), ibounds.height());
-            sk_sp<SkSurface> surface(SkSurfaces::Raster(image_info));
+            sk_sp<SkSurface> surface(SkSurface::MakeRaster(image_info));
             SkASSERT(surface);
             SkCanvas* canvas = surface->getCanvas();
             canvas->clear(0);
@@ -852,9 +862,9 @@ void TestSVGTypeface::exportTtxCbdt(SkWStream* out, SkSpan<unsigned> strikeSizes
                                    -bounds.fTop,
                                    font,
                                    paint);
-
+            surface->flushAndSubmit();
             sk_sp<SkImage> image = surface->makeImageSnapshot();
-            sk_sp<SkData> data = SkPngEncoder::Encode(nullptr, image.get(), {});
+            sk_sp<SkData>  data  = image->encodeToData(SkEncodedImageFormat::kPNG, 100);
 
             out->writeText("      <cbdt_bitmap_format_17 name=\"glyf");
             out->writeHexAsText(i, 4);
@@ -1061,7 +1071,7 @@ void TestSVGTypeface::exportTtxSbix(SkWStream* out, SkSpan<unsigned> strikeSizes
                 continue;
             }
             SkImageInfo image_info = SkImageInfo::MakeN32Premul(ibounds.width(), ibounds.height());
-            sk_sp<SkSurface> surface(SkSurfaces::Raster(image_info));
+            sk_sp<SkSurface> surface(SkSurface::MakeRaster(image_info));
             SkASSERT(surface);
             SkCanvas* canvas = surface->getCanvas();
             canvas->clear(0);
@@ -1074,9 +1084,9 @@ void TestSVGTypeface::exportTtxSbix(SkWStream* out, SkSpan<unsigned> strikeSizes
                                    -bounds.fTop,
                                    font,
                                    paint);
-
+            surface->flushAndSubmit();
             sk_sp<SkImage> image = surface->makeImageSnapshot();
-            sk_sp<SkData> data = SkPngEncoder::Encode(nullptr, image.get(), {});
+            sk_sp<SkData>  data  = image->encodeToData(SkEncodedImageFormat::kPNG, 100);
 
             // The originOffset values are difficult to use as DirectWrite and FreeType interpret
             // the origin to be the initial glyph position on the baseline, but CoreGraphics
@@ -1129,7 +1139,7 @@ namespace {
 
 void convert_noninflect_cubic_to_quads(const SkPoint            p[4],
                                        SkScalar                 toleranceSqd,
-                                       TArray<SkPoint, true>* quads,
+                                       SkTArray<SkPoint, true>* quads,
                                        int                      sublevel = 0) {
     // Notation: Point a is always p[0]. Point b is p[1] unless p[1] == p[0], in which case it is
     // p[2]. Point d is always p[3]. Point c is p[2] unless p[2] == p[3], in which case it is p[1].
@@ -1181,7 +1191,7 @@ void convert_noninflect_cubic_to_quads(const SkPoint            p[4],
     convert_noninflect_cubic_to_quads(choppedPts + 3, toleranceSqd, quads, sublevel + 1);
 }
 
-void convertCubicToQuads(const SkPoint p[4], SkScalar tolScale, TArray<SkPoint, true>* quads) {
+void convertCubicToQuads(const SkPoint p[4], SkScalar tolScale, SkTArray<SkPoint, true>* quads) {
     if (!p[0].isFinite() || !p[1].isFinite() || !p[2].isFinite() || !p[3].isFinite()) {
         return;
     }
@@ -1198,7 +1208,7 @@ void convertCubicToQuads(const SkPoint p[4], SkScalar tolScale, TArray<SkPoint, 
 
 void path_to_quads(const SkPath& path, SkPath* quadPath) {
     quadPath->reset();
-    TArray<SkPoint, true> qPts;
+    SkTArray<SkPoint, true> qPts;
     SkAutoConicToQuads      converter;
     const SkPoint*          quadPts;
     for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
@@ -1236,7 +1246,7 @@ public:
                  const TestSVGTypeface&     typeface,
                  SkGlyphID                  glyphId,
                  TestSVGTypeface::GlyfInfo* glyf,
-                 THashMap<SkColor, int>*    colors,
+                 SkTHashMap<SkColor, int>*  colors,
                  SkWStream*                 out)
             : SkNoDrawCanvas(glyphBounds.roundOut().width(), glyphBounds.roundOut().height())
             , fBaselineOffset(glyphBounds.top())
@@ -1421,7 +1431,7 @@ private:
     const TestSVGTypeface&     fTypeface;
     SkGlyphID                  fGlyphId;
     TestSVGTypeface::GlyfInfo* fGlyf;
-    THashMap<SkColor, int>*    fColors;
+    SkTHashMap<SkColor, int>*  fColors;
     SkWStream* const           fOut;
     SkOpBuilder                fBasePath;
     int                        fLayerId;
@@ -1433,8 +1443,8 @@ void TestSVGTypeface::exportTtxColr(SkWStream* out) const {
     out->writeText("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     out->writeText("<ttFont sfntVersion=\"\\x00\\x01\\x00\\x00\" ttLibVersion=\"3.19\">\n");
 
-    THashMap<SkColor, int> colors;
-    TArray<GlyfInfo>       glyfInfos(fGlyphCount);
+    SkTHashMap<SkColor, int> colors;
+    SkTArray<GlyfInfo>       glyfInfos(fGlyphCount);
 
     // Need to know all the glyphs up front for the common tables.
     SkDynamicMemoryWStream glyfOut;

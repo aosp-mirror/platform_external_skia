@@ -32,6 +32,7 @@ if command -v lsb_release > /dev/null ; then
 		freeglut3-dev
 		libfontconfig-dev
 		libfreetype6-dev
+		libgif-dev
 		libgl1-mesa-dev
 		libglu1-mesa-dev
 		libharfbuzz-dev
@@ -39,9 +40,6 @@ if command -v lsb_release > /dev/null ; then
 		libjpeg-dev
 		libpng-dev
 		libwebp-dev
-        libx11-xcb-dev
-        libxcb-xkb-dev
-        xcb
 		EOF
             )
            if [ $(lsb_release -r -s) = '14.04' ] ; then

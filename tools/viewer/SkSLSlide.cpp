@@ -8,35 +8,18 @@
 #include "tools/viewer/SkSLSlide.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkClipOp.h"
-#include "include/core/SkColor.h"
-#include "include/core/SkData.h"
 #include "include/core/SkFont.h"
-#include "include/core/SkFontTypes.h"
-#include "include/core/SkImage.h"
-#include "include/core/SkPaint.h"
-#include "include/core/SkPoint.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkSamplingOptions.h"
 #include "include/core/SkStream.h"
-#include "include/core/SkTileMode.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkSpan_impl.h"
+#include "include/effects/SkPerlinNoiseShader.h"
 #include "include/sksl/SkSLDebugTrace.h"
-#include "tools/DecodeUtils.h"
+#include "src/core/SkEnumerate.h"
 #include "tools/Resources.h"
-#include "tools/fonts/FontToolUtils.h"
-#include "tools/sk_app/Application.h"
 #include "tools/viewer/Viewer.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
-#include <string>
-#include <string_view>
-
 #include "imgui.h"
 
 using namespace sk_app;
@@ -87,8 +70,7 @@ void SkSLSlide::load(SkScalar winWidth, SkScalar winHeight) {
     shader = SkGradientShader::MakeSweep(256, 256, colors, nullptr, 2);
     fShaders.push_back(std::make_pair("Sweep Gradient", shader));
 
-    shader = ToolUtils::GetResourceAsImage("images/mandrill_256.png")
-                     ->makeShader(SkSamplingOptions());
+    shader = GetResourceAsImage("images/mandrill_256.png")->makeShader(SkSamplingOptions());
     fShaders.push_back(std::make_pair("Mandrill", shader));
 
     fResolution = { winWidth, winHeight, 1.0f };
@@ -327,7 +309,7 @@ void SkSLSlide::draw(SkCanvas* canvas) {
             canvas->drawRoundRect({ 0, 224, 512, 288 }, 32, 32, p);
             break;
         case kText: {
-            SkFont font = ToolUtils::DefaultFont();
+            SkFont font;
             font.setSize(SkIntToScalar(96));
             canvas->drawSimpleText("Hello World", strlen("Hello World"), SkTextEncoding::kUTF8, 0,
                                    256, font, p);
@@ -338,11 +320,11 @@ void SkSLSlide::draw(SkCanvas* canvas) {
     canvas->restore();
 
     if (debugTrace && writeTrace) {
-        SkFILEWStream traceFile("SkSLDebugTrace.json");
+        SkFILEWStream traceFile("SkVMDebugTrace.json");
         debugTrace->writeTrace(&traceFile);
     }
     if (debugTrace && writeDump) {
-        SkFILEWStream dumpFile("SkSLDebugTrace.dump.txt");
+        SkFILEWStream dumpFile("SkVMDebugTrace.dump.txt");
         debugTrace->dump(&dumpFile);
     }
 }

@@ -144,9 +144,6 @@ DEF_TEST(AutoTMallocSelfMove, r) {
 #if defined(__clang__)
     #pragma clang diagnostic push
     #pragma clang diagnostic ignored "-Wself-move"
-#elif defined(__GNUC__) && __GNUC__ >= 13
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wself-move"
 #endif
 
     AutoTMalloc<int> foo(20);
@@ -157,7 +154,5 @@ DEF_TEST(AutoTMallocSelfMove, r) {
 
 #if defined(__clang__)
     #pragma clang diagnostic pop
-#elif defined(__GNUC__) && __GNUC__ >= 13
-    #pragma GCC diagnostic pop
 #endif
 }

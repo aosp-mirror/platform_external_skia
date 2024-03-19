@@ -33,7 +33,7 @@ SkColorMatrix SkSVGFeColorMatrix::makeMatrixForType() const {
                 return SkColorMatrix();
             }
             SkColorMatrix m;
-            m.setRowMajor(fValues.data());
+            m.setRowMajor(this->fValues.begin());
             return m;
         }
         case SkSVGFeColorMatrixType::kSaturate:
@@ -95,6 +95,23 @@ sk_sp<SkImageFilter> SkSVGFeColorMatrix::onMakeImageFilter(const SkSVGRenderCont
             SkColorFilters::Matrix(makeMatrixForType()),
             fctx.resolveInput(ctx, this->getIn(), this->resolveColorspace(ctx, fctx)),
             this->resolveFilterSubregion(ctx, fctx));
+}
+
+template <> bool SkSVGAttributeParser::parse(SkSVGFeColorMatrixValues* values) {
+    SkSVGNumberType value;
+    if (!this->parse(&value)) {
+        return false;
+    }
+
+    values->push_back(value);
+    while (true) {
+        if (!this->parse(&value) || values->size() >= 20) {
+            break;
+        }
+        values->push_back(value);
+    }
+
+    return this->parseEOSToken();
 }
 
 template <> bool SkSVGAttributeParser::parse(SkSVGFeColorMatrixType* type) {

@@ -20,59 +20,47 @@
 #include "src/core/SkImageFilterTypes.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkMatrixPriv.h"
-#include "src/core/SkRectPriv.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/Slide.h"
 
 static constexpr float kLineHeight = 16.f;
 static constexpr float kLineInset = 8.f;
 
-static float print_size(SkCanvas* canvas, const char* prefix,
-                        std::optional<SkIRect> rect,
+static float print_size(SkCanvas* canvas, const char* prefix, const SkIRect& rect,
                         float x, float y, const SkFont& font, const SkPaint& paint) {
     canvas->drawString(prefix, x, y, font, paint);
     y += kLineHeight;
     SkString sz;
-    if (rect) {
-        sz.appendf("%d x %d", rect->width(), rect->height());
-    } else {
-        sz.appendf("infinite");
-    }
+    sz.appendf("%d x %d", rect.width(), rect.height());
     canvas->drawString(sz, x, y, font, paint);
     return y + kLineHeight;
 }
 
 static float print_info(SkCanvas* canvas,
-                        const skif::LayerSpace<SkIRect>& layerContentBounds,
-                        const skif::DeviceSpace<SkIRect>& outputBounds,
-                        std::optional<skif::DeviceSpace<SkIRect>> hintedOutputBounds,
-                        const skif::LayerSpace<SkIRect>& unhintedLayerBounds) {
-    SkFont font(ToolUtils::DefaultTypeface(), 12);
+                        const SkIRect& layerContentBounds,
+                        const SkIRect& outputBounds,
+                        const SkIRect& hintedOutputBounds,
+                        const SkIRect& unhintedLayerBounds) {
+    SkFont font(nullptr, 12);
     SkPaint text;
     text.setAntiAlias(true);
 
     float y = kLineHeight;
 
     text.setColor(SK_ColorRED);
-    y = print_size(canvas, "Content (in layer)", SkIRect(layerContentBounds),
-                   kLineInset, y, font, text);
+    y = print_size(canvas, "Content (in layer)", layerContentBounds, kLineInset, y, font, text);
     text.setColor(SK_ColorDKGRAY);
-    y = print_size(canvas, "Target (in device)", SkIRect(outputBounds),
-                   kLineInset, y, font, text);
+    y = print_size(canvas, "Target (in device)", outputBounds, kLineInset, y, font, text);
     text.setColor(SK_ColorBLUE);
-    y = print_size(canvas, "Output (w/ hint)",
-                   hintedOutputBounds ? SkIRect(*hintedOutputBounds) : std::optional<SkIRect>{},
-                   kLineInset, y, font, text);
+    y = print_size(canvas, "Output (w/ hint)", hintedOutputBounds, kLineInset, y, font, text);
     text.setColor(SK_ColorGREEN);
-    y = print_size(canvas, "Input (w/ no hint)", SkIRect(unhintedLayerBounds),
-                   kLineInset, y, font, text);
+    y = print_size(canvas, "Input (w/ no hint)", unhintedLayerBounds, kLineInset, y, font, text);
 
     return y;
 }
 
 static void print_label(SkCanvas* canvas, float x, float y, float value) {
-    SkFont font(ToolUtils::DefaultTypeface(), 12);
+    SkFont font(nullptr, 12);
     SkPaint text;
     text.setAntiAlias(true);
 
@@ -230,9 +218,9 @@ public:
         // type requirements.
         skif::LayerSpace<SkIRect> targetOutputInLayer = mapping.deviceToLayer(targetOutput);
         skif::LayerSpace<SkIRect> hintedLayerBounds = as_IFB(fBlur)->getInputBounds(
-                mapping, targetOutput, contentBounds);
+                mapping, targetOutput, &contentBounds);
         skif::LayerSpace<SkIRect> unhintedLayerBounds = as_IFB(fBlur)->getInputBounds(
-                mapping, targetOutput, {});
+                mapping, targetOutput, nullptr);
 
         canvas->setMatrix(mapping.layerToDevice());
         canvas->drawRect(SkRect::Make(SkIRect(targetOutputInLayer)),
@@ -243,18 +231,15 @@ public:
         // For visualization purposes, we want to show the layer-space output, this is what we get
         // when contentBounds is provided as a hint in local/parameter space.
         skif::Mapping layerOnly{mapping.layerMatrix()};
-        std::optional<skif::DeviceSpace<SkIRect>> hintedOutputBounds =
-                as_IFB(fBlur)->getOutputBounds(layerOnly, contentBounds);
-        if (hintedOutputBounds) {
-            canvas->drawRect(SkRect::Make(SkIRect(*hintedOutputBounds)), line_paint(SK_ColorBLUE));
-        }
+        skif::DeviceSpace<SkIRect> hintedOutputBounds = as_IFB(fBlur)->getOutputBounds(
+                layerOnly, contentBounds);
+        canvas->drawRect(SkRect::Make(SkIRect(hintedOutputBounds)), line_paint(SK_ColorBLUE));
 
         canvas->resetMatrix();
-        float y = print_info(canvas,
-                             mapping.paramToLayer(contentBounds).roundOut(),
-                             targetOutput,
-                             hintedOutputBounds,
-                             unhintedLayerBounds);
+        float y = print_info(canvas, SkIRect(mapping.paramToLayer(contentBounds).roundOut()),
+                             SkIRect(targetOutput),
+                             SkIRect(hintedOutputBounds),
+                             SkIRect(unhintedLayerBounds));
 
         // Draw color key for layer visualization
         draw_scale_key(canvas, y);

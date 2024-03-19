@@ -5,26 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkColor.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
-#include "modules/skottie/src/Adapter.h"
-#include "modules/skottie/src/SkottiePriv.h"
-#include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/effects/Effects.h"
+
+#include "include/private/SkColorData.h"
+#include "modules/skottie/src/Adapter.h"
+#include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGColorFilter.h"
 #include "modules/sksg/include/SkSGPaint.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
 #include "src/base/SkVx.h"
 #include "src/core/SkSwizzlePriv.h"
-
-#include <cstddef>
-#include <utility>
-#include <vector>
-
-namespace skjson {
-class ArrayValue;
-}
+#include "src/utils/SkJSON.h"
 
 namespace skottie::internal {
 
@@ -108,7 +98,7 @@ class CCTonerAdapter final : public DiscardableAdapterBase<CCTonerAdapter,
         const std::vector<sk_sp<sksg::Color>> fColorNodes;
 
         ScalarValue fTone = 0;
-        ColorValue  fHighlights,
+        VectorValue fHighlights,
                     fBrights,
                     fMidtones,
                     fDarktones,

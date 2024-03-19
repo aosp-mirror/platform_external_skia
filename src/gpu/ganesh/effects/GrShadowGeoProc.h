@@ -9,15 +9,12 @@
 #define GrShadowGeoProc_DEFINED
 
 #include "src/base/SkArenaAlloc.h"
-#include "src/gpu/ganesh/GrColor.h"
 #include "src/gpu/ganesh/GrGeometryProcessor.h"
+#include "src/gpu/ganesh/GrProcessor.h"
 #include "src/gpu/ganesh/GrProcessorUnitTest.h"
 
-#include <memory>
-
+class GrGLRRectShadowGeoProc;
 class GrSurfaceProxyView;
-namespace skgpu { class KeyBuilder; }
-struct GrShaderCaps;
 
 /**
  * The output color of this effect is a coverage mask for a rrect shadow,

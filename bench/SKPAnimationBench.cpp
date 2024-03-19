@@ -5,11 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "bench/GpuTools.h"
 #include "bench/SKPAnimationBench.h"
 #include "include/core/SkSurface.h"
 #include "tools/flags/CommandLineFlags.h"
-
 
 SKPAnimationBench::SKPAnimationBench(const char* name, const SkPicture* pic, const SkIRect& clip,
                                      sk_sp<Animation> animation, bool doLooping)
@@ -37,7 +35,7 @@ void SKPAnimationBench::drawPicture() {
     }
 
     for (int j = 0; j < this->tileRects().size(); ++j) {
-        skgpu::Flush(this->surfaces()[j].get());
+       this->surfaces()[j]->flush();
     }
 }
 

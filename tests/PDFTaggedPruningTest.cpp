@@ -17,11 +17,10 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
+#include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
 #include "include/docs/SkPDFDocument.h"
-#include "src/pdf/SkPDFUtils.h"
 #include "tests/Test.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <memory>
 #include <utility>
@@ -45,8 +44,8 @@ DEF_TEST(SkPDF_tagged_pruning, r) {
     SkPDF::Metadata metadata;
     metadata.fTitle = "Example Tagged PDF";
     metadata.fCreator = "Skia";
-    SkPDF::DateTime now;
-    SkPDFUtils::GetDateTime(&now);
+    SkTime::DateTime now;
+    SkTime::GetDateTime(&now);
     metadata.fCreation = now;
     metadata.fModified = now;
 
@@ -80,7 +79,7 @@ DEF_TEST(SkPDF_tagged_pruning, r) {
     SkCanvas* canvas =
             document->beginPage(pageSize.width(),
                                 pageSize.height());
-    SkFont font(ToolUtils::DefaultTypeface(), 20);
+    SkFont font(nullptr, 20);
     SkPDF::SetNodeId(canvas, 3);
     canvas->drawString("First paragraph line 1", 72, 72, font, paint);
     SkPDF::SetNodeId(canvas, 4);
@@ -110,8 +109,8 @@ DEF_TEST(SkPDF_tagged_pruning_empty, r) {
     SkPDF::Metadata metadata;
     metadata.fTitle = "Example Tagged PDF";
     metadata.fCreator = "Skia";
-    SkPDF::DateTime now;
-    SkPDFUtils::GetDateTime(&now);
+    SkTime::DateTime now;
+    SkTime::GetDateTime(&now);
     metadata.fCreation = now;
     metadata.fModified = now;
 

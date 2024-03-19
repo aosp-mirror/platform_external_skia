@@ -26,15 +26,13 @@
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 #include "tests/Test.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <initializer_list>
 #include <optional>
+#include <string>
 
 #undef ASSERT
 
@@ -129,7 +127,7 @@ DEF_TEST(Paint_flattening, reporter) {
     FOR_SETUP(m, joins, setStrokeJoin)
     FOR_SETUP(p, styles, setStyle)
 
-    SkBinaryWriteBuffer writer({});
+    SkBinaryWriteBuffer writer;
     SkPaintPriv::Flatten(paint, writer);
 
     SkAutoMalloc buf(writer.bytesWritten());
@@ -147,7 +145,7 @@ DEF_TEST(Paint_flattening, reporter) {
 // found and fixed for android: not initializing rect for string's of length 0
 DEF_TEST(Paint_regression_measureText, reporter) {
 
-    SkFont font = ToolUtils::DefaultFont();
+    SkFont font;
     font.setSize(12.0f);
 
     SkRect r;
@@ -165,7 +163,7 @@ DEF_TEST(Paint_MoreFlattening, r) {
     paint.setColor(0x00AABBCC);
     paint.setBlendMode(SkBlendMode::kModulate);
 
-    SkBinaryWriteBuffer writer({});
+    SkBinaryWriteBuffer writer;
     SkPaintPriv::Flatten(paint, writer);
 
     SkAutoMalloc buf(writer.bytesWritten());
@@ -205,7 +203,7 @@ DEF_TEST(Paint_nothingToDraw, r) {
 }
 
 DEF_TEST(Font_getpos, r) {
-    SkFont font = ToolUtils::DefaultFont();
+    SkFont font;
     const char text[] = "Hamburgefons!@#!#23425,./;'[]";
     int count = font.countText(text, strlen(text), SkTextEncoding::kUTF8);
     AutoTArray<uint16_t> glyphStorage(count);

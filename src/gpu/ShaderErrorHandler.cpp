@@ -19,7 +19,7 @@ ShaderErrorHandler* DefaultShaderErrorHandler() {
             SkShaderUtils::VisitLineByLine(message, [](int, const char* lineText) {
                 SkDebugf("%s\n", lineText);
             });
-            SkDEBUGFAILF("Shader compilation failed!\n\n%s", message.c_str());
+            SkDEBUGFAIL("Shader compilation failed!");
         }
     };
 

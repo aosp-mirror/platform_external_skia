@@ -15,9 +15,6 @@ GPU_FILES = [
     "SDFTControl.cpp",
     "SDFTControl.h",
     "Slug.cpp",
-    "SlugImpl.cpp",
-    "SlugImpl.h",
-    "SkChromeRemoteGlyphCache.cpp",
     "StrikeCache.cpp",
     "StrikeCache.h",
     "SubRunAllocator.cpp",
@@ -28,8 +25,6 @@ GPU_FILES = [
     "TextBlob.h",
     "TextBlobRedrawCoordinator.cpp",
     "TextBlobRedrawCoordinator.h",
-    "VertexFiller.cpp",
-    "VertexFiller.h",
 ]
 
 split_srcs_and_hdrs(
@@ -40,17 +35,11 @@ split_srcs_and_hdrs(
 skia_filegroup(
     name = "srcs",
     srcs = [":gpu_srcs"],
-    visibility = [
-        "//src:__pkg__",
-        "//src/gpu/ganesh:__pkg__",
-    ],
+    visibility = ["//src:__pkg__"],
 )
 
 skia_filegroup(
     name = "private_hdrs",
     srcs = [":gpu_hdrs"],
-    visibility = [
-        "//src:__pkg__",
-        "//src/gpu/ganesh:__pkg__",
-    ],
+    visibility = ["//src:__pkg__"],
 )

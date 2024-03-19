@@ -19,8 +19,6 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
-#include "include/gpu/ganesh/gl/GrGLDirectContext.h"
 #include "include/gpu/gl/GrGLFunctions.h"
 #include "include/gpu/gl/GrGLInterface.h"
 #include "include/gpu/gl/GrGLTypes.h"
@@ -41,7 +39,7 @@
 #include "src/gpu/ganesh/SurfaceContext.h"
 #include "src/gpu/ganesh/SurfaceFillContext.h" // IWYU pragma: keep
 #include "src/gpu/ganesh/gl/GrGLCaps.h"
-#include "src/gpu/ganesh/gl/GrGLDefines.h"
+#include "src/gpu/ganesh/gl/GrGLDefines_impl.h"
 #include "src/gpu/ganesh/gl/GrGLGpu.h"
 #include "src/gpu/ganesh/gl/GrGLUtil.h"
 #include "tests/CtsEnforcement.h"
@@ -62,7 +60,7 @@ using sk_gpu_test::GLTestContext;
 static void cleanup(GLTestContext* glctx0,
                     GrGLuint texID0,
                     GLTestContext* glctx1,
-                    const sk_sp<GrDirectContext>& dContext,
+                    sk_sp<GrDirectContext> dContext,
                     GrEGLImage image1) {
     if (glctx1) {
         glctx1->makeCurrent();
@@ -77,7 +75,10 @@ static void cleanup(GLTestContext* glctx0,
     }
 }
 
-DEF_GANESH_TEST_FOR_GL_CONTEXT(EGLImageTest, reporter, ctxInfo, CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest,
+                                          reporter,
+                                          ctxInfo,
+                                          CtsEnforcement::kApiLevel_T) {
     auto context0 = ctxInfo.directContext();
     sk_gpu_test::GLTestContext* glCtx0 = ctxInfo.glContext();
 
@@ -96,7 +97,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(EGLImageTest, reporter, ctxInfo, CtsEnforcement::
     if (!glCtx1) {
         return;
     }
-    sk_sp<GrDirectContext> context1 = GrDirectContexts::MakeGL(sk_ref_sp(glCtx1->gl()));
+    sk_sp<GrDirectContext> context1 = GrDirectContext::MakeGL(sk_ref_sp(glCtx1->gl()));
     GrEGLImage image = GR_EGL_NO_IMAGE;
     GrGLTextureInfo externalTexture;
     externalTexture.fID = 0;
@@ -122,7 +123,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(EGLImageTest, reporter, ctxInfo, CtsEnforcement::
                                                                     kSize,
                                                                     kSize,
                                                                     kRGBA_8888_SkColorType,
-                                                                    skgpu::Mipmapped::kNo,
+                                                                    GrMipmapped::kNo,
                                                                     GrRenderable::kNo,
                                                                     GrProtected::kNo);
 
@@ -133,7 +134,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(EGLImageTest, reporter, ctxInfo, CtsEnforcement::
     }
 
     GrGLTextureInfo texInfo;
-    if (!GrBackendTextures::GetGLTextureInfo(mbet->texture(), &texInfo)) {
+    if (!mbet->texture().getGLTextureInfo(&texInfo)) {
         ERRORF(reporter, "Failed to get GrGLTextureInfo");
         return;
     }
@@ -188,8 +189,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(EGLImageTest, reporter, ctxInfo, CtsEnforcement::
     }
 
     // Wrap this texture ID in a GrTexture
-    GrBackendTexture backendTex =
-            GrBackendTextures::MakeGL(kSize, kSize, skgpu::Mipmapped::kNo, externalTexture);
+    GrBackendTexture backendTex(kSize, kSize, GrMipmapped::kNo, externalTexture);
 
     GrColorInfo colorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr);
     // TODO: If I make this TopLeft origin to match resolve_origin calls for kDefault, this test
@@ -214,8 +214,8 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(EGLImageTest, reporter, ctxInfo, CtsEnforcement::
     }
 
     GrTextureProxy* proxy = surfaceContext->asTextureProxy();
-    REPORTER_ASSERT(reporter, proxy->mipmapped() == skgpu::Mipmapped::kNo);
-    REPORTER_ASSERT(reporter, proxy->peekTexture()->mipmapped() == skgpu::Mipmapped::kNo);
+    REPORTER_ASSERT(reporter, proxy->mipmapped() == GrMipmapped::kNo);
+    REPORTER_ASSERT(reporter, proxy->peekTexture()->mipmapped() == GrMipmapped::kNo);
 
     REPORTER_ASSERT(reporter, proxy->textureType() == GrTextureType::kExternal);
     REPORTER_ASSERT(reporter, proxy->peekTexture()->textureType() == GrTextureType::kExternal);
@@ -236,6 +236,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(EGLImageTest, reporter, ctxInfo, CtsEnforcement::
 
     //TestReadPixels(reporter, context0, surfaceContext.get(), pixels.get(), "EGLImageTest-read");
 
+    SkDebugf("type: %d\n", (int)surfaceContext->asTextureProxy()->textureType());
     // We should not be able to write to an EXTERNAL texture
     TestWritePixels(reporter, context0, surfaceContext.get(), false, "EGLImageTest-write");
 

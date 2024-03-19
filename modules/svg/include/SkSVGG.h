@@ -10,7 +10,7 @@
 
 #include "modules/svg/include/SkSVGContainer.h"
 
-class SK_API SkSVGG : public SkSVGContainer {
+class SkSVGG : public SkSVGContainer {
 public:
     static sk_sp<SkSVGG> Make() { return sk_sp<SkSVGG>(new SkSVGG()); }
 

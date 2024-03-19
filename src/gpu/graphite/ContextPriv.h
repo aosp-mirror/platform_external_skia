@@ -12,10 +12,6 @@
 #include "src/gpu/graphite/QueueManager.h"
 #include "src/gpu/graphite/SharedContext.h"
 
-#if defined(GRAPHITE_TEST_UTILS)
-#include "include/private/gpu/graphite/ContextOptionsPriv.h"
-#endif
-
 namespace skgpu::graphite {
 
 class Caps;
@@ -29,6 +25,7 @@ class ShaderCodeDictionary;
     data members or virtual methods. */
 class ContextPriv {
 public:
+#if GRAPHITE_TEST_UTILS
     const Caps* caps() const { return fContext->fSharedContext->caps(); }
 
     const ShaderCodeDictionary* shaderCodeDictionary() const {
@@ -49,8 +46,10 @@ public:
     ResourceProvider* resourceProvider() const {
         return fContext->fResourceProvider.get();
     }
+    PlotUploadTracker* plotUploadTracker() const {
+        return fContext->fPlotUploadTracker.get();
+    }
 
-#if defined(GRAPHITE_TEST_UTILS)
     void startCapture() {
         fContext->fQueueManager->startCapture();
     }
@@ -64,8 +63,6 @@ public:
                     const TextureProxy*,
                     const SkImageInfo& srcImageInfo,
                     int srcX, int srcY);
-
-    bool supportsPathRendererStrategy(PathRendererStrategy);
 #endif
 
 private:

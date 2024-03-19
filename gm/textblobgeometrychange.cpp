@@ -20,7 +20,6 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 // This tests that we don't try to reuse textblobs from the GPU textblob cache across pixel geometry
 // changes when we have LCD.  crbug/486744
@@ -30,14 +29,18 @@ public:
     TextBlobGeometryChange() { }
 
 protected:
-    SkString getName() const override { return SkString("textblobgeometrychange"); }
+    SkString onShortName() override {
+        return SkString("textblobgeometrychange");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kWidth, kHeight);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         const char text[] = "Hamburgefons";
 
-        SkFont font(ToolUtils::DefaultPortableTypeface(), 20);
+        SkFont font(ToolUtils::create_portable_typeface(), 20);
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
 
         SkTextBlobBuilder builder;

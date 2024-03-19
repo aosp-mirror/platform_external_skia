@@ -10,18 +10,15 @@
 
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/MutableTextureState.h"
-#include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "include/gpu/vk/GrVkTypes.h"
-#include "include/gpu/vk/VulkanMutableTextureState.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
-#include "src/gpu/GpuRefCnt.h"
+#include "include/private/gpu/ganesh/GrVkTypesPriv.h"
+#include "src/gpu/MutableTextureStateRef.h"
 #include "src/gpu/ganesh/GrAttachment.h"
 #include "src/gpu/ganesh/GrManagedResource.h"
+#include "src/gpu/ganesh/GrRefCnt.h"
 #include "src/gpu/ganesh/GrTexture.h"
 #include "src/gpu/ganesh/vk/GrVkDescriptorSet.h"
-#include "src/gpu/ganesh/vk/GrVkTypesPriv.h"
-#include "src/gpu/vk/VulkanMutableTextureStatePriv.h"
 
 #include <cinttypes>
 
@@ -57,7 +54,7 @@ public:
     static sk_sp<GrVkImage> MakeWrapped(GrVkGpu* gpu,
                                         SkISize dimensions,
                                         const GrVkImageInfo&,
-                                        sk_sp<skgpu::MutableTextureState>,
+                                        sk_sp<skgpu::MutableTextureStateRef>,
                                         UsageFlags attachmentUsages,
                                         GrWrapOwnership,
                                         GrWrapCacheable,
@@ -85,10 +82,10 @@ public:
                 this->vkImageInfo().fImageTiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
         if (fResource && this->ycbcrConversionInfo().isValid()) {
             SkASSERT(this->imageFormat() == this->ycbcrConversionInfo().fFormat);
-            return GrBackendFormats::MakeVk(this->ycbcrConversionInfo(), usesDRMModifier);
+            return GrBackendFormat::MakeVk(this->ycbcrConversionInfo(), usesDRMModifier);
         }
         SkASSERT(this->imageFormat() != VK_FORMAT_UNDEFINED);
-        return GrBackendFormats::MakeVk(this->imageFormat(), usesDRMModifier);
+        return GrBackendFormat::MakeVk(this->imageFormat(), usesDRMModifier);
     }
     uint32_t mipLevels() const { return fInfo.fLevelCount; }
     const GrVkYcbcrConversionInfo& ycbcrConversionInfo() const {
@@ -127,11 +124,9 @@ public:
     }
     bool isBorrowed() const { return fIsBorrowed; }
 
-    sk_sp<skgpu::MutableTextureState> getMutableState() const { return fMutableState; }
+    sk_sp<skgpu::MutableTextureStateRef> getMutableState() const { return fMutableState; }
 
-    VkImageLayout currentLayout() const {
-        return skgpu::MutableTextureStates::GetVkImageLayout(fMutableState.get());
-    }
+    VkImageLayout currentLayout() const { return fMutableState->getImageLayout(); }
 
     void setImageLayoutAndQueueIndex(const GrVkGpu* gpu,
                                      VkImageLayout newLayout,
@@ -149,12 +144,10 @@ public:
                                           VK_QUEUE_FAMILY_IGNORED);
     }
 
-    uint32_t currentQueueFamilyIndex() const {
-        return skgpu::MutableTextureStates::GetVkQueueFamilyIndex(fMutableState.get());
-    }
+    uint32_t currentQueueFamilyIndex() const { return fMutableState->getQueueFamilyIndex(); }
 
     void setQueueFamilyIndex(uint32_t queueFamilyIndex) {
-        skgpu::MutableTextureStates::SetVkQueueFamilyIndex(fMutableState.get(), queueFamilyIndex);
+        fMutableState->setQueueFamilyIndex(queueFamilyIndex);
     }
 
     // Returns the image to its original queue family and changes the layout to present if the queue
@@ -171,7 +164,7 @@ public:
         // Should only be called when we have a real fResource object, i.e. never when being used as
         // a RT in an external secondary command buffer.
         SkASSERT(fResource);
-        skgpu::MutableTextureStates::SetVkImageLayout(fMutableState.get(), newLayout);
+        fMutableState->setImageLayout(newLayout);
     }
 
     struct ImageDesc {
@@ -213,7 +206,7 @@ public:
     static VkPipelineStageFlags LayoutToPipelineSrcStageFlags(const VkImageLayout layout);
     static VkAccessFlags LayoutToSrcAccessMask(const VkImageLayout layout);
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     void setCurrentQueueFamilyToGraphicsQueue(GrVkGpu* gpu);
 #endif
 
@@ -233,7 +226,7 @@ private:
               SkISize dimensions,
               UsageFlags supportedUsages,
               const GrVkImageInfo&,
-              sk_sp<skgpu::MutableTextureState> mutableState,
+              sk_sp<skgpu::MutableTextureStateRef> mutableState,
               sk_sp<const GrVkImageView> framebufferView,
               sk_sp<const GrVkImageView> textureView,
               skgpu::Budgeted,
@@ -243,7 +236,7 @@ private:
               SkISize dimensions,
               UsageFlags supportedUsages,
               const GrVkImageInfo&,
-              sk_sp<skgpu::MutableTextureState> mutableState,
+              sk_sp<skgpu::MutableTextureStateRef> mutableState,
               sk_sp<const GrVkImageView> framebufferView,
               sk_sp<const GrVkImageView> textureView,
               GrBackendObjectOwnership,
@@ -263,7 +256,7 @@ private:
 
     GrVkImageInfo                        fInfo;
     uint32_t                             fInitialQueueFamily;
-    sk_sp<skgpu::MutableTextureState> fMutableState;
+    sk_sp<skgpu::MutableTextureStateRef> fMutableState;
 
     sk_sp<const GrVkImageView>           fFramebufferView;
     sk_sp<const GrVkImageView>           fTextureView;

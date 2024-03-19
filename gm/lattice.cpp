@@ -96,9 +96,13 @@ public:
     LatticeGM() {}
 
 protected:
-    SkString getName() const override { return SkString("lattice"); }
+    SkString onShortName() override {
+        return SkString("lattice");
+    }
 
-    SkISize getISize() override { return SkISize::Make(800, 800); }
+    SkISize onISize() override {
+        return SkISize::Make(800, 800);
+    }
 
     void onDrawHelper(GrDirectContext* dContext, SkCanvas* canvas, int padLeft, int padTop,
                       int padRight, int padBottom) {
@@ -226,9 +230,13 @@ DEF_GM( return new LatticeGM; )
 class LatticeGM2 : public skiagm::GM {
 public:
     LatticeGM2() {}
-    SkString getName() const override { return SkString("lattice2"); }
+    SkString onShortName() override {
+        return SkString("lattice2");
+    }
 
-    SkISize getISize() override { return SkISize::Make(800, 800); }
+    SkISize onISize() override {
+        return SkISize::Make(800, 800);
+    }
 
     sk_sp<SkImage> makeImage(SkCanvas* root, int padLeft, int padTop, int padRight, int padBottom) {
         const int kSize = 80;

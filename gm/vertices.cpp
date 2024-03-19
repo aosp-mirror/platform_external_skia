@@ -28,7 +28,6 @@
 #include "src/core/SkVerticesPriv.h"
 #include "src/shaders/SkLocalMatrixShader.h"
 #include "src/utils/SkPatchUtils.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -125,7 +124,7 @@ protected:
         fColorFilter = make_color_filter();
     }
 
-    SkString getName() const override {
+    SkString onShortName() override {
         SkString name("vertices");
         if (fShaderScale != 1) {
             name.append("_scaled_shader");
@@ -133,7 +132,9 @@ protected:
         return name;
     }
 
-    SkISize getISize() override { return SkISize::Make(975, 1175); }
+    SkISize onISize() override {
+        return SkISize::Make(975, 1175);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         const SkBlendMode modes[] = {
@@ -310,7 +311,7 @@ DEF_SIMPLE_GM(vertices_perspective, canvas, 256, 256) {
 }
 
 DEF_SIMPLE_GM(skbug_13047, canvas, 200, 200) {
-    auto image = ToolUtils::GetResourceAsImage("images/mandrill_128.png");
+    auto image = GetResourceAsImage("images/mandrill_128.png");
 
     const float w = image->width();
     const float h = image->height();
@@ -329,23 +330,4 @@ DEF_SIMPLE_GM(skbug_13047, canvas, 200, 200) {
     p.setShader(s);
 
     canvas->drawVertices(v, SkBlendMode::kModulate, p);
-}
-
-// Makes sure that drawVertices allows for triangles with "collapsed" UVs, where all three vertices
-// have the same texture coordinate. b/40044794
-DEF_SIMPLE_GM_BG(vertices_collapsed, canvas, 50, 50, SK_ColorWHITE) {
-    SkPoint verts[] = {{5, 5}, {45, 5}, {45, 45}, {5, 45}};
-    SkPoint texs[] = {{0, 0}, {0, 0}, {0, 0}, {0, 0}};
-    uint16_t indices[] = {0, 1, 2, 2, 3, 0};
-
-    sk_sp<SkVertices> v = SkVertices::MakeCopy(
-            SkVertices::kTriangles_VertexMode, 4, verts, texs, nullptr, 6, indices);
-
-    sk_sp<SkSurface> surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(1, 1));
-    surf->getCanvas()->clear(SK_ColorGREEN);
-    sk_sp<SkShader> shader = surf->makeImageSnapshot()->makeShader(SkSamplingOptions{});
-    SkPaint paint;
-    paint.setShader(shader);
-
-    canvas->drawVertices(v, SkBlendMode::kDst, paint);
 }

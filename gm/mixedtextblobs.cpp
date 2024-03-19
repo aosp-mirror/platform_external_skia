@@ -20,7 +20,6 @@
 #include "include/core/SkTypeface.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -49,18 +48,15 @@ public:
 
 protected:
     void onOnceBeforeDraw() override {
-        fEmojiTypeface      = ToolUtils::PlanetTypeface();
+        fEmojiTypeface      = ToolUtils::planet_typeface();
         fEmojiText = "♁♃";
-        fReallyBigATypeface = ToolUtils::CreateTypefaceFromResource("fonts/ReallyBigA.ttf");
-        if (!fReallyBigATypeface) {
-            fReallyBigATypeface = ToolUtils::DefaultPortableTypeface();
-        }
+        fReallyBigATypeface = MakeResourceAsTypeface("fonts/ReallyBigA.ttf");
 
         SkTextBlobBuilder builder;
 
         // make textblob
         // Text so large we draw as paths
-        SkFont font(ToolUtils::DefaultPortableTypeface(), 385);
+        SkFont font(ToolUtils::create_portable_typeface(), 385);
         font.setEdging(SkFont::Edging::kAlias);
         const char* text = "O";
 
@@ -107,9 +103,13 @@ protected:
         fBlob = builder.make();
     }
 
-    SkString getName() const override { return SkString("mixedtextblobs"); }
+    SkString onShortName() override {
+        return SkString("mixedtextblobs");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kWidth, kHeight);
+    }
 
     void onDraw(SkCanvas* canvas) override {
 

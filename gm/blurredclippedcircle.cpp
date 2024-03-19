@@ -30,9 +30,14 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("blurredclippedcircle"); }
 
-    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkString onShortName() override {
+        return SkString("blurredclippedcircle");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(kWidth, kHeight);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint whitePaint;

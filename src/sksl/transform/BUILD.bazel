@@ -12,13 +12,10 @@ TRANSFORM_FILES = [
     "SkSLEliminateEmptyStatements.cpp",
     "SkSLEliminateUnreachableCode.cpp",
     "SkSLFindAndDeclareBuiltinFunctions.cpp",
-    "SkSLFindAndDeclareBuiltinStructs.cpp",
     "SkSLFindAndDeclareBuiltinVariables.cpp",
-    "SkSLHoistSwitchVarDeclarationsAtTopLevel.cpp",
     "SkSLProgramWriter.h",
     "SkSLRenamePrivateSymbols.cpp",
     "SkSLReplaceConstVarsWithLiterals.cpp",
-    "SkSLRewriteIndexedSwizzle.cpp",
     "SkSLTransform.h",
 ]
 

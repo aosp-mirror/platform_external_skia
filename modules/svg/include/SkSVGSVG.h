@@ -14,7 +14,7 @@
 
 class SkSVGLengthContext;
 
-class SK_API SkSVGSVG : public SkSVGContainer {
+class SkSVGSVG : public SkSVGContainer {
 public:
     enum class Type {
         kRoot,

@@ -40,6 +40,8 @@ public:
 
     GrVkGpu* gpu() const { return fGpu; }
 
+    SkSL::Compiler* shaderCompiler() const override;
+
     void finalizeFragmentSecondaryColor(GrShaderVar& outputColor) override;
 
 private:
@@ -52,8 +54,7 @@ private:
     int loadShadersFromCache(SkReadBuffer* cached, VkShaderModule outShaderModules[],
                              VkPipelineShaderStageCreateInfo* outStageInfo);
 
-    void storeShadersInCache(const std::string shaders[],
-                             const SkSL::Program::Interface[],
+    void storeShadersInCache(const std::string shaders[], const SkSL::Program::Inputs inputs[],
                              bool isSkSL);
 
     bool createVkShaderModule(VkShaderStageFlagBits stage,
@@ -62,14 +63,14 @@ private:
                               VkPipelineShaderStageCreateInfo* stageInfo,
                               const SkSL::ProgramSettings& settings,
                               std::string* outSPIRV,
-                              SkSL::Program::Interface* outInterface);
+                              SkSL::Program::Inputs* outInputs);
 
     bool installVkShaderModule(VkShaderStageFlagBits stage,
                                const GrGLSLShaderBuilder& builder,
                                VkShaderModule* shaderModule,
                                VkPipelineShaderStageCreateInfo* stageInfo,
                                std::string spirv,
-                               SkSL::Program::Interface);
+                               SkSL::Program::Inputs inputs);
 
     GrGLSLUniformHandler* uniformHandler() override { return &fUniformHandler; }
     const GrGLSLUniformHandler* uniformHandler() const override { return &fUniformHandler; }

@@ -25,7 +25,6 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/utils/SkTextUtils.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 const SkSamplingOptions gSamplings[] = {
     SkSamplingOptions(SkFilterMode::kNearest),
@@ -75,7 +74,7 @@ protected:
         kNPOTSize = 3,
     };
 
-    SkString getName() const override {
+    SkString onShortName() override {
         SkString name("scaled_tilemodes");
         if (!fPowerOfTwoSize) {
             name.append("_npot");
@@ -83,7 +82,7 @@ protected:
         return name;
     }
 
-    SkISize getISize() override { return SkISize::Make(880, 880); }
+    SkISize onISize() override { return SkISize::Make(880, 880); }
 
     void onOnceBeforeDraw() override {
         int size = fPowerOfTwoSize ? kPOTSize : kNPOTSize;
@@ -94,7 +93,7 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint textPaint;
-        SkFont  font(ToolUtils::DefaultPortableTypeface(), 12);
+        SkFont  font(ToolUtils::create_portable_typeface(), 12);
 
         float scale = 32.f/kPOTSize;
 
@@ -102,7 +101,7 @@ protected:
 
         SkRect r = { 0, 0, SkIntToScalar(size*2), SkIntToScalar(size*2) };
 
-        const char* gColorTypeNames[] = { "8888", "565" };
+        const char* gColorTypeNames[] = { "8888" , "565", "4444" };
 
         const char* gFilterNames[] = { "Nearest", "Linear", "Trilinear", "Mitchell", "Aniso" };
 
@@ -201,9 +200,9 @@ public:
     ScaledTiling2GM(ShaderProc proc, const char name[]) : fProc(proc), fName(name) {}
 
 private:
-    SkString getName() const override { return SkString(fName); }
+    SkString onShortName() override { return SkString(fName); }
 
-    SkISize getISize() override { return SkISize::Make(650, 610); }
+    SkISize onISize() override { return SkISize::Make(650, 610); }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->scale(SkIntToScalar(3)/2, SkIntToScalar(3)/2);
@@ -222,7 +221,7 @@ private:
         SkScalar y = SkIntToScalar(24);
         SkScalar x = SkIntToScalar(66);
 
-        SkFont font = ToolUtils::DefaultPortableFont();
+        SkFont font(ToolUtils::create_portable_typeface());
 
         for (size_t kx = 0; kx < std::size(gModes); kx++) {
             SkString str(gModeNames[kx]);

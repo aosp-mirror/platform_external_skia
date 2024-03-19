@@ -7,11 +7,15 @@
 #include "include/gpu/gl/GrGLAssembleInterface.h"
 #include "include/gpu/gl/GrGLInterface.h"
 
-#include <GLES3/gl32.h>
+#include <emscripten/html5.h>
+#include <webgl/webgl1.h>
+#include <webgl/webgl1_ext.h>
+#include <webgl/webgl2.h>
+#include <webgl/webgl2_ext.h>
 
 static GrGLFuncPtr webgl_get_gl_proc(void* ctx, const char name[]) {
 
-    #define M(X) if (0 == strcmp(#X, name)) { return (GrGLFuncPtr) X; }
+    #define M(X) if (0 == strcmp(#X, name)) { return (GrGLFuncPtr) emscripten_##X; }
     M(glGetString)
     #undef M
 

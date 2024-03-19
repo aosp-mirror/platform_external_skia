@@ -18,7 +18,6 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 static void make_bm(SkBitmap* bm) {
     const SkColor colors[4] = {
@@ -59,7 +58,7 @@ static SkScalar draw_row(SkCanvas* canvas, sk_sp<SkImage> img) {
     SkScalar x = 0;
     const int scale = 32;
 
-    SkFont      font = ToolUtils::DefaultPortableFont();
+    SkFont      font(ToolUtils::create_portable_typeface());
     const char* name = ToolUtils::colortype_name(img->colorType());
     canvas->drawString(name, x, SkIntToScalar(img->height())*scale*5/8, font, paint);
     canvas->translate(SkIntToScalar(48), 0);
@@ -93,9 +92,13 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("bitmapfilters"); }
+    SkString onShortName() override {
+        return SkString("bitmapfilters");
+    }
 
-    SkISize getISize() override { return SkISize::Make(540, 250); }
+    SkISize onISize() override {
+        return SkISize::Make(540, 250);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkScalar x = SkIntToScalar(10);
@@ -138,9 +141,13 @@ public:
     SkBitmap fBitmap, fAlpha;
 
 protected:
-    SkString getName() const override { return SkString("extractalpha"); }
+    SkString onShortName() override {
+        return SkString("extractalpha");
+    }
 
-    SkISize getISize() override { return SkISize::Make(540, 330); }
+    SkISize onISize() override {
+        return SkISize::Make(540, 330);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;

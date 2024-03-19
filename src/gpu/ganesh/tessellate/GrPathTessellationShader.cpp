@@ -17,8 +17,6 @@
 #include "src/gpu/tessellate/Tessellation.h"
 #include "src/gpu/tessellate/WangsFormula.h"
 
-using namespace skia_private;
-
 namespace {
 
 using namespace skgpu::tess;
@@ -123,7 +121,7 @@ private:
     std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const final;
 
     constexpr static int kMaxInstanceAttribCount = 5;
-    STArray<kMaxInstanceAttribCount, Attribute> fInstanceAttribs;
+    SkSTArray<kMaxInstanceAttribCount, Attribute> fInstanceAttribs;
 };
 
 std::unique_ptr<GrGeometryProcessor::ProgramImpl> MiddleOutShader::makeProgramImpl(

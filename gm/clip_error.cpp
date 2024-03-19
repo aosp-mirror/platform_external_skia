@@ -21,7 +21,6 @@
 #include "include/core/SkTypeface.h"
 #include "src/core/SkBlurMask.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -47,15 +46,15 @@ public:
     ClipErrorGM() {}
 
 protected:
-    SkString getName() const override { return SkString("cliperror"); }
+    SkString onShortName() override { return SkString("cliperror"); }
 
-    SkISize getISize() override { return SkISize::Make(WIDTH, HEIGHT); }
+    SkISize onISize() override { return SkISize::Make(WIDTH, HEIGHT); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         paint.setAntiAlias(true);
 
-        SkFont font(ToolUtils::DefaultPortableTypeface(), 256);
+        SkFont font(ToolUtils::create_portable_typeface(), 256);
 
         // setup up maskfilter
         const SkScalar kSigma = SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(50));

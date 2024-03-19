@@ -92,7 +92,7 @@ public:                                                                      \
         }                                                                    \
     }
 
-class SK_API SkSVGNode : public SkRefCnt {
+class SkSVGNode : public SkRefCnt {
 public:
     ~SkSVGNode() override;
 

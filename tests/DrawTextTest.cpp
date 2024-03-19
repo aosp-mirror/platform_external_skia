@@ -9,10 +9,9 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkFont.h"
-#include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathEffect.h"  // IWYU pragma: keep
+#include "include/core/SkPathEffect.h" // IWYU pragma: keep
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
@@ -23,11 +22,9 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkDashPathEffect.h"
 #include "tests/Test.h"
-#include "tools/fonts/FontToolUtils.h"
 
-#include <array>
 #include <cmath>
-#include <cstring>
+#include <string>
 
 static const SkColor bgColor = SK_ColorWHITE;
 
@@ -84,7 +81,7 @@ DEF_TEST(DrawText_dashout, reporter) {
     SkCanvas emptyCanvas(emptyBitmap);
 
     SkPoint point = SkPoint::Make(25.0f, 25.0f);
-    SkFont font(ToolUtils::DefaultTypeface(), 20);
+    SkFont font(nullptr, 20);
     font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
     font.setSubpixel(true);
 
@@ -115,29 +112,28 @@ DEF_TEST(DrawText_dashout, reporter) {
 // Test drawing text at some unusual coordinates.
 // We measure success by not crashing or asserting.
 DEF_TEST(DrawText_weirdCoordinates, r) {
-    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(10, 10));
+    auto surface = SkSurface::MakeRasterN32Premul(10,10);
     auto canvas = surface->getCanvas();
-    SkFont font = ToolUtils::DefaultFont();
 
     SkScalar oddballs[] = { 0.0f, (float)INFINITY, (float)NAN, 34359738368.0f };
 
     for (auto x : oddballs) {
-        canvas->drawString("a", +x, 0.0f, font, SkPaint());
-        canvas->drawString("a", -x, 0.0f, font, SkPaint());
+        canvas->drawString("a", +x, 0.0f, SkFont(), SkPaint());
+        canvas->drawString("a", -x, 0.0f, SkFont(), SkPaint());
     }
     for (auto y : oddballs) {
-        canvas->drawString("a", 0.0f, +y, font, SkPaint());
-        canvas->drawString("a", 0.0f, -y, font, SkPaint());
+        canvas->drawString("a", 0.0f, +y, SkFont(), SkPaint());
+        canvas->drawString("a", 0.0f, -y, SkFont(), SkPaint());
     }
 }
 
-// Test drawing text with some unusual matrices.
+// Test drawing text with some unusual matricies.
 // We measure success by not crashing or asserting.
 DEF_TEST(DrawText_weirdMatricies, r) {
-    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(100, 100));
+    auto surface = SkSurface::MakeRasterN32Premul(100,100);
     auto canvas = surface->getCanvas();
 
-    SkFont font = ToolUtils::DefaultFont();
+    SkFont font;
     font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
 
     struct {
@@ -171,16 +167,15 @@ DEF_TEST(DrawText_weirdMatricies, r) {
 // This produces no glyphs, and is to check that buffers from previous draws don't get
 // reused.
 DEF_TEST(DrawText_noglyphs, r) {
-    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(100, 100));
+    auto surface = SkSurface::MakeRasterN32Premul(100,100);
     auto canvas = surface->getCanvas();
-    SkFont font = ToolUtils::DefaultFont();
     auto text = "Hamburgfons";
     {
         // scoped to ensure blob is deleted.
-        auto blob = SkTextBlob::MakeFromText(text, strlen(text), font);
+        auto blob = SkTextBlob::MakeFromText(text, strlen(text), SkFont());
         canvas->drawTextBlob(blob, 10, 10, SkPaint());
     }
     canvas->drawString(
             "\x0d\xf3\xf2\xf2\xe9\x0d\x0d\x0d\x05\x0d\x0d\xe3\xe3\xe3\xe3\xe3\xe3\xe3\xe3\xe3",
-            10, 20, font, SkPaint());
+            10, 20, SkFont(), SkPaint());
 }

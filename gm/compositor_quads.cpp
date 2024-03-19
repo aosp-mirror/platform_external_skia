@@ -37,20 +37,16 @@
 #include "include/effects/SkShaderMaskFilter.h"
 #include "include/private/base/SkTArray.h"
 #include "src/core/SkLineClipper.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/gpu/YUVUtils.h"
 
 #include <array>
 #include <memory>
 #include <utility>
 
-using namespace skia_private;
-
 class ClipTileRenderer;
-using ClipTileRendererArray = TArray<sk_sp<ClipTileRenderer>>;
+using ClipTileRendererArray = SkTArray<sk_sp<ClipTileRenderer>>;
 
 // This GM mimics the draw calls used by complex compositors that focus on drawing rectangles
 // and quadrilaterals with per-edge AA, with complex images, effects, and seamless tiling.
@@ -193,7 +189,7 @@ static void draw_clipping_boundaries(SkCanvas* canvas, const SkMatrix& local) {
 }
 
 static void draw_text(SkCanvas* canvas, const char* text) {
-    SkFont font(ToolUtils::DefaultPortableTypeface(), 12);
+    SkFont font(ToolUtils::create_portable_typeface(), 12);
     canvas->drawString(text, 0, 0, font, SkPaint());
 }
 
@@ -328,7 +324,7 @@ protected:
         // splits are hardcoded below; subtile quad orderings are such that the sub tiles remain in
         // clockwise order and match expected edges for QuadAAFlags. subtile indices refer to the
         // 6-element 'points' array.
-        STArray<3, std::array<int, 4>> subtiles;
+        SkSTArray<3, std::array<int, 4>> subtiles;
         int s2 = -1; // Index of an original vertex chosen for a artificial split
         if (splitIndices[1] - splitIndices[0] == 2) {
             // Opposite edges, so the split trivially forms 2 sub quads
@@ -426,7 +422,7 @@ public:
             , fName(name) {}
 
 protected:
-    SkISize getISize() override {
+    SkISize onISize() override {
         // Initialize the array of renderers.
         this->onceBeforeDraw();
 
@@ -441,7 +437,7 @@ protected:
                              SkScalarRoundToInt(kCellHeight * fRenderers.size() + 75.f));
     }
 
-    SkString getName() const override {
+    SkString onShortName() override {
         SkString fullName;
         fullName.appendf("compositor_quads_%s", fName.c_str());
         return fullName;
@@ -457,7 +453,7 @@ protected:
         static constexpr SkScalar kBannerWidth = 120.f;
         static constexpr SkScalar kOffset = 15.f;
 
-        TArray<int> drawCounts(fRenderers.size());
+        SkTArray<int> drawCounts(fRenderers.size());
         drawCounts.push_back_n(fRenderers.size(), 0);
 
         canvas->save();
@@ -501,8 +497,8 @@ protected:
 private:
     std::function<ClipTileRendererArray()> fMakeRendererFn;
     ClipTileRendererArray fRenderers;
-    TArray<SkMatrix> fMatrices;
-    TArray<SkString> fMatrixNames;
+    SkTArray<SkMatrix> fMatrices;
+    SkTArray<SkString> fMatrixNames;
 
     SkString fName;
 
@@ -786,9 +782,9 @@ private:
     bool fResetEachQuad;
     int fTransformBatchCount;
 
-    TArray<SkPoint> fDstClips;
-    TArray<SkMatrix> fPreViewMatrices;
-    TArray<SkCanvas::ImageSetEntry> fSetEntries;
+    SkTArray<SkPoint> fDstClips;
+    SkTArray<SkMatrix> fPreViewMatrices;
+    SkTArray<SkCanvas::ImageSetEntry> fSetEntries;
 
     SkMatrix fBaseCTM;
     int fBatchCount;
@@ -951,8 +947,8 @@ private:
     // The last accessed SkImage from fYUVData, held here for easy access by drawTile
     sk_sp<SkImage> fImage;
 
-    TArray<SkPoint> fDstClips;
-    TArray<SkCanvas::ImageSetEntry> fSetEntries;
+    SkTArray<SkPoint> fDstClips;
+    SkTArray<SkCanvas::ImageSetEntry> fSetEntries;
 
     YUVTextureSetRenderer(sk_sp<SkData> jpegData)
             : fYUVData(sk_gpu_test::LazyYUVImage::Make(std::move(jpegData)))
@@ -1020,7 +1016,7 @@ static ClipTileRendererArray make_shader_renderers() {
 }
 
 static ClipTileRendererArray make_image_renderers() {
-    sk_sp<SkImage> mandrill = ToolUtils::GetResourceAsImage("images/mandrill_512.png");
+    sk_sp<SkImage> mandrill = GetResourceAsImage("images/mandrill_512.png");
     sk_sp<SkData> mandrillJpeg = GetResourceAsData("images/mandrill_h1v1.jpg");
     return ClipTileRendererArray{TextureSetRenderer::MakeUnbatched(mandrill),
                                  TextureSetRenderer::MakeBatched(mandrill, 0),
@@ -1029,7 +1025,7 @@ static ClipTileRendererArray make_image_renderers() {
 }
 
 static ClipTileRendererArray make_filtered_renderers() {
-    sk_sp<SkImage> mandrill = ToolUtils::GetResourceAsImage("images/mandrill_512.png");
+    sk_sp<SkImage> mandrill = GetResourceAsImage("images/mandrill_512.png");
 
     SkColorMatrix cm;
     cm.setSaturation(10);

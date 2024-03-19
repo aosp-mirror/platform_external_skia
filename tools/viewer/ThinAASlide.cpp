@@ -11,11 +11,7 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkSurface.h"
-#include "include/private/base/SkTArray.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/Slide.h"
-
-using namespace skia_private;
 
 namespace skiagm {
 
@@ -66,6 +62,8 @@ public:
 
 private:
     RectRenderer() {}
+
+    using INHERITED = ShapeRenderer;
 };
 
 class PathRenderer : public ShapeRenderer {
@@ -149,6 +147,8 @@ private:
     PathRenderer(SkScalar depth, bool hairline)
             : fDepth(depth)
             , fHairline(hairline) {}
+
+    using INHERITED = ShapeRenderer;
 };
 
 class OffscreenShapeRenderer : public ShapeRenderer {
@@ -186,7 +186,8 @@ public:
         auto info = SkImageInfo::Make(fSupersampleFactor * kTileWidth,
                                       fSupersampleFactor * kTileHeight,
                                       kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-        auto surface = fForceRasterBackend ? SkSurfaces::Raster(info) : canvas->makeSurface(info);
+        auto surface = fForceRasterBackend ? SkSurface::MakeRaster(info)
+                                           : canvas->makeSurface(info);
 
         surface->getCanvas()->save();
         // Make fully transparent so it is easy to determine pixels that are touched by partial cov.
@@ -240,6 +241,8 @@ private:
             , fLastRendered(nullptr)
             , fRenderer(std::move(renderer))
             , fSupersampleFactor(supersample) { }
+
+    using INHERITED = ShapeRenderer;
 };
 
 class ThinAASlide : public Slide {
@@ -282,7 +285,7 @@ public:
         canvas->clear(0xFFFFFFFF);
         // Move away from screen edge and add instructions
         SkPaint text;
-        SkFont font(ToolUtils::DefaultTypeface(), 12);
+        SkFont font(nullptr, 12);
         canvas->translate(60.f, 20.f);
         canvas->drawString("Each row features a rendering command under different AA strategies. "
                            "Native refers to the current backend of the viewer, e.g. OpenGL.",
@@ -408,13 +411,13 @@ public:
 private:
     // Base renderers that get wrapped on the offscreen renderers so that they can be transformed
     // for visualization, or supersampled.
-    TArray<sk_sp<ShapeRenderer>> fShapes;
+    SkTArray<sk_sp<ShapeRenderer>> fShapes;
 
-    TArray<sk_sp<OffscreenShapeRenderer>> fNative;
-    TArray<sk_sp<OffscreenShapeRenderer>> fRaster;
-    TArray<sk_sp<OffscreenShapeRenderer>> fHairline;
-    TArray<sk_sp<OffscreenShapeRenderer>> fSS4;
-    TArray<sk_sp<OffscreenShapeRenderer>> fSS16;
+    SkTArray<sk_sp<OffscreenShapeRenderer>> fNative;
+    SkTArray<sk_sp<OffscreenShapeRenderer>> fRaster;
+    SkTArray<sk_sp<OffscreenShapeRenderer>> fHairline;
+    SkTArray<sk_sp<OffscreenShapeRenderer>> fSS4;
+    SkTArray<sk_sp<OffscreenShapeRenderer>> fSS16;
 
     SkScalar fStrokeWidth;
 
@@ -453,7 +456,7 @@ private:
     }
 
     void drawShapes(SkCanvas* canvas, const char* name, int gridX,
-                    TArray<sk_sp<OffscreenShapeRenderer>> shapes) {
+                    SkTArray<sk_sp<OffscreenShapeRenderer>> shapes) {
         SkAutoCanvasRestore autoRestore(canvas, /* save */ true);
 
         for (int i = 0; i < shapes.size(); ++i) {
@@ -473,7 +476,7 @@ private:
         // Labeling per shape and detailed labeling that isn't per-stroke
         canvas->save();
         SkPaint text;
-        SkFont font(ToolUtils::DefaultTypeface(), 12);
+        SkFont font(nullptr, 12);
 
         if (gridX == 0) {
             SkScalar centering = shape->name().size() * 4.f; // ad-hoc

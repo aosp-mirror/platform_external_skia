@@ -20,8 +20,6 @@
 #include "include/private/base/SkTArray.h"
 #include "src/base/SkRandom.h"
 
-using namespace skia_private;
-
 namespace {
 
 class SkDoOnce {
@@ -47,9 +45,10 @@ class ConvexPathsGM : public skiagm::GM {
 
     void onOnceBeforeDraw() override { this->setBGColor(0xFF000000); }
 
-    SkString getName() const override { return SkString("convexpaths"); }
+    SkString onShortName() override { return SkString("convexpaths"); }
 
-    SkISize getISize() override { return {1200, 1100}; }
+
+    SkISize onISize() override { return {1200, 1100}; }
 
     void makePaths() {
         if (fOnce.alreadyDone()) {
@@ -259,7 +258,7 @@ class ConvexPathsGM : public skiagm::GM {
         }
     }
 
-    TArray<SkPath> fPaths;
+    SkTArray<SkPath> fPaths;
 };
 }  // namespace
 

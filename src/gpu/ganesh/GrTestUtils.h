@@ -10,13 +10,14 @@
 
 #include "include/core/SkTypes.h"
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 
 #include "include/core/SkStrokeRec.h"
 #include "include/core/SkSurfaceProps.h"
 #include "include/private/base/SkMacros.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkRandom.h"
+#include "src/core/SkMatrixProvider.h"
 #include "src/core/SkPathEffectBase.h"
 #include "src/gpu/ganesh/GrColor.h"
 #include "src/gpu/ganesh/GrFPArgs.h"

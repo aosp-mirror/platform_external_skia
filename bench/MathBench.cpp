@@ -41,7 +41,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     virtual void performTest(float* SK_RESTRICT dst,
@@ -275,7 +275,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -343,7 +343,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     virtual void process(float) {}
@@ -404,7 +404,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     // just so the compiler doesn't remove our loops
@@ -464,7 +464,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     // just so the compiler doesn't remove our loops
@@ -520,7 +520,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     // just so the compiler doesn't remove our loops
@@ -567,7 +567,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -603,7 +603,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -687,7 +687,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     // These exist to try to stop the compiler from detecting what we doing, and throwing

@@ -11,8 +11,7 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "src/base/SkEnumBitMask.h"
-#include "src/base/SkVx.h"
+#include "src/core/SkEnumBitMask.h"
 #include "src/gpu/graphite/Attribute.h"
 #include "src/gpu/graphite/DrawTypes.h"
 #include "src/gpu/graphite/ResourceTypes.h"
@@ -33,14 +32,10 @@ namespace skgpu::graphite {
 class DrawWriter;
 class DrawParams;
 class PipelineDataGatherer;
-class Rect;
 class ResourceProvider;
 class TextureDataBlock;
-class Transform;
 
 struct ResourceBindingRequirements;
-
-enum class Coverage { kNone, kSingleChannel, kLCD };
 
 struct Varying {
     const char* fName;
@@ -72,7 +67,7 @@ public:
     // The DrawWriter is configured with the vertex and instance strides of the RenderStep, and its
     // primitive type. The recorded draws will be executed with a graphics pipeline compatible with
     // this RenderStep.
-    virtual void writeVertices(DrawWriter*, const DrawParams&, skvx::ushort2 ssboIndices) const = 0;
+    virtual void writeVertices(DrawWriter*, const DrawParams&, int ssboIndex) const = 0;
 
     // Write out the uniform values (aligned for the layout), textures, and samplers. The uniform
     // values will be de-duplicated across all draws using the RenderStep before uploading to the
@@ -115,13 +110,11 @@ public:
     // and variant is a unique term describing instance's specific configuration.
     const char* name() const { return fName.c_str(); }
 
-    bool requiresMSAA()        const { return SkToBool(fFlags & Flags::kRequiresMSAA);        }
-    bool performsShading()     const { return SkToBool(fFlags & Flags::kPerformsShading);     }
-    bool hasTextures()         const { return SkToBool(fFlags & Flags::kHasTextures);         }
-    bool emitsPrimitiveColor() const { return SkToBool(fFlags & Flags::kEmitsPrimitiveColor); }
-    bool outsetBoundsForAA()   const { return SkToBool(fFlags & Flags::kOutsetBoundsForAA);   }
-
-    Coverage coverage() const { return RenderStep::GetCoverage(fFlags); }
+    bool requiresMSAA()        const { return fFlags & Flags::kRequiresMSAA;        }
+    bool performsShading()     const { return fFlags & Flags::kPerformsShading;     }
+    bool hasTextures()         const { return fFlags & Flags::kHasTextures;         }
+    bool emitsCoverage()       const { return fFlags & Flags::kEmitsCoverage;       }
+    bool emitsPrimitiveColor() const { return fFlags & Flags::kEmitsPrimitiveColor; }
 
     PrimitiveType primitiveType()  const { return fPrimitiveType;  }
     size_t        vertexStride()   const { return fVertexStride;   }
@@ -131,12 +124,7 @@ public:
     size_t numVertexAttributes()   const { return fVertexAttrs.size();   }
     size_t numInstanceAttributes() const { return fInstanceAttrs.size(); }
 
-    // Name of an attribute containing both render step and shading SSBO indices, if used.
-    static const char* ssboIndicesAttribute() { return "ssboIndices"; }
-
-    // Name of a varying to pass SSBO indices to fragment shader. Both render step and shading
-    // indices are passed, because render step uniforms are sometimes used for coverage.
-    static const char* ssboIndicesVarying() { return "ssboIndicesVar"; }
+    static const char* ssboIndex() { return "ssboIndex"; }
 
     // The uniforms of a RenderStep are bound to the kRenderStep slot, the rest of the pipeline
     // may still use uniforms bound to other slots.
@@ -163,16 +151,14 @@ public:
     //    - Does each DrawList::Draw have extra space (e.g. 8 bytes) that steps can cache data in?
 protected:
     enum class Flags : unsigned {
-        kNone                  = 0b0000000,
-        kRequiresMSAA          = 0b0000001,
-        kPerformsShading       = 0b0000010,
-        kHasTextures           = 0b0000100,
-        kEmitsCoverage         = 0b0001000,
-        kLCDCoverage           = 0b0010000,
-        kEmitsPrimitiveColor   = 0b0100000,
-        kOutsetBoundsForAA     = 0b1000000,
+        kNone                  = 0b00000,
+        kRequiresMSAA          = 0b00001,
+        kPerformsShading       = 0b00010,
+        kHasTextures           = 0b00100,
+        kEmitsCoverage         = 0b01000,
+        kEmitsPrimitiveColor   = 0b10000,
     };
-    SK_DECL_BITMASK_OPS_FRIENDS(Flags)
+    SK_DECL_BITMASK_OPS_FRIENDS(Flags);
 
     // While RenderStep does not define the full program that's run for a draw, it defines the
     // entire vertex layout of the pipeline. This is not allowed to change, so can be provided to
@@ -193,8 +179,6 @@ private:
     // Cannot copy or move
     RenderStep(const RenderStep&) = delete;
     RenderStep(RenderStep&&)      = delete;
-
-    static Coverage GetCoverage(SkEnumBitMask<Flags>);
 
     uint32_t fUniqueID;
     SkEnumBitMask<Flags> fFlags;
@@ -218,7 +202,7 @@ private:
 
     std::string fName;
 };
-SK_MAKE_BITMASK_OPS(RenderStep::Flags)
+SK_MAKE_BITMASK_OPS(RenderStep::Flags);
 
 class Renderer {
     using StepFlags = RenderStep::Flags;
@@ -239,19 +223,11 @@ public:
     DrawTypeFlags drawTypes()      const { return fDrawTypes; }
     int           numRenderSteps() const { return fStepCount;    }
 
-    bool requiresMSAA() const {
-        return SkToBool(fStepFlags & StepFlags::kRequiresMSAA);
-    }
-    bool emitsPrimitiveColor() const {
-        return SkToBool(fStepFlags & StepFlags::kEmitsPrimitiveColor);
-    }
-    bool outsetBoundsForAA() const {
-        return SkToBool(fStepFlags & StepFlags::kOutsetBoundsForAA);
-    }
+    bool requiresMSAA()        const { return fStepFlags & StepFlags::kRequiresMSAA;        }
+    bool emitsCoverage()       const { return fStepFlags & StepFlags::kEmitsCoverage;       }
+    bool emitsPrimitiveColor() const { return fStepFlags & StepFlags::kEmitsPrimitiveColor; }
 
     SkEnumBitMask<DepthStencilFlags> depthStencilFlags() const { return fDepthStencilFlags; }
-
-    Coverage coverage() const { return RenderStep::GetCoverage(fStepFlags); }
 
 private:
     friend class RendererProvider; // for ctors

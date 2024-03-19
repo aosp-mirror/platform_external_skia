@@ -8,22 +8,12 @@
 #ifndef SkSGTransform_DEFINED
 #define SkSGTransform_DEFINED
 
-#include "include/core/SkM44.h"
-#include "include/core/SkMatrix.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
 #include "modules/sksg/include/SkSGEffectNode.h"
-#include "modules/sksg/include/SkSGNode.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
 
-#include <type_traits>
-#include <utility>
-
-class SkCanvas;
-struct SkPoint;
+class SkM44;
+class SkMatrix;
 
 namespace sksg {
-class InvalidationController;
 
 /**
  * Transformations base class.

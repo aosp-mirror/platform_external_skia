@@ -6,7 +6,6 @@
  */
 
 #include "include/codec/SkCodec.h"
-#include "include/codec/SkEncodedImageFormat.h"
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
@@ -15,7 +14,9 @@
 #include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
 #include "include/core/SkDataTable.h"
+#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageEncoder.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRefCnt.h"
@@ -26,11 +27,11 @@
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
-#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkMalloc.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "tests/Test.h"
-#include "tools/DecodeUtils.h"
+#include "tools/Resources.h"
 
 #include <png.h>
 #include <webp/decode.h>
@@ -67,7 +68,7 @@ static std::unique_ptr<SkEncoder> make(SkEncodedImageFormat format, SkWStream* d
 
 static void test_encode(skiatest::Reporter* r, SkEncodedImageFormat format) {
     SkBitmap bitmap;
-    bool success = ToolUtils::GetResourceAsBitmap("images/mandrill_128.png", &bitmap);
+    bool success = GetResourceAsBitmap("images/mandrill_128.png", &bitmap);
     if (!success) {
         return;
     }
@@ -151,7 +152,7 @@ static inline bool almost_equals(const SkBitmap& a, const SkBitmap& b, int toler
 }
 
 DEF_TEST(Encode_JPG, r) {
-    auto image = ToolUtils::GetResourceAsImage("images/mandrill_128.png");
+    auto image = GetResourceAsImage("images/mandrill_128.png");
     if (!image) {
         return;
     }
@@ -164,7 +165,7 @@ DEF_TEST(Encode_JPG, r) {
                      kRGBA_F16_SkColorType }) {
         for (auto at : { kPremul_SkAlphaType, kUnpremul_SkAlphaType, kOpaque_SkAlphaType }) {
             auto info = SkImageInfo::Make(image->width(), image->height(), ct, at);
-            auto surface = SkSurfaces::Raster(info);
+            auto surface = SkSurface::MakeRaster(info);
             auto canvas = surface->getCanvas();
             canvas->drawImage(image, 0, 0);
 
@@ -190,7 +191,7 @@ DEF_TEST(Encode_JPG, r) {
 
 DEF_TEST(Encode_JpegDownsample, r) {
     SkBitmap bitmap;
-    bool success = ToolUtils::GetResourceAsBitmap("images/mandrill_128.png", &bitmap);
+    bool success = GetResourceAsBitmap("images/mandrill_128.png", &bitmap);
     if (!success) {
         return;
     }
@@ -222,9 +223,9 @@ DEF_TEST(Encode_JpegDownsample, r) {
     REPORTER_ASSERT(r, data1->size() < data2->size());
 
     SkBitmap bm0, bm1, bm2;
-    SkImages::DeferredFromEncodedData(data0)->asLegacyBitmap(&bm0);
-    SkImages::DeferredFromEncodedData(data1)->asLegacyBitmap(&bm1);
-    SkImages::DeferredFromEncodedData(data2)->asLegacyBitmap(&bm2);
+    SkImage::MakeFromEncoded(data0)->asLegacyBitmap(&bm0);
+    SkImage::MakeFromEncoded(data1)->asLegacyBitmap(&bm1);
+    SkImage::MakeFromEncoded(data2)->asLegacyBitmap(&bm2);
     REPORTER_ASSERT(r, almost_equals(bm0, bm1, 60));
     REPORTER_ASSERT(r, almost_equals(bm1, bm2, 60));
 }
@@ -302,7 +303,7 @@ static void testPngComments(const SkPixmap& src, SkPngEncoder::Options& options,
 
 DEF_TEST(Encode_PngOptions, r) {
     SkBitmap bitmap;
-    bool success = ToolUtils::GetResourceAsBitmap("images/mandrill_128.png", &bitmap);
+    bool success = GetResourceAsBitmap("images/mandrill_128.png", &bitmap);
     if (!success) {
         return;
     }
@@ -336,9 +337,9 @@ DEF_TEST(Encode_PngOptions, r) {
     REPORTER_ASSERT(r, data1->size() < data2->size());
 
     SkBitmap bm0, bm1, bm2;
-    SkImages::DeferredFromEncodedData(data0)->asLegacyBitmap(&bm0);
-    SkImages::DeferredFromEncodedData(data1)->asLegacyBitmap(&bm1);
-    SkImages::DeferredFromEncodedData(data2)->asLegacyBitmap(&bm2);
+    SkImage::MakeFromEncoded(data0)->asLegacyBitmap(&bm0);
+    SkImage::MakeFromEncoded(data1)->asLegacyBitmap(&bm1);
+    SkImage::MakeFromEncoded(data2)->asLegacyBitmap(&bm2);
     REPORTER_ASSERT(r, almost_equals(bm0, bm1, 0));
     REPORTER_ASSERT(r, almost_equals(bm0, bm2, 0));
 }
@@ -349,17 +350,8 @@ DEF_TEST(Encode_WebpQuality, r) {
     bm.allocN32Pixels(100, 100);
     bm.eraseColor(SK_ColorBLUE);
 
-    SkWebpEncoder::Options opts;
-    opts.fCompression = SkWebpEncoder::Compression::kLossless;
-    SkDynamicMemoryWStream stream;
-    SkASSERT_RELEASE(SkWebpEncoder::Encode(&stream, bm.pixmap(), opts));
-    auto dataLossLess = stream.detachAsData();
-
-    opts.fCompression = SkWebpEncoder::Compression::kLossy;
-    opts.fQuality = 99;
-    stream.reset();
-    SkASSERT_RELEASE(SkWebpEncoder::Encode(&stream, bm.pixmap(), opts));
-    auto dataLossy = stream.detachAsData();
+    auto dataLossy    = SkEncodeBitmap(bm, SkEncodedImageFormat::kWEBP, 99);
+    auto dataLossLess = SkEncodeBitmap(bm, SkEncodedImageFormat::kWEBP, 100);
 
     enum Format {
         kMixed    = 0,
@@ -402,7 +394,7 @@ DEF_TEST(Encode_WebpQuality, r) {
 
 DEF_TEST(Encode_WebpOptions, r) {
     SkBitmap bitmap;
-    bool success = ToolUtils::GetResourceAsBitmap("images/google_chrome.ico", &bitmap);
+    bool success = GetResourceAsBitmap("images/google_chrome.ico", &bitmap);
     if (!success) {
         return;
     }
@@ -444,10 +436,10 @@ DEF_TEST(Encode_WebpOptions, r) {
     REPORTER_ASSERT(r, data2->size() > data3->size());
 
     SkBitmap bm0, bm1, bm2, bm3;
-    SkImages::DeferredFromEncodedData(data0)->asLegacyBitmap(&bm0);
-    SkImages::DeferredFromEncodedData(data1)->asLegacyBitmap(&bm1);
-    SkImages::DeferredFromEncodedData(data2)->asLegacyBitmap(&bm2);
-    SkImages::DeferredFromEncodedData(data3)->asLegacyBitmap(&bm3);
+    SkImage::MakeFromEncoded(data0)->asLegacyBitmap(&bm0);
+    SkImage::MakeFromEncoded(data1)->asLegacyBitmap(&bm1);
+    SkImage::MakeFromEncoded(data2)->asLegacyBitmap(&bm2);
+    SkImage::MakeFromEncoded(data3)->asLegacyBitmap(&bm3);
     REPORTER_ASSERT(r, almost_equals(bm0, bm1, 0));
     REPORTER_ASSERT(r, almost_equals(bm0, bm2, 90));
     REPORTER_ASSERT(r, almost_equals(bm2, bm3, 50));
@@ -538,24 +530,12 @@ DEF_TEST(Encode_Alpha, r) {
             SkBitmap bm;
             bm.allocPixels(SkImageInfo::Make(10, 10, ct, kPremul_SkAlphaType));
             sk_bzero(bm.getPixels(), bm.computeByteSize());
-            SkDynamicMemoryWStream stream;
-            bool success = false;
-            if (format == SkEncodedImageFormat::kJPEG) {
-                success = SkJpegEncoder::Encode(&stream, bm.pixmap(), {});
-            } else if (format == SkEncodedImageFormat::kPNG) {
-                success = SkPngEncoder::Encode(&stream, bm.pixmap(), {});
+            auto data = SkEncodeBitmap(bm, format, 100);
+            if (format == SkEncodedImageFormat::kPNG && ct == kAlpha_8_SkColorType) {
+                // We support encoding alpha8 to png with our own private meaning.
+                REPORTER_ASSERT(r, data != nullptr);
             } else {
-                success = SkWebpEncoder::Encode(&stream, bm.pixmap(), {});
-            }
-
-            if ((format == SkEncodedImageFormat::kJPEG || format == SkEncodedImageFormat::kPNG) &&
-                ct == kAlpha_8_SkColorType) {
-                // We support encoding alpha8 to png and jpeg with our own private meaning.
-                REPORTER_ASSERT(r, success);
-                REPORTER_ASSERT(r, stream.bytesWritten() > 0);
-            } else {
-                REPORTER_ASSERT(r, !success);
-                REPORTER_ASSERT(r, stream.bytesWritten() == 0);
+                REPORTER_ASSERT(r, data == nullptr);
             }
         }
     }

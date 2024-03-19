@@ -16,7 +16,6 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 #include <memory>
@@ -28,14 +27,19 @@ public:
     BitmapImageGM() {}
 
 protected:
-    SkString getName() const override { return SkString("bitmap-image-srgb-legacy"); }
 
-    SkISize getISize() override { return SkISize::Make(2 * kSize, 2 * kSize); }
+    SkString onShortName() override {
+        return SkString("bitmap-image-srgb-legacy");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(2*kSize, 2*kSize);
+    }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
         // Create image.
         const char* path = "images/mandrill_512_q075.jpg";
-        sk_sp<SkImage> image = ToolUtils::GetResourceAsImage(path);
+        sk_sp<SkImage> image = GetResourceAsImage(path);
         if (!image) {
             *errorMsg = "Couldn't load images/mandrill_512_q075.jpg. "
                         "Did you forget to set the resource path?";

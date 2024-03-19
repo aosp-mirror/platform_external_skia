@@ -8,7 +8,6 @@
 #include "src/gpu/Swizzle.h"
 
 #include "src/core/SkRasterPipeline.h"
-#include "src/core/SkRasterPipelineOpList.h"
 
 namespace skgpu {
 

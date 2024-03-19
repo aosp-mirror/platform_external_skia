@@ -8,14 +8,10 @@
 #ifndef GrCoverageSetOpXP_DEFINED
 #define GrCoverageSetOpXP_DEFINED
 
-#include "include/core/SkRefCnt.h"
 #include "include/core/SkRegion.h"
-#include "src/gpu/ganesh/GrCaps.h"
-#include "src/gpu/ganesh/GrProcessorAnalysis.h"
+#include "include/gpu/GrTypes.h"
 #include "src/gpu/ganesh/GrProcessorUnitTest.h"
 #include "src/gpu/ganesh/GrXferProcessor.h"
-
-enum class GrClampType;
 
 // See the comment above GrXPFactory's definition about this warning suppression.
 #if defined(__GNUC__)

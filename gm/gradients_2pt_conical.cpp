@@ -344,9 +344,9 @@ public:
 private:
     void onOnceBeforeDraw() override { this->setBGColor(0xFFDDDDDD); }
 
-    SkString getName() const override { return fName; }
+    SkString onShortName() override { return fName; }
 
-    SkISize getISize() override { return {840, 815}; }
+    SkISize onISize() override { return {840, 815}; }
 
     void onDraw(SkCanvas* canvas) override {
 

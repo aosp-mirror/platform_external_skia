@@ -9,6 +9,7 @@
 #define GrResourceProvider_DEFINED
 
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTemplates.h"
@@ -38,10 +39,11 @@ class GrSemaphore;
 class GrTexture;
 class SkData;
 
+enum class GrProtected : bool;
+enum class GrRenderable : bool;
 enum class SkBackingFit;
 struct GrVkDrawableInfo;
 struct SkImageInfo;
-struct SkISize;
 
 namespace skgpu {
 class ScratchKey;
@@ -49,8 +51,6 @@ class SingleOwner;
 class UniqueKey;
 enum class Budgeted : bool;
 enum class Mipmapped : bool;
-enum class Protected : bool;
-enum class Renderable : bool;
 }
 
 /**
@@ -83,20 +83,20 @@ public:
     sk_sp<GrTexture> createApproxTexture(SkISize dimensions,
                                          const GrBackendFormat& format,
                                          GrTextureType textureType,
-                                         skgpu::Renderable renderable,
+                                         GrRenderable renderable,
                                          int renderTargetSampleCnt,
-                                         skgpu::Protected isProtected,
+                                         GrProtected isProtected,
                                          std::string_view label);
 
     /** Create an exact fit texture with no initial data to upload. */
     sk_sp<GrTexture> createTexture(SkISize dimensions,
                                    const GrBackendFormat& format,
                                    GrTextureType textureType,
-                                   skgpu::Renderable renderable,
+                                   GrRenderable renderable,
                                    int renderTargetSampleCnt,
                                    skgpu::Mipmapped mipmapped,
                                    skgpu::Budgeted budgeted,
-                                   skgpu::Protected isProtected,
+                                   GrProtected isProtected,
                                    std::string_view label);
 
     /**
@@ -108,11 +108,11 @@ public:
                                    const GrBackendFormat& format,
                                    GrTextureType textureType,
                                    GrColorType colorType,
-                                   skgpu::Renderable renderable,
+                                   GrRenderable renderable,
                                    int renderTargetSampleCnt,
                                    skgpu::Budgeted budgeted,
                                    skgpu::Mipmapped mipmapped,
-                                   skgpu::Protected isProtected,
+                                   GrProtected isProtected,
                                    const GrMipLevel texels[],
                                    std::string_view label);
 
@@ -125,11 +125,11 @@ public:
                                    const GrBackendFormat&,
                                    GrTextureType textureType,
                                    GrColorType srcColorType,
-                                   skgpu::Renderable,
+                                   GrRenderable,
                                    int renderTargetSampleCnt,
                                    skgpu::Budgeted,
                                    SkBackingFit,
-                                   skgpu::Protected,
+                                   GrProtected,
                                    const GrMipLevel& mipLevel,
                                    std::string_view label);
 
@@ -141,10 +141,10 @@ public:
     sk_sp<GrTexture> findAndRefScratchTexture(SkISize dimensions,
                                               const GrBackendFormat&,
                                               GrTextureType textureType,
-                                              skgpu::Renderable,
+                                              GrRenderable,
                                               int renderTargetSampleCnt,
                                               skgpu::Mipmapped,
-                                              skgpu::Protected,
+                                              GrProtected,
                                               std::string_view label);
 
     /**
@@ -155,7 +155,7 @@ public:
                                              const GrBackendFormat&,
                                              skgpu::Budgeted,
                                              skgpu::Mipmapped,
-                                             skgpu::Protected,
+                                             GrProtected,
                                              SkData* data,
                                              std::string_view label);
 
@@ -205,6 +205,8 @@ public:
 
     sk_sp<GrRenderTarget> wrapVulkanSecondaryCBAsRenderTarget(const SkImageInfo&,
                                                               const GrVkDrawableInfo&);
+
+    static const int kMinScratchTextureSize;
 
     /**
      * Either finds and refs a buffer with the given unique key, or creates a new new, fills its
@@ -327,7 +329,7 @@ public:
     sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
                                            const GrBackendFormat& format,
                                            int sampleCnt,
-                                           skgpu::Protected isProtected,
+                                           GrProtected isProtected,
                                            GrMemoryless isMemoryless);
 
     /**
@@ -339,7 +341,7 @@ public:
     sk_sp<GrAttachment> getDiscardableMSAAAttachment(SkISize dimensions,
                                                      const GrBackendFormat& format,
                                                      int sampleCnt,
-                                                     skgpu::Protected isProtected,
+                                                     GrProtected isProtected,
                                                      GrMemoryless memoryless);
 
     /**
@@ -348,7 +350,7 @@ public:
      */
     void assignUniqueKeyToResource(const skgpu::UniqueKey&, GrGpuResource*);
 
-    [[nodiscard]] std::unique_ptr<GrSemaphore> makeSemaphore(bool isOwned = true);
+    std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned = true);
 
     std::unique_ptr<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore&,
                                                       GrSemaphoreWrapType,
@@ -363,6 +365,8 @@ public:
     const GrCaps* caps() const { return fCaps.get(); }
     bool overBudget() const { return fCache->overBudget(); }
 
+    static SkISize MakeApprox(SkISize);
+
     inline GrResourceProviderPriv priv();
     inline const GrResourceProviderPriv priv() const;  // NOLINT(readability-const-return-type)
 
@@ -376,11 +380,11 @@ private:
     sk_sp<GrTexture> getExactScratch(SkISize dimensions,
                                      const GrBackendFormat&,
                                      GrTextureType,
-                                     skgpu::Renderable,
+                                     GrRenderable,
                                      int renderTargetSampleCnt,
                                      skgpu::Budgeted,
                                      skgpu::Mipmapped,
-                                     skgpu::Protected,
+                                     GrProtected,
                                      std::string_view label);
 
     // Attempts to find a resource in the cache that exactly matches the SkISize. Failing that
@@ -388,7 +392,7 @@ private:
     sk_sp<GrAttachment> refScratchMSAAAttachment(SkISize dimensions,
                                                  const GrBackendFormat&,
                                                  int sampleCnt,
-                                                 skgpu::Protected,
+                                                 GrProtected,
                                                  GrMemoryless memoryless,
                                                  std::string_view label);
 

@@ -25,6 +25,9 @@
 #ifdef SK_DIRECT3D
 #include "tools/gpu/d3d/D3DTestContext.h"
 #endif
+#ifdef SK_DAWN
+#include "tools/gpu/dawn/DawnTestContext.h"
+#endif
 #include "src/gpu/ganesh/GrCaps.h"
 #include "tools/gpu/mock/MockTestContext.h"
 
@@ -42,13 +45,12 @@ extern "C" {
 }
 #endif
 
-bool gCreateProtectedContext = false;
-
 namespace sk_gpu_test {
-GrContextFactory::GrContextFactory() {}
+GrContextFactory::GrContextFactory() { }
 
 GrContextFactory::GrContextFactory(const GrContextOptions& opts)
-    : fGlobalOptions(opts) {}
+    : fGlobalOptions(opts) {
+}
 
 GrContextFactory::~GrContextFactory() {
     this->destroyContexts();
@@ -88,7 +90,7 @@ void GrContextFactory::abandonContexts() {
                 context.fTestContext->testAbandon();
             }
             GrBackendApi api = context.fGrContext->backend();
-            bool requiresEarlyAbandon = api == GrBackendApi::kVulkan;
+            bool requiresEarlyAbandon = api == GrBackendApi::kVulkan || api == GrBackendApi::kDawn;
             if (requiresEarlyAbandon) {
                 context.fGrContext->abandonContext();
             }
@@ -162,7 +164,7 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
     }
 
     std::unique_ptr<TestContext> testCtx;
-    GrBackendApi backend = skgpu::ganesh::ContextTypeBackend(type);
+    GrBackendApi backend = ContextTypeBackend(type);
     switch (backend) {
 #ifdef SK_GL
         case GrBackendApi::kOpenGL: {
@@ -170,14 +172,14 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
                     ? static_cast<GLTestContext*>(primaryContext->fTestContext) : nullptr;
             GLTestContext* glCtx;
             switch (type) {
-                case ContextType::kGL:
+                case kGL_ContextType:
                     glCtx = CreatePlatformGLTestContext(kGL_GrGLStandard, glShareContext);
                     break;
-                case ContextType::kGLES:
+                case kGLES_ContextType:
                     glCtx = CreatePlatformGLTestContext(kGLES_GrGLStandard, glShareContext);
                     break;
 #if SK_ANGLE
-                case ContextType::kANGLE_D3D9_ES2:
+                case kANGLE_D3D9_ES2_ContextType:
                     glCtx = MakeANGLETestContext(ANGLEBackend::kD3D9, ANGLEContextVersion::kES2,
                                                  glShareContext).release();
                     // Chrome will only run on D3D9 with NVIDIA for 2012 and earlier drivers.
@@ -191,27 +193,27 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
                         }
                     }
                     break;
-                case ContextType::kANGLE_D3D11_ES2:
+                case kANGLE_D3D11_ES2_ContextType:
                     glCtx = MakeANGLETestContext(ANGLEBackend::kD3D11, ANGLEContextVersion::kES2,
                                                  glShareContext).release();
                     break;
-                case ContextType::kANGLE_D3D11_ES3:
+                case kANGLE_D3D11_ES3_ContextType:
                     glCtx = MakeANGLETestContext(ANGLEBackend::kD3D11, ANGLEContextVersion::kES3,
                                                  glShareContext).release();
                     break;
-                case ContextType::kANGLE_GL_ES2:
+                case kANGLE_GL_ES2_ContextType:
                     glCtx = MakeANGLETestContext(ANGLEBackend::kOpenGL, ANGLEContextVersion::kES2,
                                                  glShareContext).release();
                     break;
-                case ContextType::kANGLE_GL_ES3:
+                case kANGLE_GL_ES3_ContextType:
                     glCtx = MakeANGLETestContext(ANGLEBackend::kOpenGL, ANGLEContextVersion::kES3,
                                                  glShareContext).release();
                     break;
-                case ContextType::kANGLE_Metal_ES2:
+                case kANGLE_Metal_ES2_ContextType:
                     glCtx = MakeANGLETestContext(ANGLEBackend::kMetal, ANGLEContextVersion::kES2,
                                                  glShareContext).release();
                     break;
-                case ContextType::kANGLE_Metal_ES3:
+                case kANGLE_Metal_ES3_ContextType:
                     glCtx = MakeANGLETestContext(ANGLEBackend::kMetal, ANGLEContextVersion::kES3,
                                                  glShareContext).release();
                     break;
@@ -234,7 +236,7 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
         case GrBackendApi::kVulkan: {
             VkTestContext* vkSharedContext = primaryContext
                     ? static_cast<VkTestContext*>(primaryContext->fTestContext) : nullptr;
-            SkASSERT(ContextType::kVulkan == type);
+            SkASSERT(kVulkan_ContextType == type);
             testCtx.reset(CreatePlatformVkTestContext(vkSharedContext));
             if (!testCtx) {
                 return ContextInfo();
@@ -259,7 +261,7 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
         case GrBackendApi::kMetal: {
             MtlTestContext* mtlSharedContext = primaryContext
                     ? static_cast<MtlTestContext*>(primaryContext->fTestContext) : nullptr;
-            SkASSERT(ContextType::kMetal == type);
+            SkASSERT(kMetal_ContextType == type);
             testCtx.reset(CreatePlatformMtlTestContext(mtlSharedContext));
             if (!testCtx) {
                 return ContextInfo();
@@ -271,8 +273,19 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
         case GrBackendApi::kDirect3D: {
             D3DTestContext* d3dSharedContext = primaryContext
                     ? static_cast<D3DTestContext*>(primaryContext->fTestContext) : nullptr;
-            SkASSERT(ContextType::kDirect3D == type);
+            SkASSERT(kDirect3D_ContextType == type);
             testCtx.reset(CreatePlatformD3DTestContext(d3dSharedContext));
+            if (!testCtx) {
+                return ContextInfo();
+            }
+            break;
+        }
+#endif
+#ifdef SK_DAWN
+        case GrBackendApi::kDawn: {
+            DawnTestContext* dawnSharedContext = primaryContext
+                    ? static_cast<DawnTestContext*>(primaryContext->fTestContext) : nullptr;
+            testCtx.reset(CreatePlatformDawnTestContext(dawnSharedContext));
             if (!testCtx) {
                 return ContextInfo();
             }
@@ -281,7 +294,7 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
 #endif
         case GrBackendApi::kMock: {
             TestContext* sharedContext = primaryContext ? primaryContext->fTestContext : nullptr;
-            SkASSERT(ContextType::kMock == type);
+            SkASSERT(kMock_ContextType == type);
             testCtx.reset(CreateMockTestContext(sharedContext));
             if (!testCtx) {
                 return ContextInfo();

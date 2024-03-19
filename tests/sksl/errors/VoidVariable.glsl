@@ -6,10 +6,7 @@ void a;
 error: 5: variables of type 'void' are not allowed
 void b = func();
 ^^^^^^^^^^^^^^^
-error: 11: unknown identifier 'a'
-        case 1: void c = a;
-                         ^
-error: 11: variables of type 'void' are not allowed
-        case 1: void c = a;
-                ^^^^^^^^^^
-4 errors
+error: 5: global variable initializer must be a constant expression
+void b = func();
+         ^^^^^^
+3 errors

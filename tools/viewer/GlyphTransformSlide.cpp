@@ -5,13 +5,11 @@
  * found in the LICENSE file.
  */
 #include "include/core/SkCanvas.h"
-#include "include/core/SkFont.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkTypeface.h"
 #include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/timer/TimeUtils.h"
 #include "tools/viewer/Slide.h"
 
@@ -26,8 +24,8 @@ public:
     GlyphTransformView() { fName = "Glyph Transform"; }
 
     void load(SkScalar w, SkScalar h) override {
-        fEmojiFont.fTypeface = ToolUtils::EmojiTypeface();
-        fEmojiFont.fText     = ToolUtils::EmojiSampleText();
+        fEmojiFont.fTypeface = ToolUtils::emoji_typeface();
+        fEmojiFont.fText     = ToolUtils::emoji_sample_text();
         fSize = {w, h};
     }
 

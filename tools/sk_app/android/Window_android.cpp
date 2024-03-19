@@ -5,9 +5,9 @@
 * found in the LICENSE file.
 */
 
+#include "tools/sk_app/WindowContext.h"
+#include "tools/sk_app/android/WindowContextFactory_android.h"
 #include "tools/sk_app/android/Window_android.h"
-#include "tools/window/WindowContext.h"
-#include "tools/window/android/WindowContextFactory_android.h"
 
 namespace sk_app {
 
@@ -50,24 +50,21 @@ void Window_android::initDisplay(ANativeWindow* window) {
 #ifdef SK_GL
         case kNativeGL_BackendType:
         default:
-            fWindowContext = skwindow::MakeGLForAndroid(window, fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeGLForAndroid(window, fRequestedDisplayParams);
             break;
 #else
         default:
 #endif
         case kRaster_BackendType:
-            fWindowContext = skwindow::MakeRasterForAndroid(window, fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeRasterForAndroid(window, fRequestedDisplayParams);
             break;
 #ifdef SK_VULKAN
         case kVulkan_BackendType:
-            fWindowContext = skwindow::MakeVulkanForAndroid(window, fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeVulkanForAndroid(window, fRequestedDisplayParams);
             break;
-#if defined(SK_GRAPHITE)
-        case kGraphiteVulkan_BackendType:
-            fWindowContext = skwindow::MakeGraphiteVulkanForAndroid(window,
-                                                                    fRequestedDisplayParams);
-            break;
-#endif
 #endif
     }
     this->onBackendCreated();

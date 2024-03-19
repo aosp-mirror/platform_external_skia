@@ -33,10 +33,11 @@ class DockerApi(recipe_api.RecipeApi):
     # Setup. Docker runs as a different user, so we need to give it access to
     # read, write, and execute certain files.
     with self.m.step.nest('Docker setup'):
-      uid_gid_script = self.resource('get_uid_gid.py')
-      step_stdout = self.m.step(
+      step_stdout = self.m.python.inline(
           name='Get uid and gid',
-          cmd=['python3', uid_gid_script],
+          program='''import os
+print('%d:%d' % (os.getuid(), os.getgid()))
+''',
           stdout=self.m.raw_io.output(),
           step_test_data=(
               lambda: self.m.raw_io.test_api.stream_output('13:17'))

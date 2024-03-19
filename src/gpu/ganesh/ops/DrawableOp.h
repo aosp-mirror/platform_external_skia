@@ -13,7 +13,7 @@
 
 class GrRecordingContext;
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 class DrawableOp final : public GrOp {
 public:
@@ -48,6 +48,6 @@ private:
     std::unique_ptr<SkDrawable::GpuDrawHandler> fDrawable;
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // DrawableOp_DEFINED

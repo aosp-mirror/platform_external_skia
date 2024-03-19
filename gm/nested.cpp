@@ -28,7 +28,8 @@ public:
     }
 
 protected:
-    SkString getName() const override {
+
+    SkString onShortName() override {
         SkString name("nested");
         if (fFlipped) {
             name.append("_flipY");
@@ -41,7 +42,9 @@ protected:
         return name;
     }
 
-    SkISize getISize() override { return SkISize::Make(kImageWidth, kImageHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kImageWidth, kImageHeight);
+    }
 
     enum Shapes {
         kRect_Shape = 0,

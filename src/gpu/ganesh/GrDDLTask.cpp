@@ -7,16 +7,19 @@
 
 #include "src/gpu/ganesh/GrDDLTask.h"
 
-#include "include/private/chromium/GrDeferredDisplayList.h"
-#include "src/gpu/ganesh/GrDeferredDisplayListPriv.h"
+#include "include/core/SkDeferredDisplayList.h"
+#include "src/core/SkDeferredDisplayListPriv.h"
 #include "src/gpu/ganesh/GrRenderTargetProxy.h"
 #include "src/gpu/ganesh/GrResourceAllocator.h"
 
 GrDDLTask::GrDDLTask(GrDrawingManager* drawingMgr,
                      sk_sp<GrRenderTargetProxy> ddlTarget,
-                     sk_sp<const GrDeferredDisplayList> ddl)
+                     sk_sp<const SkDeferredDisplayList> ddl,
+                     SkIPoint offset)
         : fDDL(std::move(ddl))
-        , fDDLTarget(std::move(ddlTarget)) {
+        , fDDLTarget(std::move(ddlTarget))
+        , fOffset(offset) {
+    (void) fOffset;  // fOffset will be used shortly
 
     for (auto& task : fDDL->priv().renderTasks()) {
         SkASSERT(task->isClosed());
@@ -95,7 +98,7 @@ bool GrDDLTask::onExecute(GrOpFlushState* flushState) {
     return anyCommandsIssued;
 }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 void GrDDLTask::dump(const SkString& label,
                      SkString indent,
                      bool printDependencies,

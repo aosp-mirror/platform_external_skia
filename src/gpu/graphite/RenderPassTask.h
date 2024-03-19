@@ -11,6 +11,8 @@
 #include "src/gpu/graphite/CommandBuffer.h"
 #include "src/gpu/graphite/Task.h"
 
+#include <vector>
+
 namespace skgpu::graphite {
 
 class DrawPass;
@@ -24,9 +26,7 @@ class DrawPass;
  */
 class RenderPassTask final : public Task {
 public:
-    using DrawPassList = skia_private::TArray<std::unique_ptr<DrawPass>>;
-
-    static sk_sp<RenderPassTask> Make(DrawPassList,
+    static sk_sp<RenderPassTask> Make(std::vector<std::unique_ptr<DrawPass>> passes,
                                       const RenderPassDesc&,
                                       sk_sp<TextureProxy> target);
 
@@ -37,9 +37,11 @@ public:
     bool addCommands(Context*, CommandBuffer*, ReplayTargetData) override;
 
 private:
-    RenderPassTask(DrawPassList, const RenderPassDesc&, sk_sp<TextureProxy> target);
+    RenderPassTask(std::vector<std::unique_ptr<DrawPass>> passes,
+                   const RenderPassDesc&,
+                   sk_sp<TextureProxy> target);
 
-    DrawPassList fDrawPasses;
+    std::vector<std::unique_ptr<DrawPass>> fDrawPasses;
     RenderPassDesc fRenderPassDesc;
     sk_sp<TextureProxy> fTarget;
 };

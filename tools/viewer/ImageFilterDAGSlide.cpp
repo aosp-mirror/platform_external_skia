@@ -23,7 +23,6 @@
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkSpecialImage.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/Slide.h"
 
 namespace {
@@ -82,15 +81,10 @@ private:
             // been transformed to device space. To achieve that, we mock a new mapping with the
             // identity matrix transform.
             skif::Mapping layerOnly{fMapping.layerMatrix()};
-            std::optional<skif::DeviceSpace<SkIRect>> pseudoDeviceBounds =
+            skif::DeviceSpace<SkIRect> pseudoDeviceBounds =
                     as_IFB(fFilter)->getOutputBounds(layerOnly, fContent);
             // Since layerOnly's device matrix is I, this is effectively a cast to layer space
-            if (pseudoDeviceBounds) {
-                fOutputBounds = layerOnly.deviceToLayer(*pseudoDeviceBounds);
-            } else {
-                // Skip drawing infinite output bounds
-                fOutputBounds = skif::LayerSpace<SkIRect>::Empty();
-            }
+            fOutputBounds = layerOnly.deviceToLayer(pseudoDeviceBounds);
         } else {
             fOutputBounds = fMapping.paramToLayer(fContent).roundOut();
         }
@@ -109,8 +103,8 @@ private:
                                                         .roundOut());
 
         if (fFilter) {
-            fHintedLayerBounds = as_IFB(fFilter)->getInputBounds(fMapping, targetOutput, fContent);
-            fUnhintedLayerBounds = as_IFB(fFilter)->getInputBounds(fMapping, targetOutput, {});
+            fHintedLayerBounds = as_IFB(fFilter)->getInputBounds(fMapping, targetOutput, &fContent);
+            fUnhintedLayerBounds = as_IFB(fFilter)->getInputBounds(fMapping, targetOutput, nullptr);
         } else {
             fHintedLayerBounds = fMapping.paramToLayer(fContent).roundOut();
             fUnhintedLayerBounds = fMapping.deviceToLayer(targetOutput);
@@ -212,7 +206,7 @@ static float print_size(SkCanvas* canvas, const char* prefix, const SkIRect& rec
 }
 
 static float print_info(SkCanvas* canvas, const FilterNode& node) {
-    SkFont font(ToolUtils::DefaultTypeface(), 12);
+    SkFont font(nullptr, 12);
     SkPaint text;
     text.setAntiAlias(true);
 
@@ -284,13 +278,13 @@ static float draw_dag(SkCanvas* canvas, SkSurface* nodeSurface, const FilterNode
                          x, y + 0.5f * nodeResults->height(), line);         // left of child
         canvas->save();
         canvas->translate(x, y);
-        y += draw_dag(canvas, nodeSurface, node.fInputNodes[i]);
+        y = draw_dag(canvas, nodeSurface, node.fInputNodes[i]);
         canvas->restore();
     }
     return std::max(y, nodeResults->height() + textHeight + kPad);
 }
 
-static void draw_dag(SkCanvas* canvas, SkImageFilter* filter,
+static void draw_dag(SkCanvas* canvas, sk_sp<SkImageFilter> filter,
                      const SkRect& rect, const SkISize& surfaceSize) {
     // Get the current CTM, which includes all the viewer's UI modifications, which we want to
     // pass into our mock canvases for each DAG node.
@@ -302,7 +296,7 @@ static void draw_dag(SkCanvas* canvas, SkImageFilter* filter,
 
     // Process the image filter DAG to display intermediate results later on, which will apply the
     // provided CTM during draw_node calls.
-    FilterNode dag = build_dag(ctm, rect, filter);
+    FilterNode dag = build_dag(ctm, rect, filter.get());
 
     sk_sp<SkSurface> nodeSurface =
             canvas->makeSurface(canvas->imageInfo().makeDimensions(surfaceSize));
@@ -331,7 +325,7 @@ public:
 
         sk_sp<SkImageFilter> merge0 = SkImageFilters::Merge(std::move(blur1), std::move(cf1));
 
-        draw_dag(canvas, merge0.get(), kFilterRect, kFilterSurfaceSize);
+        draw_dag(canvas, std::move(merge0), kFilterRect, kFilterSurfaceSize);
     }
 
     // We want to use the viewer calculated CTM in the mini surfaces used per DAG node. The rotation

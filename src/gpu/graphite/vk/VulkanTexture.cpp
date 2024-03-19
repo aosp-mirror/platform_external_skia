@@ -7,17 +7,14 @@
 
 #include "src/gpu/graphite/vk/VulkanTexture.h"
 
-#include "include/gpu/MutableTextureState.h"
-#include "include/gpu/vk/VulkanMutableTextureState.h"
 #include "src/core/SkMipmap.h"
+#include "src/gpu/MutableTextureStateRef.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/vk/VulkanCaps.h"
 #include "src/gpu/graphite/vk/VulkanCommandBuffer.h"
 #include "src/gpu/graphite/vk/VulkanGraphiteUtilsPriv.h"
-#include "src/gpu/graphite/vk/VulkanResourceProvider.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/gpu/vk/VulkanMemory.h"
-#include "src/gpu/vk/VulkanMutableTextureStatePriv.h"
 
 namespace skgpu::graphite {
 
@@ -26,22 +23,14 @@ bool VulkanTexture::MakeVkImage(const VulkanSharedContext* sharedContext,
                                 const TextureInfo& info,
                                 CreatedImageInfo* outInfo) {
     SkASSERT(outInfo);
-    const VulkanCaps& caps = sharedContext->vulkanCaps();
-
     if (dimensions.isEmpty()) {
         SKGPU_LOG_E("Tried to create VkImage with empty dimensions.");
         return false;
     }
-    if (dimensions.width() > caps.maxTextureSize() ||
-        dimensions.height() > caps.maxTextureSize()) {
-        SKGPU_LOG_E("Tried to create VkImage with too large a size.");
-        return false;
-    }
 
-    if ((info.isProtected() == Protected::kYes) != caps.protectedSupport()) {
-        SKGPU_LOG_E("Tried to create %s VkImage in %s Context.",
-                    info.isProtected() == Protected::kYes ? "protected" : "unprotected",
-                    caps.protectedSupport() ? "protected" : "unprotected");
+    const VulkanCaps& caps = sharedContext->vulkanCaps();
+    if (info.isProtected() == Protected::kYes && !caps.protectedSupport()) {
+        SKGPU_LOG_E("Tried to create protected VkImage when protected not supported.");
         return false;
     }
 
@@ -62,7 +51,8 @@ bool VulkanTexture::MakeVkImage(const VulkanSharedContext* sharedContext,
     SkASSERT(!isLinear || vkSamples == VK_SAMPLE_COUNT_1_BIT);
 
     VkImageCreateFlags createflags = 0;
-    if (info.isProtected() == Protected::kYes && caps.protectedSupport()) {
+    if (info.isProtected() == Protected::kYes) {
+        SkASSERT(caps.protectedSupport());
         createflags |= VK_IMAGE_CREATE_PROTECTED_BIT;
     }
 
@@ -118,15 +108,10 @@ bool VulkanTexture::MakeVkImage(const VulkanSharedContext* sharedContext,
                                                forceDedicatedMemory,
                                                useLazyAllocation,
                                                checkResult,
-                                               &outInfo->fMemoryAlloc)) {
+                                               &outInfo->fMemoryAlloc) ||
+        (useLazyAllocation &&
+         !SkToBool(outInfo->fMemoryAlloc.fFlags & skgpu::VulkanAlloc::kLazilyAllocated_Flag))) {
         VULKAN_CALL(interface, DestroyImage(device, image, nullptr));
-        return false;
-    }
-
-    if (useLazyAllocation &&
-        !SkToBool(outInfo->fMemoryAlloc.fFlags & skgpu::VulkanAlloc::kLazilyAllocated_Flag)) {
-        SKGPU_LOG_E("Failed allocate lazy vulkan memory when requested");
-        skgpu::VulkanMemory::FreeImageMemory(allocator, outInfo->fMemoryAlloc);
         return false;
     }
 
@@ -141,13 +126,12 @@ bool VulkanTexture::MakeVkImage(const VulkanSharedContext* sharedContext,
     }
 
     outInfo->fImage = image;
-    outInfo->fMutableState = sk_make_sp<MutableTextureState>(
-            skgpu::MutableTextureStates::MakeVulkan(initialLayout, VK_QUEUE_FAMILY_IGNORED));
+    outInfo->fMutableState = sk_make_sp<MutableTextureStateRef>(initialLayout,
+                                                                VK_QUEUE_FAMILY_IGNORED);
     return true;
 }
 
 sk_sp<Texture> VulkanTexture::Make(const VulkanSharedContext* sharedContext,
-                                   const VulkanResourceProvider* resourceProvider,
                                    SkISize dimensions,
                                    const TextureInfo& info,
                                    skgpu::Budgeted budgeted) {
@@ -155,9 +139,6 @@ sk_sp<Texture> VulkanTexture::Make(const VulkanSharedContext* sharedContext,
     if (!MakeVkImage(sharedContext, dimensions, info, &imageInfo)) {
         return nullptr;
     }
-    auto ycbcrConversion = resourceProvider->findOrCreateCompatibleSamplerYcbcrConversion(
-            info.vulkanTextureSpec().fYcbcrConversionInfo);
-
     return sk_sp<Texture>(new VulkanTexture(sharedContext,
                                             dimensions,
                                             info,
@@ -165,20 +146,15 @@ sk_sp<Texture> VulkanTexture::Make(const VulkanSharedContext* sharedContext,
                                             imageInfo.fImage,
                                             imageInfo.fMemoryAlloc,
                                             Ownership::kOwned,
-                                            budgeted,
-                                            std::move(ycbcrConversion)));
+                                            budgeted));
 }
 
 sk_sp<Texture> VulkanTexture::MakeWrapped(const VulkanSharedContext* sharedContext,
-                                          const VulkanResourceProvider* resourceProvider,
-                                          SkISize dimensions,
-                                          const TextureInfo& info,
-                                          sk_sp<MutableTextureState> mutableState,
-                                          VkImage image,
-                                          const VulkanAlloc& alloc) {
-    auto ycbcrConversion = resourceProvider->findOrCreateCompatibleSamplerYcbcrConversion(
-            info.vulkanTextureSpec().fYcbcrConversionInfo);
-
+                                   SkISize dimensions,
+                                   const TextureInfo& info,
+                                   sk_sp<MutableTextureStateRef> mutableState,
+                                   VkImage image,
+                                   const VulkanAlloc& alloc) {
     return sk_sp<Texture>(new VulkanTexture(sharedContext,
                                             dimensions,
                                             info,
@@ -186,8 +162,7 @@ sk_sp<Texture> VulkanTexture::MakeWrapped(const VulkanSharedContext* sharedConte
                                             image,
                                             alloc,
                                             Ownership::kWrapped,
-                                            skgpu::Budgeted::kNo,
-                                            std::move(ycbcrConversion)));
+                                            skgpu::Budgeted::kNo));
 }
 
 VkImageAspectFlags vk_format_to_aspect_flags(VkFormat format) {
@@ -208,7 +183,7 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
                                                 VkAccessFlags dstAccessMask,
                                                 VkPipelineStageFlags dstStageMask,
                                                 bool byRegion,
-                                                uint32_t newQueueFamilyIndex) const {
+                                                uint32_t newQueueFamilyIndex) {
 
     SkASSERT(newLayout == this->currentLayout() ||
              (VK_IMAGE_LAYOUT_UNDEFINED != newLayout &&
@@ -216,8 +191,8 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
     VkImageLayout currentLayout = this->currentLayout();
     uint32_t currentQueueIndex = this->currentQueueFamilyIndex();
 
-    VulkanTextureInfo textureInfo;
-    this->textureInfo().getVulkanTextureInfo(&textureInfo);
+    VulkanTextureInfo* textureInfo = nullptr;
+    this->textureInfo().getVulkanTextureInfo(textureInfo);
     auto sharedContext = static_cast<const VulkanSharedContext*>(this->sharedContext());
 
     // Enable the following block on new devices to test that their lazy images stay at 0 memory use
@@ -232,7 +207,7 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
     }
 #endif
 #ifdef SK_DEBUG
-    if (textureInfo.fSharingMode == VK_SHARING_MODE_CONCURRENT) {
+    if (textureInfo->fSharingMode == VK_SHARING_MODE_CONCURRENT) {
         if (newQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED) {
             SkASSERT(currentQueueIndex == VK_QUEUE_FAMILY_IGNORED ||
                      currentQueueIndex == VK_QUEUE_FAMILY_EXTERNAL ||
@@ -243,7 +218,7 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
             SkASSERT(currentQueueIndex == VK_QUEUE_FAMILY_IGNORED);
         }
     } else {
-        SkASSERT(textureInfo.fSharingMode == VK_SHARING_MODE_EXCLUSIVE);
+        SkASSERT(textureInfo->fSharingMode == VK_SHARING_MODE_EXCLUSIVE);
         if (newQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED ||
             currentQueueIndex == sharedContext->queueIndex()) {
             SkASSERT(currentQueueIndex == VK_QUEUE_FAMILY_IGNORED ||
@@ -258,7 +233,7 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
     }
 #endif
 
-    if (textureInfo.fSharingMode == VK_SHARING_MODE_EXCLUSIVE) {
+    if (textureInfo->fSharingMode == VK_SHARING_MODE_EXCLUSIVE) {
         if (newQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED) {
             newQueueFamilyIndex = sharedContext->queueIndex();
         }
@@ -279,7 +254,7 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
     VkAccessFlags srcAccessMask = VulkanTexture::LayoutToSrcAccessMask(currentLayout);
     VkPipelineStageFlags srcStageMask = VulkanTexture::LayoutToPipelineSrcStageFlags(currentLayout);
 
-    VkImageAspectFlags aspectFlags = vk_format_to_aspect_flags(textureInfo.fFormat);
+    VkImageAspectFlags aspectFlags = vk_format_to_aspect_flags(textureInfo->fFormat);
     uint32_t numMipLevels = 1;
     SkISize dimensions = this->dimensions();
     if (this->mipmapped() == Mipmapped::kYes) {
@@ -301,47 +276,34 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
     cmdBuffer->addImageMemoryBarrier(this, srcStageMask, dstStageMask, byRegion,
                                      &imageMemoryBarrier);
 
-    skgpu::MutableTextureStates::SetVkImageLayout(this->mutableState(), newLayout);
-    skgpu::MutableTextureStates::SetVkQueueFamilyIndex(this->mutableState(), newQueueFamilyIndex);
+    this->mutableState()->setImageLayout(newLayout);
+    this->mutableState()->setQueueFamilyIndex(newQueueFamilyIndex);
 }
 
 VulkanTexture::VulkanTexture(const VulkanSharedContext* sharedContext,
                              SkISize dimensions,
                              const TextureInfo& info,
-                             sk_sp<MutableTextureState> mutableState,
+                             sk_sp<MutableTextureStateRef> mutableState,
                              VkImage image,
                              const VulkanAlloc& alloc,
                              Ownership ownership,
-                             skgpu::Budgeted budgeted,
-                             sk_sp<VulkanSamplerYcbcrConversion> ycbcrConversion)
+                             skgpu::Budgeted budgeted)
         : Texture(sharedContext, dimensions, info, std::move(mutableState), ownership, budgeted)
         , fImage(image)
-        , fMemoryAlloc(alloc)
-        , fSamplerYcbcrConversion(std::move(ycbcrConversion)) {}
+        , fMemoryAlloc(alloc) {}
 
 void VulkanTexture::freeGpuData() {
-    // Need to delete any ImageViews first
-    fImageViews.clear();
-
-    // If the texture is wrapped we don't own this data
-    if (this->ownership() != Ownership::kWrapped) {
-        auto sharedContext = static_cast<const VulkanSharedContext*>(this->sharedContext());
-        VULKAN_CALL(sharedContext->interface(),
-                    DestroyImage(sharedContext->device(), fImage, nullptr));
-        skgpu::VulkanMemory::FreeImageMemory(sharedContext->memoryAllocator(), fMemoryAlloc);
-    }
-}
-
-void VulkanTexture::updateImageLayout(VkImageLayout newLayout) {
-    skgpu::MutableTextureStates::SetVkImageLayout(this->mutableState(), newLayout);
+    auto sharedContext = static_cast<const VulkanSharedContext*>(this->sharedContext());
+    skgpu::VulkanMemory::FreeImageMemory(sharedContext->memoryAllocator(), fMemoryAlloc);
+    VULKAN_CALL(sharedContext->interface(), DestroyImage(sharedContext->device(), fImage, nullptr));
 }
 
 VkImageLayout VulkanTexture::currentLayout() const {
-    return skgpu::MutableTextureStates::GetVkImageLayout(this->mutableState());
+    return this->mutableState()->getImageLayout();
 }
 
 uint32_t VulkanTexture::currentQueueFamilyIndex() const {
-    return skgpu::MutableTextureStates::GetVkQueueFamilyIndex(this->mutableState());
+    return this->mutableState()->getQueueFamilyIndex();
 }
 
 VkPipelineStageFlags VulkanTexture::LayoutToPipelineSrcStageFlags(const VkImageLayout layout) {
@@ -398,29 +360,5 @@ VkAccessFlags VulkanTexture::LayoutToSrcAccessMask(const VkImageLayout layout) {
     }
     return flags;
 }
-
-const VulkanImageView* VulkanTexture::getImageView(VulkanImageView::Usage usage) const {
-    for (int i = 0; i < fImageViews.size(); ++i) {
-        if (fImageViews[i]->usage() == usage) {
-            return fImageViews[i].get();
-        }
-    }
-
-    auto sharedContext = static_cast<const VulkanSharedContext*>(this->sharedContext());
-    VulkanTextureInfo vkTexInfo;
-    this->textureInfo().getVulkanTextureInfo(&vkTexInfo);
-    int miplevels = this->textureInfo().mipmapped() == Mipmapped::kYes
-                    ? SkMipmap::ComputeLevelCount(this->dimensions().width(),
-                                                  this->dimensions().height()) + 1
-                    : 1;
-    auto imageView = VulkanImageView::Make(sharedContext,
-                                           fImage,
-                                           vkTexInfo.fFormat,
-                                           usage,
-                                           miplevels,
-                                           fSamplerYcbcrConversion);
-    return fImageViews.push_back(std::move(imageView)).get();
-}
-
 
 } // namespace skgpu::graphite

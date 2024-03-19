@@ -24,8 +24,6 @@
 #include "include/core/SkTileMode.h"
 #include "include/effects/SkGradientShader.h"
 
-#include <vector>
-
 const int kWidth  = 1000;
 const int kHeight = 2000;
 const int kNumRows = 100;
@@ -38,9 +36,13 @@ public:
     HardstopGradientsManyGM() {}
 
 protected:
-    SkString getName() const override { return SkString("hardstop_gradients_many"); }
+    SkString onShortName() override {
+        return SkString("hardstop_gradients_many");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kWidth, kHeight);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         static constexpr SkPoint points[] = {

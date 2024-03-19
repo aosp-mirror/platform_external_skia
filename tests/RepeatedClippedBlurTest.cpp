@@ -23,8 +23,6 @@
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrResourceCache.h"
 #include "tests/CtsEnforcement.h"
@@ -35,7 +33,7 @@
 struct GrContextOptions;
 
 // This is the repro of a CastOS memory regression bug (b/138674523).
-// The test simply keeps calling SkImages::MakeWithFilter (with a blur image filter) while
+// The test simply keeps calling SkImage::makeWithFilter (with a blur image filter) while
 // shrinking the clip.
 // When explicit resource allocation was enabled the last (re-expanded) image in the
 // blur creation process became exact.
@@ -53,7 +51,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(RepeatedClippedBlurTest,
     const SkImageInfo ii = SkImageInfo::Make(1024, 600, kRGBA_8888_SkColorType,
                                              kPremul_SkAlphaType);
 
-    sk_sp<SkSurface> dst(SkSurfaces::RenderTarget(dContext, skgpu::Budgeted::kNo, ii));
+    sk_sp<SkSurface> dst(SkSurface::MakeRenderTarget(dContext, skgpu::Budgeted::kNo, ii));
     if (!dst) {
         ERRORF(reporter, "Could not create surfaces for repeated clipped blur test.");
         return;
@@ -77,7 +75,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(RepeatedClippedBlurTest,
         bm.eraseArea(SkIRect::MakeXYWH(1, 2, 1277, 1274), SK_ColorGREEN);
 
         sk_sp<SkImage> rasterImg = bm.asImage();
-        bigImg = SkImages::TextureFromImage(dContext, rasterImg);
+        bigImg = rasterImg->makeTextureImage(dContext);
     }
 
     sk_sp<SkImage> smImg;
@@ -87,7 +85,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(RepeatedClippedBlurTest,
         SkImageInfo screenII = SkImageInfo::Make(1024, 600, kRGBA_8888_SkColorType,
                                                  kPremul_SkAlphaType);
 
-        sk_sp<SkSurface> s = SkSurfaces::RenderTarget(
+        sk_sp<SkSurface> s = SkSurface::MakeRenderTarget(
                 dContext, skgpu::Budgeted::kYes, screenII, 1, kTopLeft_GrSurfaceOrigin, nullptr);
         SkCanvas* c = s->getCanvas();
 
@@ -116,8 +114,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(RepeatedClippedBlurTest,
 
         SkIRect outSubset;
         SkIPoint offset;
-        sk_sp<SkImage> filteredImg = SkImages::MakeWithFilter(dContext, smImg, blur.get(), subset,
-                                                              clip, &outSubset, &offset);
+        sk_sp<SkImage> filteredImg = smImg->makeWithFilter(dContext, blur.get(), subset, clip,
+                                                           &outSubset, &offset);
 
         SkRect dstRect = SkRect::MakeXYWH(offset.fX, offset.fY,
                                           outSubset.width(), outSubset.height());

@@ -8,19 +8,14 @@
 #ifndef GrConvexPolyEffect_DEFINED
 #define GrConvexPolyEffect_DEFINED
 
-#include "include/core/SkScalar.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrProcessor.h"
 #include "src/gpu/ganesh/GrProcessorUnitTest.h"
 
-#include <array>
-#include <memory>
-#include <utility>
-
+class GrInvariantOutput;
 class SkPath;
-enum class GrClipEdgeType;
-struct GrShaderCaps;
-
-namespace skgpu { class KeyBuilder; }
 
 /**
  * An effect that renders a convex polygon. It is intended to be used as a coverage effect.

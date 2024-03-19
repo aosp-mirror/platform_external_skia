@@ -89,7 +89,7 @@ private:
     template<int N> inline void setMatrices(UniformHandle, int arrayCount,
                                             const float matrices[]) const;
 
-    skia_private::TArray<Uniform, true> fUniforms;
+    SkTArray<Uniform, true> fUniforms;
     GrGLGpu* fGpu;
 
     using INHERITED = GrGLSLProgramDataManager;

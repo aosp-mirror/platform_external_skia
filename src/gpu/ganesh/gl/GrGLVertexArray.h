@@ -12,12 +12,10 @@
 #include "include/private/base/SkTArray.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrGpuResource.h"
-
-#include <cstddef>
+#include "src/gpu/ganesh/gl/GrGLDefines_impl.h"
 
 class GrBuffer;
 class GrGLGpu;
-enum class SkSLType : char;
 
 /**
  * This sets and tracks the vertex attribute array state. It is used internally by GrGLVertexArray
@@ -89,7 +87,7 @@ private:
         int                       fDivisor;
     };
 
-    skia_private::STArray<16, AttribArrayState, true> fAttribArrayStates;
+    SkSTArray<16, AttribArrayState, true> fAttribArrayStates;
     int fNumEnabledArrays;
     GrPrimitiveRestart fPrimitiveRestartEnabled;
     bool fEnableStateIsValid = false;

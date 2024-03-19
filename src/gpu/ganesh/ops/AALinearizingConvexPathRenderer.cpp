@@ -28,10 +28,8 @@
 #include "src/gpu/ganesh/ops/GrMeshDrawOp.h"
 #include "src/gpu/ganesh/ops/GrSimpleMeshDrawOpHelperWithStencil.h"
 
-using namespace skia_private;
-
 ///////////////////////////////////////////////////////////////////////////////
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 namespace {
 
@@ -303,7 +301,7 @@ private:
         return CombineResult::kMerged;
     }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     SkString onDumpInfo() const override {
         SkString string;
         for (const auto& path : fPaths) {
@@ -328,7 +326,7 @@ private:
         SkPaint::Join fJoin;
     };
 
-    STArray<1, PathData, true> fPaths;
+    SkSTArray<1, PathData, true> fPaths;
     Helper fHelper;
     bool fWideColor;
 
@@ -412,9 +410,9 @@ bool AALinearizingConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
     return true;
 }
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 
 GR_DRAW_OP_TEST_DEFINE(AAFlatteningConvexPathOp) {
     SkMatrix viewMatrix = GrTest::TestMatrixPreservesRightAngles(random);
@@ -440,15 +438,9 @@ GR_DRAW_OP_TEST_DEFINE(AAFlatteningConvexPathOp) {
         miterLimit = random->nextRangeF(0.5f, 2.0f);
     }
     const GrUserStencilSettings* stencilSettings = GrGetRandomStencil(random, context);
-    return skgpu::ganesh::AAFlatteningConvexPathOp::Make(context,
-                                                         std::move(paint),
-                                                         viewMatrix,
-                                                         path,
-                                                         strokeWidth,
-                                                         style,
-                                                         join,
-                                                         miterLimit,
-                                                         stencilSettings);
+    return skgpu::v1::AAFlatteningConvexPathOp::Make(context, std::move(paint), viewMatrix, path,
+                                                     strokeWidth, style, join, miterLimit,
+                                                     stencilSettings);
 }
 
 #endif

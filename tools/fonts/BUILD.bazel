@@ -8,17 +8,13 @@ skia_filegroup(
     name = "test_font_manager_srcs",
     testonly = True,
     srcs = [
-        "FontToolUtils.cpp",
-        "FontToolUtils.h",
         "TestFontMgr.cpp",
         "TestFontMgr.h",
         "TestTypeface.cpp",
         "TestTypeface.h",
+        "ToolUtilsFont.cpp",
     ],
-    visibility = [
-        "//tests:__pkg__",
-        "//tools:__subpackages__",
-    ],
+    visibility = ["//tools:__subpackages__"],
 )
 
 skia_filegroup(
@@ -30,10 +26,7 @@ skia_filegroup(
         "test_font_sans_serif.inc",
         "test_font_serif.inc",
     ],
-    visibility = [
-        "//tests:__pkg__",
-        "//tools:__subpackages__",
-    ],
+    visibility = ["//tools:__subpackages__"],
 )
 
 skia_filegroup(
@@ -49,34 +42,4 @@ skia_cc_library(
     hdrs = ["RandomScalerContext.h"],
     visibility = ["//tests:__pkg__"],
     deps = ["//:skia_internal"],
-)
-
-skia_cc_library(
-    name = "font_tool_utils",
-    testonly = True,
-    srcs = [
-        "FontToolUtils.cpp",
-        "TestFontMgr.cpp",
-        "TestFontMgr.h",
-        "TestTypeface.cpp",
-        "TestTypeface.h",
-    ],
-    hdrs = [
-        "FontToolUtils.h",
-    ],
-    textual_hdrs = [
-        "//tools/fonts:test_fonts",
-    ],
-    visibility = [
-        "//bench:__subpackages__",
-        "//gm:__subpackages__",
-        "//tests:__subpackages__",
-    ],
-    deps = [
-        "//:core",
-        "//src/base",
-        "//src/core:core_priv",
-        "//tools:resources",
-        "//tools:tool_utils",
-    ],
 )

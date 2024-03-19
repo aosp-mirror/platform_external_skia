@@ -8,33 +8,17 @@
 #ifndef SkRemoteTypeface_DEFINED
 #define SkRemoteTypeface_DEFINED
 
-#include "include/core/SkFontArguments.h"
-#include "include/core/SkFontParameters.h"
 #include "include/core/SkFontStyle.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkString.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkTypeface.h"
-#include "include/core/SkTypes.h"
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
+#include "src/core/SkAdvancedTypefaceMetrics.h"
+#include "src/core/SkDescriptor.h"
+#include "src/core/SkFontDescriptor.h"
 #include "src/core/SkScalerContext.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <optional>
-
-class SkArenaAlloc;
-class SkDescriptor;
-class SkDrawable;
-class SkFontDescriptor;
-class SkGlyph;
-class SkPath;
-class SkReadBuffer;
-class SkStreamAsset;
 class SkTypefaceProxy;
-class SkWriteBuffer;
-struct SkAdvancedTypefaceMetrics;
-struct SkFontMetrics;
+class SkStrikeCache;
 
 class SkScalerContextProxy : public SkScalerContext {
 public:
@@ -44,9 +28,10 @@ public:
                          sk_sp<SkStrikeClient::DiscardableHandleManager> manager);
 
 protected:
-    GlyphMetrics generateMetrics(const SkGlyph&, SkArenaAlloc*) override;
-    void generateImage(const SkGlyph&, void*) override;
-    bool generatePath(const SkGlyph& glyph, SkPath* path) override;
+    bool generateAdvance(SkGlyph* glyph) override;
+    void generateMetrics(SkGlyph* glyph, SkArenaAlloc*) override;
+    void generateImage(const SkGlyph& glyph) override;
+    bool generatePath(const SkGlyph& glyphID, SkPath* path) override;
     sk_sp<SkDrawable> generateDrawable(const SkGlyph&) override;
     void generateFontMetrics(SkFontMetrics* metrics) override;
     SkTypefaceProxy* getProxyTypeface() const;
@@ -56,55 +41,23 @@ private:
     using INHERITED = SkScalerContext;
 };
 
-// SkTypefaceProxyPrototype is the serialization format for SkTypefaceProxy.
-class SkTypefaceProxyPrototype {
-public:
-    static std::optional<SkTypefaceProxyPrototype> MakeFromBuffer(SkReadBuffer& buffer);
-    explicit SkTypefaceProxyPrototype(const SkTypeface& typeface);
-    SkTypefaceProxyPrototype(SkTypefaceID typefaceID,
-                             int glyphCount,
-                             int32_t styleValue,
-                             bool isFixedPitch,
-                             bool glyphMaskNeedsCurrentColor);
-
-    void flatten(SkWriteBuffer&buffer) const;
-    SkTypefaceID serverTypefaceID() const { return fServerTypefaceID; }
-
-private:
-    friend class SkTypefaceProxy;
-    SkFontStyle style() const {
-        SkFontStyle style;
-        style.fValue = fStyleValue;
-        return style;
-    }
-    const SkTypefaceID fServerTypefaceID;
-    const int fGlyphCount;
-    const int32_t fStyleValue;
-    const bool fIsFixedPitch;
-    // Used for COLRv0 or COLRv1 fonts that may need the 0xFFFF special palette
-    // index to represent foreground color. This information needs to be on here
-    // to determine how this typeface can be cached.
-    const bool fGlyphMaskNeedsCurrentColor;
-};
-
 class SkTypefaceProxy : public SkTypeface {
 public:
-    SkTypefaceProxy(const SkTypefaceProxyPrototype& prototype,
-                    sk_sp<SkStrikeClient::DiscardableHandleManager> manager,
-                    bool isLogging = true);
-
     SkTypefaceProxy(SkTypefaceID typefaceID,
                     int glyphCount,
                     const SkFontStyle& style,
-                    bool isFixedPitch,
+                    bool isFixed,
                     bool glyphMaskNeedsCurrentColor,
                     sk_sp<SkStrikeClient::DiscardableHandleManager> manager,
-                    bool isLogging = true);
-
+                    bool isLogging = true)
+            : INHERITED{style, false}
+            , fTypefaceID{typefaceID}
+            , fGlyphCount{glyphCount}
+            , fIsLogging{isLogging}
+            , fGlyphMaskNeedsCurrentColor(glyphMaskNeedsCurrentColor)
+            , fDiscardableManager{std::move(manager)} {}
     SkTypefaceID remoteTypefaceID() const {return fTypefaceID;}
-
     int glyphCount() const {return fGlyphCount;}
-
     bool isLogging() const {return fIsLogging;}
 
 protected:
@@ -183,6 +136,9 @@ private:
     const bool                                      fIsLogging;
     const bool                                      fGlyphMaskNeedsCurrentColor;
     sk_sp<SkStrikeClient::DiscardableHandleManager> fDiscardableManager;
+
+
+    using INHERITED = SkTypeface;
 };
 
 #endif  // SkRemoteTypeface_DEFINED

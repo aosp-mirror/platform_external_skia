@@ -8,9 +8,6 @@
 #include "modules/sksg/include/SkSGGeometryNode.h"
 
 #include "include/core/SkPath.h"
-#include "include/core/SkPoint.h"
-#include "include/core/SkRect.h"
-#include "include/private/base/SkAssert.h"
 
 namespace sksg {
 

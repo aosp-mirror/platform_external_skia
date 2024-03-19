@@ -10,7 +10,7 @@
 
 #include "include/core/SkFontMgr.h"
 
-// An SkFontMgr that always uses ToolUtils::CreatePortableTypeface().
+// An SkFontMgr that always uses ToolUtils::create_portable_typeface().
 
 namespace ToolUtils {
 sk_sp<SkFontMgr> MakePortableFontMgr();

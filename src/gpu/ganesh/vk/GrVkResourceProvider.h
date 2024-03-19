@@ -12,7 +12,6 @@
 #include "include/private/base/SkMutex.h"
 #include "include/private/base/SkTArray.h"
 #include "src/base/SkTInternalLList.h"
-#include "src/core/SkChecksum.h"
 #include "src/core/SkLRUCache.h"
 #include "src/core/SkTDynamicHash.h"
 #include "src/gpu/ganesh/GrGpu.h"
@@ -60,7 +59,7 @@ public:
                                            VkPipelineLayout layout,
                                            uint32_t subpass);
 
-    GR_DEFINE_RESOURCE_HANDLE_CLASS(CompatibleRPHandle)
+    GR_DEFINE_RESOURCE_HANDLE_CLASS(CompatibleRPHandle);
 
     using SelfDependencyFlags = GrVkRenderPass::SelfDependencyFlags;
     using LoadFromResolve = GrVkRenderPass::LoadFromResolve;
@@ -216,7 +215,7 @@ public:
     // objects from the cache are probably not worth the complexity of safely releasing them.
     void releaseUnlockedBackendObjects();
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     void resetShaderCacheForTesting() const { fPipelineStateCache->release(); }
 #endif
 
@@ -250,7 +249,7 @@ private:
 
         struct DescHash {
             uint32_t operator()(const GrProgramDesc& desc) const {
-                return SkChecksum::Hash32(desc.asKey(), desc.keyLength());
+                return SkOpts::hash_fn(desc.asKey(), desc.keyLength(), 0);
             }
         };
 
@@ -286,7 +285,7 @@ private:
         void releaseResources();
 
     private:
-        skia_private::STArray<4, GrVkRenderPass*> fRenderPasses;
+        SkSTArray<4, GrVkRenderPass*> fRenderPasses;
         int                           fLastReturnedIndex;
     };
 
@@ -303,17 +302,17 @@ private:
     };
 
     // Cache of previously created msaa load pipelines
-    skia_private::TArray<MSAALoadPipeline> fMSAALoadPipelines;
+    SkTArray<MSAALoadPipeline> fMSAALoadPipelines;
 
-    skia_private::STArray<4, CompatibleRenderPassSet> fRenderPassArray;
+    SkSTArray<4, CompatibleRenderPassSet> fRenderPassArray;
 
-    skia_private::TArray<const GrVkRenderPass*> fExternalRenderPasses;
+    SkTArray<const GrVkRenderPass*> fExternalRenderPasses;
 
     // Array of command pools that we are waiting on
-    skia_private::STArray<4, GrVkCommandPool*, true> fActiveCommandPools;
+    SkSTArray<4, GrVkCommandPool*, true> fActiveCommandPools;
 
     // Array of available command pools that are not in flight
-    skia_private::STArray<4, GrVkCommandPool*, true> fAvailableCommandPools;
+    SkSTArray<4, GrVkCommandPool*, true> fAvailableCommandPools;
 
     // Stores GrVkSampler objects that we've already created so we can reuse them across multiple
     // GrVkPipelineStates
@@ -325,7 +324,7 @@ private:
     // Cache of GrVkPipelineStates
     sk_sp<PipelineStateCache> fPipelineStateCache;
 
-    skia_private::STArray<4, std::unique_ptr<GrVkDescriptorSetManager>> fDescriptorSetManagers;
+    SkSTArray<4, std::unique_ptr<GrVkDescriptorSetManager>> fDescriptorSetManagers;
 
     GrVkDescriptorSetManager::Handle fUniformDSHandle;
     GrVkDescriptorSetManager::Handle fInputDSHandle;

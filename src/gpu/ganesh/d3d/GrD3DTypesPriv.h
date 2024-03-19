@@ -25,6 +25,6 @@ struct GrD3DTextureResourceSpec {
 GrD3DSurfaceInfo GrD3DTextureResourceSpecToSurfaceInfo(const GrD3DTextureResourceSpec& d3dSpec,
                                                        uint32_t sampleCount,
                                                        uint32_t levelCount,
-                                                       skgpu::Protected isProtected);
+                                                       GrProtected isProtected);
 
 #endif

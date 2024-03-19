@@ -9,17 +9,15 @@
 
 #include "include/core/SkM44.h"
 #include "include/gpu/graphite/Recorder.h"
-#include "src/gpu/graphite/AtlasProvider.h"
+#include "include/private/SkSLString.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/DrawParams.h"
 #include "src/gpu/graphite/DrawWriter.h"
 #include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/render/CommonDepthStencilSettings.h"
-#include "src/gpu/graphite/text/TextAtlasManager.h"
-#include "src/sksl/SkSLString.h"
+#include "src/gpu/graphite/text/AtlasManager.h"
 #include "src/text/gpu/SubRunContainer.h"
-#include "src/text/gpu/VertexFiller.h"
 
 using AtlasSubRun = sktext::gpu::AtlasSubRun;
 
@@ -32,15 +30,12 @@ constexpr int kNumTextAtlasTextures = 4;
 
 }  // namespace
 
-BitmapTextRenderStep::BitmapTextRenderStep(bool isLCD)
+BitmapTextRenderStep::BitmapTextRenderStep()
         : RenderStep("BitmapTextRenderStep",
                      "",
-                     isLCD ? Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage |
-                             Flags::kLCDCoverage
-                           : Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage,
-                     /*uniforms=*/{{"subRunDeviceMatrix", SkSLType::kFloat4x4},
-                                   {"deviceToLocal"     , SkSLType::kFloat4x4},
-                                   {"atlasSizeInv"      , SkSLType::kFloat2}},
+                     Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage,
+                     /*uniforms=*/{{"deviceMatrix", SkSLType::kFloat4x4},
+                                   {"atlasSizeInv", SkSLType::kFloat2}},
                      PrimitiveType::kTriangleStrip,
                      kDirectDepthGEqualPass,
                      /*vertexAttrs=*/ {},
@@ -51,7 +46,7 @@ BitmapTextRenderStep::BitmapTextRenderStep(bool isLCD)
                       {"indexAndFlags", VertexAttribType::kUShort2, SkSLType::kUShort2},
                       {"strikeToSourceScale", VertexAttribType::kFloat, SkSLType::kFloat},
                       {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
-                      {"ssboIndices", VertexAttribType::kUShort2, SkSLType::kUShort2}},
+                      {"ssboIndex", VertexAttribType::kInt, SkSLType::kInt}},
                      /*varyings=*/
                      {{"textureCoords", SkSLType::kFloat2},
                       {"texIndex", SkSLType::kHalf},
@@ -60,23 +55,19 @@ BitmapTextRenderStep::BitmapTextRenderStep(bool isLCD)
 BitmapTextRenderStep::~BitmapTextRenderStep() {}
 
 std::string BitmapTextRenderStep::vertexSkSL() const {
-    // Returns the body of a vertex function, which must define a float4 devPosition variable and
-    // must write to an already-defined float2 stepLocalCoords variable.
-    return "texIndex = half(indexAndFlags.x);"
-           "maskFormat = half(indexAndFlags.y);"
-           "float2 unormTexCoords;"
-           "float4 devPosition = text_vertex_fn(float2(sk_VertexID >> 1, sk_VertexID & 1), "
-                                               "subRunDeviceMatrix, "
-                                               "deviceToLocal, "
-                                               "atlasSizeInv, "
-                                               "float2(size), "
-                                               "float2(uvPos), "
-                                               "xyPos, "
-                                               "strikeToSourceScale, "
-                                               "depth, "
-                                               "textureCoords, "
-                                               "unormTexCoords, "
-                                               "stepLocalCoords);";
+    return
+        "float2 baseCoords = float2(float(sk_VertexID >> 1), float(sk_VertexID & 1));"
+        "baseCoords.xy *= float2(size);"
+
+        "stepLocalCoords = strikeToSourceScale*baseCoords + float2(xyPos);"
+        "float4 position = deviceMatrix*float4(stepLocalCoords, 0, 1);"
+
+        "float2 unormTexCoords = baseCoords + float2(uvPos);"
+        "textureCoords = unormTexCoords * atlasSizeInv;"
+        "texIndex = half(indexAndFlags.x);"
+        "maskFormat = half(indexAndFlags.y);"
+
+        "float4 devPosition = float4(position.xy, depth, position.w);";
 }
 
 std::string BitmapTextRenderStep::texturesAndSamplersSkSL(
@@ -85,37 +76,45 @@ std::string BitmapTextRenderStep::texturesAndSamplersSkSL(
 
     for (unsigned int i = 0; i < kNumTextAtlasTextures; ++i) {
         result += EmitSamplerLayout(bindingReqs, nextBindingIndex);
-        SkSL::String::appendf(&result, " sampler2D text_atlas_%d;\n", i);
+        SkSL::String::appendf(&result, " uniform sampler2D text_atlas_%d;\n", i);
     }
 
     return result;
 }
 
 const char* BitmapTextRenderStep::fragmentCoverageSkSL() const {
-    // The returned SkSL must write its coverage into a 'half4 outputCoverage' variable (defined in
-    // the calling code) with the actual coverage splatted out into all four channels.
-    static_assert(kNumTextAtlasTextures == 4);
-    return "outputCoverage = bitmap_text_coverage_fn(sample_indexed_atlas(textureCoords, "
-                                                                         "int(texIndex), "
-                                                                         "text_atlas_0, "
-                                                                         "text_atlas_1, "
-                                                                         "text_atlas_2, "
-                                                                         "text_atlas_3), "
-                                                    "int(maskFormat));";
+    return
+        "half4 texColor;"
+        "if (texIndex == 0) {"
+           "texColor = sample(text_atlas_0, textureCoords);"
+        "} else if (texIndex == 1) {"
+           "texColor = sample(text_atlas_1, textureCoords);"
+        "} else if (texIndex == 2) {"
+           "texColor = sample(text_atlas_2, textureCoords);"
+        "} else if (texIndex == 3) {"
+           "texColor = sample(text_atlas_3, textureCoords);"
+        "} else {"
+           "texColor = sample(text_atlas_0, textureCoords);"
+        "}"
+        // A8
+        "if (maskFormat == 0) {"
+            "outputCoverage = texColor.rrrr;"
+        // LCD
+        "} else if (maskFormat == 1) {"
+            "outputCoverage = half4(texColor.rgb, max(max(texColor.r, texColor.g), texColor.b));"
+        // RGBA
+        "} else {"
+            "outputCoverage = texColor;"
+        "}";
 }
 
 void BitmapTextRenderStep::writeVertices(DrawWriter* dw,
                                          const DrawParams& params,
-                                         skvx::ushort2 ssboIndices) const {
+                                         int ssboIndex) const {
     const SubRunData& subRunData = params.geometry().subRunData();
 
-    subRunData.subRun()->vertexFiller().fillInstanceData(dw,
-                                                         subRunData.startGlyphIndex(),
-                                                         subRunData.glyphCount(),
-                                                         subRunData.subRun()->instanceFlags(),
-                                                         ssboIndices,
-                                                         subRunData.subRun()->glyphs(),
-                                                         params.order().depthAsFloat());
+    subRunData.subRun()->fillInstanceData(dw, subRunData.startGlyphIndex(), subRunData.glyphCount(),
+                                          ssboIndex, params.order().depthAsFloat());
 }
 
 void BitmapTextRenderStep::writeUniformsAndTextures(const DrawParams& params,
@@ -126,13 +125,12 @@ void BitmapTextRenderStep::writeUniformsAndTextures(const DrawParams& params,
     unsigned int numProxies;
     Recorder* recorder = subRunData.recorder();
     const sk_sp<TextureProxy>* proxies =
-            recorder->priv().atlasProvider()->textAtlasManager()->getProxies(
-                    subRunData.subRun()->maskFormat(), &numProxies);
+            recorder->priv().atlasManager()->getProxies(subRunData.subRun()->maskFormat(),
+                                                        &numProxies);
     SkASSERT(proxies && numProxies > 0);
 
     // write uniforms
-    gatherer->write(params.transform().matrix());  // subRunDeviceMatrix
-    gatherer->write(subRunData.deviceToLocal());
+    gatherer->write(params.transform());
     SkV2 atlasDimensionsInverse = {1.f/proxies[0]->dimensions().width(),
                                    1.f/proxies[0]->dimensions().height()};
     gatherer->write(atlasDimensionsInverse);

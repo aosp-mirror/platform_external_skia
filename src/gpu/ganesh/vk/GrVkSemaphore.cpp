@@ -8,7 +8,6 @@
 #include "src/gpu/ganesh/vk/GrVkSemaphore.h"
 
 #include "include/gpu/GrBackendSemaphore.h"
-#include "include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
 #include "src/gpu/ganesh/vk/GrVkGpu.h"
 #include "src/gpu/ganesh/vk/GrVkUtil.h"
 
@@ -68,5 +67,7 @@ void GrVkSemaphore::Resource::freeGPUData() const {
 }
 
 GrBackendSemaphore GrVkSemaphore::backendSemaphore() const {
-    return GrBackendSemaphores::MakeVk(fResource->semaphore());
+    GrBackendSemaphore backendSemaphore;
+    backendSemaphore.initVulkan(fResource->semaphore());
+    return backendSemaphore;
 }

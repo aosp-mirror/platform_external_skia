@@ -32,13 +32,13 @@ public:
     }
 
 protected:
-    SkString getName() const override {
+    SkString onShortName() override {
         SkString name("imagesrc2_");
         name.append(fSuffix);
         return name;
     }
 
-    SkISize getISize() override { return SkISize::Make(256, 256); }
+    SkISize onISize() override { return SkISize::Make(256, 256); }
 
     // Create an image with high frequency vertical stripes
     void onOnceBeforeDraw() override {
@@ -52,7 +52,7 @@ protected:
             SK_ColorWHITE,   SK_ColorGRAY,
         };
 
-        auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(kImageSize, kImageSize)));
+        auto surface(SkSurface::MakeRasterN32Premul(kImageSize, kImageSize));
         SkCanvas* canvas = surface->getCanvas();
 
         int curColor = 0;

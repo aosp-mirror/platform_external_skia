@@ -24,7 +24,6 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 static struct {
     SkTileMode tmx;
@@ -60,13 +59,16 @@ public:
         this->drawTile(&bitmapCanvas);
     }
 
-    SkString getName() const override {
+
+    SkString onShortName() override {
         return SkStringPrintf("pictureshader%s%s",
                               fUseLocalMatrixWrapper ? "_localwrapper" : "",
                               fAlpha < 1 ? "_alpha" : "");
     }
 
-    SkISize getISize() override { return SkISize::Make(1400, 1450); }
+    SkISize onISize() override {
+        return SkISize::Make(1400, 1450);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         this->drawSceneColumn(canvas, SkPoint::Make(0, 0), 1, 1, 0);
@@ -260,8 +262,10 @@ DEF_SIMPLE_GM(pictureshader_persp, canvas, 215, 110) {
     };
 
     auto picture = []() {
-        sk_sp<SkTypeface> typeface = ToolUtils::DefaultPortableTypeface();
-        SkASSERT(typeface);
+        sk_sp<SkTypeface> typeface = SkTypeface::MakeDefault();
+        if (!typeface) {
+            typeface = SkTypeface::MakeFromName("monospace", SkFontStyle());
+        }
         SkFont font;
         font.setTypeface(typeface);
         font.setHinting(SkFontHinting::kNormal);

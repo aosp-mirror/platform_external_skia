@@ -7,28 +7,12 @@
 
 #include "src/gpu/ganesh/effects/GrConvexPolyEffect.h"
 
-#include "include/core/SkPath.h"
-#include "include/core/SkPoint.h"
-#include "include/core/SkString.h"
-#include "include/private/SkColorData.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkFloatingPoint.h"
-#include "include/private/gpu/ganesh/GrTypesPriv.h"
-#include "src/base/SkRandom.h"
-#include "src/core/SkPathEnums.h"
+#include "include/private/base/SkPathEnums.h"
 #include "src/core/SkPathPriv.h"
-#include "src/core/SkSLTypeShared.h"
 #include "src/gpu/KeyBuilder.h"
 #include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/ganesh/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/ganesh/glsl/GrGLSLUniformHandler.h"
-
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <tuple>
-
-struct GrShaderCaps;
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -206,7 +190,7 @@ bool GrConvexPolyEffect::onIsEqual(const GrFragmentProcessor& other) const {
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrConvexPolyEffect)
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrConvexPolyEffect::TestCreate(GrProcessorTestData* d) {
     int count = d->fRandom->nextULessThan(kMaxEdges) + 1;
     SkScalar edges[kMaxEdges * 3];

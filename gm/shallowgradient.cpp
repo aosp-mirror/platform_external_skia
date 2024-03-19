@@ -52,11 +52,11 @@ private:
     const char* fName;
     bool fDither;
 
-    SkString getName() const override {
+    SkString onShortName() override {
         return SkStringPrintf("shallow_gradient_%s%s", fName, fDither ? "" : "_nodither");
     }
 
-    SkISize getISize() override { return {800, 800}; }
+    SkISize onISize() override { return {800, 800}; }
 
     void onDraw(SkCanvas* canvas) override {
         const SkColor colors[] = { 0xFF555555, 0xFF444444 };

@@ -26,9 +26,7 @@
 #include "src/gpu/ganesh/ops/GrMeshDrawOp.h"
 #include "src/gpu/ganesh/ops/GrSimpleMeshDrawOpHelper.h"
 
-using namespace skia_private;
-
-namespace skgpu::ganesh::LatticeOp {
+namespace skgpu::v1::LatticeOp {
 
 namespace {
 
@@ -177,7 +175,7 @@ public:
     const char* name() const override { return "NonAALatticeOp"; }
 
     void visitProxies(const GrVisitProxyFunc& func) const override {
-        func(fView.proxy(), skgpu::Mipmapped::kNo);
+        func(fView.proxy(), GrMipmapped::kNo);
         if (fProgramInfo) {
             fProgramInfo->visitFPProxies(func);
         } else {
@@ -360,7 +358,7 @@ private:
         return CombineResult::kMerged;
     }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     SkString onDumpInfo() const override {
         SkString str;
 
@@ -383,7 +381,7 @@ private:
     };
 
     Helper fHelper;
-    STArray<1, Patch, true> fPatches;
+    SkSTArray<1, Patch, true> fPatches;
     GrSurfaceProxyView fView;
     SkAlphaType fAlphaType;
     sk_sp<GrColorSpaceXform> fColorSpaceXform;
@@ -411,9 +409,9 @@ GrOp::Owner MakeNonAA(GrRecordingContext* context,
                                 std::move(colorSpaceXform), filter, std::move(iter), dst);
 }
 
-}  // namespace skgpu::ganesh::LatticeOp
+}  // namespace skgpu::v1::LatticeOp
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 #include "src/gpu/ganesh/GrDrawOpTest.h"
 #include "src/gpu/ganesh/GrProxyProvider.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
@@ -476,7 +474,7 @@ GR_DRAW_OP_TEST_DEFINE(NonAALatticeOp) {
                                                               dims,
                                                               GrRenderable::kNo,
                                                               1,
-                                                              skgpu::Mipmapped::kNo,
+                                                              GrMipmapped::kNo,
                                                               SkBackingFit::kExact,
                                                               skgpu::Budgeted::kYes,
                                                               GrProtected::kNo,
@@ -533,15 +531,10 @@ GR_DRAW_OP_TEST_DEFINE(NonAALatticeOp) {
             std::move(proxy), origin,
             context->priv().caps()->getReadSwizzle(format, GrColorType::kRGBA_8888));
 
-    return skgpu::ganesh::LatticeOp::NonAALatticeOp::Make(context,
-                                                          std::move(paint),
-                                                          viewMatrix,
-                                                          std::move(view),
-                                                          kPremul_SkAlphaType,
-                                                          std::move(csxf),
-                                                          filter,
-                                                          std::move(iter),
-                                                          dst);
+    return skgpu::v1::LatticeOp::NonAALatticeOp::Make(context, std::move(paint), viewMatrix,
+                                                      std::move(view), kPremul_SkAlphaType,
+                                                      std::move(csxf), filter, std::move(iter),
+                                                      dst);
 }
 
 #endif

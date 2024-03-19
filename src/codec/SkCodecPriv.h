@@ -13,9 +13,7 @@
 #include "include/core/SkTypes.h"
 #include "include/private/SkColorData.h"
 #include "include/private/SkEncodedInfo.h"
-#include "src/codec/SkColorPalette.h"
-
-#include <string_view>
+#include "src/codec/SkColorTable.h"
 
 #ifdef SK_PRINT_CODEC_MESSAGES
     #define SkCodecPrintf SkDebugf
@@ -106,7 +104,7 @@ static inline bool valid_alpha(SkAlphaType dstAlpha, bool srcIsOpaque) {
 /*
  * If there is a color table, get a pointer to the colors, otherwise return nullptr
  */
-static inline const SkPMColor* get_color_ptr(SkColorPalette* colorTable) {
+static inline const SkPMColor* get_color_ptr(SkColorTable* colorTable) {
      return nullptr != colorTable ? colorTable->readColors() : nullptr;
 }
 
@@ -255,8 +253,6 @@ static inline PackColorProc choose_pack_color_proc(bool isPremul, SkColorType co
     }
 }
 
-namespace SkCodecs {
-bool HasDecoder(std::string_view id);
-}
+bool is_orientation_marker(const uint8_t* data, size_t data_length, SkEncodedOrigin* orientation);
 
 #endif // SkCodecPriv_DEFINED

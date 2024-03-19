@@ -7,9 +7,9 @@
 
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
+#include "include/core/SkICC.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
-#include "include/encode/SkICC.h"
 #include "modules/skcms/skcms.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
@@ -32,13 +32,13 @@ DEF_TEST(AdobeRGB, r) {
 
 DEF_TEST(HDR_ICC, r) {
     constexpr size_t kTestCount = 3;
-    sk_sp<SkData> profile[kTestCount] = {
+    SK_API sk_sp<SkData> profile[kTestCount] = {
             SkWriteICCProfile(SkNamedTransferFn::kPQ, SkNamedGamut::kRec2020),
             SkWriteICCProfile(SkNamedTransferFn::kHLG, SkNamedGamut::kDisplayP3),
             SkWriteICCProfile(SkNamedTransferFn::kSRGB, SkNamedGamut::kSRGB),
     };
 
-    sk_sp<SkData> dst_profile[kTestCount] = {
+    SK_API sk_sp<SkData> dst_profile[kTestCount] = {
             SkWriteICCProfile(SkNamedTransferFn::kLinear, SkNamedGamut::kRec2020),
             SkWriteICCProfile(SkNamedTransferFn::kLinear, SkNamedGamut::kDisplayP3),
             SkWriteICCProfile(SkNamedTransferFn::kLinear, SkNamedGamut::kSRGB),

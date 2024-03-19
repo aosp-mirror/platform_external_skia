@@ -9,7 +9,6 @@
 #define GrRenderTarget_DEFINED
 
 #include "include/core/SkRect.h"
-#include "include/private/base/SkTArray.h"
 #include "src/gpu/ganesh/GrSurface.h"
 
 class GrCaps;
@@ -68,7 +67,7 @@ public:
      * actual number of samples in use. (This may differ from fSampleCnt.) Sample locations are
      * returned as 0..1 offsets relative to the top-left corner of the pixel.
      */
-    const skia_private::TArray<SkPoint>& getSampleLocations();
+    const SkTArray<SkPoint>& getSampleLocations();
 
 protected:
     GrRenderTarget(GrGpu*,

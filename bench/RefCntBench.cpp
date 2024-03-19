@@ -17,7 +17,7 @@ enum {
 class RefCntBench_Stack : public Benchmark {
 public:
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -51,7 +51,7 @@ private:
 class RefCntBench_Heap : public Benchmark {
 public:
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -78,7 +78,7 @@ private:
 class RefCntBench_New : public Benchmark {
 public:
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -106,7 +106,7 @@ private:
 class WeakRefCntBench_Stack : public Benchmark {
 public:
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -137,7 +137,7 @@ public:
 class WeakRefCntBench_Heap : public Benchmark {
 public:
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -164,7 +164,7 @@ private:
 class WeakRefCntBench_New : public Benchmark {
 public:
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:

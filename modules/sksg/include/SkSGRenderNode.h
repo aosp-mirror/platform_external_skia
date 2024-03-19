@@ -8,23 +8,15 @@
 #ifndef SkSGRenderNode_DEFINED
 #define SkSGRenderNode_DEFINED
 
-#include "include/core/SkBlender.h"
-#include "include/core/SkColorFilter.h"
-#include "include/core/SkMatrix.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkShader.h"
 #include "modules/sksg/include/SkSGNode.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <utility>
-#include <vector>
+#include "include/core/SkBlender.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkShader.h"
 
 class SkCanvas;
 class SkImageFilter;
 class SkPaint;
-struct SkPoint;
-struct SkRect;
 
 namespace sksg {
 

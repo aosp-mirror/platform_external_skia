@@ -33,9 +33,13 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("bigblurs"); }
+    SkString onShortName() override {
+        return SkString("bigblurs");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kWidth, kHeight);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         constexpr int kBig = 65536;

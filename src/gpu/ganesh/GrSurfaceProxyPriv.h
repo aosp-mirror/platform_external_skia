@@ -36,7 +36,7 @@ public:
     bool isExact() const { return SkBackingFit::kExact == fProxy->fFit; }
 
     // Don't. Just don't.
-    void exactify();
+    void exactify(bool allocatedCaseOnly);
 
     void setLazyDimensions(SkISize dimensions) { fProxy->setLazyDimensions(dimensions); }
 

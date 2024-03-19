@@ -9,7 +9,7 @@
 
 #include "include/core/SkDrawable.h"
 #include "include/core/SkRect.h"
-#include "include/gpu/ganesh/vk/GrBackendDrawableInfo.h"
+#include "include/gpu/GrBackendDrawableInfo.h"
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
@@ -29,8 +29,6 @@
 #include "src/gpu/ganesh/vk/GrVkResourceProvider.h"
 #include "src/gpu/ganesh/vk/GrVkSemaphore.h"
 #include "src/gpu/ganesh/vk/GrVkTexture.h"
-
-using namespace skia_private;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -350,7 +348,7 @@ bool GrVkOpsRenderPass::set(GrRenderTarget* rt,
                             const GrOpsRenderPass::LoadAndStoreInfo& resolveInfo,
                             GrVkRenderPass::SelfDependencyFlags selfDepFlags,
                             GrVkRenderPass::LoadFromResolve loadFromResolve,
-                            const TArray<GrSurfaceProxy*, true>& sampledProxies) {
+                            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) {
     SkASSERT(!fRenderTarget);
     SkASSERT(fGpu == rt->getContext()->priv().getGpu());
 

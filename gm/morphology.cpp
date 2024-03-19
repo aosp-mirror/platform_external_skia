@@ -19,7 +19,6 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #define WIDTH 700
 #define HEIGHT 560
@@ -33,12 +32,14 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("morphology"); }
+    SkString onShortName() override {
+        return SkString("morphology");
+    }
 
     void onOnceBeforeDraw() override {
-        auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(135, 135));
+        auto surf = SkSurface::MakeRasterN32Premul(135, 135);
 
-        SkFont  font(ToolUtils::DefaultPortableTypeface(), 64.0f);
+        SkFont  font(ToolUtils::create_portable_typeface(), 64.0f);
         SkPaint paint;
         paint.setColor(0xFFFFFFFF);
         surf->getCanvas()->drawString("ABC", 10, 55,  font, paint);
@@ -47,7 +48,9 @@ protected:
         fImage = surf->makeImageSnapshot();
     }
 
-    SkISize getISize() override { return SkISize::Make(WIDTH, HEIGHT); }
+    SkISize onISize() override {
+        return SkISize::Make(WIDTH, HEIGHT);
+    }
 
     void drawClippedBitmap(SkCanvas* canvas, const SkPaint& paint, int x, int y) {
         canvas->save();

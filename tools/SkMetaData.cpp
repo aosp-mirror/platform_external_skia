@@ -137,7 +137,7 @@ bool SkMetaData::findPtr(const char name[], void** ptr) const {
     const Rec* rec = this->find(name, kPtr_Type);
     if (rec) {
         SkASSERT(rec->fDataCount == 1);
-        void* const* found = (void* const*)rec->data();
+        void** found = (void**)rec->data();
         if (ptr) {
             *ptr = *found;
         }

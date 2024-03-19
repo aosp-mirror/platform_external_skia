@@ -7,7 +7,6 @@
 
 #include "src/codec/SkAvifCodec.h"
 
-#include "include/codec/SkAvifDecoder.h"
 #include "include/codec/SkCodec.h"
 #include "include/codec/SkCodecAnimation.h"
 #include "include/core/SkColorType.h"
@@ -23,6 +22,7 @@
 #include <utility>
 
 #include "avif/avif.h"
+#include "avif/internal.h"
 
 void AvifDecoderDeleter::operator()(avifDecoder* decoder) const {
     if (decoder != nullptr) {
@@ -44,14 +44,9 @@ bool SkAvifCodec::IsAvif(const void* buffer, size_t bytesRead) {
 
 std::unique_ptr<SkCodec> SkAvifCodec::MakeFromStream(std::unique_ptr<SkStream> stream,
                                                      Result* result) {
-    SkASSERT(result);
-    if (!stream) {
-        *result = SkCodec::kInvalidInput;
-        return nullptr;
-    }
     AvifDecoder avifDecoder(avifDecoderCreate());
     if (avifDecoder == nullptr) {
-        *result = SkCodec::kInternalError;
+        *result = kInternalError;
         return nullptr;
     }
     avifDecoder->ignoreXMP = AVIF_TRUE;
@@ -76,13 +71,13 @@ std::unique_ptr<SkCodec> SkAvifCodec::MakeFromStream(std::unique_ptr<SkStream> s
 
     avifResult res = avifDecoderSetIOMemory(avifDecoder.get(), data->bytes(), data->size());
     if (res != AVIF_RESULT_OK) {
-        *result = SkCodec::kInternalError;
+        *result = kInternalError;
         return nullptr;
     }
 
     res = avifDecoderParse(avifDecoder.get());
     if (res != AVIF_RESULT_OK) {
-        *result = SkCodec::kInvalidInput;
+        *result = kInvalidInput;
         return nullptr;
     }
 
@@ -211,9 +206,11 @@ SkCodec::Result SkAvifCodec::onGetPixels(const SkImageInfo& dstInfo,
     }
 
     if (this->dimensions() != dstInfo.dimensions()) {
-        result = avifImageScale(
-                fAvifDecoder->image, dstInfo.width(), dstInfo.height(), &fAvifDecoder->diag);
-        if (result != AVIF_RESULT_OK) {
+        if (!avifImageScale(fAvifDecoder->image,
+                            dstInfo.width(),
+                            dstInfo.height(),
+                            fAvifDecoder->imageSizeLimit,
+                            &fAvifDecoder->diag)) {
             return kInvalidInput;
         }
     }
@@ -240,31 +237,3 @@ SkCodec::Result SkAvifCodec::onGetPixels(const SkImageInfo& dstInfo,
     *rowsDecoded = fAvifDecoder->image->height;
     return kSuccess;
 }
-
-namespace SkAvifDecoder {
-bool IsAvif(const void* data, size_t len) {
-    return SkAvifCodec::IsAvif(data, len);
-}
-
-std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
-                                SkCodec::Result* outResult,
-                                SkCodecs::DecodeContext) {
-    SkCodec::Result resultStorage;
-    if (!outResult) {
-        outResult = &resultStorage;
-    }
-    return SkAvifCodec::MakeFromStream(std::move(stream), outResult);
-}
-
-std::unique_ptr<SkCodec> Decode(sk_sp<SkData> data,
-                                SkCodec::Result* outResult,
-                                SkCodecs::DecodeContext) {
-    if (!data) {
-        if (outResult) {
-            *outResult = SkCodec::kInvalidInput;
-        }
-        return nullptr;
-    }
-    return Decode(SkMemoryStream::Make(std::move(data)), outResult, nullptr);
-}
-}  // namespace SkAvifDecoder

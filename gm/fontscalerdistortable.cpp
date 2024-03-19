@@ -23,7 +23,6 @@
 #include "tools/Resources.h"
 #include "tools/SkMetaData.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 #include <memory>
@@ -38,9 +37,14 @@ public:
     }
 
 private:
-    SkString getName() const override { return SkString("fontscalerdistortable"); }
 
-    SkISize getISize() override { return SkISize::Make(550, 700); }
+    SkString onShortName() override {
+        return SkString("fontscalerdistortable");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(550, 700);
+    }
 
     bool fDirty = true;
     bool fOverride = false;
@@ -73,18 +77,16 @@ private:
         constexpr SkFourByteTag wght = SkSetFourByteTag('w','g','h','t');
         //constexpr SkFourByteTag wdth = SkSetFourByteTag('w','d','t','h');
         fInfo = {
-            ToolUtils::CreateTypefaceFromResource("fonts/Distortable.ttf"), wght, 0.5f, 2.0f
+            MakeResourceAsTypeface("fonts/Distortable.ttf"), wght, 0.5f, 2.0f
             //SkTypeface::MakeFromFile("/Library/Fonts/Skia.ttf"), wght, 0.48f, 3.2f
-            //ToolUtils::CreateTestTypeface("Skia", SkFontStyle()), wdth, 0.62f, 1.3f
+            //SkTypeface::MakeFromName("Skia", SkFontStyle()), wdth, 0.62f, 1.3f
             //SkTypeface::MakeFromFile("/System/Library/Fonts/SFNS.ttf"), wght, 100.0f, 900.0f
-            //ToolUtils::CreateTestTypeface(".SF NS", SkFontStyle()), wght, 100.0f, 900.0f
+            //SkTypeface::MakeFromName(".SF NS", SkFontStyle()), wght, 100.0f, 900.0f
         };
 
-        if (!fInfo.distortable) {
-            fInfo.distortable = ToolUtils::DefaultPortableTypeface();
+        if (fInfo.distortable) {
+            fVariationSliders = ToolUtils::VariationSliders(fInfo.distortable.get());
         }
-        SkASSERT(fInfo.distortable);
-        fVariationSliders = ToolUtils::VariationSliders(fInfo.distortable.get());
     }
 
     inline static constexpr int rows = 2;
@@ -92,7 +94,7 @@ private:
     sk_sp<SkTypeface> typeface[rows][cols];
 
     void updateTypefaces() {
-        sk_sp<SkFontMgr> fontMgr = ToolUtils::TestFontMgr();
+        sk_sp<SkFontMgr> fontMgr(SkFontMgr::RefDefault());
 
         std::unique_ptr<SkStreamAsset> distortableStream( fInfo.distortable
                                                         ? fInfo.distortable->openStream(nullptr)
@@ -150,8 +152,7 @@ private:
                 SkScalar x = SkIntToScalar(10);
                 SkScalar y = SkIntToScalar(20);
 
-                font.setTypeface(typeface[row][col] ? typeface[row][col] :
-                                                      ToolUtils::DefaultPortableTypeface());
+                font.setTypeface(typeface[row][col] ? typeface[row][col] : nullptr);
 
                 SkAutoCanvasRestore acr(canvas, true);
                 canvas->translate(SkIntToScalar(30 + col * 100), SkIntToScalar(20));

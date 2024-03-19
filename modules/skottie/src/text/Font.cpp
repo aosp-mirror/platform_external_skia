@@ -7,19 +7,11 @@
 
 #include "modules/skottie/src/text/Font.h"
 
-#include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkSize.h"
-#include "include/core/SkTypeface.h"
-#include "include/private/base/SkTFitsIn.h"
-#include "include/private/base/SkTo.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/sksg/include/SkSGPath.h"
 #include "modules/sksg/include/SkSGTransform.h"
-#include "src/base/SkUTF.h"
-#include "src/utils/SkJSON.h"
 
 namespace skottie::internal {
 
@@ -59,16 +51,9 @@ bool CustomFont::Builder::parseGlyph(const AnimationBuilder* abuilder,
     const auto advance = ParseDefault(jchar["w"], 0.0f) * kPtScale;
 
     // Custom glyphs are either compositions...
-    SkSize glyph_size;
-    if (auto comp_node = ParseGlyphComp(abuilder, *jdata, &glyph_size)) {
+    if (auto comp_node = ParseGlyphComp(abuilder, *jdata)) {
         // With glyph comps, we use the SkCustomTypeface only for shaping -- not for rendering.
-        // We still need accurate glyph bounds though, for visual alignment.
-
-        // TODO: This assumes the glyph origin is always in the lower-left corner.
-        // Lottie may need to add an origin property, to allow designers full control over
-        // glyph comp positioning.
-        const auto glyph_bounds = SkRect::MakeLTRB(0, -glyph_size.fHeight, glyph_size.fWidth, 0);
-        fCustomBuilder.setGlyph(glyph_id, advance, SkPath::Rect(glyph_bounds));
+        fCustomBuilder.setGlyph(glyph_id, advance, SkPath());
 
         // Rendering is handled explicitly, post shaping,
         // based on info tracked in this GlyphCompMap.
@@ -151,8 +136,7 @@ bool CustomFont::Builder::ParseGlyphPath(const skottie::internal::AnimationBuild
 
 sk_sp<sksg::RenderNode>
 CustomFont::Builder::ParseGlyphComp(const AnimationBuilder* abuilder,
-                                    const skjson::ObjectValue& jdata,
-                                    SkSize* glyph_size) {
+                                    const skjson::ObjectValue& jdata) {
     // Glyph comp encoding:
     //
     //   "data": {                     // Follows the precomp layer format.
@@ -181,10 +165,6 @@ CustomFont::Builder::ParseGlyphComp(const AnimationBuilder* abuilder,
 
     // Normalize for 1pt.
     static constexpr float kPtScale = 0.01f;
-
-    // For bounds/alignment purposes, we use a glyph size matching the normalized glyph comp size.
-    *glyph_size = {linfo.fSize.fWidth * kPtScale, linfo.fSize.fHeight * kPtScale};
-
     sk_sp<sksg::Transform> glyph_transform =
             sksg::Matrix<SkMatrix>::Make(SkMatrix::Scale(kPtScale, kPtScale));
 

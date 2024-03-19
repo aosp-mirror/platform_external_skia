@@ -5,28 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkColor.h"
-#include "include/core/SkPoint.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkShader.h"
-#include "include/core/SkSize.h"
-#include "include/core/SkTileMode.h"
-#include "include/effects/SkGradientShader.h"
-#include "include/private/base/SkTPin.h"
-#include "modules/skottie/src/SkottiePriv.h"
-#include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/effects/Effects.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
 
-#include <algorithm>
+#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkShaderMaskFilter.h"
+#include "include/private/base/SkTPin.h"
+#include "modules/skottie/src/SkottieValue.h"
+#include "modules/sksg/include/SkSGRenderEffect.h"
+#include "src/utils/SkJSON.h"
+
 #include <cmath>
-#include <cstddef>
 #include <utility>
-
-namespace skjson {
-class ArrayValue;
-}
 
 namespace skottie {
 namespace internal {

@@ -88,8 +88,7 @@ public:
     GrPixmap& operator=(const GrPixmap&) = default;
     GrPixmap& operator=(GrPixmap&&) = default;
 
-    GrPixmap(GrImageInfo info, void* addr, size_t rowBytes)
-            : GrPixmapBase(std::move(info), addr, rowBytes) {}
+    GrPixmap(GrImageInfo info, void* addr, size_t rowBytes) : GrPixmapBase(info, addr, rowBytes) {}
 
     /* implicit */ GrPixmap(const SkPixmap& pixmap)
             : GrPixmapBase(pixmap.info(), pixmap.writable_addr(), pixmap.rowBytes()) {}
@@ -136,11 +135,11 @@ public:
             : GrPixmapBase(pixmap.info(), pixmap.addr(), pixmap.rowBytes()) {}
 
     GrCPixmap(GrImageInfo info, const void* addr, size_t rowBytes)
-            : GrPixmapBase(std::move(info), addr, rowBytes) {}
+            : GrPixmapBase(info, addr, rowBytes) {}
 
 private:
     GrCPixmap(GrImageInfo info, sk_sp<SkData> storage, size_t rowBytes)
-            : GrPixmapBase(std::move(info), std::move(storage), rowBytes) {}
+            : GrPixmapBase(info, std::move(storage), rowBytes) {}
 };
 
 #endif

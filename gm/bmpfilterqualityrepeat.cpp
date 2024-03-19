@@ -20,7 +20,6 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 // Inspired by svg/as-border-image/svg-as-border-image.html. Draws a four-color checker board bitmap
 // such that it is stretched and repeat tiled with different filter qualities. It is testing whether
@@ -46,9 +45,9 @@ protected:
         canvas.drawImage(colorBmp.asImage(), 20, 20);
     }
 
-    SkString getName() const override { return SkString("bmp_filter_quality_repeat"); }
+    SkString onShortName() override { return SkString("bmp_filter_quality_repeat"); }
 
-    SkISize getISize() override { return SkISize::Make(1000, 400); }
+    SkISize onISize() override { return SkISize::Make(1000, 400); }
 
     void onDraw(SkCanvas* canvas) override {
         this->drawAll(canvas, 2.5f);
@@ -70,7 +69,7 @@ private:
 
         SkPaint bmpPaint(textPaint);
 
-        SkFont font = ToolUtils::DefaultPortableFont();
+        SkFont font(ToolUtils::create_portable_typeface());
 
         SkAutoCanvasRestore acr(canvas, true);
 

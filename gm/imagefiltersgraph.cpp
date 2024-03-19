@@ -22,7 +22,6 @@
 #include "include/core/SkString.h"
 #include "include/effects/SkImageFilters.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <utility>
 
@@ -31,18 +30,21 @@ public:
     ImageFiltersGraphGM() {}
 
 protected:
-    SkString getName() const override { return SkString("imagefiltersgraph"); }
 
-    SkISize getISize() override { return SkISize::Make(600, 150); }
+    SkString onShortName() override {
+        return SkString("imagefiltersgraph");
+    }
+
+    SkISize onISize() override { return SkISize::Make(600, 150); }
 
     void onOnceBeforeDraw() override {
-        fImage = ToolUtils::CreateStringImage(100, 100, SK_ColorWHITE, 20, 70, 96, "e");
+        fImage = ToolUtils::create_string_image(100, 100, SK_ColorWHITE, 20, 70, 96, "e");
     }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->clear(SK_ColorBLACK);
         {
-            sk_sp<SkImageFilter> bitmapSource(SkImageFilters::Image(fImage, SkFilterMode::kLinear));
+            sk_sp<SkImageFilter> bitmapSource(SkImageFilters::Image(fImage));
             sk_sp<SkColorFilter> cf(SkColorFilters::Blend(SK_ColorRED,
                                                                   SkBlendMode::kSrcIn));
             sk_sp<SkImageFilter> blur(SkImageFilters::Blur(4.0f, 4.0f, std::move(bitmapSource)));

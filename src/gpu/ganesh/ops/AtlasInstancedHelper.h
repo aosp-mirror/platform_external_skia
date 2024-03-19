@@ -13,7 +13,7 @@
 #include "src/gpu/ganesh/GrSurfaceProxyView.h"
 #include "src/gpu/ganesh/glsl/GrGLSLUniformHandler.h"
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 // This class encapsulates all the necessary steps for an instanced GrGeometryProcessor to clip
 // against a path mask from an atlas.
@@ -53,8 +53,7 @@ public:
 
     // Appends the instanced input attribs to the back of the array that we will need in order to
     // locate our path in the atlas.
-    void appendInstanceAttribs(
-            skia_private::TArray<GrGeometryProcessor::Attribute>* instanceAttribs) const;
+    void appendInstanceAttribs(SkTArray<GrGeometryProcessor::Attribute>* instanceAttribs) const;
 
     struct Instance {
         Instance(SkIPoint16 locationInAtlas, const SkIRect& pathDevIBounds, bool transposedInAtlas)
@@ -96,6 +95,6 @@ private:
 
 GR_MAKE_BITFIELD_CLASS_OPS(AtlasInstancedHelper::ShaderFlags)
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // AtlasInstancedHelper_DEFINED

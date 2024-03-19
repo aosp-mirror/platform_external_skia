@@ -47,7 +47,7 @@ public:
      *
      * @return a query object that can retrieve the time elapsed once the timer has completed.
      */
-    [[nodiscard]] PlatformTimerQuery queueStop() {
+    PlatformTimerQuery SK_WARN_UNUSED_RESULT queueStop() {
         SkASSERT(fActiveTimer);
         this->onQueueTimerStop(fActiveTimer);
         return std::exchange(fActiveTimer, kInvalidTimerQuery);

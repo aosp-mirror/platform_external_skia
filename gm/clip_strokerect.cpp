@@ -20,9 +20,13 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("clip_strokerect"); }
+    SkString onShortName() override {
+        return SkString("clip_strokerect");
+    }
 
-    SkISize getISize() override { return SkISize::Make(200, 400); }
+    SkISize onISize() override {
+        return SkISize::Make(200, 400);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint p;

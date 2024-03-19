@@ -34,9 +34,7 @@
 #include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrEagerVertexAllocator.h"
-#include "src/gpu/ganesh/GrFPArgs.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
-#include "src/gpu/ganesh/GrFragmentProcessors.h"
 #include "src/gpu/ganesh/GrPaint.h"
 #include "src/gpu/ganesh/GrStyle.h"
 #include "src/gpu/ganesh/GrUserStencilSettings.h"
@@ -48,6 +46,7 @@
 #include "src/gpu/ganesh/geometry/GrStyledShape.h"
 #include "src/gpu/ganesh/geometry/GrTriangulator.h"
 #include "src/gpu/ganesh/ops/TriangulatingPathRenderer.h"
+#include "src/shaders/SkShaderBase.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
@@ -829,17 +828,16 @@ create_linear_gradient_processor(GrRecordingContext* rContext, const SkMatrix& c
         pts, colors, nullptr, std::size(colors), SkTileMode::kClamp);
     GrColorInfo colorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr);
     SkSurfaceProps props; // default props for testing
-    return GrFragmentProcessors::Make(
-            shader.get(), {rContext, &colorInfo, props, GrFPArgs::Scope::kDefault}, ctm);
+    return as_SB(shader)->asRootFragmentProcessor({rContext, &colorInfo, props}, ctm);
 }
 
 static void test_path(GrRecordingContext* rContext,
-                      skgpu::ganesh::SurfaceDrawContext* sdc,
+                      skgpu::v1::SurfaceDrawContext* sdc,
                       const SkPath& path,
                       const SkMatrix& matrix = SkMatrix::I(),
                       GrAAType aaType = GrAAType::kNone,
                       std::unique_ptr<GrFragmentProcessor> fp = nullptr) {
-    skgpu::ganesh::TriangulatingPathRenderer pr;
+    skgpu::v1::TriangulatingPathRenderer pr;
     pr.setMaxVerbCount(100);
 
     GrPaint paint;
@@ -851,16 +849,16 @@ static void test_path(GrRecordingContext* rContext,
     SkIRect clipConservativeBounds = SkIRect::MakeWH(sdc->width(), sdc->height());
     GrStyle style(SkStrokeRec::kFill_InitStyle);
     GrStyledShape shape(path, style);
-    skgpu::ganesh::PathRenderer::DrawPathArgs args{rContext,
-                                                   std::move(paint),
-                                                   &GrUserStencilSettings::kUnused,
-                                                   sdc,
-                                                   nullptr,
-                                                   &clipConservativeBounds,
-                                                   &matrix,
-                                                   &shape,
-                                                   aaType,
-                                                   false};
+    skgpu::v1::PathRenderer::DrawPathArgs args{rContext,
+                                               std::move(paint),
+                                               &GrUserStencilSettings::kUnused,
+                                               sdc,
+                                               nullptr,
+                                               &clipConservativeBounds,
+                                               &matrix,
+                                               &shape,
+                                               aaType,
+                                               false};
     pr.drawPath(args);
 }
 
@@ -869,17 +867,10 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests,
                                  ctxInfo,
                                  CtsEnforcement::kNever) {
     auto ctx = ctxInfo.directContext();
-    auto sdc = skgpu::ganesh::SurfaceDrawContext::Make(ctx,
-                                                       GrColorType::kRGBA_8888,
-                                                       nullptr,
-                                                       SkBackingFit::kApprox,
-                                                       {800, 800},
-                                                       SkSurfaceProps(),
-                                                       /*label=*/{},
-                                                       /* sampleCnt= */ 1,
-                                                       skgpu::Mipmapped::kNo,
-                                                       GrProtected::kNo,
-                                                       kTopLeft_GrSurfaceOrigin);
+    auto sdc = skgpu::v1::SurfaceDrawContext::Make(
+            ctx, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {800, 800},
+            SkSurfaceProps(),/*label=*/{}, 1, GrMipmapped::kNo, GrProtected::kNo,
+            kTopLeft_GrSurfaceOrigin);
     if (!sdc) {
         return;
     }

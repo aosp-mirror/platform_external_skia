@@ -11,8 +11,6 @@
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GpuTypes.h"
 
-#include <functional>
-
 class GrDirectContext;
 
 #if defined(SK_GRAPHITE)
@@ -40,7 +38,7 @@ public:
 
     void setFinished() { fIsFinished = true; }
 
-    void waitTillFinished(std::function<void()> tick = {});
+    void waitTillFinished();
 
 private:
     GrDirectContext* fContext = nullptr;

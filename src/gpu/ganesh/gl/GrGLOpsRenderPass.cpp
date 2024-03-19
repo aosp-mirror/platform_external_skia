@@ -9,7 +9,6 @@
 
 #include "src/gpu/ganesh/GrProgramInfo.h"
 #include "src/gpu/ganesh/GrRenderTarget.h"
-#include "src/gpu/ganesh/gl/GrGLProgram.h"
 
 #ifdef SK_DEBUG
 #include "include/gpu/GrDirectContext.h"

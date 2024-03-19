@@ -8,14 +8,11 @@
 #ifndef GrPorterDuffXferProcessor_DEFINED
 #define GrPorterDuffXferProcessor_DEFINED
 
-#include "include/core/SkRefCnt.h"
-#include "src/gpu/ganesh/GrCaps.h"
-#include "src/gpu/ganesh/GrProcessorAnalysis.h"
+#include "include/core/SkBlendMode.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/base/SkMacros.h"
 #include "src/gpu/ganesh/GrProcessorUnitTest.h"
 #include "src/gpu/ganesh/GrXferProcessor.h"
-
-enum class GrClampType;
-enum class SkBlendMode;
 
 // See the comment above GrXPFactory's definition about this warning suppression.
 #if defined(__GNUC__)

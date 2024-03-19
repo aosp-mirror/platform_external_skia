@@ -7,30 +7,12 @@
 
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
 
-#include "include/core/SkSize.h"
-#include "include/core/SkString.h"
-#include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrTypes.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkFloatingPoint.h"
-#include "include/private/base/SkMath.h"
-#include "include/private/gpu/ganesh/GrTypesPriv.h"
-#include "src/base/SkRandom.h"
-#include "src/core/SkSLTypeShared.h"
+#include "src/core/SkMatrixPriv.h"
 #include "src/gpu/KeyBuilder.h"
-#include "src/gpu/ganesh/GrSurfaceProxy.h"
-#include "src/gpu/ganesh/GrTestUtils.h"
 #include "src/gpu/ganesh/GrTexture.h"
 #include "src/gpu/ganesh/effects/GrMatrixEffect.h"
-#include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/ganesh/glsl/GrGLSLProgramDataManager.h"
-#include "src/gpu/ganesh/glsl/GrGLSLUniformHandler.h"
-
-#include <algorithm>
-#include <utility>
-
-enum SkAlphaType : int;
-struct GrShaderCaps;
+#include "src/gpu/ganesh/glsl/GrGLSLProgramBuilder.h"
+#include "src/sksl/SkSLUtil.h"
 
 using Wrap = GrSamplerState::WrapMode;
 using Filter = GrSamplerState::Filter;
@@ -115,14 +97,14 @@ GrTextureEffect::Sampling::Sampling(const GrSurfaceProxy& proxy,
     bool aniso = sampler.isAniso();
     SkASSERT(!aniso || caps.anisoSupport());
     if (aniso) {
-        bool anisoSubset = !subset.contains(proxy.backingStoreBoundsRect()) &&
+        bool anisoSubset = !proxy.backingStoreBoundsRect().contains(subset) &&
                            (!domain || !subset.contains(*domain));
         bool needsShaderWrap = !canDoWrapInHW(dim.width(),  sampler.wrapModeX()) ||
                                !canDoWrapInHW(dim.height(), sampler.wrapModeY());
         if (needsShaderWrap || anisoSubset) {
-            MipmapMode newMM = proxy.asTextureProxy()->mipmapped() == skgpu::Mipmapped::kYes
-                                       ? MipmapMode::kLinear
-                                       : MipmapMode::kNone;
+            MipmapMode newMM = proxy.asTextureProxy()->mipmapped() == GrMipmapped::kYes
+                                    ? MipmapMode::kLinear
+                                    : MipmapMode::kNone;
             sampler = GrSamplerState(sampler.wrapModeX(),
                                      sampler.wrapModeY(),
                                      SkFilterMode::kLinear,
@@ -151,9 +133,9 @@ GrTextureEffect::Sampling::Sampling(const GrSurfaceProxy& proxy,
             // This inset prevents sampling neighboring texels that could occur when
             // texture coords fall exactly at texel boundaries (depending on precision
             // and GPU-specific snapping at the boundary).
-            r.fShaderClamp = isubset.makeInset(0.5f + kInsetEpsilon);
+            r.fShaderClamp = isubset.makeInset(0.5f);
         } else {
-            r.fShaderClamp = subset.makeInset(linearFilterInset + kInsetEpsilon);
+            r.fShaderClamp = subset.makeInset(linearFilterInset);
             if (r.fShaderClamp.contains(domain)) {
                 domainIsSafe = true;
             }
@@ -851,7 +833,7 @@ std::unique_ptr<GrFragmentProcessor> GrTextureEffect::clone() const {
 }
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrTextureEffect)
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrTextureEffect::TestCreate(GrProcessorTestData* testData) {
     auto [view, ct, at] = testData->randomView();
     Wrap wrapModes[2];
@@ -859,7 +841,7 @@ std::unique_ptr<GrFragmentProcessor> GrTextureEffect::TestCreate(GrProcessorTest
 
     Filter filter = testData->fRandom->nextBool() ? Filter::kLinear : Filter::kNearest;
     MipmapMode mm = MipmapMode::kNone;
-    if (view.asTextureProxy()->mipmapped() == skgpu::Mipmapped::kYes) {
+    if (view.asTextureProxy()->mipmapped() == GrMipmapped::kYes) {
         mm = testData->fRandom->nextBool() ? MipmapMode::kLinear : MipmapMode::kNone;
     }
     GrSamplerState params(wrapModes, filter, mm);

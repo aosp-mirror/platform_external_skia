@@ -15,6 +15,8 @@ skia_filegroup(
     ],
 )
 
+# Not currently in a Bazel target.
+# This list is exported to to gpu.gni:skia_metal_sources.
 MTL_FILES = [
     "GrMtlAttachment.h",
     "GrMtlAttachment.mm",
@@ -53,7 +55,6 @@ MTL_FILES = [
     "GrMtlTextureRenderTarget.h",
     "GrMtlTextureRenderTarget.mm",
     "GrMtlTrampoline.mm",
-    "GrMtlTypesPriv.h",
     "GrMtlTypesPriv.mm",
     "GrMtlUniformHandler.h",
     "GrMtlUniformHandler.mm",
@@ -66,21 +67,4 @@ MTL_FILES = [
 split_srcs_and_hdrs(
     name = "mtl",
     files = MTL_FILES,
-)
-
-skia_filegroup(
-    name = "objc_srcs",
-    srcs = [
-        ":mtl_srcs",
-    ],
-    visibility = ["//src/gpu/ganesh:__pkg__"],
-)
-
-skia_filegroup(
-    name = "private_hdrs",
-    srcs = [
-        ":mtl_cpp_hdrs",
-        ":mtl_hdrs",
-    ],
-    visibility = ["//src/gpu/ganesh:__pkg__"],
 )

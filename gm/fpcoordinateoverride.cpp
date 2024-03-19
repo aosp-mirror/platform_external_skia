@@ -19,7 +19,6 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
@@ -28,7 +27,6 @@
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
 #include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -77,15 +75,15 @@ std::unique_ptr<GrFragmentProcessor::ProgramImpl> SampleCoordEffect::onMakeProgr
 DEF_SIMPLE_GPU_GM_BG(fpcoordinateoverride, rContext, canvas, 512, 512,
                      ToolUtils::color_to_565(0xFF66AA99)) {
 
-    auto sfc = skgpu::ganesh::TopDeviceSurfaceFillContext(canvas);
+    auto sfc = SkCanvasPriv::TopDeviceSurfaceFillContext(canvas);
     if (!sfc) {
         return;
     }
 
     SkBitmap bmp;
-    ToolUtils::GetResourceAsBitmap("images/mandrill_512_q075.jpg", &bmp);
+    GetResourceAsBitmap("images/mandrill_512_q075.jpg", &bmp);
     auto view = std::get<0>(GrMakeCachedBitmapProxyView(
-            rContext, bmp, /*label=*/"FpCoordinateOverride", skgpu::Mipmapped::kNo));
+            rContext, bmp, /*label=*/"FpCoordinateOverride", GrMipmapped::kNo));
     if (!view) {
         return;
     }

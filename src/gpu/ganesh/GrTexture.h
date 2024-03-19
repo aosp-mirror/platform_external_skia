@@ -13,11 +13,8 @@
 #include "include/core/SkPoint.h"
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrSurface.h"
-
-class GrCaps;
 
 class GrTexture : virtual public GrSurface {
 public:
@@ -41,7 +38,7 @@ public:
      */
     static bool StealBackendTexture(sk_sp<GrTexture>,
                                     GrBackendTexture*,
-                                    SkImages::BackendTextureReleaseProc*);
+                                    SkImage::BackendTextureReleaseProc*);
 
     GrTextureType textureType() const { return fTextureType; }
     bool hasRestrictedSampling() const {
@@ -50,8 +47,8 @@ public:
 
     void markMipmapsDirty();
     void markMipmapsClean();
-    skgpu::Mipmapped mipmapped() const {
-        return skgpu::Mipmapped(fMipmapStatus != GrMipmapStatus::kNotAllocated);
+    GrMipmapped mipmapped() const {
+        return GrMipmapped(fMipmapStatus != GrMipmapStatus::kNotAllocated);
     }
     bool mipmapsAreDirty() const { return fMipmapStatus != GrMipmapStatus::kValid; }
     GrMipmapStatus mipmapStatus() const { return fMipmapStatus; }
@@ -62,7 +59,7 @@ public:
                                   SkISize dimensions,
                                   GrRenderable,
                                   int sampleCnt,
-                                  skgpu::Mipmapped,
+                                  GrMipmapped,
                                   GrProtected,
                                   skgpu::ScratchKey* key);
 
@@ -74,7 +71,7 @@ protected:
               GrMipmapStatus,
               std::string_view label);
 
-    virtual bool onStealBackendTexture(GrBackendTexture*, SkImages::BackendTextureReleaseProc*) = 0;
+    virtual bool onStealBackendTexture(GrBackendTexture*, SkImage::BackendTextureReleaseProc*) = 0;
 
     void computeScratchKey(skgpu::ScratchKey*) const override;
 

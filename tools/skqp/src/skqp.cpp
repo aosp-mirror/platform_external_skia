@@ -13,21 +13,18 @@
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrDirectContext.h"
+#include "src/core/SkFontMgrPriv.h"
 #include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
 #include "tests/Test.h"
 #include "tests/TestHarness.h"
 #include "tools/Resources.h"
-#include "tools/fonts/FontToolUtils.h"
+#include "tools/fonts/TestFontMgr.h"
 #ifdef SK_GL
 #include "tools/gpu/gl/GLTestContext.h"
 #endif
 #ifdef SK_VULKAN
 #include "tools/gpu/vk/VkTestContext.h"
-#endif
-
-#ifdef SK_GRAPHITE
-#include "tools/graphite/TestOptions.h"
 #endif
 
 #ifdef SK_BUILD_FOR_ANDROID
@@ -38,6 +35,22 @@
 #include <regex>
 
 static constexpr char kUnitTestReportPath[] = "unit_tests.txt";
+
+// Kind of like Python's readlines(), but without any allocation.
+// Calls `lineFn` on each line.
+static void read_lines(const void* data,
+                       size_t size,
+                       const std::function<void(std::string_view)>& lineFn) {
+    const char* start = (const char*)data;
+    const char* end = start + size;
+    const char* ptr = start;
+    while (ptr < end) {
+        while (*ptr++ != '\n' && ptr < end) {}
+        size_t len = ptr - start;
+        lineFn(std::string_view(start, len));
+        start = ptr;
+    }
+}
 
 // Returns a list of every unit test to be run.
 static std::vector<SkQP::UnitTest> get_unit_tests(int enforcedAndroidAPILevel) {
@@ -122,7 +135,7 @@ void SkQP::init(SkQPAssetManager* assetManager, const char* reportDirectory) {
     fReportDirectory = reportDirectory;
 
     SkGraphics::Init();
-    ToolUtils::UsePortableFontMgr();
+    gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
 
 #ifdef SK_BUILD_FOR_ANDROID
     // ro.vendor.api_level contains the minAPI level based on the order defined in
@@ -152,32 +165,15 @@ std::vector<std::string> SkQP::executeTest(SkQP::UnitTest test) {
             fErrors.push_back(std::string(desc.c_str(), desc.size()));
         }
     } r;
-
-    if (test->fTestType == skiatest::TestType::kGanesh) {
-        GrContextOptions options;
-        if (test->fCTSEnforcement.eval(fEnforcedAndroidAPILevel) ==
-            CtsEnforcement::RunMode::kRunStrict) {
-            options.fDisableDriverCorrectnessWorkarounds = true;
-        }
-        if (test->fGaneshContextOptionsProc) {
-            test->fGaneshContextOptionsProc(&options);
-        }
-        test->ganesh(&r, options);
+    GrContextOptions options;
+    if (test->fCTSEnforcement.eval(fEnforcedAndroidAPILevel) ==
+        CtsEnforcement::RunMode::kRunStrict) {
+        options.fDisableDriverCorrectnessWorkarounds = true;
     }
-#ifdef SK_GRAPHITE
-    else if (test->fTestType == skiatest::TestType::kGraphite) {
-        skiatest::graphite::TestOptions options;
-        if (test->fCTSEnforcement.eval(fEnforcedAndroidAPILevel) ==
-            CtsEnforcement::RunMode::kRunStrict) {
-            options.fContextOptions.fDisableDriverCorrectnessWorkarounds = true;
-        }
-        if (test->fGraphiteContextOptionsProc) {
-            test->fGraphiteContextOptionsProc(&options.fContextOptions);
-        }
-        test->graphite(&r, options);
+    if (test->fContextOptionsProc) {
+        test->fContextOptionsProc(&options);
     }
-#endif
-
+    test->ganesh(&r, options);
     fTestResults.push_back(TestResult{test->fName, r.fErrors});
     return r.fErrors;
 }

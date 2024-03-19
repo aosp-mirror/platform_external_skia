@@ -13,15 +13,7 @@
 namespace skgpu::graphite {
 
 // The maximum number of shared resource binding slots permitted for ComputeSteps of a DispatchGroup
-constexpr int kMaxComputeDataFlowSlots = 28;
-
-// The minimum element stride of an indirect dispatch argument array in bytes
-struct IndirectDispatchArgs {
-    uint32_t global_size_x;
-    uint32_t global_size_y;
-    uint32_t global_size_z;
-};
-constexpr size_t kIndirectDispatchArgumentSize = sizeof(IndirectDispatchArgs);
+constexpr int kMaxComputeDataFlowSlots = 16;
 
 /**
  * Defines the space that a compute shader operates on. A problem space is logically divided into
@@ -52,11 +44,36 @@ struct WorkgroupSize {
             , fHeight(height)
             , fDepth(depth) {}
 
-    uint32_t scalarSize() const { return fWidth * fHeight * fDepth; }
-
     uint32_t fWidth = 1;
     uint32_t fHeight = 1;
     uint32_t fDepth = 1;
+};
+
+struct ComputePassDesc {
+    WorkgroupSize fGlobalDispatchSize;
+
+    // TODO(b/240615224): On OpenGL D3D, and Vulkan 1.0, the local work group size is expressed with
+    // literals in the shading language and is tied to the pipeline state. On those platforms, we
+    // could either:
+    //
+    //     1. Defer pipeline creation until `fLocalDispatchSize` is known for a particular compute
+    //     pass and build the shader text using this value, or
+    //     2. Hard-code reasonable defaults within GPU capabilities and disregard
+    //     `fLocalDispatchSize`.
+    //
+    // The local size is a function of both the number of supported hardware threads AND how the
+    // problem is divided between the global and local sizes. Which approach is more optimal depends
+    // on the problem.
+    WorkgroupSize fLocalDispatchSize;
+};
+
+// TODO(armansito): These types aren't specific to compute and could share definitions with render
+// pipeline stack.
+using BindingIndex = uint32_t;
+
+struct ResourceBinding {
+    BindingIndex fIndex;
+    BindBufferInfo fBuffer;
 };
 
 }  // namespace skgpu::graphite

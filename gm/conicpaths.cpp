@@ -19,13 +19,16 @@
 #include "include/private/base/SkFloatBits.h"
 #include "include/private/base/SkTArray.h"
 
-using namespace skia_private;
-
 class ConicPathsGM : public skiagm::GM {
 protected:
-    SkString getName() const override { return SkString("conicpaths"); }
 
-    SkISize getISize() override { return SkISize::Make(920, 960); }
+    SkString onShortName() override {
+        return SkString("conicpaths");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(920, 960);
+    }
 
     template <typename Proc> void append_path(Proc proc) {
         SkPathBuilder b;
@@ -136,7 +139,7 @@ protected:
     }
 
 private:
-    TArray<SkPath> fPaths;
+    SkTArray<SkPath> fPaths;
     SkPath           fGiantCircle;
     using INHERITED = skiagm::GM;
 };

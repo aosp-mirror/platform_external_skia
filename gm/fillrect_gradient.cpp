@@ -24,8 +24,6 @@
 #include "include/core/SkTileMode.h"
 #include "include/effects/SkGradientShader.h"
 
-#include <vector>
-
 const int kCellSize = 50;
 const int kNumColumns = 2;
 const int kNumRows = 9;
@@ -41,9 +39,11 @@ protected:
         SkColor color;
     };
 
-    SkString getName() const override { return SkString("fillrect_gradient"); }
+    SkString onShortName() override {
+        return SkString("fillrect_gradient");
+    }
 
-    SkISize getISize() override {
+    SkISize onISize() override {
         return SkISize::Make(kNumColumns * (kCellSize + kPadSize),
                              kNumRows * (kCellSize + kPadSize));
     }

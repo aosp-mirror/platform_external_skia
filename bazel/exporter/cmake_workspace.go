@@ -8,7 +8,6 @@ package exporter
 import (
 	"fmt"
 	"io"
-	"sort"
 
 	"go.skia.org/infra/go/skerr"
 	"go.skia.org/infra/go/util"
@@ -98,17 +97,9 @@ func (w *cmakeWorkspace) writeRule(writer io.Writer, r *cmakeRule, state *writeS
 
 // Write this workspace using the given writer.
 func (w *cmakeWorkspace) write(writer io.Writer) (int, error) {
-	// Sort rule names to ensure a deterministic output.
-	var sortedRuleNames []string
-	for name := range w.rules {
-		sortedRuleNames = append(sortedRuleNames, name)
-	}
-	sort.Strings(sortedRuleNames)
-
 	var state writeState
 	nb := 0
-	for _, name := range sortedRuleNames {
-		r := w.rules[name]
+	for _, r := range w.rules {
 		num, err := w.writeRule(writer, r, &state)
 		if err != nil {
 			return nb, skerr.Wrap(err)

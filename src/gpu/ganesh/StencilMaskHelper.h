@@ -8,7 +8,6 @@
 #ifndef StencilMaskHelper_DEFINED
 #define StencilMaskHelper_DEFINED
 
-#include "include/core/SkRegion.h"
 #include "src/gpu/ganesh/StencilClip.h"
 
 class GrShape;
@@ -17,7 +16,7 @@ class SkMatrix;
 struct SkRect;
 class SkRRect;
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 class SurfaceDrawContext;
 
@@ -69,6 +68,6 @@ private:
     using INHERITED = SkNoncopyable;
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // StencilMaskHelper_DEFINED

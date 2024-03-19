@@ -7,18 +7,14 @@
 
 #include "src/gpu/ganesh/effects/GrCoverageSetOpXP.h"
 
-#include "include/private/SkColorData.h"
-#include "include/private/base/SkAssert.h"
-#include "src/base/SkRandom.h"
-#include "src/gpu/Blend.h"
 #include "src/gpu/KeyBuilder.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrColor.h"
+#include "src/gpu/ganesh/GrPipeline.h"
 #include "src/gpu/ganesh/GrXferProcessor.h"
+#include "src/gpu/ganesh/glsl/GrGLSLBlend.h"
 #include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
-
-#include <memory>
-
-enum class GrClampType;
-struct GrShaderCaps;
+#include "src/gpu/ganesh/glsl/GrGLSLUniformHandler.h"
 
 class CoverageSetOpXP : public GrXferProcessor {
 public:
@@ -184,7 +180,7 @@ sk_sp<const GrXferProcessor> GrCoverageSetOpXPFactory::makeXferProcessor(
 
 GR_DEFINE_XP_FACTORY_TEST(GrCoverageSetOpXPFactory)
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 const GrXPFactory* GrCoverageSetOpXPFactory::TestGet(GrProcessorTestData* d) {
     SkRegion::Op regionOp = SkRegion::Op(d->fRandom->nextULessThan(SkRegion::kLastOp + 1));
     bool invertCoverage = d->fRandom->nextBool();

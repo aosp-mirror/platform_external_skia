@@ -21,14 +21,11 @@
 class GrAppliedClip;
 class GrProxyProvider;
 class GrRecordingContext;
-namespace skgpu {
-namespace ganesh {
-class SurfaceDrawContext;
-}
-}  // namespace skgpu
+namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
 class GrSWMaskHelper;
+class SkMatrixProvider;
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 class ClipStack final : public GrClip {
 public:
@@ -51,8 +48,8 @@ public:
         using sk_is_trivially_relocatable = std::true_type;
     };
 
-    // The ctm must outlive the ClipStack.
-    ClipStack(const SkIRect& deviceBounds, const SkMatrix* ctm, bool forceAA);
+    // The SkMatrixProvider must outlive the ClipStack.
+    ClipStack(const SkIRect& deviceBounds, const SkMatrixProvider* matrixProvider, bool forceAA);
 
     ~ClipStack() override;
 
@@ -85,16 +82,12 @@ public:
     void replaceClip(const SkIRect& rect);
 
     // GrClip implementation
-    GrClip::Effect apply(GrRecordingContext*,
-                         skgpu::ganesh::SurfaceDrawContext*,
-                         GrDrawOp*,
-                         GrAAType,
-                         GrAppliedClip*,
-                         SkRect* bounds) const override;
+    GrClip::Effect apply(GrRecordingContext*, skgpu::v1::SurfaceDrawContext*, GrDrawOp*, GrAAType,
+                         GrAppliedClip*, SkRect* bounds) const override;
     GrClip::PreClipResult preApply(const SkRect& drawBounds, GrAA aa) const override;
     SkIRect getConservativeBounds() const override;
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     UniqueKey testingOnly_getLastSWMaskKey() const {
         return fMasks.empty() ? UniqueKey() : fMasks.back().key();
     }
@@ -323,7 +316,7 @@ private:
     mutable GrProxyProvider* fProxyProvider;
 
     const SkIRect            fDeviceBounds;
-    const SkMatrix*          fCTM;
+    const SkMatrixProvider*  fMatrixProvider;
 
     // When there's MSAA, clip elements are applied using the stencil buffer. If a backend cannot
     // disable MSAA per draw, then all elements are effectively AA'ed. Tracking them as such makes
@@ -372,6 +365,6 @@ ClipStack::ElementIter ClipStack::end() const {
     return ElementIter(fElements.ritems().end(), 0);
 }
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // ClipStack_DEFINED

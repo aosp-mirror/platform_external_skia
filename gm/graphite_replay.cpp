@@ -10,8 +10,6 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkGradientShader.h"
-#include "tools/DecodeUtils.h"
-#include "tools/GpuToolUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -28,17 +26,15 @@ namespace skiagm {
 
 class GraphiteReplayGM : public GM {
 public:
-    GraphiteReplayGM() = default;
-
-protected:
-    void onOnceBeforeDraw() override {
+    GraphiteReplayGM() {
         this->setBGColor(SK_ColorBLACK);
-        fImage = ToolUtils::GetResourceAsImage("images/mandrill_128.png");
+        fImage = GetResourceAsImage("images/mandrill_128.png");
     }
 
-    SkString getName() const override { return SkString("graphite-replay"); }
+protected:
+    SkString onShortName() override { return SkString("graphite-replay"); }
 
-    SkISize getISize() override { return SkISize::Make(kTileWidth * 3, kTileHeight * 2); }
+    SkISize onISize() override { return SkISize::Make(kTileWidth * 3, kTileHeight * 2); }
 
     bool onAnimate(double nanos) override {
         fStartX = kTileWidth * (1.0f + sinf(nanos * 1e-9)) * 0.5f;

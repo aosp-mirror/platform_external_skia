@@ -13,7 +13,7 @@
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
 #include "src/gpu/ganesh/tessellate/GrPathTessellationShader.h"
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 void PathTessellateOp::visitProxies(const GrVisitProxyFunc& func) const {
     if (fTessellationProgram) {
@@ -123,4 +123,4 @@ void PathTessellateOp::onExecute(GrOpFlushState* flushState, const SkRect& chain
     fTessellator->draw(flushState);
 }
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1

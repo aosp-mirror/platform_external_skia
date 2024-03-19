@@ -11,16 +11,14 @@
 #include "include/core/SkSurface.h"
 #include "src/core/SkReadBuffer.h"
 
-void FuzzPathDeserialize(const uint8_t *data, size_t size) {
-    SkReadBuffer buf(data, size);
-
+void FuzzPathDeserialize(SkReadBuffer& buf) {
     SkPath path;
     buf.readPath(&path);
     if (!buf.isValid()) {
         return;
     }
 
-    auto s = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(128, 128));
+    auto s = SkSurface::MakeRasterN32Premul(128, 128);
     if (!s) {
         // May return nullptr in memory-constrained fuzzing environments
         return;
@@ -28,7 +26,8 @@ void FuzzPathDeserialize(const uint8_t *data, size_t size) {
     s->getCanvas()->drawPath(path, SkPaint());
 }
 
-#if defined(SK_BUILD_FOR_LIBFUZZER)
+// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
+#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size < 4 || size > 2000) {
         return 0;
@@ -41,7 +40,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         // only focus on those branches.
         return 0;
     }
-    FuzzPathDeserialize(data, size);
+    SkReadBuffer buf(data, size);
+    FuzzPathDeserialize(buf);
     return 0;
 }
 #endif

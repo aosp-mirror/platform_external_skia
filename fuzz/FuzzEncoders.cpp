@@ -77,9 +77,9 @@ DEF_FUZZ(WEBPEncoder, fuzz) {
 // Not a real fuzz endpoint, but a helper to take in real, good images
 // and dump out a corpus for this fuzzer.
 DEF_FUZZ(_MakeEncoderCorpus, fuzz) {
-    sk_sp<SkData> bytes = SkData::MakeWithoutCopy(fuzz->fData, fuzz->fSize);
+    auto bytes = fuzz->fBytes;
     SkDebugf("bytes %zu\n", bytes->size());
-    auto img = SkImages::DeferredFromEncodedData(bytes);
+    auto img = SkImage::MakeFromEncoded(bytes);
     if (nullptr == img.get()) {
         SkDebugf("invalid image, could not decode\n");
         return;

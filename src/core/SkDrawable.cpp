@@ -4,20 +4,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "include/core/SkDrawable.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkMatrix.h"
-#include "include/core/SkPaint.h"
-#include "include/core/SkPicture.h"  // IWYU pragma: keep
-#include "include/core/SkPictureRecorder.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
-
+#include "include/core/SkDrawable.h"
 #include <atomic>
-#include <cstddef>
-#include <cstdint>
 
 static int32_t next_generation_id() {
     static std::atomic<int32_t> nextID{1};
@@ -57,8 +47,8 @@ void SkDrawable::draw(SkCanvas* canvas, SkScalar x, SkScalar y) {
     this->draw(canvas, &matrix);
 }
 
-sk_sp<SkPicture> SkDrawable::makePictureSnapshot() {
-    return this->onMakePictureSnapshot();
+SkPicture* SkDrawable::newPictureSnapshot() {
+    return this->onNewPictureSnapshot();
 }
 
 uint32_t SkDrawable::getGenerationID() {
@@ -85,7 +75,9 @@ void SkDrawable::notifyDrawingChanged() {
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-sk_sp<SkPicture> SkDrawable::onMakePictureSnapshot() {
+#include "include/core/SkPictureRecorder.h"
+
+SkPicture* SkDrawable::onNewPictureSnapshot() {
     SkPictureRecorder recorder;
 
     const SkRect bounds = this->getBounds();
@@ -94,5 +86,5 @@ sk_sp<SkPicture> SkDrawable::onMakePictureSnapshot() {
     if ((false)) {
         draw_bbox(canvas, bounds);
     }
-    return recorder.finishRecordingAsPicture();
+    return recorder.finishRecordingAsPicture().release();
 }

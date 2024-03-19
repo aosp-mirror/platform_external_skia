@@ -9,12 +9,7 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
-#include "tools/window/WindowContext.h"
-
-#if defined(SK_GANESH)
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
-#endif
+#include "tools/sk_app/WindowContext.h"
 
 namespace sk_app {
 
@@ -24,7 +19,7 @@ Window::~Window() {}
 
 void Window::detach() { fWindowContext = nullptr; }
 
-void Window::visitLayers(const std::function<void(Layer*)>& visitor) {
+void Window::visitLayers(std::function<void(Layer*)> visitor) {
     for (int i = 0; i < fLayers.size(); ++i) {
         if (fLayers[i]->fActive) {
             visitor(fLayers[i]);
@@ -32,7 +27,7 @@ void Window::visitLayers(const std::function<void(Layer*)>& visitor) {
     }
 }
 
-bool Window::signalLayers(const std::function<bool(Layer*)>& visitor) {
+bool Window::signalLayers(std::function<bool(Layer*)> visitor) {
     for (int i = fLayers.size() - 1; i >= 0; --i) {
         if (fLayers[i]->fActive && visitor(fLayers[i])) {
             return true;
@@ -57,9 +52,8 @@ bool Window::onMouse(int x, int y, skui::InputState state, skui::ModifierKey mod
     return this->signalLayers([=](Layer* layer) { return layer->onMouse(x, y, state, modifiers); });
 }
 
-bool Window::onMouseWheel(float delta, int x, int y, skui::ModifierKey modifiers) {
-    return this->signalLayers(
-            [=](Layer* layer) { return layer->onMouseWheel(delta, x, y, modifiers); });
+bool Window::onMouseWheel(float delta, skui::ModifierKey modifiers) {
+    return this->signalLayers([=](Layer* layer) { return layer->onMouseWheel(delta, modifiers); });
 }
 
 bool Window::onTouch(intptr_t owner, skui::InputState state, float x, float y) {
@@ -98,9 +92,7 @@ void Window::onPaint() {
     this->visitLayers([](Layer* layer) { layer->onPrePaint(); });
     this->visitLayers([=](Layer* layer) { layer->onPaint(backbuffer.get()); });
 
-    if (auto dContext = this->directContext()) {
-        dContext->flushAndSubmit(backbuffer.get(), GrSyncCpu::kNo);
-    }
+    backbuffer->flushAndSubmit();
 
     fWindowContext->swapBuffers();
 }
@@ -160,17 +152,6 @@ GrDirectContext* Window::directContext() const {
         return nullptr;
     }
     return fWindowContext->directContext();
-}
-
-skgpu::graphite::Context* Window::graphiteContext() const {
-#if defined(SK_GRAPHITE)
-    if (!fWindowContext) {
-        return nullptr;
-    }
-    return fWindowContext->graphiteContext();
-#else
-    return nullptr;
-#endif
 }
 
 void Window::inval() {

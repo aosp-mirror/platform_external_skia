@@ -8,22 +8,21 @@
 #ifndef DDLTileHelper_DEFINED
 #define DDLTileHelper_DEFINED
 
+#include "include/core/SkDeferredDisplayList.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSpan.h"
+#include "include/core/SkSurfaceCharacterization.h"
 #include "include/private/base/SkTemplates.h"
-#include "include/private/chromium/GrDeferredDisplayList.h"
-#include "include/private/chromium/GrSurfaceCharacterization.h"
 
 class DDLPromiseImageHelper;
 class PromiseImageCallbackContext;
 class SkCanvas;
 class SkData;
-class GrDeferredDisplayListRecorder;
-class SkImage;
+class SkDeferredDisplayListRecorder;
 class SkPicture;
 class SkSurface;
-class GrSurfaceCharacterization;
+class SkSurfaceCharacterization;
 class SkTaskGroup;
 
 class DDLTileHelper {
@@ -39,7 +38,7 @@ public:
 
         void init(int id,
                   GrDirectContext*,
-                  const GrSurfaceCharacterization& dstChar,
+                  const SkSurfaceCharacterization& dstChar,
                   const SkIRect& clip,
                   const SkIRect& paddingOutsets);
 
@@ -69,7 +68,7 @@ public:
         }
         SkIVector padOffset() const { return { fPaddingOutsets.fLeft, fPaddingOutsets.fTop }; }
 
-        GrDeferredDisplayList* ddl() { return fDisplayList.get(); }
+        SkDeferredDisplayList* ddl() { return fDisplayList.get(); }
 
         sk_sp<SkImage> makePromiseImageForDst(sk_sp<GrContextThreadSafeProxy>);
         void dropCallbackContext() { fCallbackContext.reset(); }
@@ -85,9 +84,9 @@ public:
         int                       fID = -1;
         SkIRect                   fClip;             // in the device space of the final SkSurface
         SkIRect                   fPaddingOutsets;   // random padding for the output surface
-        GrSurfaceCharacterization fPlaybackChar;     // characterization for the tile's dst surface
+        SkSurfaceCharacterization fPlaybackChar;     // characterization for the tile's dst surface
 
-        // The callback context holds (via its GrPromiseImageTexture) the backend texture
+        // The callback context holds (via its SkPromiseImageTexture) the backend texture
         // that is both wrapped in 'fTileSurface' and backs this tile's promise image
         // (i.e., the one returned by 'makePromiseImage').
         sk_sp<PromiseImageCallbackContext> fCallbackContext;
@@ -97,11 +96,11 @@ public:
         // TODO: fix the ref-order so we don't need 'fTileSurface' here
         sk_sp<SkSurface>              fTileSurface;
 
-        sk_sp<GrDeferredDisplayList>  fDisplayList;
+        sk_sp<SkDeferredDisplayList>  fDisplayList;
     };
 
     DDLTileHelper(GrDirectContext*,
-                  const GrSurfaceCharacterization& dstChar,
+                  const SkSurfaceCharacterization& dstChar,
                   const SkIRect& viewport,
                   int numXDivisions, int numYDivisions,
                   bool addRandomPaddingToDst);
@@ -115,7 +114,7 @@ public:
 
     // Create the DDL that will compose all the tile images into a final result.
     void createComposeDDL();
-    const sk_sp<GrDeferredDisplayList>& composeDDL() const { return fComposeDDL; }
+    const sk_sp<SkDeferredDisplayList>& composeDDL() const { return fComposeDDL; }
 
     // For each tile, create its DDL and then draw it - all on a single thread. This is to allow
     // comparison w/ just drawing the SKP directly (i.e., drawAllTilesDirectly). The
@@ -142,9 +141,9 @@ private:
     skia_private::AutoTArray<TileData>   fTiles;        // 'fNumXDivisions' x
     // 'fNumYDivisions'
 
-    sk_sp<GrDeferredDisplayList>           fComposeDDL;
+    sk_sp<SkDeferredDisplayList>           fComposeDDL;
 
-    const GrSurfaceCharacterization        fDstCharacterization;
+    const SkSurfaceCharacterization        fDstCharacterization;
 };
 
 #endif

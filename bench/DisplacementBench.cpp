@@ -11,7 +11,6 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkImageFilters.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #define FILTER_WIDTH_SMALL  32
 #define FILTER_HEIGHT_SMALL 32
@@ -34,11 +33,11 @@ protected:
     void makeBitmap() {
         const int w = this->isSmall() ? FILTER_WIDTH_SMALL : FILTER_WIDTH_LARGE;
         const int h = this->isSmall() ? FILTER_HEIGHT_SMALL : FILTER_HEIGHT_LARGE;
-        auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(w, h));
+        auto surf = SkSurface::MakeRasterN32Premul(w, h);
         SkPaint paint;
         paint.setColor(0xFF884422);
 
-        SkFont font = ToolUtils::DefaultFont();
+        SkFont font;
         font.setSize(SkIntToScalar(96));
         surf->getCanvas()->drawSimpleText("g", 1, SkTextEncoding::kUTF8, 15, 55, font, paint);
         fImage = surf->makeImageSnapshot();
@@ -47,7 +46,7 @@ protected:
     void makeCheckerboard() {
         const int w = this->isSmall() ? FILTER_WIDTH_SMALL : FILTER_WIDTH_LARGE;
         const int h = this->isSmall() ? FILTER_HEIGHT_SMALL : FILTER_HEIGHT_LARGE;
-        auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(w, h)));
+        auto surface(SkSurface::MakeRasterN32Premul(w, h));
         SkCanvas* canvas = surface->getCanvas();
         canvas->clear(0x00000000);
         SkPaint darkPaint;
@@ -97,7 +96,7 @@ protected:
 
     void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint;
-        sk_sp<SkImageFilter> displ(SkImageFilters::Image(fCheckerboard, SkFilterMode::kLinear));
+        sk_sp<SkImageFilter> displ(SkImageFilters::Image(fCheckerboard));
         // No displacement effect
         paint.setImageFilter(SkImageFilters::DisplacementMap(SkColorChannel::kR, SkColorChannel::kG,
                                                              0.0f, std::move(displ), nullptr));
@@ -122,7 +121,7 @@ protected:
 
     void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint;
-        sk_sp<SkImageFilter> displ(SkImageFilters::Image(fCheckerboard, SkFilterMode::kLinear));
+        sk_sp<SkImageFilter> displ(SkImageFilters::Image(fCheckerboard));
         // Displacement, with 1 alpha component (which isn't pre-multiplied)
         paint.setImageFilter(SkImageFilters::DisplacementMap(SkColorChannel::kB, SkColorChannel::kA,
                                                              16.0f, std::move(displ), nullptr));
@@ -146,7 +145,7 @@ protected:
 
     void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint;
-        sk_sp<SkImageFilter> displ(SkImageFilters::Image(fCheckerboard, SkFilterMode::kLinear));
+        sk_sp<SkImageFilter> displ(SkImageFilters::Image(fCheckerboard));
         // Displacement, with 2 non-alpha components
         paint.setImageFilter(SkImageFilters::DisplacementMap(SkColorChannel::kR, SkColorChannel::kB,
                                                              32.0f, std::move(displ), nullptr));

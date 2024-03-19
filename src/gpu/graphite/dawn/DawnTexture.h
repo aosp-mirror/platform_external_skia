@@ -11,7 +11,7 @@
 #include "include/core/SkRefCnt.h"
 #include "src/gpu/graphite/Texture.h"
 
-#include "webgpu/webgpu_cpp.h"  // NO_G3_REWRITE
+#include "webgpu/webgpu_cpp.h"
 
 namespace skgpu::graphite {
 class DawnSharedContext;
@@ -35,31 +35,28 @@ public:
     static sk_sp<Texture> MakeWrapped(const DawnSharedContext*,
                                       SkISize dimensions,
                                       const TextureInfo&,
-                                      const wgpu::TextureView&);
+                                      wgpu::TextureView);
 
     ~DawnTexture() override {}
 
     const wgpu::Texture& dawnTexture() const { return fTexture; }
-    const wgpu::TextureView& sampleTextureView() const { return fSampleTextureView; }
-    const wgpu::TextureView& renderTextureView() const { return fRenderTextureView; }
+    const wgpu::TextureView& dawnTextureView() const { return fTextureView; }
 
 private:
-    DawnTexture(const DawnSharedContext*,
+    DawnTexture(const DawnSharedContext* sharedContext,
                 SkISize dimensions,
-                const TextureInfo&,
+                const TextureInfo& info,
                 wgpu::Texture,
-                wgpu::TextureView sampleTextureView,
-                wgpu::TextureView renderTextureView,
+                wgpu::TextureView,
                 Ownership,
                 skgpu::Budgeted);
 
     void freeGpuData() override;
 
     wgpu::Texture     fTexture;
-    wgpu::TextureView fSampleTextureView;
-    wgpu::TextureView fRenderTextureView;
+    wgpu::TextureView fTextureView;
 };
 
-}  // namespace skgpu::graphite
+} // namepsace skgpu::graphite
 
 #endif // skgpu_graphite_DawnTexture_DEFINED

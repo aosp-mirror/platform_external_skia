@@ -12,8 +12,6 @@
 #include "include/gpu/graphite/TextureInfo.h"
 #include "src/gpu/graphite/ResourceTypes.h"
 
-#include "src/gpu/Swizzle.h"
-
 #include <array>
 
 namespace skgpu::graphite {
@@ -56,8 +54,7 @@ struct RenderPassDesc {
                                StoreOp storeOp,
                                SkEnumBitMask<DepthStencilFlags> depthStencilFlags,
                                const std::array<float, 4>& clearColor,
-                               bool requiresMSAA,
-                               Swizzle writeSwizzle);
+                               bool requiresMSAA);
 
     AttachmentDesc fColorAttachment;
     std::array<float, 4> fClearColor;
@@ -67,17 +64,9 @@ struct RenderPassDesc {
     float fClearDepth;
     uint32_t fClearStencil;
 
-    Swizzle fWriteSwizzle;
-
-    // This samples count usually matches fColorAttachment & fDepthStencilAttachment's samples
-    // count. The only exceptional case is when multisampled render to single sampled is used. In
-    // that case, the fColorAttachment's samples count will be 1 and fSampleCount will be > 1.
-    uint32_t fSampleCount;
-
     // TODO:
     // * bounds (TBD whether exact bounds vs. granular)
     // * input attachments
-    // * subpass makeup information
 };
 
 };  // namespace skgpu::graphite

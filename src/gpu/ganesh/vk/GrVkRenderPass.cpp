@@ -15,8 +15,6 @@
 #include "src/gpu/ganesh/vk/GrVkUtil.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
 
-using namespace skia_private;
-
 typedef GrVkRenderPass::AttachmentsDescriptor::AttachmentDesc AttachmentDesc;
 
 void setup_vk_attachment_description(VkAttachmentDescription* attachment,
@@ -126,7 +124,7 @@ GrVkRenderPass* GrVkRenderPass::Create(GrVkGpu* gpu,
 
     uint32_t numAttachments = attachmentsDescriptor->fAttachmentCount;
     // Attachment descriptions to be set on the render pass
-    TArray<VkAttachmentDescription> attachments(numAttachments);
+    SkTArray<VkAttachmentDescription> attachments(numAttachments);
     attachments.reset(numAttachments);
     memset(attachments.begin(), 0, numAttachments * sizeof(VkAttachmentDescription));
 

@@ -12,7 +12,7 @@
 #include "include/core/SkTypes.h"
 #include <atomic>
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 #include "include/core/SkString.h"
 #include "include/private/base/SkTArray.h"
 #endif
@@ -68,9 +68,9 @@ public:
         int numCompilationSuccesses() const { return fNumCompilationSuccesses; }
         void incNumCompilationSuccesses() { ++fNumCompilationSuccesses; }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
         void dump(SkString*);
-        void dumpKeyValuePairs(skia_private::TArray<SkString>* keys, skia_private::TArray<double>* values);
+        void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values);
 #endif
 
     private:
@@ -96,9 +96,9 @@ public:
         void incNumPartialCompilationSuccesses() {}
         void incNumCompilationSuccesses() {}
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
         void dump(SkString*) {}
-        void dumpKeyValuePairs(skia_private::TArray<SkString>*, skia_private::TArray<double>*) {}
+        void dumpKeyValuePairs(SkTArray<SkString>*, SkTArray<double>*) {}
 #endif
 
 #endif // GR_GPU_STATS

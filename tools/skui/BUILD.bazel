@@ -6,7 +6,7 @@ exports_files_legacy()
 
 skia_cc_library(
     name = "skui",
-    srcs = ["//src/base:SkBitmaskEnum.h"],
+    srcs = ["//include/private:SkBitmaskEnum.h"],
     hdrs = [
         "InputState.h",
         "Key.h",

@@ -18,7 +18,6 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTo.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
@@ -43,8 +42,6 @@
 #include <cstddef>
 #include <functional>
 #include <utility>
-
-using namespace skia_private;
 
 class GrRecordingContext;
 struct GrContextOptions;
@@ -91,14 +88,8 @@ constexpr ProxyParams::Kind kFullyLazy = ProxyParams::Kind::kFullyLazy;
 static sk_sp<GrSurfaceProxy> make_deferred(GrProxyProvider* proxyProvider, const GrCaps* caps,
                                            const ProxyParams& p) {
     const GrBackendFormat format = caps->getDefaultBackendFormat(p.fColorType, p.fRenderable);
-    return proxyProvider->createProxy(format,
-                                      {p.fSize, p.fSize},
-                                      p.fRenderable,
-                                      p.fSampleCnt,
-                                      skgpu::Mipmapped::kNo,
-                                      p.fFit,
-                                      p.fBudgeted,
-                                      GrProtected::kNo,
+    return proxyProvider->createProxy(format, {p.fSize, p.fSize}, p.fRenderable, p.fSampleCnt,
+                                      GrMipmapped::kNo, p.fFit, p.fBudgeted, GrProtected::kNo,
                                       /*label=*/"ResourceAllocatorTest_Deffered");
 }
 
@@ -109,7 +100,7 @@ static sk_sp<GrSurfaceProxy> make_backend(GrDirectContext* dContext, const Proxy
     SkASSERT(SkColorType::kUnknown_SkColorType != skColorType);
 
     auto mbet = sk_gpu_test::ManagedBackendTexture::MakeWithoutData(
-            dContext, p.fSize, p.fSize, skColorType, skgpu::Mipmapped::kNo, GrRenderable::kNo);
+            dContext, p.fSize, p.fSize, skColorType, GrMipmapped::kNo, GrRenderable::kNo);
 
     if (!mbet) {
         return nullptr;
@@ -157,17 +148,11 @@ static sk_sp<GrSurfaceProxy> make_lazy(GrProxyProvider* proxyProvider, const GrC
                                            /*label=*/"ResourceAllocatorTest_Lazy");
         return GrSurfaceProxy::LazyCallbackResult(std::move(tex));
     };
-    return proxyProvider->createLazyProxy(std::move(cb),
-                                          format,
-                                          {p.fSize, p.fSize},
-                                          skgpu::Mipmapped::kNo,
-                                          GrMipmapStatus::kNotAllocated,
+    return proxyProvider->createLazyProxy(std::move(cb), format, {p.fSize, p.fSize},
+                                          GrMipmapped::kNo, GrMipmapStatus::kNotAllocated,
                                           GrInternalSurfaceFlags::kNone,
-                                          p.fFit,
-                                          p.fBudgeted,
-                                          GrProtected::kNo,
-                                          GrSurfaceProxy::UseAllocator::kYes,
-                                          /*label=*/{});
+                                          p.fFit, p.fBudgeted, GrProtected::kNo,
+                                          GrSurfaceProxy::UseAllocator::kYes, /*label=*/{});
 }
 
 static sk_sp<GrSurfaceProxy> make_proxy(GrDirectContext* dContext, const ProxyParams& p) {
@@ -205,15 +190,13 @@ static sk_sp<GrSurfaceProxy> make_proxy(GrDirectContext* dContext, const ProxyPa
 // Basic test that two proxies with overlapping intervals and compatible descriptors are
 // assigned different GrSurfaces.
 static void overlap_test(skiatest::Reporter* reporter, GrDirectContext* dContext,
-                         const sk_sp<GrSurfaceProxy>& p1, const sk_sp<GrSurfaceProxy>& p2,
+                         sk_sp<GrSurfaceProxy> p1, sk_sp<GrSurfaceProxy> p2,
                          bool expectedResult) {
     GrResourceAllocator alloc(dContext);
 
-    alloc.addInterval(p1.get(), 0, 4, GrResourceAllocator::ActualUse::kYes,
-                      GrResourceAllocator::AllowRecycling::kYes);
+    alloc.addInterval(p1.get(), 0, 4, GrResourceAllocator::ActualUse::kYes);
     alloc.incOps();
-    alloc.addInterval(p2.get(), 1, 2, GrResourceAllocator::ActualUse::kYes,
-                      GrResourceAllocator::AllowRecycling::kYes);
+    alloc.addInterval(p2.get(), 1, 2, GrResourceAllocator::ActualUse::kYes);
     alloc.incOps();
 
     REPORTER_ASSERT(reporter, alloc.planAssignment());
@@ -229,7 +212,7 @@ static void overlap_test(skiatest::Reporter* reporter, GrDirectContext* dContext
 // Test various cases when two proxies do not have overlapping intervals.
 // This mainly acts as a test of the ResourceAllocator's free pool.
 static void non_overlap_test(skiatest::Reporter* reporter, GrDirectContext* dContext,
-                             const sk_sp<GrSurfaceProxy>& p1, const sk_sp<GrSurfaceProxy>& p2,
+                             sk_sp<GrSurfaceProxy> p1, sk_sp<GrSurfaceProxy> p2,
                              bool expectedResult) {
     GrResourceAllocator alloc(dContext);
 
@@ -240,10 +223,8 @@ static void non_overlap_test(skiatest::Reporter* reporter, GrDirectContext* dCon
     alloc.incOps();
     alloc.incOps();
 
-    alloc.addInterval(p1.get(), 0, 2, GrResourceAllocator::ActualUse::kYes,
-                      GrResourceAllocator::AllowRecycling::kYes);
-    alloc.addInterval(p2.get(), 3, 5, GrResourceAllocator::ActualUse::kYes,
-                      GrResourceAllocator::AllowRecycling::kYes);
+    alloc.addInterval(p1.get(), 0, 2, GrResourceAllocator::ActualUse::kYes);
+    alloc.addInterval(p2.get(), 3, 5, GrResourceAllocator::ActualUse::kYes);
 
     REPORTER_ASSERT(reporter, alloc.planAssignment());
     REPORTER_ASSERT(reporter, alloc.makeBudgetHeadroom());
@@ -376,7 +357,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorTest,
 static void draw(GrRecordingContext* rContext) {
     SkImageInfo ii = SkImageInfo::Make(1024, 1024, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 
-    sk_sp<SkSurface> s = SkSurfaces::RenderTarget(
+    sk_sp<SkSurface> s = SkSurface::MakeRenderTarget(
             rContext, skgpu::Budgeted::kYes, ii, 1, kTopLeft_GrSurfaceOrigin, nullptr);
 
     SkCanvas* c = s->getCanvas();
@@ -414,9 +395,9 @@ struct TestCase {
     const char *          fName;
     bool                  fShouldFit;
     size_t                fBudget;
-    TArray<ProxyParams> fPurgeableResourcesInCache = {};
-    TArray<ProxyParams> fUnpurgeableResourcesInCache = {};
-    TArray<Interval>    fIntervals;
+    SkTArray<ProxyParams> fPurgeableResourcesInCache = {};
+    SkTArray<ProxyParams> fUnpurgeableResourcesInCache = {};
+    SkTArray<Interval>    fIntervals;
 };
 
 static void memory_budget_test(skiatest::Reporter* reporter,
@@ -429,7 +410,7 @@ static void memory_budget_test(skiatest::Reporter* reporter,
 
     // Add purgeable entries.
     size_t expectedPurgeableBytes = 0;
-    TArray<sk_sp<GrSurface>> purgeableSurfaces;
+    SkTArray<sk_sp<GrSurface>> purgeableSurfaces;
     for (auto& params : test.fPurgeableResourcesInCache) {
         SkASSERT(params.fKind == kInstantiated);
         sk_sp<GrSurfaceProxy> proxy = make_proxy(dContext, params);
@@ -443,7 +424,7 @@ static void memory_budget_test(skiatest::Reporter* reporter,
 
     // Add unpurgeable entries.
     size_t expectedUnpurgeableBytes = 0;
-    TArray<sk_sp<GrSurface>> unpurgeableSurfaces;
+    SkTArray<sk_sp<GrSurface>> unpurgeableSurfaces;
     for (auto& params : test.fUnpurgeableResourcesInCache) {
         SkASSERT(params.fKind == kInstantiated);
         sk_sp<GrSurfaceProxy> proxy = make_proxy(dContext, params);
@@ -463,8 +444,7 @@ static void memory_budget_test(skiatest::Reporter* reporter,
             alloc.incOps();
         }
         alloc.addInterval(interval.fProxy.get(), interval.fStart, interval.fEnd,
-                          GrResourceAllocator::ActualUse::kYes,
-                          GrResourceAllocator::AllowRecycling::kYes);
+                          GrResourceAllocator::ActualUse::kYes);
     }
     REPORTER_ASSERT(reporter, alloc.planAssignment());
     REPORTER_ASSERT(reporter, alloc.makeBudgetHeadroom() == test.fShouldFit);

@@ -10,7 +10,6 @@
 #define GrGLTypes_DEFINED
 
 #include "include/core/SkRefCnt.h"
-#include "include/gpu/GpuTypes.h"
 #include "include/gpu/gl/GrGLConfig.h"
 
 /**
@@ -181,36 +180,25 @@ struct GrGLTextureInfo {
     GrGLenum fTarget;
     GrGLuint fID;
     GrGLenum fFormat = 0;
-    skgpu::Protected fProtected = skgpu::Protected::kNo;
 
     bool operator==(const GrGLTextureInfo& that) const {
-        return fTarget == that.fTarget &&
-               fID == that.fID &&
-               fFormat == that.fFormat &&
-               fProtected == that.fProtected;
+        return fTarget == that.fTarget && fID == that.fID && fFormat == that.fFormat;
     }
-
-    bool isProtected() const { return fProtected == skgpu::Protected::kYes; }
 };
 
 struct GrGLFramebufferInfo {
     GrGLuint fFBOID;
     GrGLenum fFormat = 0;
-    skgpu::Protected fProtected = skgpu::Protected::kNo;
 
     bool operator==(const GrGLFramebufferInfo& that) const {
-        return fFBOID == that.fFBOID &&
-               fFormat == that.fFormat &&
-               fProtected == that.fProtected;
+        return fFBOID == that.fFBOID && fFormat == that.fFormat;
     }
-
-    bool isProtected() const { return fProtected == skgpu::Protected::kYes; }
 };
 
 struct GrGLSurfaceInfo {
     uint32_t fSampleCount = 1;
     uint32_t fLevelCount = 0;
-    skgpu::Protected fProtected = skgpu::Protected::kNo;
+    GrProtected fProtected = GrProtected::kNo;
 
     GrGLenum fTarget = 0;
     GrGLenum fFormat = 0;

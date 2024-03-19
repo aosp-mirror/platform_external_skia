@@ -19,7 +19,7 @@
 #include "tools/ToolUtils.h"
 #include <vector>
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 // This is the number of cubics in desk_chalkboard.skp. (There are no quadratics in the chalkboard.)
 constexpr static int kNumCubicsInChalkboard = 47182;
@@ -92,7 +92,7 @@ public:
     }
 
     const char* onGetName() override { return fName.c_str(); }
-    bool isSuitableFor(Backend backend) final { return backend == Backend::kNonRendering; }
+    bool isSuitableFor(Backend backend) final { return backend == kNonRendering_Backend; }
 
 protected:
     void onDelayedSetup() override {
@@ -322,7 +322,7 @@ public:
 
 private:
     const char* onGetName() override { return fName.c_str(); }
-    bool isSuitableFor(Backend backend) final { return backend == Backend::kNonRendering; }
+    bool isSuitableFor(Backend backend) final { return backend == kNonRendering_Backend; }
 
     void onDelayedSetup() override {
         fTarget = std::make_unique<GrMockOpTarget>(make_mock_context());
@@ -378,4 +378,4 @@ DEF_BENCH(return new TessPrepareBench(
         "GrStrokeFixedCountTessellator_motionmark");
 )
 
-}  // namespace skgpu::ganesh
+}  // namespace skgpu::v1

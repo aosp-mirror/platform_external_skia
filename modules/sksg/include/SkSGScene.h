@@ -12,6 +12,7 @@
 #include "include/core/SkTypes.h"
 
 #include <memory>
+#include <vector>
 
 class SkCanvas;
 struct SkPoint;

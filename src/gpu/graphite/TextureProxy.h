@@ -20,11 +20,15 @@ enum SkColorType : int;
 namespace skgpu::graphite {
 
 class Caps;
+enum class Renderable : bool;
 class ResourceProvider;
 class Texture;
 
 class TextureProxy : public SkRefCnt {
 public:
+    TextureProxy(SkISize dimensions, const TextureInfo& info, skgpu::Budgeted budgeted);
+    TextureProxy(sk_sp<Texture>);
+
     TextureProxy() = delete;
 
     ~TextureProxy() override;
@@ -38,9 +42,6 @@ public:
     bool isLazy() const;
     bool isFullyLazy() const;
     bool isVolatile() const;
-    bool isProtected() const;
-
-    size_t uninstantiatedGpuMemorySize() const;
 
     bool instantiate(ResourceProvider*);
     /*
@@ -62,7 +63,6 @@ public:
     void deinstantiate();
     sk_sp<Texture> refTexture() const;
     const Texture* texture() const;
-    Texture* texture() { return fTexture.get(); }
 
     static sk_sp<TextureProxy> Make(const Caps*,
                                     SkISize dimensions,
@@ -71,15 +71,10 @@ public:
                                     Protected,
                                     Renderable,
                                     skgpu::Budgeted);
-    static sk_sp<TextureProxy> Make(const Caps*,
-                                    SkISize dimensions,
-                                    const TextureInfo&,
-                                    skgpu::Budgeted);
 
     using LazyInstantiateCallback = std::function<sk_sp<Texture> (ResourceProvider*)>;
 
-    static sk_sp<TextureProxy> MakeLazy(const Caps*,
-                                        SkISize dimensions,
+    static sk_sp<TextureProxy> MakeLazy(SkISize dimensions,
                                         const TextureInfo&,
                                         skgpu::Budgeted,
                                         Volatile,
@@ -89,21 +84,12 @@ public:
                                              Volatile,
                                              LazyInstantiateCallback&&);
 
-    static sk_sp<TextureProxy> MakeStorage(const Caps*,
-                                           SkISize dimensions,
-                                           SkColorType,
-                                           skgpu::Budgeted);
-
-    static sk_sp<TextureProxy> Wrap(sk_sp<Texture>);
-
 private:
-    TextureProxy(SkISize dimensions, const TextureInfo& info, skgpu::Budgeted budgeted);
     TextureProxy(SkISize dimensions,
                  const TextureInfo&,
                  skgpu::Budgeted,
                  Volatile,
                  LazyInstantiateCallback&&);
-    TextureProxy(sk_sp<Texture>);
 
 #ifdef SK_DEBUG
     void validateTexture(const Texture*);
@@ -137,6 +123,6 @@ private:
     TextureProxy* const fTextureProxy;
 };
 
-}  // namespace skgpu::graphite
+} // namepsace skgpu::graphite
 
 #endif // skgpu_graphite_TextureProxy_DEFINED

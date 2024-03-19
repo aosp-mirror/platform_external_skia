@@ -4,10 +4,9 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "modules/svg/include/SkSVGGradient.h"
 
-#include "include/core/SkTileMode.h"
 #include "include/private/base/SkTPin.h"
+#include "modules/svg/include/SkSVGGradient.h"
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGStop.h"
 #include "modules/svg/include/SkSVGValue.h"
@@ -64,7 +63,7 @@ SkColor4f SkSVGGradient::resolveStopColor(const SkSVGRenderContext& ctx,
 
     const auto color = SkColor4f::FromColor(ctx.resolveSvgColor(*stopColor));
 
-    return { color.fR, color.fG, color.fB, *stopOpacity * color.fA };
+    return { color.fR, color.fG, color.fB, *stopOpacity };
 }
 
 bool SkSVGGradient::onAsPaint(const SkSVGRenderContext& ctx, SkPaint* paint) const {

@@ -333,9 +333,13 @@ protected:
         }
     }
 
-    SkString getName() const override { return SkString("smallpaths"); }
+    SkString onShortName() override {
+        return SkString("smallpaths");
+    }
 
-    SkISize getISize() override { return SkISize::Make(640, 512); }
+    SkISize onISize() override {
+        return SkISize::Make(640, 512);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;

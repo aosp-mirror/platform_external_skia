@@ -11,6 +11,7 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
+#include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRect.h"
@@ -18,7 +19,6 @@
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/core/SkTextureCompressionType.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
@@ -53,7 +53,6 @@
 #include "src/gpu/ganesh/TestFormatColorTypeCombination.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
-#include "tools/gpu/ContextType.h"
 #include "tools/gpu/ManagedBackendTexture.h"
 
 #include <cstdint>
@@ -78,7 +77,7 @@ DEF_GANESH_TEST_FOR_MOCK_CONTEXT(GrSurface, reporter, ctxInfo) {
                                                               GrTextureType::k2D,
                                                               GrRenderable::kYes,
                                                               1,
-                                                              skgpu::Mipmapped::kNo,
+                                                              GrMipmapped::kNo,
                                                               skgpu::Budgeted::kNo,
                                                               GrProtected::kNo,
                                                               /*label=*/{});
@@ -97,7 +96,7 @@ DEF_GANESH_TEST_FOR_MOCK_CONTEXT(GrSurface, reporter, ctxInfo) {
                                                             GrTextureType::k2D,
                                                             GrRenderable::kNo,
                                                             1,
-                                                            skgpu::Mipmapped::kNo,
+                                                            GrMipmapped::kNo,
                                                             skgpu::Budgeted::kNo,
                                                             GrProtected::kNo,
                                                             /*label=*/{});
@@ -109,7 +108,7 @@ DEF_GANESH_TEST_FOR_MOCK_CONTEXT(GrSurface, reporter, ctxInfo) {
                                                                 256,
                                                                 kRGBA_8888_SkColorType,
                                                                 SkColors::kTransparent,
-                                                                skgpu::Mipmapped::kNo,
+                                                                GrMipmapped::kNo,
                                                                 GrRenderable::kNo,
                                                                 GrProtected::kNo);
 
@@ -144,23 +143,20 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability,
     auto createTexture = [](SkISize dimensions, GrColorType colorType,
                             const GrBackendFormat& format, GrRenderable renderable,
                             GrResourceProvider* rp) -> sk_sp<GrTexture> {
-        SkTextureCompressionType compression = GrBackendFormatToCompressionType(format);
-        if (compression != SkTextureCompressionType::kNone) {
+        SkImage::CompressionType compression = GrBackendFormatToCompressionType(format);
+        if (compression != SkImage::CompressionType::kNone) {
             if (renderable == GrRenderable::kYes) {
                 return nullptr;
             }
             auto size = SkCompressedDataSize(compression, dimensions, nullptr, false);
             auto data = SkData::MakeUninitialized(size);
             SkColor4f color = {0, 0, 0, 0};
-            GrFillInCompressedData(compression,
-                                   dimensions,
-                                   skgpu::Mipmapped::kNo,
-                                   (char*)data->writable_data(),
-                                   color);
+            GrFillInCompressedData(compression, dimensions, GrMipmapped::kNo,
+                                   (char*)data->writable_data(), color);
             return rp->createCompressedTexture(dimensions,
                                                format,
                                                skgpu::Budgeted::kNo,
-                                               skgpu::Mipmapped::kNo,
+                                               GrMipmapped::kNo,
                                                GrProtected::kNo,
                                                data.get(),
                                                /*label=*/{});
@@ -170,7 +166,7 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability,
                                      GrTextureType::k2D,
                                      renderable,
                                      1,
-                                     skgpu::Mipmapped::kNo,
+                                     GrMipmapped::kNo,
                                      skgpu::Budgeted::kNo,
                                      GrProtected::kNo,
                                      /*label=*/{});
@@ -215,7 +211,7 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability,
                                                                      kDims,
                                                                      GrRenderable::kNo,
                                                                      1,
-                                                                     skgpu::Mipmapped::kYes,
+                                                                     GrMipmapped::kYes,
                                                                      SkBackingFit::kExact,
                                                                      skgpu::Budgeted::kNo,
                                                                      GrProtected::kNo,
@@ -235,7 +231,7 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability,
                                                                    GrTextureType::k2D,
                                                                    GrRenderable::kYes,
                                                                    1,
-                                                                   skgpu::Mipmapped::kNo,
+                                                                   GrMipmapped::kNo,
                                                                    skgpu::Budgeted::kNo,
                                                                    GrProtected::kNo,
                                                                    /*label=*/{});
@@ -254,7 +250,7 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability,
                                                                    GrTextureType::k2D,
                                                                    GrRenderable::kYes,
                                                                    2,
-                                                                   skgpu::Mipmapped::kNo,
+                                                                   GrMipmapped::kNo,
                                                                    skgpu::Budgeted::kNo,
                                                                    GrProtected::kNo,
                                                                    /*label=*/{});
@@ -284,10 +280,10 @@ DEF_GANESH_TEST(InitialTextureClear, reporter, baseOptions, CtsEnforcement::kApi
     SkISize desc;
     desc.fWidth = desc.fHeight = kSize;
 
-    for (int ct = 0; ct < skgpu::kContextTypeCount; ++ct) {
+    for (int ct = 0; ct < sk_gpu_test::GrContextFactory::kContextTypeCnt; ++ct) {
         sk_gpu_test::GrContextFactory factory(options);
-        auto contextType = static_cast<skgpu::ContextType>(ct);
-        if (!skgpu::IsRenderingContext(contextType)) {
+        auto contextType = static_cast<sk_gpu_test::GrContextFactory::ContextType>(ct);
+        if (!sk_gpu_test::GrContextFactory::IsRenderingContext(contextType)) {
             continue;
         }
         auto dContext = factory.get(contextType);
@@ -373,8 +369,7 @@ DEF_GANESH_TEST(InitialTextureClear, reporter, baseOptions, CtsEnforcement::kApi
                             }
                         }
 
-                        dContext->priv().getResourceCache()->purgeUnlockedResources(
-                                GrPurgeResourceOptions::kAllResources);
+                        dContext->priv().getResourceCache()->purgeUnlockedResources();
                     }
 
                     // Try creating the texture as a deferred proxy.
@@ -404,8 +399,7 @@ DEF_GANESH_TEST(InitialTextureClear, reporter, baseOptions, CtsEnforcement::kApi
                                 }
                             }
                         }
-                        dContext->priv().getResourceCache()->purgeUnlockedResources(
-                                GrPurgeResourceOptions::kAllResources);
+                        dContext->priv().getResourceCache()->purgeUnlockedResources();
                     }
                 }
             }
@@ -417,8 +411,6 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture,
                                        reporter,
                                        context_info,
                                        CtsEnforcement::kApiLevel_T) {
-    using namespace skgpu;
-
     auto fillPixels = [](SkPixmap* p, const std::function<uint32_t(int x, int y)>& f) {
         for (int y = 0; y < p->height(); ++y) {
             for (int x = 0; x < p->width(); ++x) {
@@ -451,8 +443,6 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture,
     auto dContext = context_info.directContext();
     GrProxyProvider* proxyProvider = dContext->priv().proxyProvider();
 
-    Protected isProtected = Protected(dContext->priv().caps()->supportsProtectedContent());
-
     // We test both kRW in addition to kRead mostly to ensure that the calls are structured such
     // that they'd succeed if the texture wasn't kRead. We want to be sure we're failing with
     // kRead for the right reason.
@@ -461,7 +451,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture,
                                                                      srcPixmap,
                                                                      kTopLeft_GrSurfaceOrigin,
                                                                      GrRenderable::kNo,
-                                                                     isProtected);
+                                                                     GrProtected::kNo);
         if (!mbet) {
             ERRORF(reporter, "Could not make texture.");
             return;
@@ -469,8 +459,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture,
         auto proxy = proxyProvider->wrapBackendTexture(mbet->texture(), kBorrow_GrWrapOwnership,
                                                        GrWrapCacheable::kNo, ioType,
                                                        mbet->refCountedCallback());
-        Swizzle swizzle = dContext->priv().caps()->getReadSwizzle(proxy->backendFormat(),
-                                                                  GrColorType::kRGBA_8888);
+        skgpu::Swizzle swizzle = dContext->priv().caps()->getReadSwizzle(proxy->backendFormat(),
+                                                                         GrColorType::kRGBA_8888);
         GrSurfaceProxyView view(proxy, kTopLeft_GrSurfaceOrigin, swizzle);
         auto surfContext = dContext->priv().makeSC(std::move(view), ii.colorInfo());
         // Read pixels should work with a read-only texture.
@@ -526,9 +516,9 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture,
                                                                        kSize,
                                                                        kSize,
                                                                        kRGBA_8888_SkColorType,
-                                                                       Mipmapped::kYes,
+                                                                       GrMipmapped::kYes,
                                                                        GrRenderable::kNo,
-                                                                       isProtected);
+                                                                       GrProtected::kNo);
             proxy = proxyProvider->wrapBackendTexture(mbet->texture(), kBorrow_GrWrapOwnership,
                                                       GrWrapCacheable::kNo, ioType,
                                                       mbet->refCountedCallback());

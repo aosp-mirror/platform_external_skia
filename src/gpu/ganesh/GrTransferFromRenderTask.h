@@ -8,21 +8,7 @@
 #ifndef GrTransferFromRenderTask_DEFINED
 #define GrTransferFromRenderTask_DEFINED
 
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
-#include "include/gpu/GpuTypes.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/gpu/ganesh/GrTypesPriv.h"
-#include "src/gpu/ganesh/GrGpuBuffer.h"
 #include "src/gpu/ganesh/GrRenderTask.h"
-#include "src/gpu/ganesh/GrSurfaceProxy.h"
-
-#include <cstddef>
-#include <utility>
-
-class GrOpFlushState;
-class GrRecordingContext;
-class GrResourceAllocator;
 
 class GrTransferFromRenderTask final : public GrRenderTask {
 public:
@@ -53,12 +39,12 @@ private:
 
     bool onExecute(GrOpFlushState*) override;
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     const char* name() const final { return "TransferFrom"; }
 #endif
 #ifdef SK_DEBUG
     void visitProxies_debugOnly(const GrVisitProxyFunc& func) const override {
-        func(fSrcProxy.get(), skgpu::Mipmapped::kNo);
+        func(fSrcProxy.get(), GrMipmapped::kNo);
     }
 #endif
 

@@ -142,9 +142,13 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("mandoline"); }
+    SkString onShortName() override {
+        return SkString("mandoline");
+    }
 
-    SkISize getISize() override { return SkISize::Make(560, 475); }
+    SkISize onISize() override {
+        return SkISize::Make(560, 475);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;

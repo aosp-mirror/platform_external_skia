@@ -28,7 +28,7 @@ protected:
     void onPerCanvasPreDraw(SkCanvas*) override;
     void onPerCanvasPostDraw(SkCanvas*) override;
     void onDraw(int loops, SkCanvas*) override;
-    SkISize onGetSize() override;
+    SkIPoint onGetSize() override;
 
 private:
     std::unique_ptr<skiagm::GM> fGM;

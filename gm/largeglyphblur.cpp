@@ -17,7 +17,6 @@
 #include "include/core/SkTypeface.h"
 #include "src/core/SkBlurMask.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -26,7 +25,7 @@
 DEF_SIMPLE_GM(largeglyphblur, canvas, 1920, 600) {
     const char text[] = "Hamburgefons";
 
-    SkFont font(ToolUtils::DefaultPortableTypeface(), 256);
+    SkFont font(ToolUtils::create_portable_typeface(), 256);
     auto blob = SkTextBlob::MakeFromText(text, strlen(text), font);
 
     // setup up maskfilter

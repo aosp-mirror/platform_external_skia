@@ -43,19 +43,27 @@
   },
   {
     "cmd": [
-      "python3",
-      "RECIPE_MODULE[skia::vars]/resources/get_env_var.py",
-      "SWARMING_BOT_ID"
+      "python",
+      "import os\nprint(os.environ.get('SWARMING_BOT_ID', ''))\n"
     ],
-    "name": "get swarming bot id"
+    "name": "get swarming bot id",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@python.inline@import os@@@",
+      "@@@STEP_LOG_LINE@python.inline@print(os.environ.get('SWARMING_BOT_ID', ''))@@@",
+      "@@@STEP_LOG_END@python.inline@@@"
+    ]
   },
   {
     "cmd": [
-      "python3",
-      "RECIPE_MODULE[skia::vars]/resources/get_env_var.py",
-      "SWARMING_TASK_ID"
+      "python",
+      "import os\nprint(os.environ.get('SWARMING_TASK_ID', ''))\n"
     ],
-    "name": "get swarming task id"
+    "name": "get swarming task id",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@python.inline@import os@@@",
+      "@@@STEP_LOG_LINE@python.inline@print(os.environ.get('SWARMING_TASK_ID', ''))@@@",
+      "@@@STEP_LOG_END@python.inline@@@"
+    ]
   },
   {
     "cmd": [],
@@ -63,12 +71,15 @@
   },
   {
     "cmd": [
-      "python3",
-      "RECIPE_MODULE[skia::docker]/resources/get_uid_gid.py"
+      "python",
+      "import os\nprint('%d:%d' % (os.getuid(), os.getgid()))\n"
     ],
     "name": "Docker setup.Get uid and gid",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
+      "@@@STEP_NEST_LEVEL@1@@@",
+      "@@@STEP_LOG_LINE@python.inline@import os@@@",
+      "@@@STEP_LOG_LINE@python.inline@print('%d:%d' % (os.getuid(), os.getgid()))@@@",
+      "@@@STEP_LOG_END@python.inline@@@"
     ]
   },
   {

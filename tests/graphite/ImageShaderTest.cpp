@@ -8,12 +8,9 @@
 #include "tests/Test.h"
 
 #include "include/core/SkBitmap.h"
-#include "include/core/SkTileMode.h"
 #include "include/gpu/graphite/Context.h"
-#include "include/gpu/graphite/Surface.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
 #include "src/shaders/SkImageShader.h"
-#include "tools/GpuToolUtils.h"
 #include "tools/ToolUtils.h"
 
 namespace skgpu::graphite {
@@ -38,7 +35,7 @@ void test_draw(skiatest::Reporter* reporter,
                SkSamplingOptions samplingOptions,
                std::vector<Expectation> expectations) {
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
-    sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(
+    sk_sp<SkSurface> surface = SkSurface::MakeGraphite(
             recorder.get(),
             SkImageInfo::Make(canvasSize, kRGBA_8888_SkColorType, kPremul_SkAlphaType));
     SkCanvas* canvas = surface->getCanvas();
@@ -82,8 +79,7 @@ void test_draw(skiatest::Reporter* reporter,
 
 }  // anonymous namespace
 
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageShaderTest, reporter, context,
-                                         CtsEnforcement::kNextRelease) {
+DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageShaderTest, reporter, context) {
     // Test that a subset bound covering less than half of a pixel causes that pixel not to be
     // drawn when using decal tiling and nearest-neighbor filtering. In this case we have a subset
     // that covers 3/4 the pixel column at y=1, all of the y=2 column, and 1/4 the y=3 column.

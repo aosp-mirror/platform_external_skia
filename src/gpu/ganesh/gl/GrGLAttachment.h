@@ -61,7 +61,7 @@ private:
                            dimensions,
                            supportedUsages,
                            sampleCnt,
-                           skgpu::Mipmapped::kNo,
+                           GrMipmapped::kNo,
                            GrProtected::kNo,
                            label)
             , fFormat(format)

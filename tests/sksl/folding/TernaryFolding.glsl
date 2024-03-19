@@ -6,7 +6,8 @@ bool do_side_effect_bb(out bool x) {
     return false;
 }
 vec4 main() {
-    bool ok = true;
+    bool ok;
+    ok = true;
     vec4 green = colorGreen;
     vec4 red = colorRed;
     bool param = false;

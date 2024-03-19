@@ -154,7 +154,7 @@ struct DiffRecord {
     Result fResult;
 };
 
-typedef skia_private::TArray<DiffRecord> RecordArray;
+typedef SkTArray<DiffRecord> RecordArray;
 
 /// A wrapper for any sortProc (comparison routine) which applies a first-order
 /// sort beforehand, and a tiebreaker if the sortProc returns 0.

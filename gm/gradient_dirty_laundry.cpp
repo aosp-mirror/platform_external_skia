@@ -77,8 +77,8 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("gradient_dirty_laundry"); }
-    SkISize getISize() override { return SkISize::Make(640, 615); }
+    SkString onShortName() override { return SkString("gradient_dirty_laundry"); }
+    SkISize onISize() override { return SkISize::Make(640, 615); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPoint pts[2] = { { 0, 0 },

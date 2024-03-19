@@ -54,9 +54,9 @@ static sk_sp<SkShader> MakeRadial() {
 
 // Simpler blurred RR test cases where all the radii are the same.
 class SimpleBlurRoundRectGM : public skiagm::GM {
-    SkString getName() const override { return SkString("simpleblurroundrect"); }
+    SkString onShortName() override { return SkString("simpleblurroundrect"); }
 
-    SkISize getISize() override { return {1000, 500}; }
+    SkISize onISize() override { return {1000, 500}; }
 
     bool runAsBench() const override { return true; }
 

@@ -1,7 +1,6 @@
 // Implementation of the parallel prefix sum algorithm
 
-layout(local_size_x = 256) in;
-const int SIZE = 256;
+const int SIZE = 512;
 
 layout(set=0, binding=0) readonly buffer inputs {
     float[] in_data;

@@ -4,7 +4,6 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkVertices.h"
@@ -12,7 +11,7 @@
 #include "src/core/SkBlurMask.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
-#include "tools/EncodeUtils.h"
+#include "tools/ToolUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 
 #define BG_COLOR    0xFFDDDDDD
@@ -238,11 +237,12 @@ static void gradient_slide(SkCanvas* canvas) {
 #include "include/core/SkStream.h"
 #include "src/base/SkRandom.h"
 #include "src/core/SkOSFile.h"
-#include "tools/DecodeUtils.h"
+#include "tools/DecodeFile.h"
 
 static sk_sp<SkShader> make_shader0(SkIPoint* size) {
-    SkBitmap bm;
-    ToolUtils::GetResourceAsBitmap("images/baby_tux.png", &bm);
+    SkBitmap    bm;
+
+    decode_file("/skimages/logo.gif", &bm);
     size->set(bm.width(), bm.height());
     return bm.makeShader(SkSamplingOptions(SkFilterMode::kLinear));
 }
@@ -391,6 +391,7 @@ static void mesh_slide(SkCanvas* canvas) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "include/core/SkImageEncoder.h"
 
 static const SlideProc gProc[] = {
     patheffect_slide,
@@ -419,7 +420,7 @@ public:
             canvas.restore();
             SkString str;
             str.printf("/skimages/slide_%zu.png", i);
-            ToolUtils::EncodeImageToPngFile(str.c_str(), bm);
+            ToolUtils::EncodeImageToFile(str.c_str(), bm, SkEncodedImageFormat::kPNG, 100);
         }
     }
 

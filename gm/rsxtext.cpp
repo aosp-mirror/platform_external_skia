@@ -11,24 +11,26 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
-#include "include/core/SkTileMode.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 // Exercises RSX text blobs + shader with various local matrix combinations.
 // Yellow grid should stay aligned for text vs. background.
 class RSXShaderGM : public skiagm::GM {
 public:
 private:
-    SkString getName() const override { return SkString("rsx_blob_shader"); }
+    SkString onShortName() override {
+        return SkString("rsx_blob_shader");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kSZ * kScale * 2.1f, kSZ * kScale * 2.1f); }
+    SkISize onISize() override {
+        return SkISize::Make(kSZ*kScale*2.1f, kSZ*kScale*2.1f);
+    }
 
     void onOnceBeforeDraw() override {
         const SkFontStyle style(SkFontStyle::kExtraBlack_Weight,
                                 SkFontStyle::kNormal_Width,
                                 SkFontStyle::kUpright_Slant);
-        SkFont font(ToolUtils::CreatePortableTypeface("Sans", style), kFontSZ);
+        SkFont font(ToolUtils::create_portable_typeface(nullptr, style), kFontSZ);
         font.setEdging(SkFont::Edging::kAntiAlias);
 
         static constexpr char txt[] = "TEST";
@@ -83,8 +85,7 @@ private:
 
     static sk_sp<SkShader> make_shader(const SkMatrix& lm, const SkMatrix& outer_lm) {
         static constexpr SkISize kTileSize = { 30, 30 };
-        auto surface = SkSurfaces::Raster(
-                SkImageInfo::MakeN32Premul(kTileSize.width(), kTileSize.height()));
+        auto surface = SkSurface::MakeRasterN32Premul(kTileSize.width(), kTileSize.height());
 
         SkPaint p;
         p.setColor(0xffffff00);

@@ -4,29 +4,18 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
+#include "modules/skunicode/include/SkUnicode.h"
+
+#include "include/private/SkBitmaskEnum.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTemplates.h"
-#include "modules/skunicode/include/SkUnicode.h"
-#include "src/base/SkBitmaskEnum.h"
 
 using namespace skia_private;
 
 std::unique_ptr<SkUnicode> SkUnicode::Make() {
-    std::unique_ptr<SkUnicode> unicode;
 #ifdef SK_UNICODE_ICU_IMPLEMENTATION
-    unicode = SkUnicode::MakeIcuBasedUnicode();
-    if (unicode) {
-        return unicode;
-    }
-#endif
-#ifdef SK_UNICODE_LIBGRAPHEME_IMPLEMENTATION
-    unicode = SkUnicode::MakeLibgraphemeBasedUnicode();
-    if (unicode) {
-        return unicode;
-    }
-#endif
-#ifdef SK_UNICODE_ICU4X_IMPLEMENTATION
-    unicode = SkUnicode::MakeIcu4xBasedUnicode();
+    std::unique_ptr<SkUnicode> unicode = SkUnicode::MakeIcuBasedUnicode();
     if (unicode) {
         return unicode;
     }
@@ -36,12 +25,12 @@ std::unique_ptr<SkUnicode> SkUnicode::Make() {
 
 std::unique_ptr<SkUnicode> MakeClientBasedUnicode(
         SkSpan<char> text,
-        std::vector<SkUnicode::Position> words,               // NOLINT(performance-unnecessary-value-param)
-        std::vector<SkUnicode::Position> graphemeBreaks,      // NOLINT(performance-unnecessary-value-param)
-        std::vector<SkUnicode::LineBreakBefore> lineBreaks) { // NOLINT(performance-unnecessary-value-param)
+        std::vector<SkUnicode::Position> words,
+        std::vector<SkUnicode::Position> graphemeBreaks,
+        std::vector<SkUnicode::LineBreakBefore> lineBreaks) {
 #ifdef SK_UNICODE_CLIENT_IMPLEMENTATION
-    std::unique_ptr<SkUnicode> unicode = SkUnicode::MakeClientBasedUnicode(
-            text, std::move(words), std::move(graphemeBreaks), std::move(lineBreaks));
+    std::unique_ptr<SkUnicode> unicode =
+            SkUnicode::MakeClientBasedUnicode(text, words, graphemeBreaks, lineBreaks);
     if (unicode) {
         return unicode;
     }
@@ -86,26 +75,26 @@ std::u16string SkUnicode::convertUtf8ToUtf16(const SkString& utf8) {
     return convertUtf8ToUtf16(utf8.c_str(), utf8.size());
 }
 
-bool SkUnicode::hasTabulationFlag(SkUnicode::CodeUnitFlags flags) {
+bool SkUnicode::isTabulation(SkUnicode::CodeUnitFlags flags) {
     return (flags & SkUnicode::kTabulation) == SkUnicode::kTabulation;
 }
 
-bool SkUnicode::hasHardLineBreakFlag(SkUnicode::CodeUnitFlags flags) {
+bool SkUnicode::isHardLineBreak(SkUnicode::CodeUnitFlags flags) {
     return (flags & SkUnicode::kHardLineBreakBefore) == SkUnicode::kHardLineBreakBefore;
 }
 
-bool SkUnicode::hasSoftLineBreakFlag(SkUnicode::CodeUnitFlags flags) {
+bool SkUnicode::isSoftLineBreak(SkUnicode::CodeUnitFlags flags) {
     return (flags & SkUnicode::kSoftLineBreakBefore) == SkUnicode::kSoftLineBreakBefore;
 }
 
-bool SkUnicode::hasGraphemeStartFlag(SkUnicode::CodeUnitFlags flags) {
+bool SkUnicode::isGraphemeStart(SkUnicode::CodeUnitFlags flags) {
     return (flags & SkUnicode::kGraphemeStart) == SkUnicode::kGraphemeStart;
 }
 
-bool SkUnicode::hasControlFlag(SkUnicode::CodeUnitFlags flags) {
+bool SkUnicode::isControl(SkUnicode::CodeUnitFlags flags) {
     return (flags & SkUnicode::kControl) == SkUnicode::kControl;
 }
 
-bool SkUnicode::hasPartOfWhiteSpaceBreakFlag(SkUnicode::CodeUnitFlags flags) {
+bool SkUnicode::isPartOfWhiteSpaceBreak(SkUnicode::CodeUnitFlags flags) {
     return (flags & SkUnicode::kPartOfWhiteSpaceBreak) == SkUnicode::kPartOfWhiteSpaceBreak;
 }

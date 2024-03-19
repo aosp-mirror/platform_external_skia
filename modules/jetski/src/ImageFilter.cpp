@@ -30,12 +30,11 @@ static long ImageFilter_DistantLitDiffuse(JNIEnv* env, jobject, jfloat x, jfloat
 }
 
 static long ImageFilter_Blur(JNIEnv* env, jobject, jfloat sigmaX, jfloat sigmaY,
-                                                   jint jTileMode, jfloat l, jfloat t, jfloat r,
-                                                   jfloat b, jlong native_input) {
+                                                   jint jTileMode, jlong native_input) {
     auto input = sk_ref_sp(reinterpret_cast<SkImageFilter*>(native_input));
     auto filter = SkImageFilters::Blur(sigmaX, sigmaY,
                                        jetski::utils::TileMode(jTileMode),
-                                       std::move(input), SkRect::MakeLTRB(l,t,r,b));
+                                       std::move(input));
     return reinterpret_cast<jlong>(filter.release());
 }
 
@@ -58,7 +57,7 @@ static long ImageFilter_Blend(JNIEnv* env, jobject, jint bm, jlong background, j
 
 static long ImageFilter_Image(JNIEnv* env, jobject, jlong native_image) {
     auto image = sk_ref_sp(reinterpret_cast<SkImage*>(native_image));
-    auto filter = SkImageFilters::Image(std::move(image), SkFilterMode::kLinear);
+    auto filter = SkImageFilters::Image(std::move(image));
     return reinterpret_cast<jlong>(filter.release());
 }
 
@@ -66,12 +65,12 @@ static long ImageFilter_Image(JNIEnv* env, jobject, jlong native_image) {
 
 int register_jetski_ImageFilter(JNIEnv* env) {
     static const JNINativeMethod methods[] = {
-        {"nRelease"          , "(J)V"            , reinterpret_cast<void*>(ImageFilter_Release)},
-        {"nDistantLitDiffuse", "(FFFFFFFFJ)J"    , reinterpret_cast<void*>(ImageFilter_DistantLitDiffuse)},
-        {"nBlur"             , "(FFIFFFFJ)J"     , reinterpret_cast<void*>(ImageFilter_Blur)},
-        {"nDropShadow"       , "(FFFFFFFJ)J"     , reinterpret_cast<void*>(ImageFilter_DropShadow)},
-        {"nBlend"            , "(IJJ)J"          , reinterpret_cast<void*>(ImageFilter_Blend)},
-        {"nImage"            , "(J)J"            , reinterpret_cast<void*>(ImageFilter_Image)},
+        {"nRelease"          , "(J)V"        , reinterpret_cast<void*>(ImageFilter_Release)},
+        {"nDistantLitDiffuse", "(FFFFFFFFJ)J", reinterpret_cast<void*>(ImageFilter_DistantLitDiffuse)},
+        {"nBlur"             , "(FFIJ)J"     , reinterpret_cast<void*>(ImageFilter_Blur)},
+        {"nDropShadow"       , "(FFFFFFFJ)J" , reinterpret_cast<void*>(ImageFilter_DropShadow)},
+        {"nBlend"            , "(IJJ)J"      , reinterpret_cast<void*>(ImageFilter_Blend)},
+        {"nImage"            , "(J)J"        , reinterpret_cast<void*>(ImageFilter_Image)},
     };
 
     const auto clazz = env->FindClass("org/skia/jetski/ImageFilter");

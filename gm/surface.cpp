@@ -29,13 +29,11 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/utils/SkTextUtils.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/gpu/BackendSurfaceFactory.h"
 
-#define W 800
+#define W 200
 #define H 100
 
 static sk_sp<SkShader> make_shader() {
@@ -48,14 +46,12 @@ static sk_sp<SkShader> make_shader() {
 
 static sk_sp<SkSurface> make_surface(GrRecordingContext* ctx,
                                      const SkImageInfo& info,
-                                     SkPixelGeometry geo,
-                                     SkScalar contrast,
-                                     SkScalar gamma) {
-    SkSurfaceProps props(0, geo, contrast, gamma);
+                                     SkPixelGeometry geo) {
+    SkSurfaceProps props(0, geo);
     if (ctx) {
-        return SkSurfaces::RenderTarget(ctx, skgpu::Budgeted::kNo, info, 0, &props);
+        return SkSurface::MakeRenderTarget(ctx, skgpu::Budgeted::kNo, info, 0, &props);
     } else {
-        return SkSurfaces::Raster(info, &props);
+        return SkSurface::MakeRaster(info, &props);
     }
 }
 
@@ -70,7 +66,7 @@ static void test_draw(SkCanvas* canvas, const char label[]) {
     paint.setShader(nullptr);
 
     paint.setColor(SK_ColorWHITE);
-    SkFont font(ToolUtils::DefaultPortableTypeface(), 32);
+    SkFont font(ToolUtils::create_portable_typeface(), 32);
     font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
     SkTextUtils::DrawString(canvas, label, W / 2, H * 3 / 4, font, paint,
                             SkTextUtils::kCenter_Align);
@@ -78,39 +74,16 @@ static void test_draw(SkCanvas* canvas, const char label[]) {
 
 class SurfacePropsGM : public skiagm::GM {
 public:
-    SurfacePropsGM() {
-        recs = {
-                {kUnknown_SkPixelGeometry,
-                 "Unknown geometry, default contrast/gamma",
-                 SK_GAMMA_CONTRAST,
-                 SK_GAMMA_EXPONENT},
-                {kRGB_H_SkPixelGeometry,
-                 "RGB_H, default contrast/gamma",
-                 SK_GAMMA_CONTRAST,
-                 SK_GAMMA_EXPONENT},
-                {kBGR_H_SkPixelGeometry,
-                 "BGR_H, default contrast/gamma",
-                 SK_GAMMA_CONTRAST,
-                 SK_GAMMA_EXPONENT},
-                {kRGB_V_SkPixelGeometry,
-                 "RGB_V, default contrast/gamma",
-                 SK_GAMMA_CONTRAST,
-                 SK_GAMMA_EXPONENT},
-                {kBGR_V_SkPixelGeometry,
-                 "BGR_V, default contrast/gamma",
-                 SK_GAMMA_CONTRAST,
-                 SK_GAMMA_EXPONENT},
-                {kRGB_H_SkPixelGeometry, "RGB_H contrast : 0 gamma: 0", 0, 0},
-                {kRGB_H_SkPixelGeometry, "RGB_H contrast : 1 gamma: 0", 1, 0},
-                {kRGB_H_SkPixelGeometry, "RGB_H contrast : 0 gamma: 3.9", 0, 3.9f},
-                {kRGB_H_SkPixelGeometry, "RGB_H contrast : 1 gamma: 3.9", 1, 3.9f},
-        };
-    }
+    SurfacePropsGM() {}
 
 protected:
-    SkString getName() const override { return SkString("surfaceprops"); }
+    SkString onShortName() override {
+        return SkString("surfaceprops");
+    }
 
-    SkISize getISize() override { return SkISize::Make(W, H * recs.size()); }
+    SkISize onISize() override {
+        return SkISize::Make(W, H * 5);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         auto ctx = canvas->recordingContext();
@@ -118,10 +91,21 @@ protected:
         // must be opaque to have a hope of testing LCD text
         const SkImageInfo info = SkImageInfo::MakeN32(W, H, kOpaque_SkAlphaType);
 
+        const struct {
+            SkPixelGeometry fGeo;
+            const char*     fLabel;
+        } recs[] = {
+            { kUnknown_SkPixelGeometry, "Unknown" },
+            { kRGB_H_SkPixelGeometry,   "RGB_H" },
+            { kBGR_H_SkPixelGeometry,   "BGR_H" },
+            { kRGB_V_SkPixelGeometry,   "RGB_V" },
+            { kBGR_V_SkPixelGeometry,   "BGR_V" },
+        };
+
         SkScalar x = 0;
         SkScalar y = 0;
         for (const auto& rec : recs) {
-            auto surface(make_surface(ctx, info, rec.fGeo, rec.fContrast, rec.fGamma));
+            auto surface(make_surface(ctx, info, rec.fGeo));
             if (!surface) {
                 SkDebugf("failed to create surface! label: %s", rec.fLabel);
                 continue;
@@ -133,21 +117,13 @@ protected:
     }
 
 private:
-    struct SurfacePropsInput {
-        SkPixelGeometry fGeo;
-        const char*     fLabel;
-        SkScalar fContrast;
-        SkScalar fGamma;
-    };
-    std::vector<SurfacePropsInput> recs;
-
     using INHERITED = GM;
 };
 DEF_GM( return new SurfacePropsGM )
 
 #ifdef SK_DEBUG
 static bool equal(const SkSurfaceProps& a, const SkSurfaceProps& b) {
-    return a == b;
+    return a.flags() == b.flags() && a.pixelGeometry() == b.pixelGeometry();
 }
 #endif
 
@@ -156,9 +132,13 @@ public:
     NewSurfaceGM() {}
 
 protected:
-    SkString getName() const override { return SkString("surfacenew"); }
+    SkString onShortName() override {
+        return SkString("surfacenew");
+    }
 
-    SkISize getISize() override { return SkISize::Make(300, 140); }
+    SkISize onISize() override {
+        return SkISize::Make(300, 140);
+    }
 
     static void drawInto(SkCanvas* canvas) {
         canvas->drawColor(SK_ColorRED);
@@ -326,7 +306,7 @@ DEF_SIMPLE_GM(snap_with_mips, canvas, 80, 75) {
                                 ct,
                                 kPremul_SkAlphaType,
                                 canvas->imageInfo().refColorSpace());
-    auto surface = SkSurfaces::Raster(ii);
+    auto surface = SkSurface::MakeRaster(ii);
 
     auto nextImage = [&](SkColor color) {
         surface->getCanvas()->clear(color);

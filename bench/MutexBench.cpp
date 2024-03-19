@@ -6,16 +6,16 @@
  */
 #include "bench/Benchmark.h"
 #include "include/core/SkString.h"
+#include "include/private/SkSpinlock.h"
 #include "include/private/base/SkMutex.h"
-#include "src/base/SkSharedMutex.h"
-#include "src/base/SkSpinlock.h"
+#include "src/core/SkSharedMutex.h"
 
 template <typename Mutex>
 class MutexBench : public Benchmark {
 public:
     MutexBench(SkString benchPrefix) : fBenchName(benchPrefix += "UncontendedBenchmark") { }
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -39,7 +39,7 @@ private:
 class SharedBench : public Benchmark {
 public:
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
 protected:

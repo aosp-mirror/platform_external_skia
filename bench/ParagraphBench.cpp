@@ -7,12 +7,10 @@
 
 #include "bench/Benchmark.h"
 #include "include/core/SkCanvas.h"
-#include "include/core/SkData.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkString.h"
 #include "tools/Resources.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #if defined(SK_ENABLE_PARAGRAPH)
 
@@ -38,12 +36,12 @@ protected:
 
     bool isSuitableFor(Backend backend) override {
         // fParagraph might have failed to be created in onDelayedSetup()
-        return backend == Backend::kNonRendering && !!fParagraph;
+        return backend == kNonRendering_Backend && !!fParagraph;
     }
 
     void onDelayedSetup() override {
         fFontCollection = sk_make_sp<skia::textlayout::FontCollection>();
-        fFontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        fFontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
 
         fTStyle.setFontFamilies({SkString("Roboto")});
         fTStyle.setColor(SK_ColorBLACK);

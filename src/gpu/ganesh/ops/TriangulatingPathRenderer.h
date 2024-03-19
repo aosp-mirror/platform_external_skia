@@ -12,7 +12,7 @@
 
 #include "src/gpu/ganesh/PathRenderer.h"
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 /**
  *  Subclass that renders the path by converting to screen-space trapezoids plus
@@ -21,7 +21,7 @@ namespace skgpu::ganesh {
 class TriangulatingPathRenderer final : public PathRenderer {
 public:
     TriangulatingPathRenderer();
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     void setMaxVerbCount(int maxVerbCount) { fMaxVerbCount = maxVerbCount; }
 #endif
 
@@ -39,7 +39,7 @@ private:
     int fMaxVerbCount;
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // SK_ENABLE_OPTIMIZE_SIZE
 

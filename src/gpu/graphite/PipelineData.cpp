@@ -7,28 +7,41 @@
 
 #include "src/gpu/graphite/PipelineData.h"
 
-#include "src/core/SkChecksum.h"
+#include "src/core/SkOpts.h"
 #include "src/gpu/graphite/ShaderCodeDictionary.h"
 
 namespace skgpu::graphite {
 
-PipelineDataGatherer::PipelineDataGatherer(Layout layout) : fUniformManager(layout) {}
+using SnippetRequirementFlags = SnippetRequirementFlags;
+
+PipelineDataGatherer::PipelineDataGatherer(Layout layout)
+        : fUniformManager(layout), fSnippetRequirementFlags(SnippetRequirementFlags::kNone) {}
 
 void PipelineDataGatherer::resetWithNewLayout(Layout layout) {
     fUniformManager.resetWithNewLayout(layout);
     fTextureDataBlock.reset();
+    fSnippetRequirementFlags = SnippetRequirementFlags::kNone;
 }
 
 #ifdef SK_DEBUG
 void PipelineDataGatherer::checkReset() {
     SkASSERT(fTextureDataBlock.empty());
-    SkASSERT(fUniformManager.isReset());
+    SkDEBUGCODE(fUniformManager.checkReset());
+    SkASSERT(fSnippetRequirementFlags == SnippetRequirementFlags::kNone);
 }
 
 void PipelineDataGatherer::setExpectedUniforms(SkSpan<const Uniform> expectedUniforms) {
     fUniformManager.setExpectedUniforms(expectedUniforms);
 }
 #endif // SK_DEBUG
+
+void PipelineDataGatherer::addFlags(SkEnumBitMask<SnippetRequirementFlags> flags) {
+    fSnippetRequirementFlags |= flags;
+}
+
+bool PipelineDataGatherer::needsLocalCoords() const {
+    return fSnippetRequirementFlags & SnippetRequirementFlags::kLocalCoords;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 UniformDataBlock* UniformDataBlock::Make(const UniformDataBlock& other, SkArenaAlloc* arena) {
@@ -42,7 +55,7 @@ UniformDataBlock* UniformDataBlock::Make(const UniformDataBlock& other, SkArenaA
 }
 
 uint32_t UniformDataBlock::hash() const {
-    return SkChecksum::Hash32(fData.data(), fData.size());
+    return SkOpts::hash_fn(fData.data(), fData.size(), 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -71,14 +84,14 @@ uint32_t TextureDataBlock::hash() const {
     uint32_t hash = 0;
 
     for (auto& d : fTextureData) {
-        SamplerDesc samplerKey = std::get<1>(d);
-        hash = SkChecksum::Hash32(&samplerKey, sizeof(samplerKey), hash);
+        uint32_t samplerKey = std::get<1>(d).asKey();
+        hash = SkOpts::hash_fn(&samplerKey, sizeof(samplerKey), hash);
 
         // Because the lifetime of the TextureDataCache is for just one Recording and the
         // TextureDataBlocks hold refs on their proxies, we can just use the proxy's pointer
         // for the hash here.
         uintptr_t proxy = reinterpret_cast<uintptr_t>(std::get<0>(d).get());
-        hash = SkChecksum::Hash32(&proxy, sizeof(proxy), hash);
+        hash = SkOpts::hash_fn(&proxy, sizeof(proxy), hash);
     }
 
     return hash;

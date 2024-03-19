@@ -18,8 +18,7 @@ DawnTextureInfo::DawnTextureInfo(const wgpu::Texture& texture) {
     fMipmapped  = texture.GetMipLevelCount() > 1 ? Mipmapped::kYes : Mipmapped::kNo;
 
     fFormat = texture.GetFormat();
-    fUsage = texture.GetUsage();
-    fAspect = wgpu::TextureAspect::All;
+    fUsage =  texture.GetUsage();
 }
 
 DawnTextureInfo DawnTextureSpecToTextureInfo(const DawnTextureSpec& dawnSpec,
@@ -33,7 +32,6 @@ DawnTextureInfo DawnTextureSpecToTextureInfo(const DawnTextureSpec& dawnSpec,
     // Dawn info
     info.fFormat = dawnSpec.fFormat;
     info.fUsage = dawnSpec.fUsage;
-    info.fAspect = dawnSpec.fAspect;
 
     return info;
 }

@@ -15,7 +15,6 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -24,13 +23,13 @@ namespace {
  *  Test copying an image from 8888 to 4444.
  */
 class CopyTo4444GM : public skiagm::GM {
-    SkString getName() const override { return SkString("copyTo4444"); }
+    SkString onShortName() override { return SkString("copyTo4444"); }
 
-    SkISize getISize() override { return {360, 180}; }
+    SkISize onISize() override { return {360, 180}; }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
         SkBitmap bm, bm4444;
-        if (!ToolUtils::GetResourceAsBitmap("images/dog.jpg", &bm)) {
+        if (!GetResourceAsBitmap("images/dog.jpg", &bm)) {
             *errorMsg = "Could not decode the file. Did you forget to set the resourcePath?";
             return DrawResult::kFail;
         }

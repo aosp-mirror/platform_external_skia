@@ -30,7 +30,7 @@ protected:
         const SkScalar kMaxDashLen = 100;
         const SkScalar kDashGrowth = 1.2f;
 
-        STArray<100, SkScalar> intervals;
+        SkSTArray<100, SkScalar> intervals;
         for (SkScalar len = 1; len < kMaxDashLen; len *= kDashGrowth) {
             intervals.push_back(len);
             intervals.push_back(len);
@@ -48,9 +48,11 @@ protected:
         fRect = SkRect::MakeLTRB(10, 10, 100, 70);
     }
 
-    SkString getName() const override { return SkString("contour_start"); }
+    SkString onShortName() override {
+        return SkString("contour_start");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kImageWidth, kImageHeight); }
+    SkISize onISize() override { return SkISize::Make(kImageWidth, kImageHeight); }
 
     void onDraw(SkCanvas* canvas) override {
 

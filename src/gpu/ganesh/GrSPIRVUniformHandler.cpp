@@ -7,13 +7,15 @@
 
 #include "src/gpu/ganesh/GrSPIRVUniformHandler.h"
 
-#include "src/gpu/ganesh/GrUtil.h"
 #include "src/gpu/ganesh/glsl/GrGLSLProgramBuilder.h"
 
 GrSPIRVUniformHandler::GrSPIRVUniformHandler(GrGLSLProgramBuilder* program)
     : INHERITED(program)
     , fUniforms(kUniformsPerBlock)
-    , fSamplers(kUniformsPerBlock) {}
+    , fSamplers(kUniformsPerBlock)
+    , fTextures(kUniformsPerBlock)
+{
+}
 
 const GrShaderVar& GrSPIRVUniformHandler::getUniformVariable(UniformHandle u) const {
     return fUniforms.item(u.toIndex()).fVariable;
@@ -224,45 +226,56 @@ GrGLSLUniformHandler::UniformHandle GrSPIRVUniformHandler::internalAddUniformArr
     return GrGLSLUniformHandler::UniformHandle(fUniforms.count() - 1);
 }
 
-GrGLSLUniformHandler::SamplerHandle GrSPIRVUniformHandler::addSampler(
-        const GrBackendFormat& backendFormat,
-        GrSamplerState,
-        const skgpu::Swizzle& swizzle,
-        const char* name,
-        const GrShaderCaps* caps) {
-    SkASSERT(name && strlen(name));
-
+GrGLSLUniformHandler::SamplerHandle GrSPIRVUniformHandler::addSampler(const GrBackendFormat&,
+                                                                     GrSamplerState,
+                                                                     const skgpu::Swizzle& swizzle,
+                                                                     const char* name,
+                                                                     const GrShaderCaps* caps) {
     int binding = fSamplers.count() * 2;
 
-    SkString mangleName = fProgramBuilder->nameVariable('u', name, /*mangle=*/true);
-    SkString layoutQualifier = SkStringPrintf("direct3d, set = %d, sampler = %d, texture = %d",
-                                              kSamplerTextureDescriptorSet,
-                                              binding,
-                                              binding + 1);
+    SkString mangleName = fProgramBuilder->nameVariable('s', name, /*mangle=*/true);
+    SkString layoutQualifier;
+    layoutQualifier.appendf("set = %d, binding = %d", kSamplerTextureDescriptorSet, binding);
 
-    SPIRVUniformInfo& uniformInfo = fSamplers.emplace_back();
-    uniformInfo.fVariable =
-            GrShaderVar{std::move(mangleName),
-                        SkSLCombinedSamplerTypeForTextureType(backendFormat.textureType()),
-                        GrShaderVar::TypeModifier::None,
-                        GrShaderVar::kNonArray,
-                        std::move(layoutQualifier),
-                        SkString()};
+    SPIRVUniformInfo tempInfo;
+    tempInfo.fVariable = GrShaderVar{std::move(mangleName),
+                                     SkSLType::kSampler,
+                                     GrShaderVar::TypeModifier::Uniform,
+                                     GrShaderVar::kNonArray,
+                                     std::move(layoutQualifier),
+                                     SkString()};
 
-    uniformInfo.fVisibility = kFragment_GrShaderFlag;
-    uniformInfo.fOwner      = nullptr;
-    uniformInfo.fRawName    = SkString(name);
-    uniformInfo.fUBOOffset  = 0;
+    tempInfo.fVisibility = kFragment_GrShaderFlag;
+    tempInfo.fOwner      = nullptr;
+    tempInfo.fRawName    = SkString(name);
+    tempInfo.fUBOOffset  = 0;
 
+    fSamplers.push_back(tempInfo);
     fSamplerSwizzles.push_back(swizzle);
     SkASSERT(fSamplerSwizzles.size() == fSamplers.count());
 
+    SkString mangleTexName = fProgramBuilder->nameVariable('t', name, /*mangle=*/true);
+    SkString texLayoutQualifier;
+    texLayoutQualifier.appendf("set = %d, binding = %d", kSamplerTextureDescriptorSet, binding + 1);
+    tempInfo.fVariable = GrShaderVar{std::move(mangleTexName),
+                                     SkSLType::kTexture2D,
+                                     GrShaderVar::TypeModifier::Uniform,
+                                     GrShaderVar::kNonArray,
+                                     std::move(texLayoutQualifier),
+                                     SkString()};
+    fTextures.push_back(tempInfo);
+
+    SkString reference;
+    reference.printf("makeSampler2D(%s, %s)",
+                     fTextures.back().fVariable.getName().c_str(),
+                     fSamplers.back().fVariable.getName().c_str());
+    fSamplerReferences.emplace_back(std::move(reference));
     return GrGLSLUniformHandler::SamplerHandle(fSamplers.count() - 1);
 }
 
 const char* GrSPIRVUniformHandler::samplerVariable(
         GrGLSLUniformHandler::SamplerHandle handle) const {
-    return fSamplers.item(handle.toIndex()).fVariable.getName().c_str();
+    return fSamplerReferences[handle.toIndex()].c_str();
 }
 
 skgpu::Swizzle GrSPIRVUniformHandler::samplerSwizzle(
@@ -271,11 +284,15 @@ skgpu::Swizzle GrSPIRVUniformHandler::samplerSwizzle(
 }
 
 void GrSPIRVUniformHandler::appendUniformDecls(GrShaderFlags visibility, SkString* out) const {
+    auto textures = fTextures.items().begin();
     for (const SPIRVUniformInfo& sampler : fSamplers.items()) {
         if (sampler.fVisibility & visibility) {
             sampler.fVariable.appendDecl(fProgramBuilder->shaderCaps(), out);
             out->append(";\n");
+            (*textures).fVariable.appendDecl(fProgramBuilder->shaderCaps(), out);
+            out->append(";\n");
         }
+        ++textures;
     }
     SkString uniformsString;
     for (const UniformInfo& uniform : fUniforms.items()) {

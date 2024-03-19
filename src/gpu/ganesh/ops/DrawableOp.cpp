@@ -14,7 +14,7 @@
 #include "src/gpu/ganesh/GrOpsRenderPass.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 GrOp::Owner DrawableOp::Make(GrRecordingContext* context,
                              std::unique_ptr<SkDrawable::GpuDrawHandler> drawable,
@@ -34,4 +34,4 @@ void DrawableOp::onExecute(GrOpFlushState* state, const SkRect& chainBounds) {
     state->opsRenderPass()->executeDrawable(std::move(fDrawable));
 }
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1

@@ -6,12 +6,10 @@
  */
 
 #include <iostream>
-#include "include/core/SkFontMgr.h"
 #include "include/core/SkStream.h"
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/include/SkottieProperty.h"
 #include "tests/Test.h"
-#include "tools/fonts/FontToolUtils.h"
 
 using namespace skottie;
 
@@ -54,22 +52,22 @@ class FakePropertyObserver : public PropertyObserver {
 public:
     void onOpacityProperty(const char node_name[],
                            const LazyHandle<OpacityPropertyHandle>& opacity_handle) override {
-        opacity_handle_ = opacity_handle();
+        opacity_handle_.reset(opacity_handle().release());
     }
 
     void onTransformProperty(const char node_name[],
                              const LazyHandle<TransformPropertyHandle>& transform_handle) override {
-        transform_handle_ = transform_handle();
+        transform_handle_.reset(transform_handle().release());
     }
 
     void onColorProperty(const char node_name[],
                          const LazyHandle<ColorPropertyHandle>& color_handle) override {
-        color_handle_ = color_handle();
+        color_handle_.reset(color_handle().release());
     }
 
     void onTextProperty(const char node_name[],
                         const LazyHandle<TextPropertyHandle>& text_handle) override {
-        text_handle_ = text_handle();
+        text_handle_.reset(text_handle().release());
     }
 
     std::unique_ptr<OpacityPropertyHandle> opacity_handle_;
@@ -251,7 +249,6 @@ DEF_TEST(Skottie_Expression, r) {
 
     auto anim = Animation::Builder()
         .setExpressionManager(em)
-        .setFontManager(ToolUtils::TestFontMgr())
         .setPropertyObserver(observer)
         .make(&stream);
 
@@ -352,7 +349,6 @@ DEF_TEST(Skottie_ExpressionText, r) {
 
     auto anim = Animation::Builder()
                         .setExpressionManager(em)
-                        .setFontManager(ToolUtils::TestFontMgr())
                         .setPropertyObserver(observer)
                         .make(&stream);
 

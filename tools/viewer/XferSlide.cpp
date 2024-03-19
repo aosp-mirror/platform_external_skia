@@ -16,8 +16,6 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/utils/SkTextUtils.h"
 #include "src/base/SkRandom.h"
-#include "tools/DecodeUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 
 const SkBlendMode gModes[] = {
@@ -54,7 +52,7 @@ public:
         canvas->drawRoundRect(fRect, 8, 8, paint);
 
         paint.setColor(0xFFFFFFFF);
-        SkFont font = ToolUtils::DefaultFont();
+        SkFont font;
         font.setSize(16);
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
         SkTextUtils::DrawString(canvas, fLabel.c_str(), fRect.centerX(), fRect.fTop + 0.68f * fRect.height(),
@@ -206,20 +204,20 @@ DEF_SLIDE( return new XferSlide; )
 class CubicResamplerSlide : public ClickHandlerSlide {
 public:
     CubicResamplerSlide() {
-        fName = "CubicResampler";
-    }
-
-protected:
-    void load(SkScalar, SkScalar) override {
+        const char* names[] = {
+            "images/mandrill_128.png",
+            "images/rle.bmp",
+            "images/example_4.png",
+        };
         SkRect r = {10, 10, 200, 200};
-        for (const char* name : {"images/mandrill_128.png",
-                                 "images/rle.bmp",
-                                 "images/example_4.png"}) {
-            fRecs.push_back({ToolUtils::GetResourceAsImage(name), r});
+        for (auto name : names) {
+            fRecs.push_back({GetResourceAsImage(name), r});
             r.offset(0, r.height() + 10);
         }
-        fDomain.setXYWH(r.fLeft + 3 * r.width() + 40, 50, 200, 200);
+
+        fDomain.setXYWH(r.fLeft + 3*r.width() + 40, 50, 200, 200);
         fCubic = {.3f, .5f};
+        fName = "CubicResampler";
     }
 
     void draw(SkCanvas* canvas) override {
@@ -239,7 +237,7 @@ protected:
 
         SkString str;
         str.printf("B=%4.2f  C=%4.2f", fCubic.B, fCubic.C);
-        SkFont font = ToolUtils::DefaultFont();
+        SkFont font;
         font.setSize(25);
         font.setEdging(SkFont::Edging::kAntiAlias);
         paint.setColor(SK_ColorBLACK);

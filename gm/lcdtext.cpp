@@ -18,15 +18,14 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "tools/fonts/FontToolUtils.h"
 
 class LcdTextGM : public skiagm::GM {
     static constexpr SkScalar kTextHeight = 36;
     SkScalar fY = kTextHeight;
 
-    SkString getName() const override { return SkString("lcdtext"); }
+    SkString onShortName() override { return SkString("lcdtext"); }
 
-    SkISize getISize() override { return {640, 480}; }
+    SkISize onISize() override { return {640, 480}; }
 
     void onDraw(SkCanvas* canvas) override {
         fY = kTextHeight;
@@ -45,7 +44,7 @@ class LcdTextGM : public skiagm::GM {
         SkPaint paint;
         paint.setColor(SK_ColorBLACK);
         paint.setDither(true);
-        SkFont font(ToolUtils::DefaultPortableTypeface(), kTextHeight);
+        SkFont font(nullptr, kTextHeight);
         if (subpixelTextEnabled) {
             font.setSubpixel(true);
         }
@@ -59,7 +58,7 @@ class LcdTextGM : public skiagm::GM {
 
 /*
  *  Skia will automatically disable LCD requests if the total size exceeds some limit
- *  (hard coded in this test for now, as it is now available as an API)
+ *  (hard coded in this test for now, as it is now avaiable as an API)
  *
  *  Test this both by changing "textsize" and by changing the computed size (textsize * CTM)
  */
@@ -70,9 +69,9 @@ class LcdTextSizeGM : public skiagm::GM {
         canvas->concat(m);
     }
 
-    SkString getName() const override { return SkString("lcdtextsize"); }
+    SkString onShortName() override { return SkString("lcdtextsize"); }
 
-    SkISize getISize() override { return {320, 120}; }
+    SkISize onISize() override { return {320, 120}; }
 
     void onDraw(SkCanvas* canvas) override {
         const char* lcd_text = "LCD";
@@ -96,7 +95,7 @@ class LcdTextSizeGM : public skiagm::GM {
             const SkPoint loc = rec[i].fLoc;
             SkAutoCanvasRestore acr(canvas, true);
 
-            SkFont font(ToolUtils::DefaultPortableTypeface(), rec[i].fTextSize);
+            SkFont font(nullptr, rec[i].fTextSize);
             font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
 
             ScaleAbout(canvas, rec[i].fScale, rec[i].fScale, loc.x(), loc.y());
@@ -108,9 +107,9 @@ class LcdTextSizeGM : public skiagm::GM {
 class SaveLayerPreserveLCDTextGM : public skiagm::GM {
     static constexpr SkScalar kTextHeight = 36;
 
-    SkString getName() const override { return SkString("savelayerpreservelcdtext"); }
+    SkString onShortName() override { return SkString("savelayerpreservelcdtext"); }
 
-    SkISize getISize() override { return {620, 300}; }
+    SkISize onISize() override { return {620, 300}; }
 
     void onDraw(SkCanvas* canvas) override {
         drawText(canvas, SkString("SaveLayer PreserveLCDText"), 50,
@@ -128,7 +127,7 @@ class SaveLayerPreserveLCDTextGM : public skiagm::GM {
         paint.setColor(SK_ColorWHITE);
         canvas->drawRect(SkRect::MakeXYWH(0, y - 10, 640, kTextHeight + 20), paint);
         paint.setColor(SK_ColorBLACK);
-        SkFont font(ToolUtils::DefaultPortableTypeface(), kTextHeight);
+        SkFont font(nullptr, kTextHeight);
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
         canvas->drawString(string, 10, y, font, paint);
         canvas->restore();

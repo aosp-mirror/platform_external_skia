@@ -5,46 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkBlendMode.h"
-#include "include/core/SkCanvas.h"
-#include "include/core/SkData.h"
-#include "include/core/SkPaint.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkShader.h"
-#include "include/core/SkString.h"
-#include "include/effects/SkRuntimeEffect.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkDebug.h"
-#include "include/private/base/SkMalloc.h"
-#include "modules/skottie/include/Skottie.h"
-#include "modules/skottie/src/Adapter.h"
-#include "modules/skottie/src/SkottiePriv.h"
-#include "modules/skottie/src/SkottieValue.h"
-#include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/effects/Effects.h"
+
+#include "include/core/SkCanvas.h"
+#include "include/effects/SkRuntimeEffect.h"
+#include "include/private/base/SkMalloc.h"
+#include "modules/skottie/src/Adapter.h"
+#include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGColorFilter.h"
-#include "modules/sksg/include/SkSGNode.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
-#include "src/utils/SkJSON.h"
-
-#include <cstdint>
-#include <cstring>
-#include <memory>
-#include <tuple>
-#include <utility>
-#include <vector>
-
-class SkMatrix;
-struct SkPoint;
-
-namespace sksg {
-class InvalidationController;
-}
 
 namespace skottie::internal {
 
-#if defined(SK_ENABLE_SKOTTIE_SKSLEFFECT)
+#ifdef SK_ENABLE_SKSL
 
 namespace  {
 class SkSLShaderNode final : public sksg::CustomRenderNode {
@@ -198,11 +171,11 @@ private:
 
 } // namespace
 
-#endif  // SK_ENABLE_SKOTTIE_SKSLEFFECT
+#endif  // SK_ENABLE_SKSL
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachSkSLShader(const skjson::ArrayValue& jprops,
                                                         sk_sp<sksg::RenderNode> layer) const {
-#if defined(SK_ENABLE_SKOTTIE_SKSLEFFECT)
+#ifdef SK_ENABLE_SKSL
     auto shaderNode = sk_make_sp<SkSLShaderNode>(std::move(layer));
     return fBuilder->attachDiscardableAdapter<SkSLShaderAdapter>(jprops, *fBuilder,
                                                                  std::move(shaderNode));
@@ -213,7 +186,7 @@ sk_sp<sksg::RenderNode> EffectBuilder::attachSkSLShader(const skjson::ArrayValue
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachSkSLColorFilter(const skjson::ArrayValue& jprops,
                                                              sk_sp<sksg::RenderNode> layer) const {
-#if defined(SK_ENABLE_SKOTTIE_SKSLEFFECT)
+#ifdef SK_ENABLE_SKSL
     auto cfNode = sksg::ExternalColorFilter::Make(std::move(layer));
     return fBuilder->attachDiscardableAdapter<SkSLColorFilterAdapter>(jprops, *fBuilder,
                                                                       std::move(cfNode));

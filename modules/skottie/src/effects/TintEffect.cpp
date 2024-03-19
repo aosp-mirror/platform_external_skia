@@ -5,22 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkColor.h"
-#include "include/core/SkRefCnt.h"
-#include "modules/skottie/src/SkottiePriv.h"
-#include "modules/skottie/src/SkottieValue.h"
-#include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/effects/Effects.h"
+
+#include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGColorFilter.h"
 #include "modules/sksg/include/SkSGPaint.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
-
-#include <cstddef>
-#include <utility>
-
-namespace skjson {
-class ArrayValue;
-}
+#include "src/utils/SkJSON.h"
 
 namespace skottie {
 namespace internal {
@@ -71,7 +61,7 @@ private:
                                            fColorNode1;
     const sk_sp<sksg::GradientColorFilter> fFilterNode;
 
-    ColorValue  fMapBlackTo,
+    VectorValue fMapBlackTo,
                 fMapWhiteTo;
     ScalarValue fAmount = 0;
 };

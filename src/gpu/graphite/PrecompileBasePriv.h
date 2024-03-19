@@ -22,10 +22,9 @@ public:
     }
 
     void addToKey(const KeyContext& keyContext,
-                  PaintParamsKeyBuilder* builder,
-                  PipelineDataGatherer* gatherer,
-                  int desiredCombination) const {
-        fPrecompileBase->addToKey(keyContext, builder, gatherer, desiredCombination);
+                  int desiredCombination,
+                  PaintParamsKeyBuilder* builder) const {
+        fPrecompileBase->addToKey(keyContext, desiredCombination, builder);
     }
 
 private:

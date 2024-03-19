@@ -6,17 +6,15 @@
  */
 
 #include "gm/gm.h"
-#include "include/codec/SkEncodedImageFormat.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
-#include "include/encode/SkWebpEncoder.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 namespace skiagm {
@@ -48,13 +46,13 @@ static sk_sp<SkImage> make_image(SkColorType colorType, SkAlphaType alphaType) {
             break;
     }
 
-    auto image = ToolUtils::GetResourceAsImage(resource);
+    auto image = GetResourceAsImage(resource);
     if (!image) {
         return nullptr;
     }
 
-    auto surface = SkSurfaces::Raster(SkImageInfo::Make(
-            image->width(), image->height(), colorType, alphaType, image->refColorSpace()));
+    auto surface = SkSurface::MakeRaster(SkImageInfo::Make(image->width(), image->height(),
+            colorType, alphaType, image->refColorSpace()));
     surface->getCanvas()->drawImage(image, 0, 0);
     return surface->makeImageSnapshot();
 }
@@ -83,14 +81,14 @@ public:
     {}
 
 protected:
-    SkString getName() const override {
+    SkString onShortName() override {
         const char* variant = fVariant == Variant::kOpaque ? "opaque-":
                               fVariant == Variant::kGray   ? "gray-"  :
                                                              ""       ;
         return SkStringPrintf("encode-%scolor-types-%s", variant, fName);
     }
 
-    SkISize getISize() override {
+    SkISize onISize() override {
         const int width = fVariant == Variant::kNormal ? imageWidth * 7 : imageWidth * 2;
         return SkISize::Make(width, imageHeight);
     }
@@ -132,24 +130,9 @@ protected:
 
         for (SkAlphaType alphaType : alphaTypes) {
             auto src = make_image(colorType, alphaType);
-            if (!src) {
-                break;
-            }
-            SkASSERT_RELEASE(fFormat == SkEncodedImageFormat::kWEBP);
-            SkWebpEncoder::Options options;
-            if (fQuality < 100) {
-                options.fCompression = SkWebpEncoder::Compression::kLossy;
-                options.fQuality = fQuality;
-            } else {
-                options.fCompression = SkWebpEncoder::Compression::kLossless;
-                // in lossless mode, this is effort. 70 is the default effort in SkImageEncoder,
-                // which follows Blink and WebPConfigInit.
-                options.fQuality = 70;
-            }
-            auto data = SkWebpEncoder::Encode(nullptr, src.get(), options);
-            SkASSERT(data);
-            auto decoded = SkImages::DeferredFromEncodedData(data);
-            if (!decoded) {
+            auto decoded = src ? SkImage::MakeFromEncoded(src->encodeToData(fFormat, fQuality))
+                               : nullptr;
+            if (!src || !decoded) {
                 break;
             }
 

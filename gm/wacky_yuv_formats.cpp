@@ -35,7 +35,6 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTPin.h"
@@ -47,9 +46,7 @@
 #include "src/core/SkYUVMath.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
-#include "tools/DecodeUtils.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 #include "tools/gpu/YUVUtils.h"
 
 #include <math.h>
@@ -63,8 +60,6 @@ static const int kLabelWidth = 64;
 static const int kLabelHeight = 32;
 static const int kSubsetPadding = 8;
 static const int kPad = 1;
-
-using Recorder = skgpu::graphite::Recorder;
 
 enum YUVFormat {
     // 4:2:0 formats, 24 bpp
@@ -694,7 +689,7 @@ static void draw_col_label(SkCanvas* canvas, int x, int yuvColorSpace, bool opaq
     static_assert(std::size(kYUVColorSpaceNames) == kLastEnum_SkYUVColorSpace + 1);
 
     SkPaint paint;
-    SkFont  font(ToolUtils::CreatePortableTypeface("Sans", SkFontStyle::Bold()), 16);
+    SkFont  font(ToolUtils::create_portable_typeface(nullptr, SkFontStyle::Bold()), 16);
     font.setEdging(SkFont::Edging::kAlias);
 
     SkRect textRect;
@@ -721,7 +716,7 @@ static void draw_row_label(SkCanvas* canvas, int y, int yuvFormat) {
     static_assert(std::size(kYUVFormatNames) == kLast_YUVFormat + 1);
 
     SkPaint paint;
-    SkFont  font(ToolUtils::CreatePortableTypeface("Sans", SkFontStyle::Bold()), 16);
+    SkFont  font(ToolUtils::create_portable_typeface(nullptr, SkFontStyle::Bold()), 16);
     font.setEdging(SkFont::Edging::kAlias);
 
     SkRect textRect;
@@ -767,25 +762,19 @@ class WackyYUVFormatsGM : public GM {
 public:
     using Type = sk_gpu_test::LazyYUVImage::Type;
 
-    WackyYUVFormatsGM(bool useTargetColorSpace, bool useSubset, bool useCubicSampling, Type type)
-            : fUseTargetColorSpace(useTargetColorSpace)
-            , fUseSubset(useSubset)
-            , fUseCubicSampling(useCubicSampling)
-            , fImageType(type) {
+    WackyYUVFormatsGM(bool useTargetColorSpace, bool useSubset, Type type)
+            : fUseTargetColorSpace(useTargetColorSpace), fUseSubset(useSubset), fImageType(type) {
         this->setBGColor(0xFFCCCCCC);
     }
 
 protected:
-    SkString getName() const override {
+    SkString onShortName() override {
         SkString name("wacky_yuv_formats");
         if (fUseTargetColorSpace) {
             name += "_cs";
         }
         if (fUseSubset) {
             name += "_domain";
-        }
-        if (fUseCubicSampling) {
-            name += "_cubic";
         }
         switch (fImageType) {
             case Type::kFromPixmaps:
@@ -796,15 +785,12 @@ protected:
             case Type::kFromGenerator:
                 name += "_imggen";
                 break;
-            case Type::kFromImages:
-                name += "_fromimages";
-                break;
         }
 
         return name;
     }
 
-    SkISize getISize() override {
+    SkISize onISize() override {
         int numCols = 2 * (kLastEnum_SkYUVColorSpace + 1); // opacity x #-color-spaces
         int numRows = 1 + (kLast_YUVFormat + 1);  // original + #-yuv-formats
         int wh = SkScalarCeilToInt(kTileWidthHeight * (fUseSubset ? 1.5f : 1.f));
@@ -836,7 +822,7 @@ protected:
         }
     }
 
-    bool createImages(GrDirectContext* dContext, Recorder* recorder) {
+    bool createImages(GrDirectContext* dContext) {
         int origin = 0;
         for (bool opaque : { false, true }) {
             for (int cs = kJPEG_SkYUVColorSpace; cs <= kLastEnum_SkYUVColorSpace; ++cs) {
@@ -860,14 +846,8 @@ protected:
                                                          resultBMs,
                                                          numPlanes);
                     auto lazyYUV = sk_gpu_test::LazyYUVImage::Make(std::move(pixmaps));
-#if defined(SK_GRAPHITE)
-                    if (recorder) {
-                        fImages[opaque][cs][format] = lazyYUV->refImage(recorder, fImageType);
-                    } else
-#endif
-                    {
-                        fImages[opaque][cs][format] = lazyYUV->refImage(dContext, fImageType);
-                    }
+
+                    fImages[opaque][cs][format] = lazyYUV->refImage(dContext, fImageType);
                 }
                 origin = (origin + 1) % 8;
             }
@@ -878,15 +858,14 @@ protected:
             // before they are deleted. Since we don't know when we'll next have access to a
             // direct context, flush all the work now.
             dContext->flush();
-            dContext->submit(GrSyncCpu::kYes);
+            dContext->submit(true);
         }
 
         return true;
     }
 
-    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg, GraphiteTestContext*) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
         auto dContext = GrAsDirectContext(canvas->recordingContext());
-        auto recorder = canvas->recorder();
         this->createBitmaps();
 
         if (dContext && dContext->abandoned()) {
@@ -896,11 +875,11 @@ protected:
         }
 
         // Only the generator is expected to work with the CPU backend.
-        if (fImageType != Type::kFromGenerator && !dContext && !recorder) {
+        if (fImageType != Type::kFromGenerator && !dContext) {
             return DrawResult::kSkip;
         }
 
-        if (!this->createImages(dContext, recorder)) {
+        if (!this->createImages(dContext)) {
             *errorMsg = "Failed to create YUV images";
             return DrawResult::kFail;
         }
@@ -920,9 +899,6 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         auto direct = GrAsDirectContext(canvas->recordingContext());
-#if defined(SK_GRAPHITE)
-        auto recorder = canvas->recorder();
-#endif
 
         float cellWidth = kTileWidthHeight, cellHeight = kTileWidthHeight;
         if (fUseSubset) {
@@ -943,9 +919,7 @@ protected:
             constraint = SkCanvas::kStrict_SrcRectConstraint;
         }
 
-        SkSamplingOptions sampling = fUseCubicSampling
-                                         ? SkSamplingOptions(SkCubicResampler::Mitchell())
-                                         : SkSamplingOptions(SkFilterMode::kLinear);
+        SkSamplingOptions sampling(SkFilterMode::kLinear);
         for (int cs = kJPEG_SkYUVColorSpace; cs <= kLastEnum_SkYUVColorSpace; ++cs) {
             SkPaint paint;
             if (kIdentity_SkYUVColorSpace == cs) {
@@ -968,17 +942,8 @@ protected:
                         // Making a CS-specific version of a kIdentity_SkYUVColorSpace YUV image
                         // doesn't make a whole lot of sense. The colorSpace conversion will
                         // operate on the YUV components rather than the RGB components.
-                        sk_sp<SkImage> csImage;
-#if defined(SK_GRAPHITE)
-                        if (recorder) {
-                            csImage = fImages[opaque][cs][format]->makeColorSpace(
-                                    recorder, fTargetColorSpace, {});
-                        } else
-#endif
-                        {
-                            csImage = fImages[opaque][cs][format]->makeColorSpace(
-                                    direct, fTargetColorSpace);
-                        }
+                        sk_sp<SkImage> csImage =
+                            fImages[opaque][cs][format]->makeColorSpace(fTargetColorSpace, direct);
                         canvas->drawImageRect(csImage, srcRect, dstRect, sampling,
                                               &paint, constraint);
                     } else {
@@ -998,7 +963,6 @@ private:
     sk_sp<SkImage>             fImages[2][kLastEnum_SkYUVColorSpace + 1][kLast_YUVFormat + 1];
     bool                       fUseTargetColorSpace;
     bool                       fUseSubset;
-    bool                       fUseCubicSampling;
     Type                       fImageType;
     sk_sp<SkColorSpace>        fTargetColorSpace;
 
@@ -1007,36 +971,21 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new WackyYUVFormatsGM(/*useTargetColorSpace=*/false,
-                                    /*useSubset=*/false,
-                                    /*useCubicSampling=*/false,
+DEF_GM(return new WackyYUVFormatsGM(/* target cs */ false,
+                                    /* subset */ false,
                                     WackyYUVFormatsGM::Type::kFromTextures);)
-DEF_GM(return new WackyYUVFormatsGM(/*useTargetColorSpace=*/false,
-                                    /*useSubset=*/true,
-                                    /*useCubicSampling=*/false,
+DEF_GM(return new WackyYUVFormatsGM(/* target cs */ false,
+                                    /* subset */ true,
                                     WackyYUVFormatsGM::Type::kFromTextures);)
-DEF_GM(return new WackyYUVFormatsGM(/*useTargetColorSpace=*/true,
-                                    /*useSubset=*/false,
-                                    /*useCubicSampling=*/false,
+DEF_GM(return new WackyYUVFormatsGM(/* target cs */ true,
+                                    /* subset */ false,
                                     WackyYUVFormatsGM::Type::kFromTextures);)
-DEF_GM(return new WackyYUVFormatsGM(/*useTargetColorSpace=*/false,
-                                    /*useSubset=*/false,
-                                    /*useCubicSampling=*/true,
-                                    WackyYUVFormatsGM::Type::kFromTextures);)
-DEF_GM(return new WackyYUVFormatsGM(/*useTargetColorSpace=*/false,
-                                    /*useSubset=*/false,
-                                    /*useCubicSampling=*/false,
+DEF_GM(return new WackyYUVFormatsGM(/* target cs */ false,
+                                    /* subset */ false,
                                     WackyYUVFormatsGM::Type::kFromGenerator);)
-DEF_GM(return new WackyYUVFormatsGM(/*useTargetColorSpace=*/false,
-                                    /*useSubset=*/false,
-                                    /*useCubicSampling=*/false,
+DEF_GM(return new WackyYUVFormatsGM(/* target cs */ false,
+                                    /* subset */ false,
                                     WackyYUVFormatsGM::Type::kFromPixmaps);)
-#if defined(SK_GRAPHITE)
-DEF_GM(return new WackyYUVFormatsGM(/*useTargetColorSpace=*/false,
-                                    /*useSubset=*/false,
-                                    /*useCubicSampling=*/false,
-                                    WackyYUVFormatsGM::Type::kFromImages);)
-#endif
 
 class YUVMakeColorSpaceGM : public GM {
 public:
@@ -1045,9 +994,11 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("yuv_make_color_space"); }
+    SkString onShortName() override {
+        return SkString("yuv_make_color_space");
+    }
 
-    SkISize getISize() override {
+    SkISize onISize() override {
         int numCols = 4; // (transparent, opaque) x (untagged, tagged)
         int numRows = 5; // original, YUV, subset, makeNonTextureImage, readPixels
         return SkISize::Make(numCols * (kTileWidthHeight + kPad) + kPad,
@@ -1098,8 +1049,9 @@ protected:
             int i = 0;
             for (sk_sp<SkColorSpace> cs : {sk_sp<SkColorSpace>(nullptr),
                                            SkColorSpace::MakeSRGB()}) {
-                auto lazyYUV = sk_gpu_test::LazyYUVImage::Make(
-                        yuvaPixmaps, skgpu::Mipmapped::kNo, std::move(cs));
+                auto lazyYUV = sk_gpu_test::LazyYUVImage::Make(yuvaPixmaps,
+                                                               GrMipmapped::kNo,
+                                                               std::move(cs));
                 fImages[opaque][i++] =
                         lazyYUV->refImage(context, sk_gpu_test::LazyYUVImage::Type::kFromTextures);
             }
@@ -1109,12 +1061,12 @@ protected:
         // they are deleted. Since we don't know when we'll next have access to a direct context,
         // flush all the work now.
         context->flush();
-        context->submit(GrSyncCpu::kYes);
+        context->submit(true);
 
         return true;
     }
 
-    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg, GraphiteTestContext*) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
         auto dContext = GrAsDirectContext(canvas->recordingContext());
         if (!dContext || dContext->abandoned()) {
             *errorMsg = "DirectContext required to create YUV images";
@@ -1148,20 +1100,19 @@ protected:
             for (int opaque : { 0, 1 }) {
                 int y = kPad;
 
-                auto raster = fOriginalBMs[opaque].asImage()->makeColorSpace(
-                      nullptr, fTargetColorSpace);
+                auto raster = fOriginalBMs[opaque].asImage()->makeColorSpace(fTargetColorSpace);
                 canvas->drawImage(raster, x, y);
                 y += kTileWidthHeight + kPad;
 
                 if (fImages[opaque][tagged]) {
-                    auto yuv = fImages[opaque][tagged]->makeColorSpace(dContext, fTargetColorSpace);
+                    auto yuv = fImages[opaque][tagged]->makeColorSpace(fTargetColorSpace, dContext);
                     SkASSERT(yuv);
                     SkASSERT(SkColorSpace::Equals(yuv->colorSpace(), fTargetColorSpace.get()));
                     canvas->drawImage(yuv, x, y);
                     y += kTileWidthHeight + kPad;
 
                     SkIRect bounds = SkIRect::MakeWH(kTileWidthHeight / 2, kTileWidthHeight / 2);
-                    auto subset = SkImages::SubsetTextureFrom(dContext, yuv.get(), bounds);
+                    auto subset = yuv->makeSubset(bounds, dContext);
                     SkASSERT(subset);
                     canvas->drawImage(subset, x, y);
                     y += kTileWidthHeight + kPad;
@@ -1230,12 +1181,17 @@ public:
     YUVSplitterGM() {}
 
 protected:
-    SkString getName() const override { return SkString("yuv_splitter"); }
 
-    SkISize getISize() override { return SkISize::Make(1280, 768); }
+    SkString onShortName() override {
+        return SkString("yuv_splitter");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(1280, 768);
+    }
 
     void onOnceBeforeDraw() override {
-        fOrig = ToolUtils::GetResourceAsImage("images/mandrill_256.png");
+        fOrig = GetResourceAsImage("images/mandrill_256.png");
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -1256,11 +1212,11 @@ protected:
                 planes[i]->peekPixels(&pixmaps[i]);
             }
             auto yuvaPixmaps = SkYUVAPixmaps::FromExternalPixmaps(info, pixmaps);
-            auto img = SkImages::TextureFromYUVAPixmaps(canvas->recordingContext(),
-                                                        yuvaPixmaps,
-                                                        skgpu::Mipmapped::kNo,
-                                                        /* limit to max tex size */ false,
-                                                        /* color space */ nullptr);
+            auto img = SkImage::MakeFromYUVAPixmaps(canvas->recordingContext(),
+                                                    yuvaPixmaps,
+                                                    GrMipmapped::kNo,
+                                                    /* limit to max tex size */ false,
+                                                    /* color space */ nullptr);
             if (img) {
                 canvas->drawImage(img, 0, 0);
                 draw_diff(canvas, 0, fOrig->height(), fOrig.get(), img.get());

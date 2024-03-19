@@ -31,7 +31,9 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("resizeimagefilter"); }
+    SkString onShortName() override {
+        return SkString("resizeimagefilter");
+    }
 
     void draw(SkCanvas* canvas,
               const SkRect& rect,
@@ -63,7 +65,9 @@ protected:
         canvas->restore();
     }
 
-    SkISize getISize() override { return SkISize::Make(630, 100); }
+    SkISize onISize() override {
+        return SkISize::Make(630, 100);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->clear(SK_ColorBLACK);
@@ -84,7 +88,7 @@ protected:
         }
 
         {
-            sk_sp<SkSurface> surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(16, 16)));
+            sk_sp<SkSurface> surface(SkSurface::MakeRasterN32Premul(16, 16));
             SkCanvas* surfaceCanvas = surface->getCanvas();
             surfaceCanvas->clear(0x000000);
             {

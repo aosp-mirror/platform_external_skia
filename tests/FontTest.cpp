@@ -18,13 +18,12 @@
 #include "src/core/SkWriteBuffer.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <cstddef>
 
 static SkFont serialize_deserialize(const SkFont& font, skiatest::Reporter* reporter) {
     sk_sp<SkRefCntSet> typefaces = sk_make_sp<SkRefCntSet>();
-    SkBinaryWriteBuffer wb({});
+    SkBinaryWriteBuffer wb;
     wb.setTypefaceRecorder(typefaces);
 
     SkFontPriv::Flatten(font, wb);
@@ -86,7 +85,7 @@ DEF_TEST(Font_flatten, reporter) {
         kAllBits,
     };
     const sk_sp<SkTypeface> typefaces[] = {
-        nullptr, ToolUtils::SampleUserTypeface()
+        nullptr, ToolUtils::sample_user_typeface()
     };
 
     SkFont font;

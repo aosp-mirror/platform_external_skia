@@ -6,7 +6,8 @@
  */
 
 #include "fuzz/Fuzz.h"
-#include "tools/fonts/FontToolUtils.h"
+#include "src/core/SkFontMgrPriv.h"
+#include "tools/fonts/TestFontMgr.h"
 
 void fuzz_MockGPUCanvas(Fuzz* f);
 
@@ -22,8 +23,8 @@ extern "C" {
         if (size > 4000) {
             return 0;
         }
-        ToolUtils::UsePortableFontMgr();
-        auto fuzz = Fuzz(data, size);
+        gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
+        auto fuzz = Fuzz(SkData::MakeWithoutCopy(data, size));
         fuzz_MockGPUCanvas(&fuzz);
         return 0;
     }

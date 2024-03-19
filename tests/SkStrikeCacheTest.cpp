@@ -18,13 +18,12 @@
 #include "src/core/SkStrikeSpec.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 DEF_TEST(SkStrikeCache_CachePurge, Reporter) {
     SkStrikeCache cache;
 
     sk_sp<SkTypeface> typeface =
-            ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Italic());
+            ToolUtils::create_portable_typeface("serif", SkFontStyle::Italic());
 
     SkFont font;
     font.setEdging(SkFont::Edging::kAntiAlias);

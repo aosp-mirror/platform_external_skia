@@ -31,9 +31,13 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("complexclip_blur_tiled"); }
+    SkString onShortName() override {
+        return SkString("complexclip_blur_tiled");
+    }
 
-    SkISize getISize() override { return SkISize::Make(WIDTH, HEIGHT); }
+    SkISize onISize() override {
+        return SkISize::Make(WIDTH, HEIGHT);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint blurPaint;

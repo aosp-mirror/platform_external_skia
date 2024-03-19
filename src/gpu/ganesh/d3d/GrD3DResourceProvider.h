@@ -10,7 +10,6 @@
 
 #include "include/gpu/d3d/GrD3DTypes.h"
 #include "include/private/base/SkTArray.h"
-#include "src/core/SkChecksum.h"
 #include "src/core/SkLRUCache.h"
 #include "src/core/SkTHash.h"
 #include "src/gpu/ganesh/GrProgramDesc.h"
@@ -83,7 +82,7 @@ public:
 
     void markPipelineStateUniformsDirty() { fPipelineStateCache->markPipelineStateUniformsDirty(); }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     void resetShaderCacheForTesting() const { fPipelineStateCache->release(); }
 #endif
 
@@ -107,7 +106,7 @@ private:
 
         struct DescHash {
             uint32_t operator()(const GrProgramDesc& desc) const {
-                return SkChecksum::Hash32(desc.asKey(), desc.keyLength());
+                return SkOpts::hash_fn(desc.asKey(), desc.keyLength(), 0);
             }
         };
 
@@ -145,8 +144,8 @@ private:
         typedef sk_sp<GrD3DDescriptorTable> DescTableValue;
         struct DescTableHash {
             uint32_t operator()(DescTableKey key) const {
-                return SkChecksum::Hash32(key.data(),
-                                          key.size() * sizeof(D3D12_CPU_DESCRIPTOR_HANDLE));
+                return SkOpts::hash_fn(key.data(),
+                                       key.size()*sizeof(D3D12_CPU_DESCRIPTOR_HANDLE), 0);
             }
         };
         SkLRUCache<DescTableKey, DescTableValue, DescTableHash> fMap;
@@ -156,9 +155,9 @@ private:
 
     GrD3DGpu* fGpu;
 
-    skia_private::STArray<4, std::unique_ptr<GrD3DDirectCommandList>> fAvailableDirectCommandLists;
-    skia_private::STArray<4, sk_sp<GrD3DRootSignature>> fRootSignatures;
-    skia_private::STArray<2, sk_sp<GrD3DCommandSignature>> fCommandSignatures;
+    SkSTArray<4, std::unique_ptr<GrD3DDirectCommandList>> fAvailableDirectCommandLists;
+    SkSTArray<4, sk_sp<GrD3DRootSignature>> fRootSignatures;
+    SkSTArray<2, sk_sp<GrD3DCommandSignature>> fCommandSignatures;
 
     GrD3DCpuDescriptorManager fCpuDescriptorManager;
     GrD3DDescriptorTableManager fDescriptorTableManager;
@@ -166,7 +165,7 @@ private:
     std::unique_ptr<PipelineStateCache> fPipelineStateCache;
     sk_sp<GrD3DPipeline> fMipmapPipeline;
 
-    skia_private::THashMap<uint32_t, D3D12_CPU_DESCRIPTOR_HANDLE> fSamplers;
+    SkTHashMap<uint32_t, D3D12_CPU_DESCRIPTOR_HANDLE> fSamplers;
 
     DescriptorTableCache fShaderResourceDescriptorTableCache;
     DescriptorTableCache fSamplerDescriptorTableCache;

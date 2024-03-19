@@ -31,9 +31,9 @@ protected:
     }
 
     void doDraw(SkCanvas* canvas) {
-        SkISize canvasSize = onGetSize();
+        SkIPoint canvasSize = onGetSize();
         canvas->save();
-        canvas->scale(SkIntToScalar(canvasSize.width()), SkIntToScalar(canvasSize.height()));
+        canvas->scale(SkIntToScalar(canvasSize.x()), SkIntToScalar(canvasSize.y()));
 
         SkDEBUGCODE(int pics = ) this->sierpinsky(canvas, 0, fPaint);
         SkASSERT(pics == this->countPics());
@@ -113,16 +113,16 @@ public:
 
 protected:
     bool isSuitableFor(Backend backend) override {
-        return backend == Backend::kNonRendering;
+        return backend == kNonRendering_Backend;
     }
 
     void onDraw(int loops, SkCanvas*) override {
-        SkISize canvasSize = onGetSize();
+        SkIPoint canvasSize = onGetSize();
         SkPictureRecorder recorder;
 
         for (int i = 0; i < loops; i++) {
-            SkCanvas* c = recorder.beginRecording(SkIntToScalar(canvasSize.width()),
-                                                  SkIntToScalar(canvasSize.height()));
+            SkCanvas* c = recorder.beginRecording(SkIntToScalar(canvasSize.x()),
+                                                  SkIntToScalar(canvasSize.y()));
             this->doDraw(c);
             (void)recorder.finishRecordingAsPicture();
         }
@@ -141,10 +141,10 @@ protected:
     void onDelayedSetup() override {
         this->INHERITED::onDelayedSetup();
 
-        SkISize canvasSize = onGetSize();
+        SkIPoint canvasSize = onGetSize();
         SkPictureRecorder recorder;
-        SkCanvas* c = recorder.beginRecording(SkIntToScalar(canvasSize.width()),
-                                              SkIntToScalar(canvasSize.height()));
+        SkCanvas* c = recorder.beginRecording(SkIntToScalar(canvasSize.x()),
+                                              SkIntToScalar(canvasSize.y()));
 
         this->doDraw(c);
         fPicture = recorder.finishRecordingAsPicture();

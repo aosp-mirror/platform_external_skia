@@ -13,22 +13,14 @@
 
 class GrColorInfo;
 class GrRecordingContext;
+class SkMatrixProvider;
 class SkSurfaceProps;
 
 struct GrFPArgs {
-    enum class Scope {
-        kDefault,
-        kRuntimeEffect,
-    };
-
     GrFPArgs(GrRecordingContext* context,
              const GrColorInfo* dstColorInfo,
-             const SkSurfaceProps& surfaceProps,
-             Scope scope)
-            : fContext(context)
-            , fDstColorInfo(dstColorInfo)
-            , fSurfaceProps(surfaceProps)
-            , fScope(scope) {
+             const SkSurfaceProps& surfaceProps)
+            : fContext(context), fDstColorInfo(dstColorInfo), fSurfaceProps(surfaceProps) {
         SkASSERT(fContext);
     }
 
@@ -37,8 +29,6 @@ struct GrFPArgs {
     const GrColorInfo* fDstColorInfo;
 
     const SkSurfaceProps& fSurfaceProps;
-
-    Scope fScope;
 };
 
 #endif

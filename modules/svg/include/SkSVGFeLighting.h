@@ -15,7 +15,7 @@ class SkSVGFeDistantLight;
 class SkSVGFePointLight;
 class SkSVGFeSpotLight;
 
-class SK_API SkSVGFeLighting : public SkSVGFe {
+class SkSVGFeLighting : public SkSVGFe {
 public:
     struct KernelUnitLength {
         SkSVGNumberType fDx;

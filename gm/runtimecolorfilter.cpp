@@ -19,7 +19,6 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkVertices.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 #include <stddef.h>
@@ -91,12 +90,16 @@ public:
     RuntimeColorFilterGM() = default;
 
 protected:
-    SkString getName() const override { return SkString("runtimecolorfilter"); }
+    SkString onShortName() override {
+        return SkString("runtimecolorfilter");
+    }
 
-    SkISize getISize() override { return SkISize::Make(256 * 3, 256 * 2); }
+    SkISize onISize() override {
+        return SkISize::Make(256 * 3, 256 * 2);
+    }
 
     void onOnceBeforeDraw() override {
-        fImg = ToolUtils::GetResourceAsImage("images/mandrill_256.png");
+        fImg = GetResourceAsImage("images/mandrill_256.png");
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -139,7 +142,7 @@ DEF_SIMPLE_GM(runtimecolorfilter_vertices_atlas_and_patch, canvas, 404, 404) {
                                   kRGBA_8888_SkColorType,
                                   kPremul_SkAlphaType,
                                   canvas->imageInfo().refColorSpace());
-    auto surf = SkSurfaces::Raster(info);
+    auto surf = SkSurface::MakeRaster(info);
     surf->getCanvas()->drawVertices(verts, SkBlendMode::kDst, SkPaint());
     auto atlas = surf->makeImageSnapshot();
     auto xform = SkRSXform::Make(1, 0, 0, 0);
@@ -166,7 +169,7 @@ DEF_SIMPLE_GM(runtimecolorfilter_vertices_atlas_and_patch, canvas, 404, 404) {
     auto makePaint = [&](bool useCF, bool useShader) {
         SkPaint paint;
         paint.setColorFilter(useCF ? colorfilter : nullptr);
-        paint.setShader(useShader ? atlas->makeShader(SkFilterMode::kNearest) : nullptr);
+        paint.setShader(useShader ? atlas->makeShader(SkSamplingOptions{}) : nullptr);
         return paint;
     };
 
@@ -189,7 +192,7 @@ DEF_SIMPLE_GM(runtimecolorfilter_vertices_atlas_and_patch, canvas, 404, 404) {
                           &kColor,
                           1,
                           SkBlendMode::kModulate,
-                          SkFilterMode::kNearest,
+                          SkSamplingOptions{},
                           nullptr,
                           &paint);
     };

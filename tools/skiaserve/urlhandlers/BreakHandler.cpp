@@ -8,13 +8,11 @@
 #include "tools/skiaserve/urlhandlers/UrlHandler.h"
 
 #include "microhttpd.h"
-#include "src/core/SkStringUtils.h"
 #include "src/utils/SkJSONWriter.h"
 #include "tools/debugger/DrawCommand.h"
 #include "tools/skiaserve/Request.h"
 #include "tools/skiaserve/Response.h"
 
-using namespace skia_private;
 using namespace Response;
 
 bool BreakHandler::canHandle(const char* method, const char* url) {
@@ -26,7 +24,7 @@ bool BreakHandler::canHandle(const char* method, const char* url) {
 int BreakHandler::handle(Request* request, MHD_Connection* connection,
                          const char* url, const char* method,
                          const char* upload_data, size_t* upload_data_size) {
-    TArray<SkString> commands;
+    SkTArray<SkString> commands;
     SkStrSplit(url, "/", &commands);
 
     if (!request->hasPicture() || commands.size() != 4) {

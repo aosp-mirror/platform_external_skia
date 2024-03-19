@@ -18,6 +18,9 @@ MtlQueueManager::MtlQueueManager(sk_cfp<id<MTLCommandQueue>> queue,
                                  const SharedContext* sharedContext)
         : QueueManager(sharedContext)
         , fQueue(std::move(queue))
+#ifdef SK_ENABLE_PIET_GPU
+        , fPietRenderer(this->mtlSharedContext()->device(), fQueue.get())
+#endif
 {
 }
 
@@ -31,7 +34,12 @@ std::unique_ptr<CommandBuffer> MtlQueueManager::getNewCommandBuffer(
     auto cmdBuffer = MtlCommandBuffer::Make(fQueue.get(),
                                             this->mtlSharedContext(),
                                             mtlResourceProvider);
-    return cmdBuffer;
+
+#ifdef SK_ENABLE_PIET_GPU
+    cmdBuffer->setPietRenderer(&fPietRenderer);
+#endif
+
+    return std::move(cmdBuffer);
 }
 
 class MtlWorkSubmission final : public GpuWorkSubmission {
@@ -40,11 +48,10 @@ public:
         : GpuWorkSubmission(std::move(cmdBuffer), queueManager) {}
     ~MtlWorkSubmission() override {}
 
-private:
-    bool onIsFinished() override {
+    bool isFinished() override {
         return static_cast<MtlCommandBuffer*>(this->commandBuffer())->isFinished();
     }
-    void onWaitUntilFinished() override {
+    void waitUntilFinished() override {
         return static_cast<MtlCommandBuffer*>(this->commandBuffer())->waitUntilFinished();
     }
 };
@@ -62,15 +69,15 @@ QueueManager::OutstandingSubmission MtlQueueManager::onSubmitToGpu() {
     return submission;
 }
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if GRAPHITE_TEST_UTILS
 void MtlQueueManager::startCapture() {
-    if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
+    if (@available(macOS 10.13, iOS 11.0, *)) {
         // TODO: add newer Metal interface as well
         MTLCaptureManager* captureManager = [MTLCaptureManager sharedCaptureManager];
         if (captureManager.isCapturing) {
             return;
         }
-        if (@available(macOS 10.15, iOS 13.0, tvOS 13.0, *)) {
+        if (@available(macOS 10.15, iOS 13.0, *)) {
             MTLCaptureDescriptor* captureDescriptor = [[MTLCaptureDescriptor alloc] init];
             captureDescriptor.captureObject = fQueue.get();
 
@@ -86,7 +93,7 @@ void MtlQueueManager::startCapture() {
 }
 
 void MtlQueueManager::stopCapture() {
-    if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
+    if (@available(macOS 10.13, iOS 11.0, *)) {
         MTLCaptureManager* captureManager = [MTLCaptureManager sharedCaptureManager];
         if (captureManager.isCapturing) {
             [captureManager stopCapture];

@@ -57,7 +57,7 @@ func main() {
 	if err != nil {
 		td.Fatal(ctx, err)
 	}
-	defer func() { _ = doc.Cleanup(ctx) }()
+	defer doc.Cleanup(ctx)
 
 	command := []string{innerBuildScript}
 	volumes := []string{skiaAbsPath + ":/SRC", workAbsPath + ":/OUT"}

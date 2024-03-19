@@ -11,7 +11,7 @@
 #include "src/gpu/ganesh/GrAppliedClip.h"
 #include "src/gpu/ganesh/GrFixedClip.h"
 
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 /**
  * Implements GrHardClip with the currently-existing stencil buffer contents and GrFixedClip.
@@ -67,6 +67,6 @@ private:
     using INHERITED = GrClip;
 };
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
 #endif // StencilClip_DEFINED

@@ -8,6 +8,7 @@
 #include "include/core/SkTypes.h"
 
 #ifdef SK_GL
+
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
@@ -22,16 +23,13 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
-#include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
 #include "include/gpu/gl/GrGLTypes.h"
+#include "include/private/gpu/ganesh/GrGLTypesPriv.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrSurfaceProxy.h"
 #include "src/gpu/ganesh/GrTextureProxy.h"
 #include "src/gpu/ganesh/gl/GrGLCaps.h"
 #include "src/gpu/ganesh/gl/GrGLTexture.h"
-#include "src/gpu/ganesh/gl/GrGLTypesPriv.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/gpu/ProxyUtils.h"
@@ -63,33 +61,30 @@ static bool params_valid(const GrGLTextureParameters& parameters, const GrGLCaps
     return caps->useSamplerObjects() == sampler_params_invalid(parameters);
 }
 
-DEF_GANESH_TEST_FOR_GL_CONTEXT(GLTextureParameters,
-                               reporter,
-                               ctxInfo,
-                               CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters,
+                                    reporter,
+                                    ctxInfo,
+                                    CtsEnforcement::kApiLevel_T) {
     auto dContext = ctxInfo.directContext();
     auto caps = static_cast<const GrGLCaps*>(dContext->priv().caps());
 
     GrBackendTexture backendTex = dContext->createBackendTexture(1,
                                                                  1,
                                                                  kRGBA_8888_SkColorType,
-                                                                 skgpu::Mipmapped::kNo,
+                                                                 GrMipmapped::kNo,
                                                                  GrRenderable::kNo,
                                                                  GrProtected::kNo);
     REPORTER_ASSERT(reporter, backendTex.isValid());
 
     GrGLTextureInfo info;
-    REPORTER_ASSERT(reporter, GrBackendTextures::GetGLTextureInfo(backendTex, &info));
+    REPORTER_ASSERT(reporter, backendTex.getGLTextureInfo(&info));
 
     GrBackendTexture backendTexCopy = backendTex;
     REPORTER_ASSERT(reporter, backendTexCopy.isSameTexture(backendTex));
 
-    sk_sp<SkImage> wrappedImage = SkImages::BorrowTextureFrom(dContext,
-                                                              backendTex,
-                                                              kTopLeft_GrSurfaceOrigin,
-                                                              kRGBA_8888_SkColorType,
-                                                              kPremul_SkAlphaType,
-                                                              nullptr);
+    sk_sp<SkImage> wrappedImage =
+            SkImage::MakeFromTexture(dContext, backendTex, kTopLeft_GrSurfaceOrigin,
+                                     kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr);
     REPORTER_ASSERT(reporter, wrappedImage);
 
     GrSurfaceProxy* proxy = sk_gpu_test::GetTextureImageProxy(wrappedImage.get(), dContext);
@@ -104,7 +99,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(GLTextureParameters,
     GrGLTextureParameters::NonsamplerState invalidNSState;
     invalidNSState.invalidate();
 
-    auto surf = SkSurfaces::RenderTarget(
+    auto surf = SkSurface::MakeRenderTarget(
             dContext,
             skgpu::Budgeted::kYes,
             SkImageInfo::Make(1, 1, kRGBA_8888_SkColorType, kPremul_SkAlphaType),
@@ -113,16 +108,16 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(GLTextureParameters,
     REPORTER_ASSERT(reporter, surf);
 
     // Test invalidating from the GL backend texture.
-    GrBackendTextures::GLTextureParametersModified(&backendTex);
+    backendTex.glTextureParametersModified();
     REPORTER_ASSERT(reporter, params_invalid(*parameters));
 
     REPORTER_ASSERT(reporter, surf);
     surf->getCanvas()->drawImage(wrappedImage, 0, 0);
-    dContext->flushAndSubmit(surf.get(), GrSyncCpu::kNo);
+    surf->flushAndSubmit();
     REPORTER_ASSERT(reporter, params_valid(*parameters, caps));
 
     // Test invalidating from the copy.
-    GrBackendTextures::GLTextureParametersModified(&backendTexCopy);
+    backendTexCopy.glTextureParametersModified();
     REPORTER_ASSERT(reporter, params_invalid(*parameters));
 
     // Check that we can do things like assigning the backend texture to invalid one, assign an
@@ -150,7 +145,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(GLTextureParameters,
 
     wrappedImage.reset();
     dContext->flush();
-    dContext->submit(GrSyncCpu::kYes);
+    dContext->submit(true);
     dContext->deleteBackendTexture(backendTex);
 }
 #endif

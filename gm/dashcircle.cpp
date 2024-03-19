@@ -42,9 +42,9 @@ public:
     DashCircleGM() : fRotation(0) { }
 
 protected:
-    SkString getName() const override { return SkString("dashcircle"); }
+    SkString onShortName() override { return SkString("dashcircle"); }
 
-    SkISize getISize() override { return SkISize::Make(900, 1200); }
+    SkISize onISize() override { return SkISize::Make(900, 1200); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint refPaint;
@@ -124,9 +124,9 @@ public:
     DashCircle2GM() {}
 
 protected:
-    SkString getName() const override { return SkString("dashcircle2"); }
+    SkString onShortName() override { return SkString("dashcircle2"); }
 
-    SkISize getISize() override { return SkISize::Make(635, 900); }
+    SkISize onISize() override { return SkISize::Make(635, 900); }
 
     void onDraw(SkCanvas* canvas) override {
         // These intervals are defined relative to tau.

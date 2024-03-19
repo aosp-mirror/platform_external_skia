@@ -12,7 +12,6 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
-#include "include/core/SkImageFilter.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPoint.h"
@@ -39,12 +38,14 @@
 #include "src/core/SkVerticesPriv.h"
 #include "src/utils/SkPatchUtils.h"
 
+#if defined(SK_GANESH)
+#include "include/private/chromium/Slug.h"
+#endif
+
 class SkDrawable;
 class SkPath;
 class SkTextBlob;
 class SkVertices;
-
-namespace sktext { namespace gpu { class Slug; } }
 
 using namespace skia_private;
 
@@ -139,6 +140,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             reader->skip(size - 4);
         } break;
         case FLUSH:
+            canvas->flush();
             break;
         case CLIP_PATH: {
             const SkPath& path = fPictureData->getPath(reader);
@@ -334,9 +336,9 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             SkBlendMode blend = reader->read32LE(SkBlendMode::kLastMode);
             BREAK_ON_READ_ERROR(reader);
             bool hasClip = reader->readInt();
-            const SkPoint* clip = nullptr;
+            SkPoint* clip = nullptr;
             if (hasClip) {
-                clip = (const SkPoint*) reader->skip(4, sizeof(SkPoint));
+                clip = (SkPoint*) reader->skip(4, sizeof(SkPoint));
             }
             BREAK_ON_READ_ERROR(reader);
             canvas->experimental_DrawEdgeAAQuad(rect, clip, aaFlags, color, blend);
@@ -389,13 +391,13 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             }
 
             int dstClipCount = reader->readInt();
-            const SkPoint* dstClips = nullptr;
+            SkPoint* dstClips = nullptr;
             if (!reader->validate(dstClipCount >= 0) ||
                 !reader->validate(expectedClips <= dstClipCount)) {
                 // A bad dstClipCount (either negative, or not enough to satisfy entries).
                 break;
             } else if (dstClipCount > 0) {
-                dstClips = (const SkPoint*) reader->skip(dstClipCount, sizeof(SkPoint));
+                dstClips = (SkPoint*) reader->skip(dstClipCount, sizeof(SkPoint));
                 if (dstClips == nullptr) {
                     // Not enough bytes remaining so the reader has been invalidated
                     break;
@@ -410,7 +412,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
                 // there aren't enough bytes to provide that many matrices
                 break;
             }
-            TArray<SkMatrix> matrices(matrixCount);
+            SkTArray<SkMatrix> matrices(matrixCount);
             for (int i = 0; i < matrixCount && reader->isValid(); ++i) {
                 reader->readMatrix(&matrices.push_back());
             }
@@ -631,10 +633,12 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             canvas->drawTextBlob(blob, x, y, paint);
         } break;
         case DRAW_SLUG: {
+#if defined(SK_GANESH)
             const sktext::gpu::Slug* slug = fPictureData->getSlug(reader);
             BREAK_ON_READ_ERROR(reader);
 
-            canvas->drawSlug(slug);
+            slug->draw(canvas);
+#endif
         } break;
         case DRAW_VERTICES_OBJECT: {
             const SkPaint& paint = fPictureData->requiredPaint(reader);
@@ -672,7 +676,6 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             SkCanvas::SaveLayerRec rec(nullptr, nullptr, nullptr, 0);
             const uint32_t flatFlags = reader->readInt();
             SkRect bounds;
-            skia_private::AutoSTArray<2, sk_sp<SkImageFilter>> filters;
             if (flatFlags & SAVELAYERREC_HAS_BOUNDS) {
                 reader->readRect(&bounds);
                 rec.fBounds = &bounds;
@@ -697,18 +700,6 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             if (!reader->isVersionLT(SkPicturePriv::Version::kBackdropScaleFactor) &&
                 (flatFlags & SAVELAYERREC_HAS_BACKDROP_SCALE)) {
                 SkCanvasPriv::SetBackdropScaleFactor(&rec, reader->readScalar());
-            }
-            if (!reader->isVersionLT(SkPicturePriv::Version::kMultipleFiltersOnSaveLayer) &&
-                (flatFlags & SAVELAYERREC_HAS_MULTIPLE_FILTERS)) {
-                int filterCount = reader->readUInt();
-                reader->validate(filterCount > 0 && filterCount <= SkCanvas::kMaxFiltersPerLayer);
-                BREAK_ON_READ_ERROR(reader);
-                filters.reset(filterCount);
-                for (int i = 0; i < filterCount; ++i) {
-                    const SkPaint& paint = fPictureData->requiredPaint(reader);
-                    filters[i] = paint.refImageFilter();
-                }
-                rec.fFilters = filters;
             }
             BREAK_ON_READ_ERROR(reader);
 

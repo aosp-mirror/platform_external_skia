@@ -1,7 +1,7 @@
 cbuffer _UniformBuffer : register(b0, space0)
 {
-    float4 _15_colorGreen : packoffset(c0);
-    float4 _15_colorRed : packoffset(c1);
+    float4 _18_colorGreen : packoffset(c0);
+    float4 _18_colorRed : packoffset(c1);
 };
 
 
@@ -21,7 +21,7 @@ bool test_flat_b()
 
 bool test_if_b()
 {
-    if (_15_colorGreen.y > 0.0f)
+    if (_18_colorGreen.y > 0.0f)
     {
         return true;
     }
@@ -35,7 +35,7 @@ bool test_if_b()
 
 bool test_else_b()
 {
-    if (_15_colorGreen.y == 0.0f)
+    if (_18_colorGreen.y == 0.0f)
     {
         return false;
     }
@@ -49,7 +49,7 @@ bool test_loop_if_b()
 {
     for (int x = 0; x <= 1; x++)
     {
-        if (_15_colorGreen.y == 0.0f)
+        if (_18_colorGreen.y == 0.0f)
         {
             return false;
         }
@@ -62,55 +62,55 @@ bool test_loop_if_b()
     return true;
 }
 
-float4 main(float2 _77)
+float4 main(float2 _79)
 {
     scratchVar = 0;
-    bool _83 = false;
+    bool _85 = false;
     if (test_flat_b())
     {
-        bool _82 = test_if_b();
-        _83 = _82;
+        bool _84 = test_if_b();
+        _85 = _84;
     }
     else
     {
-        _83 = false;
+        _85 = false;
     }
-    bool _87 = false;
-    if (_83)
+    bool _89 = false;
+    if (_85)
     {
-        _87 = test_else_b();
+        _89 = test_else_b();
     }
     else
     {
-        _87 = false;
+        _89 = false;
     }
-    bool _91 = false;
-    if (_87)
+    bool _93 = false;
+    if (_89)
     {
-        bool _90 = test_loop_if_b();
-        _91 = _90;
+        bool _92 = test_loop_if_b();
+        _93 = _92;
     }
     else
     {
-        _91 = false;
+        _93 = false;
     }
-    float4 _92 = 0.0f.xxxx;
-    if (_91)
+    float4 _94 = 0.0f.xxxx;
+    if (_93)
     {
-        _92 = _15_colorGreen;
+        _94 = _18_colorGreen;
     }
     else
     {
-        _92 = _15_colorRed;
+        _94 = _18_colorRed;
     }
-    return _92;
+    return _94;
 }
 
 void frag_main()
 {
-    float2 _25 = 0.0f.xx;
-    float4 _27 = main(_25);
-    sk_FragColor = _27;
+    float2 _28 = 0.0f.xx;
+    float4 _30 = main(_28);
+    sk_FragColor = _30;
 }
 
 SPIRV_Cross_Output main()

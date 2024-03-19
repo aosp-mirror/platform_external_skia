@@ -12,7 +12,6 @@
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
-#include "include/core/SkImage.h"
 #include "include/core/SkPathBuilder.h"
 #include "include/core/SkPathTypes.h"
 #include "include/core/SkPicture.h"
@@ -62,7 +61,7 @@ class AnimatedImageGM : public skiagm::GM {
                                  * 2    // crop and no-crop
                                  * 2,   // post-process and no post-process
                       fTranslate * 4    // 4 scales
-                                 * 2 }; // makePictureSnapshot and getCurrentFrame
+                                 * 2 }; // newPictureSnapshot and getCurrentFrame
         }
     }
 public:
@@ -76,9 +75,11 @@ public:
     {}
     ~AnimatedImageGM() override = default;
 
-    SkString getName() const override { return SkStringPrintf("%s_animated_image", fName); }
+    SkString onShortName() override {
+        return SkStringPrintf("%s_animated_image", fName);
+    }
 
-    SkISize getISize() override {
+    SkISize onISize() override {
         this->init();
         return fSize;
     }
@@ -88,7 +89,7 @@ public:
         for (bool usePic : { true, false }) {
             auto drawProc = [canvas, usePic](const sk_sp<SkAnimatedImage>& animatedImage) {
                 if (usePic) {
-                    sk_sp<SkPicture> pic = animatedImage->makePictureSnapshot();
+                    sk_sp<SkPicture> pic(animatedImage->newPictureSnapshot());
                     canvas->drawPicture(pic);
                 } else {
                     auto image = animatedImage->getCurrentFrame();

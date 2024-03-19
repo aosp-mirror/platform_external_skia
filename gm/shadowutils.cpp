@@ -17,13 +17,12 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
+#include "include/private/SkShadowFlags.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/utils/SkShadowUtils.h"
 
 #include <initializer_list>
-
-using namespace skia_private;
 
 void draw_shadow(SkCanvas* canvas, const SkPath& path, SkScalar height, SkColor color,
                  SkPoint3 lightPos, SkScalar lightR, bool isAmbient, uint32_t flags) {
@@ -47,7 +46,7 @@ enum ShadowMode {
 };
 
 void draw_paths(SkCanvas* canvas, ShadowMode mode) {
-    TArray<SkPath> paths;
+    SkTArray<SkPath> paths;
     paths.push_back(SkPath::RRect(SkRect::MakeWH(50, 50), 10, 10.00002f));
     SkRRect oddRRect;
     oddRRect.setNinePatch(SkRect::MakeWH(50, 50), 9, 13, 6, 16);
@@ -58,7 +57,7 @@ void draw_paths(SkCanvas* canvas, ShadowMode mode) {
     paths.push_back(SkPath::Oval(SkRect::MakeWH(20, 60)));
 
     // star
-    TArray<SkPath> concavePaths;
+    SkTArray<SkPath> concavePaths;
     concavePaths.push_back().moveTo(0.0f, -33.3333f);
     concavePaths.back().lineTo(9.62f, -16.6667f);
     concavePaths.back().lineTo(28.867f, -16.6667f);

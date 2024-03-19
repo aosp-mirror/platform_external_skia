@@ -7,19 +7,14 @@
 
 #include "modules/skottie/src/effects/Effects.h"
 
-#include "modules/skottie/include/Skottie.h"
-#include "modules/skottie/include/SkottieProperty.h"
+#include "modules/skottie/src/Composition.h"
+#include "modules/skottie/src/Layer.h"
 #include "modules/skottie/src/SkottieJson.h"
-#include "modules/skottie/src/SkottiePriv.h"
 #include "modules/sksg/include/SkSGRenderEffect.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
+#include "src/utils/SkJSON.h"
 
 #include <algorithm>
-#include <cstdint>
-#include <cstring>
 #include <iterator>
-#include <limits>
-#include <utility>
 
 namespace skottie {
 namespace internal {

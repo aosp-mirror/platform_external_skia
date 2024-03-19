@@ -8,7 +8,6 @@
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
-#include "include/core/SkFontMgr.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPictureRecorder.h"
@@ -16,9 +15,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/utils/SkCustomTypeface.h"
-#include "src/core/SkFontPriv.h"
 #include "tools/Resources.h"
-#include "tools/fonts/FontToolUtils.h"
 
 static sk_sp<SkDrawable> make_drawable(const SkPath& path) {
     const auto bounds = path.computeTightBounds();
@@ -37,9 +34,8 @@ static sk_sp<SkDrawable> make_drawable(const SkPath& path) {
 
 static sk_sp<SkTypeface> make_tf() {
     SkCustomTypefaceBuilder builder;
-    SkFont font = ToolUtils::DefaultFont();
-    SkASSERT(font.getTypeface());
-    const float upem = font.getTypeface()->getUnitsPerEm();
+    SkFont font;
+    const float upem = font.getTypefaceOrDefault()->getUnitsPerEm();
 
     // request a big size, to improve precision at the fontscaler level
     font.setSize(upem);
@@ -53,7 +49,7 @@ static sk_sp<SkTypeface> make_tf() {
         font.getMetrics(&metrics);
         builder.setMetrics(metrics, 1.0f/upem);
     }
-    builder.setFontStyle(font.getTypeface()->fontStyle());
+    builder.setFontStyle(font.getTypefaceOrDefault()->fontStyle());
 
     // Steal the first 128 chars from the default font
     for (SkGlyphID index = 0; index <= 127; ++index) {
@@ -81,9 +77,7 @@ static sk_sp<SkTypeface> make_tf() {
 static sk_sp<SkTypeface> round_trip(sk_sp<SkTypeface> tf) {
     auto data = tf->serialize();
     SkMemoryStream stream(data->data(), data->size());
-    sk_sp<SkTypeface> face = SkTypeface::MakeDeserialize(&stream, nullptr);
-    SkASSERT(face);
-    return face;
+    return SkTypeface::MakeDeserialize(&stream);
 }
 
 class UserFontGM : public skiagm::GM {
@@ -108,12 +102,12 @@ public:
 
     bool runAsBench() const override { return true; }
 
-    SkString getName() const override { return SkString("user_typeface"); }
+    SkString onShortName() override { return SkString("user_typeface"); }
 
-    SkISize getISize() override { return {810, 452}; }
+    SkISize onISize() override { return {810, 452}; }
 
     void onDraw(SkCanvas* canvas) override {
-        auto waterfall = [&](sk_sp<SkTypeface> tf, bool defaultFace) {
+        auto waterfall = [&](sk_sp<SkTypeface> tf) {
             SkPaint paint;
             paint.setAntiAlias(true);
 
@@ -124,7 +118,7 @@ public:
                 auto blob = make_blob(tf, size, &spacing);
 
                 // shared baseline
-                if (defaultFace) {
+                if (tf == nullptr) {
                     paint.setColor(0xFFDDDDDD);
                     canvas->drawRect({0, y, 810, y+1}, paint);
                 }
@@ -141,9 +135,9 @@ public:
             }
         };
 
-        waterfall(ToolUtils::DefaultTypeface(), true);
+        waterfall(nullptr);
         canvas->translate(400, 0);
-        waterfall(fTF, false);
+        waterfall(fTF);
     }
 };
 DEF_GM(return new UserFontGM;)

@@ -20,7 +20,6 @@
 #include "include/core/SkTypeface.h"
 #include "src/base/SkUTF.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 #include <initializer_list>
@@ -49,13 +48,15 @@ protected:
     } fEmojiFont;
 
     void onOnceBeforeDraw() override {
-        fEmojiFont.fTypeface = ToolUtils::EmojiTypeface();
-        fEmojiFont.fText     = ToolUtils::EmojiSampleText();
+        fEmojiFont.fTypeface = ToolUtils::emoji_typeface();
+        fEmojiFont.fText     = ToolUtils::emoji_sample_text();
     }
 
-    SkString getName() const override { return SkString("scaledemoji"); }
+    SkString onShortName() override {
+        return SkString("scaledemoji");
+    }
 
-    SkISize getISize() override { return SkISize::Make(1200, 1200); }
+    SkISize onISize() override { return SkISize::Make(1200, 1200); }
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -96,20 +97,23 @@ protected:
     } fEmojiFont;
 
     void onOnceBeforeDraw() override {
-        fEmojiFont.fTypeface = ToolUtils::EmojiTypeface();
-        fEmojiFont.fText     = ToolUtils::EmojiSampleText();
+        fEmojiFont.fTypeface = ToolUtils::emoji_typeface();
+        fEmojiFont.fText     = ToolUtils::emoji_sample_text();
     }
 
-    SkString getName() const override { return SkString("scaledemojipos"); }
+    SkString onShortName() override {
+        return SkString("scaledemojipos");
+    }
 
-    SkISize getISize() override { return SkISize::Make(1200, 1200); }
+    SkISize onISize() override { return SkISize::Make(1200, 1200); }
 
     void onDraw(SkCanvas* canvas) override {
 
         canvas->drawColor(SK_ColorGRAY);
 
         SkPaint paint;
-        SkFont font(fEmojiFont.fTypeface, 12);
+        SkFont font;
+        font.setTypeface(fEmojiFont.fTypeface);
         const char* text = fEmojiFont.fText;
 
         // draw text at different point sizes
@@ -151,10 +155,10 @@ protected:
     } fEmojiFont;
 
     void onOnceBeforeDraw() override {
-        fEmojiFont.fTypeface = ToolUtils::EmojiTypeface();
+        fEmojiFont.fTypeface = ToolUtils::emoji_typeface();
 
         int count = 0;
-        const char* ch_ptr = ToolUtils::EmojiSampleText();
+        const char* ch_ptr = ToolUtils::emoji_sample_text();
         const char* ch_end = ch_ptr + strlen(ch_ptr);
         while (ch_ptr < ch_end && count < 2) {
             SkUnichar ch = SkUTF::NextUTF8(&ch_ptr, ch_end);
@@ -165,9 +169,11 @@ protected:
         }
     }
 
-    SkString getName() const override { return SkString("scaledemojiperspective"); }
+    SkString onShortName() override {
+        return SkString("scaledemojiperspective");
+    }
 
-    SkISize getISize() override { return SkISize::Make(1200, 1200); }
+    SkISize onISize() override { return SkISize::Make(1200, 1200); }
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -176,7 +182,9 @@ protected:
         taper.setPerspY(-0.0025f);
 
         SkPaint paint;
-        SkFont font(fEmojiFont.fTypeface, 40);
+        SkFont font;
+        font.setTypeface(fEmojiFont.fTypeface);
+        font.setSize(40);
         sk_sp<SkTextBlob> blob = make_hpos_test_blob_utf8(fEmojiFont.fText.c_str(), font);
 
         // draw text at different point sizes

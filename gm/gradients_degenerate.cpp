@@ -21,7 +21,6 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 // NOTE: The positions define hardstops for the red and green borders. For the repeating degenerate
 // gradients, that means the red and green are never visible, so the average color used should only
@@ -48,7 +47,7 @@ typedef sk_sp<SkShader> (*GradientFactory)(SkTileMode tm);
 static void draw_tile_header(SkCanvas* canvas) {
     canvas->save();
 
-    SkFont font(ToolUtils::DefaultPortableTypeface(), 12);
+    SkFont font(ToolUtils::create_portable_typeface(), 12);
     for (int i = 0; i < TILE_MODE_CT; ++i) {
         canvas->drawString(TILE_NAMES[i], 0, 0, font, SkPaint());
         canvas->translate(TILE_SIZE + TILE_GAP, 0);
@@ -66,7 +65,7 @@ static void draw_row(SkCanvas* canvas, const char* desc, GradientFactory factory
     SkPaint text;
     text.setAntiAlias(true);
 
-    SkFont font(ToolUtils::DefaultPortableTypeface(), 12);
+    SkFont font(ToolUtils::create_portable_typeface(), 12);
 
     canvas->translate(0, TILE_GAP);
     canvas->drawString(desc, 0, 0, font, text);
@@ -132,9 +131,13 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("degenerate_gradients"); }
+    SkString onShortName() override {
+        return SkString("degenerate_gradients");
+    }
 
-    SkISize getISize() override { return SkISize::Make(800, 800); }
+    SkISize onISize() override {
+        return SkISize::Make(800, 800);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(3 * TILE_GAP, 3 * TILE_GAP);

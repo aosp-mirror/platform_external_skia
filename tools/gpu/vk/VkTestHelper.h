@@ -13,42 +13,28 @@
 #ifdef SK_VULKAN
 
 #include "include/core/SkRefCnt.h"
-#include "include/gpu/vk/VulkanBackendContext.h"
+#include "include/gpu/vk/GrVkBackendContext.h"
 #include "include/gpu/vk/VulkanExtensions.h"
 
 class GrDirectContext;
 class SkSurface;
-struct SkISize;
-
-namespace skiatest {
-    enum class TestType : uint8_t;
-}
-
-namespace skgpu::graphite {
-    class Recorder;
-};
 
 #define DECLARE_VK_PROC(name) PFN_vk##name fVk##name
 
 class VkTestHelper {
 public:
-    static std::unique_ptr<VkTestHelper> Make(skiatest::TestType, bool isProtected);
-
-    virtual ~VkTestHelper();
-
-    virtual bool isValid() const = 0;
-
-    virtual sk_sp<SkSurface> createSurface(SkISize, bool textureable, bool isProtected) = 0;
-    virtual void submitAndWaitForCompletion(bool* completionMarker) = 0;
-
-    virtual GrDirectContext* directContext() { return nullptr; }
-    virtual skgpu::graphite::Recorder* recorder() { return nullptr; }
-
-protected:
     VkTestHelper(bool isProtected) : fIsProtected(isProtected) {}
 
-    bool setupBackendContext();
-    virtual bool init() = 0;
+    ~VkTestHelper() {
+        this->cleanup();
+    }
+
+    bool init();
+
+    GrDirectContext* directContext() { return fDirectContext.get(); }
+
+private:
+    void cleanup();
 
     DECLARE_VK_PROC(DestroyInstance);
     DECLARE_VK_PROC(DeviceWaitIdle);
@@ -76,7 +62,8 @@ protected:
     VkPhysicalDeviceFeatures2 fFeatures = {};
     VkDebugReportCallbackEXT fDebugCallback = VK_NULL_HANDLE;
     PFN_vkDestroyDebugReportCallbackEXT fDestroyDebugCallback = nullptr;
-    skgpu::VulkanBackendContext fBackendContext;
+    GrVkBackendContext fBackendContext;
+    sk_sp<GrDirectContext> fDirectContext;
 };
 
 #undef DECLARE_VK_PROC

@@ -33,9 +33,7 @@
 #include "src/gpu/ganesh/ops/GrMeshDrawOp.h"
 #include "src/gpu/ganesh/ops/GrSimpleMeshDrawOpHelperWithStencil.h"
 
-using namespace skia_private;
-
-namespace skgpu::ganesh {
+namespace skgpu::v1 {
 
 namespace {
 
@@ -68,7 +66,7 @@ struct Segment {
     }
 };
 
-typedef TArray<Segment, true> SegmentArray;
+typedef SkTArray<Segment, true> SegmentArray;
 
 bool center_of_mass(const SegmentArray& segments, SkPoint* c) {
     SkScalar area = 0;
@@ -273,7 +271,7 @@ inline void add_quad_segment(const SkPoint pts[3], SegmentArray* segments) {
 inline void add_cubic_segments(const SkPoint pts[4],
                                SkPathFirstDirection dir,
                                SegmentArray* segments) {
-    STArray<15, SkPoint, true> quads;
+    SkSTArray<15, SkPoint, true> quads;
     GrPathUtils::convertCubicToQuadsConstrainToTangents(pts, SK_Scalar1, dir, &quads);
     int count = quads.size();
     for (int q = 0; q < count; q += 3) {
@@ -367,7 +365,7 @@ struct Draw {
     int fIndexCnt;
 };
 
-typedef TArray<Draw, true> DrawArray;
+typedef SkTArray<Draw, true> DrawArray;
 
 void create_vertices(const SegmentArray& segments,
                      const SkPoint& fanPt,
@@ -675,7 +673,7 @@ std::unique_ptr<GrGeometryProcessor::ProgramImpl> QuadEdgeEffect::makeProgramImp
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(QuadEdgeEffect)
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 GrGeometryProcessor* QuadEdgeEffect::TestCreate(GrProcessorTestData* d) {
     SkMatrix localMatrix = GrTest::TestMatrix(d->fRandom);
     bool usesLocalCoords = d->fRandom->nextBool();
@@ -798,7 +796,7 @@ private:
                 kPreallocSegmentCnt = 512 / sizeof(Segment),
                 kPreallocDrawCnt = 4,
             };
-            STArray<kPreallocSegmentCnt, Segment, true> segments;
+            SkSTArray<kPreallocSegmentCnt, Segment, true> segments;
             SkPoint fanPt;
 
             if (!get_segments(*pathPtr, *viewMatrix, &segments, &fanPt, &vertexCount,
@@ -828,7 +826,7 @@ private:
                 return;
             }
 
-            STArray<kPreallocDrawCnt, Draw, true> draws;
+            SkSTArray<kPreallocDrawCnt, Draw, true> draws;
             VertexColor color(args.fColor, fWideColor);
             create_vertices(segments, fanPt, color, &draws, verts, idxs, kVertexStride);
 
@@ -875,7 +873,7 @@ private:
         return CombineResult::kMerged;
     }
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
     SkString onDumpInfo() const override {
         return SkStringPrintf("Count: %d\n%s", fPaths.size(), fHelper.dumpInfo().c_str());
     }
@@ -888,7 +886,7 @@ private:
     };
 
     Helper fHelper;
-    STArray<1, PathData, true> fPaths;
+    SkSTArray<1, PathData, true> fPaths;
     bool fWideColor;
 
     struct MeshDraw {
@@ -934,16 +932,16 @@ bool AAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
     return true;
 }
 
-}  // namespace skgpu::ganesh
+} // namespace skgpu::v1
 
-#if defined(GR_TEST_UTILS)
+#if GR_TEST_UTILS
 
 GR_DRAW_OP_TEST_DEFINE(AAConvexPathOp) {
     SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
     const SkPath& path = GrTest::TestPathConvex(random);
     const GrUserStencilSettings* stencilSettings = GrGetRandomStencil(random, context);
-    return skgpu::ganesh::AAConvexPathOp::Make(
-            context, std::move(paint), viewMatrix, path, stencilSettings);
+    return skgpu::v1::AAConvexPathOp::Make(context, std::move(paint), viewMatrix, path,
+                                           stencilSettings);
 }
 
 #endif

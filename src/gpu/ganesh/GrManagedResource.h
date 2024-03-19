@@ -68,8 +68,7 @@ public:
 
     private:
         SkMutex fLock;
-        skia_private::THashSet<const GrManagedResource*, GrManagedResource::Hash> fHashSet
-                SK_GUARDED_BY(fLock);
+        SkTHashSet<const GrManagedResource*, GrManagedResource::Hash> fHashSet SK_GUARDED_BY(fLock);
     };
 
     static std::atomic<uint32_t> fKeyCounter;

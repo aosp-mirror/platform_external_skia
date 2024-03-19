@@ -2,8 +2,6 @@
 #include "include/core/SkPathBuilder.h"
 #include "modules/skparagraph/src/Decorations.h"
 
-using namespace skia_private;
-
 namespace skia {
 namespace textlayout {
 
@@ -115,7 +113,7 @@ void Decorations::calculateGaps(const TextLine::ClipContext& context, const SkRe
     const SkScalar bounds[2] = {rect.fTop - baseline, rect.fBottom - baseline};
     const SkPaint& decorPaint = fDecorStyle.skPaint();
     auto count = blob->getIntercepts(bounds, nullptr, &decorPaint);
-    TArray<SkScalar> intersections(count);
+    SkTArray<SkScalar> intersections(count);
     intersections.resize(count);
     blob->getIntercepts(bounds, intersections.data(), &decorPaint);
 
@@ -138,7 +136,7 @@ void Decorations::calculateGaps(const TextLine::ClipContext& context, const SkRe
 // This is how flutter calculates the thickness
 void Decorations::calculateThickness(TextStyle textStyle, sk_sp<SkTypeface> typeface) {
 
-    textStyle.setTypeface(std::move(typeface));
+    textStyle.setTypeface(typeface);
     textStyle.getFontMetrics(&fFontMetrics);
 
     fThickness = textStyle.getFontSize() / 14.0f;

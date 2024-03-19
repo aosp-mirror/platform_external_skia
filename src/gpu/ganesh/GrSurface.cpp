@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
@@ -21,7 +20,7 @@
 size_t GrSurface::ComputeSize(const GrBackendFormat& format,
                               SkISize dimensions,
                               int colorSamplesPerPixel,
-                              skgpu::Mipmapped mipmapped,
+                              GrMipmapped mipmapped,
                               bool binSize) {
     // For external formats we do not actually know the real size of the resource so we just return
     // 0 here to indicate this.
@@ -32,13 +31,13 @@ size_t GrSurface::ComputeSize(const GrBackendFormat& format,
     size_t colorSize;
 
     if (binSize) {
-        dimensions = skgpu::GetApproxSize(dimensions);
+        dimensions = GrResourceProvider::MakeApprox(dimensions);
     }
 
-    SkTextureCompressionType compressionType = GrBackendFormatToCompressionType(format);
-    if (compressionType != SkTextureCompressionType::kNone) {
-        colorSize = SkCompressedFormatDataSize(
-                compressionType, dimensions, mipmapped == skgpu::Mipmapped::kYes);
+    SkImage::CompressionType compressionType = GrBackendFormatToCompressionType(format);
+    if (compressionType != SkImage::CompressionType::kNone) {
+        colorSize = SkCompressedFormatDataSize(compressionType, dimensions,
+                                               mipmapped == GrMipmapped::kYes);
     } else {
         colorSize = (size_t)dimensions.width() * dimensions.height() *
                     GrBackendFormatBytesPerPixel(format);
@@ -47,7 +46,7 @@ size_t GrSurface::ComputeSize(const GrBackendFormat& format,
 
     size_t finalSize = colorSamplesPerPixel * colorSize;
 
-    if (skgpu::Mipmapped::kYes == mipmapped) {
+    if (GrMipmapped::kYes == mipmapped) {
         // We don't have to worry about the mipmaps being a different dimensions than
         // we'd expect because we never change fDesc.fWidth/fHeight.
         finalSize += colorSize/3;

@@ -19,7 +19,6 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -34,7 +33,7 @@ protected:
         SkTextBlobBuilder builder;
 
         // make textblob.  To stress distance fields, we choose sizes appropriately
-        SkFont font(ToolUtils::DefaultPortableTypeface(), 162);
+        SkFont font(ToolUtils::create_portable_typeface(), 162);
         font.setEdging(SkFont::Edging::kAlias);
         const char* text = "A";
 
@@ -60,9 +59,13 @@ protected:
         fBlob = builder.make();
     }
 
-    SkString getName() const override { return SkString("textblobtransforms"); }
+    SkString onShortName() override {
+        return SkString("textblobtransforms");
+    }
 
-    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkISize onISize() override {
+        return SkISize::Make(kWidth, kHeight);
+    }
 
     void onDraw(SkCanvas* canvas) override {
 

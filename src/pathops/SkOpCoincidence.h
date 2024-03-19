@@ -8,8 +8,8 @@
 #define SkOpCoincidence_DEFINED
 
 #include "include/core/SkTypes.h"
-#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkDebug.h"
 #include "src/pathops/SkOpSpan.h"
 #include "src/pathops/SkPathOpsTypes.h"
 
@@ -132,7 +132,7 @@ private:
     const SkOpPtT* fCoinPtTEnd;
     const SkOpPtT* fOppPtTStart;
     const SkOpPtT* fOppPtTEnd;
-    SkDEBUGCODE(SkOpGlobalState* fGlobalState;)
+    SkDEBUGCODE(SkOpGlobalState* fGlobalState);
 };
 
 class SkOpCoincidence {

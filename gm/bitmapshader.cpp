@@ -55,9 +55,13 @@ protected:
         fMask = draw_mask();
     }
 
-    SkString getName() const override { return SkString("bitmapshaders"); }
+    SkString onShortName() override {
+        return SkString("bitmapshaders");
+    }
 
-    SkISize getISize() override { return SkISize::Make(150, 100); }
+    SkISize onISize() override {
+        return SkISize::Make(150, 100);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;

@@ -5,32 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkColorFilter.h"
-#include "include/core/SkData.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkString.h"
-#include "include/effects/SkRuntimeEffect.h"
-#include "include/private/base/SkAssert.h"
-#include "include/private/base/SkTPin.h"
-#include "modules/skottie/src/SkottiePriv.h"
-#include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/effects/Effects.h"
+
+#include "include/effects/SkRuntimeEffect.h"
+#include "include/private/base/SkTPin.h"
+#include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGColorFilter.h"
-#include "modules/sksg/include/SkSGRenderNode.h"
-
-#include <algorithm>
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <utility>
-
-namespace skjson {
-class ArrayValue;
-}
+#include "src/utils/SkJSON.h"
 
 namespace skottie::internal {
-namespace {
+
+namespace  {
+
+#ifdef SK_ENABLE_SKSL
 
 // AE Saturation semantics:
 //
@@ -79,6 +67,10 @@ static sk_sp<SkColorFilter> make_saturate(float chroma_scale) {
 
     return effect->makeColorFilter(SkData::MakeWithCopy(&chroma_scale, sizeof(chroma_scale)));
 }
+
+#else
+static sk_sp<SkColorFilter> make_saturate(float) { return nullptr; }
+#endif  // SK_ENABLE_SKSL
 
 class HueSaturationEffectAdapter final : public AnimatablePropertyContainer {
 public:

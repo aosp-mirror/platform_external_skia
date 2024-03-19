@@ -15,48 +15,42 @@ S globalStructWithAtomicMemberArray[2];      // invalid
 error: 22: atomics are only permitted in workgroup variables and writable storage blocks
 NestedS globalStructWithNestedAtomicMember;  // invalid
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-error: 31: variables of type 'ubo1' may not be uniform
-layout(metal, binding = 1) uniform ubo1 {
-                                   ^^^^
-error: 32: caused by:
+error: 32: variables of type 'atomicUint' may not be uniform
     atomicUint uboAtomic;                    // invalid
     ^^^^^^^^^^^^^^^^^^^^^
+error: 31: caused by:
+layout(metal, binding = 1) uniform ubo1 {
+                                   ^^^^
 error: 31: atomics are only permitted in workgroup variables and writable storage blocks
 layout(metal, binding = 1) uniform ubo1 {
                                    ^^^^
-error: 34: variables of type 'ubo2' may not be uniform
-layout(metal, binding = 2) uniform ubo2 {
-                                   ^^^^
-error: 35: caused by:
+error: 35: variables of type 'atomicUint[2]' may not be uniform
     atomicUint uboAtomicArray[2];            // invalid
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+error: 34: caused by:
+layout(metal, binding = 2) uniform ubo2 {
+                                   ^^^^
 error: 34: atomics are only permitted in workgroup variables and writable storage blocks
 layout(metal, binding = 2) uniform ubo2 {
                                    ^^^^
-error: 37: variables of type 'ubo3' may not be uniform
-layout(metal, binding = 3) uniform ubo3 {
-                                   ^^^^
-error: 8: caused by:
+error: 8: variables of type 'atomicUint' may not be uniform
     atomicUint structMemberAtomic;          // valid
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+error: 37: caused by:
+layout(metal, binding = 3) uniform ubo3 {
+                                   ^^^^
 error: 37: atomics are only permitted in workgroup variables and writable storage blocks
 layout(metal, binding = 3) uniform ubo3 {
                                    ^^^^
-error: 40: variables of type 'ubo4' may not be uniform
-layout(metal, binding = 4) uniform ubo4 {
-                                   ^^^^
-error: 8: caused by:
-    atomicUint structMemberAtomic;          // valid
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 error: 40: atomics are only permitted in workgroup variables and writable storage blocks
 layout(metal, binding = 4) uniform ubo4 {
                                    ^^^^
-error: 43: variables of type 'ubo5' may not be uniform
-layout(metal, binding = 5) uniform ubo5 {
-                                   ^^^^
-error: 8: caused by:
+error: 8: variables of type 'atomicUint' may not be uniform
     atomicUint structMemberAtomic;          // valid
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+error: 43: caused by:
+layout(metal, binding = 5) uniform ubo5 {
+                                   ^^^^
 error: 43: atomics are only permitted in workgroup variables and writable storage blocks
 layout(metal, binding = 5) uniform ubo5 {
                                    ^^^^
@@ -87,4 +81,4 @@ error: 66: atomics are only permitted in workgroup variables and writable storag
 error: 67: atomics are only permitted in workgroup variables and writable storage blocks
     S localStructWithAtomicMemberArray[2];  // invalid
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-29 errors
+27 errors

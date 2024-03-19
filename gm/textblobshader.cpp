@@ -24,7 +24,6 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/private/base/SkTDArray.h"
 #include "tools/ToolUtils.h"
-#include "tools/fonts/FontToolUtils.h"
 
 #include <math.h>
 #include <string.h>
@@ -37,17 +36,18 @@ public:
 private:
     void onOnceBeforeDraw() override {
         {
-            SkFont      font = ToolUtils::DefaultPortableFont();
+            SkFont      font(ToolUtils::create_portable_typeface());
             const char* txt = "Blobber";
             size_t txtLen = strlen(txt);
             fGlyphs.append(font.countText(txt, txtLen, SkTextEncoding::kUTF8));
             font.textToGlyphs(txt, txtLen, SkTextEncoding::kUTF8, fGlyphs.begin(), fGlyphs.size());
         }
 
-        SkFont font = ToolUtils::DefaultPortableFont();
+        SkFont font;
         font.setSubpixel(true);
         font.setEdging(SkFont::Edging::kAntiAlias);
         font.setSize(30);
+        font.setTypeface(ToolUtils::create_portable_typeface());
 
         SkTextBlobBuilder builder;
         int glyphCount = fGlyphs.size();
@@ -80,7 +80,7 @@ private:
             pos[i] = (float)i / (std::size(pos) - 1);
         }
 
-        SkISize sz = this->getISize();
+        SkISize sz = this->onISize();
         fShader = SkGradientShader::MakeRadial(SkPoint::Make(SkIntToScalar(sz.width() / 2),
                                                SkIntToScalar(sz.height() / 2)),
                                                sz.width() * .66f, colors, pos,
@@ -88,9 +88,13 @@ private:
                                                SkTileMode::kRepeat);
     }
 
-    SkString getName() const override { return SkString("textblobshader"); }
+    SkString onShortName() override {
+        return SkString("textblobshader");
+    }
 
-    SkISize getISize() override { return SkISize::Make(640, 480); }
+    SkISize onISize() override {
+        return SkISize::Make(640, 480);
+    }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint p;
@@ -98,7 +102,7 @@ private:
         p.setStyle(SkPaint::kFill_Style);
         p.setShader(fShader);
 
-        SkISize sz = this->getISize();
+        SkISize sz = this->onISize();
         constexpr int kXCount = 4;
         constexpr int kYCount = 3;
         for (int i = 0; i < kXCount; ++i) {

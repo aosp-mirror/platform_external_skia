@@ -5,29 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkFontMgr.h"
-#include "include/core/SkFontStyle.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkString.h"
-#include "include/core/SkTypeface.h"
-#include "include/core/SkTypes.h"
-#include "modules/skottie/include/Skottie.h"
-#include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottiePriv.h"
-#include "modules/skottie/src/text/Font.h"
+
+#include "include/core/SkData.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkTypes.h"
+#include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/text/TextAdapter.h"
-#include "modules/skresources/include/SkResources.h"
-#include "modules/sksg/include/SkSGGroup.h"  // IWYU pragma: keep
-#include "modules/sksg/include/SkSGRenderNode.h"
+#include "modules/skottie/src/text/TextAnimator.h"
+#include "modules/skottie/src/text/TextValue.h"
+#include "modules/sksg/include/SkSGDraw.h"
+#include "modules/sksg/include/SkSGGroup.h"
+#include "modules/sksg/include/SkSGPaint.h"
+#include "modules/sksg/include/SkSGPath.h"
+#include "modules/sksg/include/SkSGText.h"
 #include "src/base/SkTSearch.h"
-#include "src/core/SkTHash.h"
-#include "src/utils/SkJSON.h"
 
 #include <string.h>
-#include <memory>
-#include <tuple>
-#include <utility>
-#include <vector>
 
 namespace skottie {
 namespace internal {
@@ -220,6 +214,8 @@ bool AnimationBuilder::resolveNativeTypefaces() {
             return;
         }
 
+        const auto& fmgr = fLazyFontMgr.get();
+
         // Typeface fallback order:
         //   1) externally-loaded font (provided by the embedder)
         //   2) system font (family/style)
@@ -229,29 +225,24 @@ bool AnimationBuilder::resolveNativeTypefaces() {
 
         // legacy API fallback
         // TODO: remove after client migration
-        if (!finfo->fTypeface && fFontMgr) {
-            finfo->fTypeface = fFontMgr->makeFromData(
+        if (!finfo->fTypeface) {
+            finfo->fTypeface = fmgr->makeFromData(
                     fResourceProvider->loadFont(name.c_str(), finfo->fPath.c_str()));
         }
 
-        if (!finfo->fTypeface && fFontMgr) {
-            finfo->fTypeface = fFontMgr->matchFamilyStyle(finfo->fFamily.c_str(),
-                                                      FontStyle(this, finfo->fStyle.c_str()));
+        if (!finfo->fTypeface) {
+            finfo->fTypeface.reset(fmgr->matchFamilyStyle(finfo->fFamily.c_str(),
+                                                          FontStyle(this, finfo->fStyle.c_str())));
 
             if (!finfo->fTypeface) {
                 this->log(Logger::Level::kError, nullptr, "Could not create typeface for %s|%s.",
                           finfo->fFamily.c_str(), finfo->fStyle.c_str());
                 // Last resort.
-                finfo->fTypeface = fFontMgr->legacyMakeTypeface(nullptr,
+                finfo->fTypeface = fmgr->legacyMakeTypeface(nullptr,
                                                             FontStyle(this, finfo->fStyle.c_str()));
 
                 has_unresolved |= !finfo->fTypeface;
             }
-        }
-        if (!finfo->fTypeface && !fFontMgr) {
-            this->log(Logger::Level::kError, nullptr,
-                      "Could not load typeface for %s|%s because no SkFontMgr provided.",
-                      finfo->fFamily.c_str(), finfo->fStyle.c_str());
         }
     });
 
@@ -309,7 +300,7 @@ bool AnimationBuilder::resolveEmbeddedTypefaces(const skjson::ArrayValue& jchars
     }
 
     // Final pass to commit custom typefaces.
-    bool has_unresolved = false;
+    auto has_unresolved = false;
     std::vector<std::unique_ptr<CustomFont>> custom_fonts;
     fFonts.foreach([&has_unresolved, &custom_fonts](const SkString&, FontInfo* finfo) {
         if (finfo->fTypeface) {
@@ -340,7 +331,7 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachTextLayer(const skjson::ObjectVa
                                                           LayerInfo*) const {
     return this->attachDiscardableAdapter<TextAdapter>(jlayer,
                                                        this,
-                                                       fFontMgr,
+                                                       fLazyFontMgr.getMaybeNull(),
                                                        fCustomGlyphMapper,
                                                        fLogger);
 }

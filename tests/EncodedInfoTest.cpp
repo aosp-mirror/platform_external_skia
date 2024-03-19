@@ -9,15 +9,17 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
-#include "include/core/SkDataTable.h"
+#include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkImageEncoder.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkStream.h"
-#include "include/encode/SkPngEncoder.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
 #include <memory>
+#include <utility>
 
 DEF_TEST(AlphaEncodedInfo, r) {
     auto codec = SkCodec::MakeFromStream(GetResourceAsStream("images/grayscale.jpg"));
@@ -28,11 +30,10 @@ DEF_TEST(AlphaEncodedInfo, r) {
     auto result = codec->getPixels(codec->getInfo(), bm.getPixels(), bm.rowBytes());
     REPORTER_ASSERT(r, result == SkCodec::kSuccess);
 
-    SkDynamicMemoryWStream stream;
-    REPORTER_ASSERT(r, SkPngEncoder::Encode(&stream, bm.pixmap(), {}));
-    REPORTER_ASSERT(r, stream.bytesWritten() > 0);
+    auto data = SkEncodeBitmap(bm, SkEncodedImageFormat::kPNG, 100);
+    REPORTER_ASSERT(r, data);
 
-    codec = SkCodec::MakeFromData(stream.detachAsData());
+    codec = SkCodec::MakeFromData(std::move(data));
     REPORTER_ASSERT(r, codec);
     // TODO: Make SkEncodedInfo public and compare to its version of kAlpha_8.
     REPORTER_ASSERT(r, codec->getInfo().colorType() == kAlpha_8_SkColorType);

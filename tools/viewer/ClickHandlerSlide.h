@@ -11,10 +11,6 @@
 #include "tools/SkMetaData.h"
 #include "tools/viewer/Slide.h"
 
-#include "include/core/SkPoint.h"
-
-#include <functional>
-
 /**
  * Provides a higher level abstraction for click handling than the Slide base class. A Click object
  * is is used to track the state of the mouse over time.
@@ -25,7 +21,7 @@ public:
     class Click {
     public:
         Click() {}
-        Click(std::function<bool(Click*)> f) : fFunc(std::move(f)), fHasFunc(true) {}
+        Click(std::function<bool(Click*)> f) : fFunc(f), fHasFunc(true) {}
         virtual ~Click() = default;
 
         SkPoint fOrig = {0, 0};

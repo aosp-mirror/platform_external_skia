@@ -9,14 +9,7 @@
 #define GMSlide_DEFINED
 
 #include "gm/gm.h"
-
-#include "include/core/SkSize.h"
-#include "include/core/SkTypes.h"
 #include "tools/viewer/Slide.h"
-
-#include <memory>
-class SkCanvas;
-class SkMetaData;
 
 class GMSlide : public Slide {
 public:
