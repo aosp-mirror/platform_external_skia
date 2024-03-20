@@ -21,6 +21,8 @@
 #include "include/private/base/SkTArray.h"
 #include "src/base/SkRandom.h"
 
+using namespace skia_private;
+
 namespace skiagm {
 
 /*
@@ -36,8 +38,8 @@ protected:
         }
     }
 
-    SkString onShortName() final { return fName; }
-    SkISize onISize() override { return SkISize::Make(500, 500); }
+    SkString getName() const override { return fName; }
+    SkISize getISize() override { return SkISize::Make(500, 500); }
 
     void onOnceBeforeDraw() override {
         fShapes.push_back().setOval(SkRect::MakeXYWH(-5, 25, 200, 100));
@@ -89,8 +91,8 @@ protected:
     SkString             fName;
     bool                 fAntialias;
     SkPaint              fPaint;
-    SkTArray<SkRRect>    fShapes;
-    SkTArray<SkScalar>   fRotations;
+    TArray<SkRRect>    fShapes;
+    TArray<SkScalar>   fRotations;
     int                  fSimpleShapeCount;
 
 private:

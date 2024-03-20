@@ -7,9 +7,13 @@
 
 #include "bench/Benchmark.h"
 #include "include/core/SkBitmap.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkPicture.h"
 #include "include/core/SkPictureRecorder.h"
 #include "modules/skottie/include/Skottie.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
 
 class DecodeBench : public Benchmark {
 protected:
@@ -19,7 +23,7 @@ protected:
     {}
 
     bool isSuitableFor(Backend backend) final {
-            return backend == kNonRendering_Backend;
+            return backend == Backend::kNonRendering;
     }
 
     const char* onGetName() final { return fName.c_str(); }
@@ -46,7 +50,7 @@ public:
     void onDraw(int loops, SkCanvas*) override {
         while (loops-- > 0) {
             SkBitmap bm;
-            SkAssertResult(DecodeDataToBitmap(fData, &bm));
+            SkAssertResult(ToolUtils::DecodeDataToBitmap(fData, &bm));
         }
     }
 
@@ -63,8 +67,10 @@ public:
 
     void onDraw(int loops, SkCanvas*) override {
         while (loops-- > 0) {
-            const auto anim = skottie::Animation::Make(reinterpret_cast<const char*>(fData->data()),
-                                                       fData->size());
+            const auto anim = skottie::Animation::Builder()
+                .setFontManager(ToolUtils::TestFontMgr())
+                .make(reinterpret_cast<const char*>(fData->data()),
+                                                    fData->size());
         }
     }
 
@@ -80,8 +86,10 @@ public:
 
     void onDraw(int loops, SkCanvas*) override {
         while (loops-- > 0) {
-            const auto anim = skottie::Animation::Make(reinterpret_cast<const char*>(fData->data()),
-                                                       fData->size());
+            const auto anim = skottie::Animation::Builder()
+                .setFontManager(ToolUtils::TestFontMgr())
+                .make(reinterpret_cast<const char*>(fData->data()),
+                                                    fData->size());
             SkPictureRecorder recorder;
             anim->seek(0);
             anim->render(recorder.beginRecording(anim->size().width(), anim->size().height()));

@@ -10,10 +10,10 @@
 
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
-#include "include/core/SkICC.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
+#include "include/encode/SkICC.h"
 #include "modules/skcms/skcms.h"
 
 #include <cstring>
@@ -129,6 +129,13 @@ static inline void transform_scanline_bgra_1010102(char* dst, const char* src, i
           skcms_PixelFormat_RGBA_16161616BE, skcms_AlphaFormat_Unpremul);
 }
 
+static inline void transform_scanline_bgr_101010x_xr(char* dst, const char* src, int width, int) {
+    skcms(dst, src, width,
+          skcms_PixelFormat_BGR_101010x_XR, skcms_AlphaFormat_Unpremul,
+          skcms_PixelFormat_RGB_161616BE,   skcms_AlphaFormat_Unpremul);
+}
+
+
 static inline void transform_scanline_bgra_1010102_premul(char* dst, const char* src, int width, int) {
     skcms(dst, src, width,
           skcms_PixelFormat_BGRA_1010102,    skcms_AlphaFormat_PremulAsEncoded,
@@ -183,10 +190,10 @@ static inline void transform_scanline_F32_premul(char* dst, const char* src, int
           skcms_PixelFormat_RGBA_16161616BE, skcms_AlphaFormat_Unpremul);
 }
 
-static inline sk_sp<SkData> icc_from_color_space(const SkImageInfo& info,
+static inline sk_sp<SkData> icc_from_color_space(const SkColorSpace* cs,
                                                  const skcms_ICCProfile* profile,
                                                  const char* profile_description) {
-    SkColorSpace* cs = info.colorSpace();
+    // TODO(ccameron): Remove this check.
     if (!cs) {
         return nullptr;
     }
@@ -202,6 +209,12 @@ static inline sk_sp<SkData> icc_from_color_space(const SkImageInfo& info,
         return SkWriteICCProfile(fn, toXYZD50);
     }
     return nullptr;
+}
+
+static inline sk_sp<SkData> icc_from_color_space(const SkImageInfo& info,
+                                                 const skcms_ICCProfile* profile,
+                                                 const char* profile_description) {
+    return icc_from_color_space(info.colorSpace(), profile, profile_description);
 }
 
 #endif  // SkImageEncoderFns_DEFINED

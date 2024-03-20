@@ -46,7 +46,7 @@ describe('Font Behavior', () => {
         paint.setAntiAlias(true);
         paint.setStyle(CanvasKit.PaintStyle.Stroke);
 
-        const font = new CanvasKit.Font(null, 24);
+        const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 24);
         const fontPaint = new CanvasKit.Paint();
         fontPaint.setAntiAlias(true);
         fontPaint.setStyle(CanvasKit.PaintStyle.Fill);
@@ -72,7 +72,7 @@ describe('Font Behavior', () => {
     });
 
     gm('serif_text_on_path', (canvas) => {
-        const notoSerif = CanvasKit.Typeface.MakeFreeTypeFaceFromData(notoSerifFontBuffer);
+        const notoSerif = CanvasKit.Typeface.MakeTypefaceFromData(notoSerifFontBuffer);
 
         const paint = new CanvasKit.Paint();
         paint.setAntiAlias(true);
@@ -104,7 +104,7 @@ describe('Font Behavior', () => {
 
     // https://bugs.chromium.org/p/skia/issues/detail?id=9314
     gm('nullterminators_skbug_9314', (canvas) => {
-        const bungee = CanvasKit.Typeface.MakeFreeTypeFaceFromData(bungeeFontBuffer);
+        const bungee = CanvasKit.Typeface.MakeTypefaceFromData(bungeeFontBuffer);
 
         // yellow, to make sure tofu is plainly visible
         canvas.clear(CanvasKit.Color(255, 255, 0, 1));
@@ -131,7 +131,7 @@ describe('Font Behavior', () => {
     });
 
     gm('textblobs_with_glyphs', (canvas) => {
-        const notoSerif = CanvasKit.Typeface.MakeFreeTypeFaceFromData(notoSerifFontBuffer);
+        const notoSerif = CanvasKit.Typeface.MakeTypefaceFromData(notoSerifFontBuffer);
 
         const font = new CanvasKit.Font(notoSerif, 24);
         const bluePaint = new CanvasKit.Paint();
@@ -200,6 +200,15 @@ describe('Font Behavior', () => {
         if (fontMgr.dumpFamilies) {
             fontMgr.dumpFamilies();
         }
+
+        const font1 = fontMgr.matchFamilyStyle(fontMgr.getFamilyName(0), {});
+        expect(font1).toBeTruthy();
+
+        const font2 = fontMgr.matchFamilyStyle(fontMgr.getFamilyName(1), { width: 5, weight: 400 });
+        expect(font2).toBeTruthy();
+
+        font1.delete();
+        font2.delete();
         fontMgr.delete();
     });
 
@@ -238,14 +247,14 @@ describe('Font Behavior', () => {
             y: 150,
         }];
 
-        const defaultFont = new CanvasKit.Font(null, 24);
+        const defaultFont = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 24);
         canvas.drawText(`The following should be ${inputs.length + 1} lines of text:`, 5, 30, fontPaint, defaultFont);
 
         for (const fontType of inputs) {
             // smoke test that the font bytes loaded.
             expect(fontType.buffer).toBeTruthy(fontType.type + ' did not load');
 
-            const typeface = CanvasKit.Typeface.MakeFreeTypeFaceFromData(fontType.buffer);
+            const typeface = CanvasKit.Typeface.MakeTypefaceFromData(fontType.buffer);
             const font = new CanvasKit.Font(typeface, 24);
 
             if (font && typeface) {
@@ -261,7 +270,7 @@ describe('Font Behavior', () => {
         // which doesn't have very many glyphs in it, so we just check that we got a non-zero
         // typeface for it. I was able to load NotoSansCJK-Regular.ttc just fine in a
         // manual test.
-        const typeface = CanvasKit.Typeface.MakeFreeTypeFaceFromData(fetchedByteBuffers[3]);
+        const typeface = CanvasKit.Typeface.MakeTypefaceFromData(fetchedByteBuffers[3]);
         expect(typeface).toBeTruthy('.ttc font');
         if (typeface) {
             canvas.drawText('.ttc loaded', 5, 180, fontPaint, defaultFont);
@@ -275,7 +284,7 @@ describe('Font Behavior', () => {
     }, '/assets/Roboto-Regular.otf', '/assets/Roboto-Regular.woff', '/assets/Roboto-Regular.woff2', '/assets/test.ttc');
 
     it('can measure text very precisely with proper settings', () => {
-        const typeface = CanvasKit.Typeface.MakeFreeTypeFaceFromData(notoSerifFontBuffer);
+        const typeface = CanvasKit.Typeface.MakeTypefaceFromData(notoSerifFontBuffer);
         const fontSizes = [257, 100, 11];
         // The point of these values is to let us know 1) we can measure to sub-pixel levels
         // and 2) that measurements don't drastically change. If these change a little bit,
@@ -301,7 +310,7 @@ describe('Font Behavior', () => {
     gm('font_edging', (canvas) => {
         // Draw a small font scaled up to see the aliasing artifacts.
         canvas.scale(8, 8);
-        const notoSerif = CanvasKit.Typeface.MakeFreeTypeFaceFromData(notoSerifFontBuffer);
+        const notoSerif = CanvasKit.Typeface.MakeTypefaceFromData(notoSerifFontBuffer);
 
         const textPaint = new CanvasKit.Paint();
         const annotationFont = new CanvasKit.Font(notoSerif, 6);
@@ -328,7 +337,7 @@ describe('Font Behavior', () => {
     });
 
     it('can get the intercepts of glyphs', () => {
-        const font = new CanvasKit.Font(null, 100);
+        const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 100);
         const ids = font.getGlyphIDs('I');
         expect(ids.length).toEqual(1);
 
@@ -345,7 +354,7 @@ describe('Font Behavior', () => {
     });
 
     it('can use mallocd and normal arrays', () => {
-        const font = new CanvasKit.Font(null, 100);
+        const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 100);
         const ids = font.getGlyphIDs('I');
         expect(ids.length).toEqual(1);
         const glyphID = ids[0];
@@ -421,10 +430,10 @@ describe('Font Behavior', () => {
 
     gm('colrv1_gradients', (canvas) => {
         // Inspired by gm/colrv1.cpp, specifically the kColorFontsRepoGradients one.
-        const colrFace = CanvasKit.Typeface.MakeFreeTypeFaceFromData(colrv1FontBuffer);
+        const colrFace = CanvasKit.Typeface.MakeTypefaceFromData(colrv1FontBuffer);
 
         const textPaint = new CanvasKit.Paint();
-        const annotationFont = new CanvasKit.Font(null, 20);
+        const annotationFont = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 20);
 
         canvas.drawText('You should see 4 lines of gradient glyphs below',
             5, 25, textPaint, annotationFont);

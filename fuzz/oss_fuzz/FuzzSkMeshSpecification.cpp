@@ -6,24 +6,30 @@
  */
 
 #include "include/core/SkMesh.h"
+#include "include/private/base/SkTArray.h"
 
 #include "fuzz/Fuzz.h"
+
+using namespace skia_private;
 
 template <typename T>
 T extract(SkSpan<const uint8_t>& data) {
     T result = 0;
     size_t bytesToCopy = std::min(sizeof(T), data.size());
-    memcpy(&result, &data.front(), bytesToCopy);
-    data = data.subspan(bytesToCopy);
+    if (bytesToCopy > 0) {
+        memcpy(&result, &data.front(), bytesToCopy);
+        data = data.subspan(bytesToCopy);
+    }
     return result;
 }
 
-static void FuzzSkMeshSpecification(SkSpan<const uint8_t> data) {
+void FuzzSkMeshSpecification(const uint8_t *fuzzData, size_t fuzzSize) {
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
 
-    SkSTArray<SkMeshSpecification::kMaxAttributes, Attribute> attributes;
-    SkSTArray<SkMeshSpecification::kMaxVaryings,   Varying>   varyings;
+    SkSpan<const uint8_t> data(fuzzData, fuzzSize);
+    STArray<SkMeshSpecification::kMaxAttributes, Attribute> attributes;
+    STArray<SkMeshSpecification::kMaxVaryings,   Varying>   varyings;
     size_t vertexStride;
     SkString vs, fs;
 
@@ -150,6 +156,10 @@ static void FuzzSkMeshSpecification(SkSpan<const uint8_t> data) {
 
     while (!data.empty()) {
         uint8_t control = extract<uint8_t>(data) % 4;
+        // A control code with no payload can be ignored.
+        if (data.empty()) {
+            break;
+        }
         switch (control) {
             case 0: {
                 // Add an attribute.
@@ -203,17 +213,12 @@ static void FuzzSkMeshSpecification(SkSpan<const uint8_t> data) {
     }
 }
 
-bool FuzzSkMeshSpecification(sk_sp<SkData> fuzz) {
-    FuzzSkMeshSpecification(SkSpan(fuzz->bytes(), fuzz->size()));
-    return true;
-}
-
 #if defined(SK_BUILD_FOR_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 8000) {
         return 0;
     }
-    FuzzSkMeshSpecification(SkSpan<const uint8_t>(data, size));
+    FuzzSkMeshSpecification(data, size);
     return 0;
 }
 #endif

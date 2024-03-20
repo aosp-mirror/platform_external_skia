@@ -11,13 +11,29 @@
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrTypes.h"
 
-class GrDirectContext;
 class SkColorSpace;
 class SkImage;
 class SkPixmap;
 struct SkISize;
 
+#ifdef SK_GANESH
+class GrDirectContext;
+#endif
+
+#ifdef SK_GRAPHITE
+namespace skgpu::graphite {
+    class Recorder;
+}
+using Origin = skgpu::Origin; // TODO: Can we migrate Ganesh to use this?
+#endif
+
 namespace sk_gpu_test {
+
+using Mipmapped = skgpu::Mipmapped;
+using Protected = skgpu::Protected;
+using Renderable = skgpu::Renderable;
+
+#ifdef SK_GANESH
 /**
  * Creates a backend texture with pixmap contents and wraps it in a SkImage that safely deletes
  * the texture when it goes away. Unlike using makeTextureImage() on a non-GPU image, this will
@@ -27,15 +43,40 @@ namespace sk_gpu_test {
  */
 sk_sp<SkImage> MakeBackendTextureImage(GrDirectContext*,
                                        const SkPixmap&,
-                                       GrRenderable,
-                                       GrSurfaceOrigin);
+                                       Renderable,
+                                       GrSurfaceOrigin,
+                                       Protected = Protected::kNo);
 
-/** Creates an image of with a solid color. */
+/** Creates a solid color image. */
 sk_sp<SkImage> MakeBackendTextureImage(GrDirectContext*,
                                        const SkImageInfo& info,
                                        SkColor4f,
-                                       skgpu::Mipmapped = skgpu::Mipmapped::kNo,
-                                       GrRenderable = GrRenderable::kNo,
-                                       GrSurfaceOrigin = GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin);
+                                       Mipmapped = Mipmapped::kNo,
+                                       Renderable = Renderable::kNo,
+                                       GrSurfaceOrigin = GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
+                                       Protected isProtected = Protected::kNo);
+#endif  // SK_GANESH
+
+#ifdef SK_GRAPHITE
+/*
+ * Graphite versions of MakeBackendTextureImage
+ */
+sk_sp<SkImage> MakeBackendTextureImage(skgpu::graphite::Recorder*,
+                                       const SkPixmap&,
+                                       Mipmapped,
+                                       Renderable,
+                                       Origin,
+                                       Protected = Protected::kNo);
+
+/** Creates a solid color image. */
+sk_sp<SkImage> MakeBackendTextureImage(skgpu::graphite::Recorder*,
+                                       const SkImageInfo&,
+                                       SkColor4f,
+                                       Mipmapped,
+                                       Renderable,
+                                       Origin,
+                                       Protected = Protected::kNo);
+
+#endif  // SK_GRAPHITE
 
 }  // namespace sk_gpu_test

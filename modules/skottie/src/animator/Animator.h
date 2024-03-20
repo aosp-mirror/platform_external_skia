@@ -21,6 +21,9 @@ class ObjectValue;
 } // namespace skjson
 
 namespace skottie {
+
+class SlotManager;
+
 namespace internal {
 
 class AnimationBuilder;
@@ -60,9 +63,10 @@ public:
                             const skjson::ObjectValue* jobject,
                             SkV2* v, float* orientation);
 
-    bool isStatic() const { return fAnimators.empty(); }
+    bool isStatic() const { return fAnimators.empty() && !fHasSlotID; }
 
 protected:
+    friend class skottie::SlotManager;
     virtual void onSync() = 0;
 
     void shrink_to_fit();
@@ -76,6 +80,7 @@ private:
 
     std::vector<sk_sp<Animator>> fAnimators;
     bool                         fHasSynced = false;
+    bool                         fHasSlotID = false;
 };
 
 } // namespace internal

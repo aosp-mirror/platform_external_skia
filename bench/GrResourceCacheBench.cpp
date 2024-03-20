@@ -62,7 +62,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
+        return backend == Backend::kNonRendering;
     }
 protected:
     const char* onGetName() override {
@@ -80,7 +80,7 @@ protected:
         GrResourceCache* cache = context->priv().getResourceCache();
 
         // Make sure the cache is empty.
-        cache->purgeUnlockedResources();
+        cache->purgeUnlockedResources(GrPurgeResourceOptions::kAllResources);
         SkASSERT(0 == cache->getResourceCount() && 0 == cache->getResourceBytes());
 
         GrGpu* gpu = context->priv().getGpu();
@@ -108,7 +108,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
+        return backend == Backend::kNonRendering;
     }
 protected:
     const char* onGetName() override {
@@ -126,7 +126,7 @@ protected:
         GrResourceCache* cache = fContext->priv().getResourceCache();
 
         // Make sure the cache is empty.
-        cache->purgeUnlockedResources();
+        cache->purgeUnlockedResources(GrPurgeResourceOptions::kAllResources);
         SkASSERT(0 == cache->getResourceCount() && 0 == cache->getResourceBytes());
 
         GrGpu* gpu = fContext->priv().getGpu();

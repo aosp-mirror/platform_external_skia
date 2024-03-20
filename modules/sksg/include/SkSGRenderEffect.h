@@ -8,23 +8,30 @@
 #ifndef SkSGRenderEffect_DEFINED
 #define SkSGRenderEffect_DEFINED
 
-#include "modules/sksg/include/SkSGEffectNode.h"
-
 #include "include/core/SkBlendMode.h"
+#include "include/core/SkBlender.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTileMode.h"
 #include "include/effects/SkImageFilters.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkPoint_impl.h"
+#include "modules/sksg/include/SkSGEffectNode.h"
+#include "modules/sksg/include/SkSGNode.h"
 
-#include <memory>
-#include <vector>
+#include <optional>
+
+class SkCanvas;
+class SkMatrix;
 
 // TODO: merge EffectNode.h with this header
 
-class SkBlender;
-class SkImageFilter;
-class SkMaskFilter;
-class SkShader;
-
 namespace sksg {
+class InvalidationController;
+class RenderNode;
 
 /**
  * Shader base class.
@@ -107,22 +114,18 @@ public:
         return fFilter;
     }
 
-protected:
-    explicit ImageFilter(sk_sp<ImageFilter> input = nullptr);
+    SG_ATTRIBUTE(CropRect, SkImageFilters::CropRect, fCropRect)
 
-    using InputsT = std::vector<sk_sp<ImageFilter>>;
-    explicit ImageFilter(std::unique_ptr<InputsT> inputs);
+protected:
+    ImageFilter();
 
     SkRect onRevalidate(InvalidationController*, const SkMatrix&) final;
 
     virtual sk_sp<SkImageFilter> onRevalidateFilter() = 0;
 
-    sk_sp<SkImageFilter> refInput(size_t) const;
-
 private:
-    const std::unique_ptr<InputsT> fInputs;
-
-    sk_sp<SkImageFilter>           fFilter;
+    sk_sp<SkImageFilter>     fFilter;
+    SkImageFilters::CropRect fCropRect = std::nullopt;
 
     using INHERITED = Node;
 };
@@ -136,6 +139,13 @@ public:
 
     static sk_sp<RenderNode> Make(sk_sp<RenderNode> child, sk_sp<ImageFilter> filter);
 
+    enum class Cropping {
+        kNone,    // Doesn't use a crop rect.
+        kContent, // Uses the content bounding box as a crop rect.
+    };
+
+    SG_ATTRIBUTE(Cropping, Cropping, fCropping)
+
 protected:
     void onRender(SkCanvas*, const RenderContext*) const override;
     const RenderNode* onNodeAt(const SkPoint&)     const override;
@@ -146,6 +156,7 @@ private:
     ImageFilterEffect(sk_sp<RenderNode> child, sk_sp<ImageFilter> filter);
 
     sk_sp<ImageFilter> fImageFilter;
+    Cropping           fCropping = Cropping::kNone;
 
     using INHERITED = EffectNode;
 };
@@ -178,7 +189,7 @@ class DropShadowImageFilter final : public ImageFilter {
 public:
     ~DropShadowImageFilter() override;
 
-    static sk_sp<DropShadowImageFilter> Make(sk_sp<ImageFilter> input = nullptr);
+    static sk_sp<DropShadowImageFilter> Make();
 
     enum class Mode { kShadowAndForeground, kShadowOnly };
 
@@ -191,7 +202,7 @@ protected:
     sk_sp<SkImageFilter> onRevalidateFilter() override;
 
 private:
-    explicit DropShadowImageFilter(sk_sp<ImageFilter> input);
+    explicit DropShadowImageFilter();
 
     SkVector             fOffset = { 0, 0 },
                          fSigma  = { 0, 0 };
@@ -208,7 +219,7 @@ class BlurImageFilter final : public ImageFilter {
 public:
     ~BlurImageFilter() override;
 
-    static sk_sp<BlurImageFilter> Make(sk_sp<ImageFilter> input = nullptr);
+    static sk_sp<BlurImageFilter> Make();
 
     SG_ATTRIBUTE(Sigma   , SkVector  , fSigma   )
     SG_ATTRIBUTE(TileMode, SkTileMode, fTileMode)
@@ -217,10 +228,10 @@ protected:
     sk_sp<SkImageFilter> onRevalidateFilter() override;
 
 private:
-    explicit BlurImageFilter(sk_sp<ImageFilter> input);
+    explicit BlurImageFilter();
 
     SkVector   fSigma    = { 0, 0 };
-    SkTileMode fTileMode = SkTileMode::kClamp;
+    SkTileMode fTileMode = SkTileMode::kDecal;
 
     using INHERITED = ImageFilter;
 };

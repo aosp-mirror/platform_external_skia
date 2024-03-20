@@ -8,15 +8,26 @@
 #ifndef SkottieComposition_DEFINED
 #define SkottieComposition_DEFINED
 
-#include "modules/skottie/src/SkottiePriv.h"
-
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/private/base/SkNoncopyable.h"
 #include "modules/skottie/src/Layer.h"
 #include "src/core/SkTHash.h"
 
+#include <cstddef>
 #include <vector>
+
+namespace skjson {
+class ObjectValue;
+}
+namespace sksg {
+class RenderNode;
+class Transform;
+}  // namespace sksg
 
 namespace skottie {
 namespace internal {
+class AnimationBuilder;
 
 class CompositionBuilder final : SkNoncopyable {
 public:
@@ -35,7 +46,7 @@ private:
     const SkSize              fSize;
 
     std::vector<LayerBuilder> fLayerBuilders;
-    SkTHashMap<int, size_t>   fLayerIndexMap; // Maps layer "ind" to layer builder index.
+    skia_private::THashMap<int, size_t>   fLayerIndexMap; // Maps layer "ind" to layer builder index.
 
     sk_sp<sksg::Transform>    fCameraTransform;
 

@@ -8,15 +8,35 @@
 #ifndef DrawAtlasPathOp_DEFINED
 #define DrawAtlasPathOp_DEFINED
 
+#include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/private/SkColorData.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkIPoint16.h"
+#include "src/gpu/ganesh/GrBuffer.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrGpuBuffer.h"
+#include "src/gpu/ganesh/GrPaint.h"
+#include "src/gpu/ganesh/GrProcessorSet.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
 #include "src/gpu/ganesh/ops/AtlasInstancedHelper.h"
 #include "src/gpu/ganesh/ops/GrDrawOp.h"
+#include "src/gpu/ganesh/ops/GrOp.h"
 
-class GrBuffer;
-class GrGpuBuffer;
+#include <array>
+#include <utility>
+
+class GrAppliedClip;
+class GrDstProxyView;
+class GrOpFlushState;
 class GrProgramInfo;
+class GrRecordingContext;
+enum class GrXferBarrierFlags;
 
-namespace skgpu::v1 {
+namespace skgpu::ganesh {
 
 // Fills a rectangle of pixels with a clip against coverage values from an atlas.
 class DrawAtlasPathOp final : public GrDrawOp {
@@ -42,7 +62,7 @@ public:
     const char* name() const override { return "DrawAtlasPathOp"; }
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
     void visitProxies(const GrVisitProxyFunc& func) const override {
-        func(fAtlasHelper.proxy(), GrMipmapped::kNo);
+        func(fAtlasHelper.proxy(), skgpu::Mipmapped::kNo);
         fProcessors.visitProxies(func);
     }
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*, GrClampType) override;
@@ -95,6 +115,6 @@ private:
     GrProcessorSet fProcessors;
 };
 
-} // namespace skgpu::v1
+}  // namespace skgpu::ganesh
 
 #endif // DrawAtlasPathOp_DEFINED

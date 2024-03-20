@@ -18,11 +18,17 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
 #include "src/core/SkImagePriv.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 #include <initializer_list>
 #include <memory>
+
+#if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/Image.h"
+#endif
 
 sk_sp<SkImage> make_raster_image(const char* path) {
     sk_sp<SkData> resourceData = GetResourceAsData(path);
@@ -41,12 +47,12 @@ sk_sp<SkImage> make_color_space(sk_sp<SkImage> orig,
     sk_sp<SkImage> xform;
 #if defined(SK_GRAPHITE)
     if (auto recorder = canvas->recorder()) {
-        xform = orig->makeColorSpace(colorSpace, recorder);
+        xform = orig->makeColorSpace(recorder, colorSpace, {});
     } else
 #endif
     {
         auto direct = GrAsDirectContext(canvas->recordingContext());
-        xform = orig->makeColorSpace(colorSpace, direct);
+        xform = orig->makeColorSpace(direct, colorSpace);
     }
 
     if (!xform) {
@@ -68,8 +74,8 @@ DEF_SIMPLE_GM_CAN_FAIL(makecolorspace, canvas, errorMsg, 128 * 3, 128 * 4) {
     sk_sp<SkColorSpace> wideGamutLinear = wideGamut->makeLinearGamma();
 
     // Lazy images
-    sk_sp<SkImage> opaqueImage = GetResourceAsImage("images/mandrill_128.png");
-    sk_sp<SkImage> premulImage = GetResourceAsImage("images/color_wheel.png");
+    sk_sp<SkImage> opaqueImage = ToolUtils::GetResourceAsImage("images/mandrill_128.png");
+    sk_sp<SkImage> premulImage = ToolUtils::GetResourceAsImage("images/color_wheel.png");
     if (!opaqueImage || !premulImage) {
         *errorMsg = "Failed to load images. Did you forget to set the resourcePath?";
         return skiagm::DrawResult::kFail;
@@ -97,8 +103,8 @@ DEF_SIMPLE_GM_CAN_FAIL(makecolorspace, canvas, errorMsg, 128 * 3, 128 * 4) {
 
 DEF_SIMPLE_GM_BG(makecolortypeandspace, canvas, 128 * 3, 128 * 4, SK_ColorWHITE) {
     sk_sp<SkImage> images[] = {
-        GetResourceAsImage("images/mandrill_128.png"),
-        GetResourceAsImage("images/color_wheel.png"),
+            ToolUtils::GetResourceAsImage("images/mandrill_128.png"),
+            ToolUtils::GetResourceAsImage("images/color_wheel.png"),
     };
     auto rec2020 = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kRec2020);
 
@@ -125,13 +131,12 @@ DEF_SIMPLE_GM_BG(makecolortypeandspace, canvas, 128 * 3, 128 * 4, SK_ColorWHITE)
 
 #if defined(SK_GRAPHITE)
             if (auto recorder = canvas->recorder()) {
-                image565 = image->makeColorTypeAndColorSpace(kRGB_565_SkColorType,
-                                                             rec2020, recorder);
+                image565 = image->makeColorTypeAndColorSpace(
+                        recorder, kRGB_565_SkColorType, rec2020, {});
             } else
 #endif
             {
-                image565 = image->makeColorTypeAndColorSpace(kRGB_565_SkColorType,
-                                                             rec2020, direct);
+                image565 = image->makeColorTypeAndColorSpace(direct, kRGB_565_SkColorType, rec2020);
             }
             if (image565) {
                 if (!lazy || image565->isTextureBacked() || image565->makeRasterImage()) {
@@ -144,15 +149,13 @@ DEF_SIMPLE_GM_BG(makecolortypeandspace, canvas, 128 * 3, 128 * 4, SK_ColorWHITE)
             sk_sp<SkImage> imageGray;
 #if defined(SK_GRAPHITE)
             if (auto recorder = canvas->recorder()) {
-                imageGray = image->makeColorTypeAndColorSpace(kGray_8_SkColorType,
-                                                              image->refColorSpace(),
-                                                              recorder);
+                imageGray = image->makeColorTypeAndColorSpace(
+                        recorder, kGray_8_SkColorType, image->refColorSpace(), {});
             } else
 #endif
             {
-                imageGray = image->makeColorTypeAndColorSpace(kGray_8_SkColorType,
-                                                              image->refColorSpace(),
-                                                              direct);
+                imageGray = image->makeColorTypeAndColorSpace(
+                        direct, kGray_8_SkColorType, image->refColorSpace());
             }
             if (imageGray) {
                 if (!lazy || imageGray->isTextureBacked() || imageGray->makeRasterImage()) {
@@ -162,11 +165,15 @@ DEF_SIMPLE_GM_BG(makecolortypeandspace, canvas, 128 * 3, 128 * 4, SK_ColorWHITE)
 
 #if defined(SK_GRAPHITE)
             if (auto recorder = canvas->recorder()) {
-                images[j] = image->makeTextureImage(recorder);
+                images[j] = SkImages::TextureFromImage(recorder, image, {});
             } else
 #endif
             {
-                images[j] = direct ? image->makeTextureImage(direct) : image->makeRasterImage();
+                if (direct) {
+                    images[j] = SkImages::TextureFromImage(direct, image);
+                } else {
+                    images[j] = image->makeRasterImage(nullptr);
+                }
             }
 
             canvas->translate(0, 128);
@@ -190,7 +197,7 @@ DEF_SIMPLE_GM_CAN_FAIL(reinterpretcolorspace, canvas, errorMsg, 128 * 3, 128 * 3
 
     sk_sp<SkColorSpace> srgb = SkColorSpace::MakeSRGB();
     sk_sp<SkColorSpace> spin = srgb->makeColorSpin();
-    sk_sp<SkImage> image = GetResourceAsImage("images/color_wheel.png");
+    sk_sp<SkImage> image = ToolUtils::GetResourceAsImage("images/color_wheel.png");
     if (!image) {
         *errorMsg = "Failed to load image. Did you forget to set the resourcePath?";
         return skiagm::DrawResult::kFail;
@@ -199,7 +206,7 @@ DEF_SIMPLE_GM_CAN_FAIL(reinterpretcolorspace, canvas, errorMsg, 128 * 3, 128 * 3
     // Lazy images
     canvas->drawImage(image, 0.0f, 0.0f);
     canvas->drawImage(image->reinterpretColorSpace(spin), 128.0f, 0.0f);
-    canvas->drawImage(image->makeColorSpace(spin)->reinterpretColorSpace(srgb), 256.0f, 0.0f);
+    canvas->drawImage(image->makeColorSpace(nullptr, spin)->reinterpretColorSpace(srgb), 256.0f, 0.0f);
 
     canvas->translate(0.0f, 128.0f);
 
@@ -207,7 +214,7 @@ DEF_SIMPLE_GM_CAN_FAIL(reinterpretcolorspace, canvas, errorMsg, 128 * 3, 128 * 3
     image = image->makeRasterImage();
     canvas->drawImage(image, 0.0f, 0.0f);
     canvas->drawImage(image->reinterpretColorSpace(spin), 128.0f, 0.0f);
-    canvas->drawImage(image->makeColorSpace(spin)->reinterpretColorSpace(srgb), 256.0f, 0.0f);
+    canvas->drawImage(image->makeColorSpace(nullptr, spin)->reinterpretColorSpace(srgb), 256.0f, 0.0f);
 
     canvas->translate(0.0f, 128.0f);
 
@@ -217,11 +224,11 @@ DEF_SIMPLE_GM_CAN_FAIL(reinterpretcolorspace, canvas, errorMsg, 128 * 3, 128 * 3
     sk_sp<SkImage> gpuImage;
 #if defined(SK_GRAPHITE)
     if (auto recorder = canvas->recorder()) {
-        gpuImage = image->makeTextureImage(recorder);
+        gpuImage = SkImages::TextureFromImage(recorder, image, {});
     } else
 #endif
     {
-        gpuImage = image->makeTextureImage(direct);
+        gpuImage = SkImages::TextureFromImage(direct, image);
     }
     if (gpuImage) {
         image = gpuImage;
@@ -232,11 +239,11 @@ DEF_SIMPLE_GM_CAN_FAIL(reinterpretcolorspace, canvas, errorMsg, 128 * 3, 128 * 3
 
 #if defined(SK_GRAPHITE)
     if (auto recorder = canvas->recorder()) {
-        gpuImage = image->makeColorSpace(spin, recorder);
+        gpuImage = image->makeColorSpace(recorder, spin, {});
     } else
 #endif
     {
-        gpuImage = image->makeColorSpace(spin, direct);
+        gpuImage = image->makeColorSpace(direct, spin);
     }
     if (gpuImage) {
         canvas->drawImage(gpuImage->reinterpretColorSpace(srgb), 256.0f, 0.0f);

@@ -9,10 +9,12 @@
 #define GrVkCaps_DEFINED
 
 #include "include/gpu/vk/GrVkTypes.h"
+#include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
 #include "src/gpu/ganesh/GrCaps.h"
 
 class GrVkRenderTarget;
+enum class SkTextureCompressionType;
 
 namespace skgpu {
 class VulkanExtensions;
@@ -28,14 +30,14 @@ public:
      * Creates a GrVkCaps that is set such that nothing is supported. The init function should
      * be called to fill out the caps.
      */
-    GrVkCaps(const GrContextOptions& contextOptions,
-             const skgpu::VulkanInterface* vkInterface,
-             VkPhysicalDevice device,
-             const VkPhysicalDeviceFeatures2& features,
+    GrVkCaps(const GrContextOptions&,
+             const skgpu::VulkanInterface*,
+             VkPhysicalDevice,
+             const VkPhysicalDeviceFeatures2&,
              uint32_t instanceVersion,
              uint32_t physicalDeviceVersion,
-             const skgpu::VulkanExtensions& extensions,
-             GrProtected isProtected = GrProtected::kNo);
+             const skgpu::VulkanExtensions&,
+             skgpu::Protected);
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
 
@@ -162,11 +164,10 @@ public:
         return 3;
     }
 
-    // Returns true if the device supports protected memory.
-    bool supportsProtectedMemory() const { return fSupportsProtectedMemory; }
-
     // Returns true if the VK_EXT_image_drm_format_modifier is enabled.
     bool supportsDRMFormatModifiers() const { return fSupportsDRMFormatModifiers; }
+
+    bool supportsDeviceFaultInfo() const { return fSupportsDeviceFaultInfo; }
 
     // Returns whether we prefer to record draws directly into a primary command buffer.
     bool preferPrimaryOverSecondaryCommandBuffers() const {
@@ -184,10 +185,6 @@ public:
     bool mustInvalidatePrimaryCmdBufferStateAfterClearAttachments() const {
         return fMustInvalidatePrimaryCmdBufferStateAfterClearAttachments;
     }
-
-    // For host visible allocations, this returns true if we require that they are coherent. This
-    // is used to work around bugs for devices that don't handle non-coherent memory correctly.
-    bool mustUseCoherentHostVisibleMemory() const { return fMustUseCoherentHostVisibleMemory; }
 
     // Returns whether a pure GPU accessible buffer is more performant to read than a buffer that is
     // also host visible. If so then in some cases we may prefer the cost of doing a copy to the
@@ -233,7 +230,7 @@ public:
                           int srcSamplecnt,
                           bool srcHasYcbcr) const;
 
-    GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
+    GrBackendFormat getBackendFormatFromCompressionType(SkTextureCompressionType) const override;
 
     VkFormat getFormatFromColorType(GrColorType colorType) const {
         int idx = static_cast<int>(colorType);
@@ -270,7 +267,7 @@ public:
 
     bool supportsMemorylessAttachments() const { return fSupportsMemorylessAttachments; }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     std::vector<GrTest::TestFormatColorTypeCombination> getTestingCombinations() const override;
 #endif
 
@@ -278,6 +275,7 @@ private:
     enum VkVendor {
         kAMD_VkVendor = 4098,
         kARM_VkVendor = 5045,
+        kGoogle_VkVendor = 0x1AE0,
         kImagination_VkVendor = 4112,
         kIntel_VkVendor = 32902,
         kNvidia_VkVendor = 4318,
@@ -297,6 +295,11 @@ private:
         kAlderLake,
 
         kOther
+    };
+
+    enum DeviceID {
+        kSwiftshader_DeviceID = 0xC0DE, // As listed in Swiftshader code this may be a placeholder
+                                        // value but works for now.
     };
 
     static IntelGPUType GetIntelGPUType(uint32_t deviceID);
@@ -320,13 +323,13 @@ private:
         SkUNREACHABLE;
     }
 
-    void init(const GrContextOptions& contextOptions,
-              const skgpu::VulkanInterface* vkInterface,
-              VkPhysicalDevice device,
+    void init(const GrContextOptions&,
+              const skgpu::VulkanInterface*,
+              VkPhysicalDevice,
               const VkPhysicalDeviceFeatures2&,
               uint32_t physicalDeviceVersion,
               const skgpu::VulkanExtensions&,
-              GrProtected isProtected);
+              GrProtected);
     void initGrCaps(const skgpu::VulkanInterface* vkInterface,
                     VkPhysicalDevice physDev,
                     const VkPhysicalDeviceProperties&,
@@ -338,7 +341,9 @@ private:
     void initFormatTable(const GrContextOptions&,
                          const skgpu::VulkanInterface*,
                          VkPhysicalDevice,
-                         const VkPhysicalDeviceProperties&);
+                         const VkPhysicalDeviceProperties&,
+                         const VkPhysicalDeviceFeatures2&,
+                         const skgpu::VulkanExtensions&);
     void initStencilFormat(const skgpu::VulkanInterface* iface, VkPhysicalDevice physDev);
 
     void applyDriverCorrectnessWorkarounds(const VkPhysicalDeviceProperties&);
@@ -415,7 +420,7 @@ private:
         std::unique_ptr<ColorTypeInfo[]> fColorTypeInfos;
         int fColorTypeInfoCount = 0;
     };
-    static const size_t kNumVkFormats = 22;
+    static const size_t kNumVkFormats = 25;
     FormatInfo fFormatTable[kNumVkFormats];
 
     FormatInfo& getFormatInfo(VkFormat);
@@ -426,7 +431,7 @@ private:
 
     VkFormat fPreferredStencilFormat;
 
-    SkSTArray<1, GrVkYcbcrConversionInfo> fYcbcrInfos;
+    skia_private::STArray<1, GrVkYcbcrConversionInfo> fYcbcrInfos;
 
     bool fMustSyncCommandBuffersWithQueue = false;
     bool fShouldAlwaysUseDedicatedImageMemory = false;
@@ -448,14 +453,13 @@ private:
 
     bool fSupportsYcbcrConversion = false;
 
-    bool fSupportsProtectedMemory = false;
-
     bool fSupportsDRMFormatModifiers = false;
+
+    bool fSupportsDeviceFaultInfo = false;
 
     bool fPreferPrimaryOverSecondaryCommandBuffers = true;
     bool fMustInvalidatePrimaryCmdBufferStateAfterClearAttachments = false;
 
-    bool fMustUseCoherentHostVisibleMemory = false;
     bool fGpuOnlyBuffersMorePerformant = false;
     bool fShouldPersistentlyMapCpuToGpuBuffers = true;
 

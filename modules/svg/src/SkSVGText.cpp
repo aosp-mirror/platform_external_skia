@@ -77,7 +77,10 @@ static SkFont ResolveFont(const SkSVGRenderContext& ctx) {
     // TODO: we likely want matchFamilyStyle here, but switching away from legacyMakeTypeface
     // changes all the results when using the default fontmgr.
     auto tf = ctx.fontMgr()->legacyMakeTypeface(family.c_str(), style);
-
+    if (!tf) {
+        tf = ctx.fontMgr()->legacyMakeTypeface(nullptr, style);
+    }
+    SkASSERT(tf);
     SkFont font(std::move(tf), size);
     font.setHinting(SkFontHinting::kNone);
     font.setSubpixel(true);
@@ -468,9 +471,14 @@ void SkSVGTextContext::commitRunBuffer(const RunInfo& ri) {
         current_run.glyhPosAdjust[i] = fShapeBuffer.fUtf8PosAdjust[SkToInt(utf8_index)];
     }
 
-    // Offset adjustments are cumulative - we only need to advance the current chunk
-    // with the last value.
-    fChunkAdvance += ri.fAdvance + fShapeBuffer.fUtf8PosAdjust.back().offset;
+    fChunkAdvance += ri.fAdvance;
+}
+
+void SkSVGTextContext::commitLine() {
+    if (!fShapeBuffer.fUtf8PosAdjust.empty()) {
+        // Offset adjustments are cumulative - only advance the current chunk with the last value.
+        fChunkAdvance += fShapeBuffer.fUtf8PosAdjust.back().offset;
+    }
 }
 
 void SkSVGTextFragment::renderText(const SkSVGRenderContext& ctx, SkSVGTextContext* tctx,

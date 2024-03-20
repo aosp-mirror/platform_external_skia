@@ -8,14 +8,22 @@
 #ifndef SkSGPaint_DEFINED
 #define SkSGPaint_DEFINED
 
-#include "modules/sksg/include/SkSGNode.h"
-
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "modules/sksg/include/SkSGNode.h"
+
+class SkMatrix;
+
+namespace skottie::internal {
+class AnimationBuilder;
+} // namespace skottie::internal
 
 namespace sksg {
-
+class InvalidationController;
 class Shader;
 
 /**
@@ -73,6 +81,8 @@ private:
     explicit Color(SkColor);
 
     SkColor fColor;
+
+    friend class skottie::internal::AnimationBuilder;
 };
 
 /**
@@ -97,6 +107,6 @@ private:
     using INHERITED = PaintNode;
 };
 
-} // namespace sksg
+}  // namespace sksg
 
 #endif // SkSGPaint_DEFINED

@@ -21,6 +21,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkMessageBus.h"
 #include "src/gpu/ResourceKey.h"
@@ -42,7 +43,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
-#include <utility>
 
 class GrResourceProvider;
 struct GrContextOptions;
@@ -61,7 +61,11 @@ static sk_sp<GrTextureProxy> deferred_tex(skiatest::Reporter* reporter,
                                           GrRecordingContext* rContext,
                                           GrProxyProvider* proxyProvider,
                                           SkBackingFit fit) {
+    using namespace skgpu;
+
     const GrCaps* caps = rContext->priv().caps();
+
+    Protected isProtected = Protected(caps->supportsProtectedContent());
 
     GrBackendFormat format = caps->getDefaultBackendFormat(kColorType, GrRenderable::kNo);
 
@@ -69,10 +73,10 @@ static sk_sp<GrTextureProxy> deferred_tex(skiatest::Reporter* reporter,
                                                              kSize,
                                                              GrRenderable::kNo,
                                                              1,
-                                                             GrMipmapped::kNo,
+                                                             Mipmapped::kNo,
                                                              fit,
-                                                             skgpu::Budgeted::kYes,
-                                                             GrProtected::kNo,
+                                                             Budgeted::kYes,
+                                                             isProtected,
                                                              /*label=*/{});
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     REPORTER_ASSERT(reporter, !proxy->getUniqueKey().isValid());
@@ -83,7 +87,11 @@ static sk_sp<GrTextureProxy> deferred_texRT(skiatest::Reporter* reporter,
                                             GrRecordingContext* rContext,
                                             GrProxyProvider* proxyProvider,
                                             SkBackingFit fit) {
+    using namespace skgpu;
+
     const GrCaps* caps = rContext->priv().caps();
+
+    Protected isProtected = Protected(caps->supportsProtectedContent());
 
     GrBackendFormat format = caps->getDefaultBackendFormat(kColorType, GrRenderable::kYes);
 
@@ -91,53 +99,67 @@ static sk_sp<GrTextureProxy> deferred_texRT(skiatest::Reporter* reporter,
                                                              kSize,
                                                              GrRenderable::kYes,
                                                              1,
-                                                             GrMipmapped::kNo,
+                                                             Mipmapped::kNo,
                                                              fit,
-                                                             skgpu::Budgeted::kYes,
-                                                             GrProtected::kNo,
+                                                             Budgeted::kYes,
+                                                             isProtected,
                                                              /*label=*/{});
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     REPORTER_ASSERT(reporter, !proxy->getUniqueKey().isValid());
     return proxy;
 }
 
-static sk_sp<GrTextureProxy> wrapped(skiatest::Reporter* reporter, GrRecordingContext*,
+static sk_sp<GrTextureProxy> wrapped(skiatest::Reporter* reporter, GrRecordingContext* rContext,
                                      GrProxyProvider* proxyProvider, SkBackingFit fit) {
+    using namespace skgpu;
+
+    Protected isProtected = Protected(rContext->priv().caps()->supportsProtectedContent());
+
     sk_sp<GrTextureProxy> proxy = proxyProvider->testingOnly_createInstantiatedProxy(
-            kSize, kColorType, GrRenderable::kNo, 1, fit, skgpu::Budgeted::kYes, GrProtected::kNo);
+            kSize, kColorType, GrRenderable::kNo, 1, fit, Budgeted::kYes, isProtected);
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     REPORTER_ASSERT(reporter, !proxy->getUniqueKey().isValid());
     return proxy;
 }
 
-static sk_sp<GrTextureProxy> wrapped_with_key(skiatest::Reporter* reporter, GrRecordingContext*,
-                                              GrProxyProvider* proxyProvider, SkBackingFit fit) {
-    static skgpu::UniqueKey::Domain d = skgpu::UniqueKey::GenerateDomain();
+static sk_sp<GrTextureProxy> wrapped_with_key(skiatest::Reporter* reporter,
+                                              GrRecordingContext* rContext,
+                                              GrProxyProvider* proxyProvider,
+                                              SkBackingFit fit) {
+    using namespace skgpu;
+
+    Protected isProtected = Protected(rContext->priv().caps()->supportsProtectedContent());
+
+    static UniqueKey::Domain d = UniqueKey::GenerateDomain();
     static int kUniqueKeyData = 0;
 
-    skgpu::UniqueKey key;
+    UniqueKey key;
 
-    skgpu::UniqueKey::Builder builder(&key, d, 1, nullptr);
+    UniqueKey::Builder builder(&key, d, 1, nullptr);
     builder[0] = kUniqueKeyData++;
     builder.finish();
 
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     sk_sp<GrTextureProxy> proxy = proxyProvider->testingOnly_createInstantiatedProxy(
-            kSize, kColorType, GrRenderable::kNo, 1, fit, skgpu::Budgeted::kYes, GrProtected::kNo);
+            kSize, kColorType, GrRenderable::kNo, 1, fit, Budgeted::kYes, isProtected);
     SkAssertResult(proxyProvider->assignUniqueKeyToProxy(key, proxy.get()));
     REPORTER_ASSERT(reporter, proxy->getUniqueKey().isValid());
     return proxy;
 }
 
 static sk_sp<GrTextureProxy> create_wrapped_backend(GrDirectContext* dContext) {
+    using namespace skgpu;
+
+    Protected isProtected = Protected(dContext->priv().caps()->supportsProtectedContent());
+
     auto mbet = sk_gpu_test::ManagedBackendTexture::MakeWithoutData(
             dContext,
             kSize.width(),
             kSize.height(),
             GrColorTypeToSkColorType(kColorType),
-            GrMipmapped::kNo,
+            Mipmapped::kNo,
             GrRenderable::kNo,
-            GrProtected::kNo);
+            isProtected);
     if (!mbet) {
         return nullptr;
     }
@@ -220,7 +242,7 @@ static void basic_test(GrDirectContext* dContext,
 
     // Mega-purging it should remove it from both the hash and the cache
     proxy = nullptr;
-    cache->purgeUnlockedResources();
+    cache->purgeUnlockedResources(GrPurgeResourceOptions::kAllResources);
     if (!expectResourceToOutliveProxy) {
         expectedCacheCount -= cacheEntriesPerProxy;
     }
@@ -272,14 +294,13 @@ static void invalidation_test(GrDirectContext* dContext,
     // Some of our backends use buffers to do uploads that will live in our resource cache. So we
     // need to account for those extra resources here.
     int bufferResources = 0;
-    if (dContext->backend() == GrBackendApi::kDawn ||
-        dContext->backend() == GrBackendApi::kVulkan ||
+    if (dContext->backend() == GrBackendApi::kVulkan ||
         dContext->backend() == GrBackendApi::kDirect3D ||
         dContext->backend() == GrBackendApi::kMetal) {
         bufferResources = 1;
     }
 
-    sk_sp<SkImage> textureImg = rasterImg->makeTextureImage(dContext);
+    sk_sp<SkImage> textureImg = SkImages::TextureFromImage(dContext, rasterImg);
     REPORTER_ASSERT(reporter, 0 == proxyProvider->numUniqueKeyProxies_TestOnly());
     REPORTER_ASSERT(reporter, cacheEntriesPerProxy + bufferResources == cache->getResourceCount());
 
@@ -296,8 +317,9 @@ static void invalidation_test(GrDirectContext* dContext,
 
     // For backends that use buffers to upload lets make sure that work has been submit and done
     // before we try to purge all resources.
-    dContext->submit(true);
-    dContext->priv().getResourceCache()->purgeUnlockedResources();
+    dContext->submit(GrSyncCpu::kYes);
+    dContext->priv().getResourceCache()->purgeUnlockedResources(
+            GrPurgeResourceOptions::kAllResources);
 
     REPORTER_ASSERT(reporter, 0 == proxyProvider->numUniqueKeyProxies_TestOnly());
     REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
@@ -340,7 +362,8 @@ static void invalidation_and_instantiation_test(GrDirectContext* dContext,
     REPORTER_ASSERT(reporter, cacheEntriesPerProxy == cache->getResourceCount());
 
     proxy = nullptr;
-    dContext->priv().getResourceCache()->purgeUnlockedResources();
+    dContext->priv().getResourceCache()->purgeUnlockedResources(
+            GrPurgeResourceOptions::kAllResources);
 
     REPORTER_ASSERT(reporter, 0 == proxyProvider->numUniqueKeyProxies_TestOnly());
     REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
@@ -376,7 +399,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TextureProxyTest,
         }
 
         REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
-        cache->purgeUnlockedResources();
+        cache->purgeUnlockedResources(GrPurgeResourceOptions::kAllResources);
     }
 
     basic_test(direct, reporter, create_wrapped_backend(direct), cacheEntriesPerProxy);

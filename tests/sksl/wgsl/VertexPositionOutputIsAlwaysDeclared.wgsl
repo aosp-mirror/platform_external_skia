@@ -1,10 +1,14 @@
+diagnostic(off, derivative_uniformity);
+diagnostic(off, chromium.unreachable_code);
 struct VSOut {
-    @builtin(position) sk_Position: vec4<f32>,
+  @builtin(position) sk_Position: vec4<f32>,
 };
-fn main() {
+fn _skslMain() {
+  {
+  }
 }
-@vertex fn vertexMain() -> VSOut {
-    var _stageOut: VSOut;
-    main();
-    return _stageOut;
+@vertex fn main() -> VSOut {
+  var _stageOut: VSOut;
+  _skslMain();
+  return _stageOut;
 }

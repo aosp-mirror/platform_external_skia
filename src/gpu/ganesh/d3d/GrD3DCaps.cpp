@@ -6,6 +6,7 @@
  */
 #include "src/gpu/ganesh/d3d/GrD3DCaps.h"
 
+#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextOptions.h"
 #include "include/gpu/d3d/GrD3DBackendContext.h"
@@ -40,7 +41,8 @@ GrD3DCaps::GrD3DCaps(const GrContextOptions& contextOptions, IDXGIAdapter1* adap
     fNativeDrawIndirectSupport = true;
 
     fSemaphoreSupport = true;
-    fFenceSyncSupport = true;
+    fBackendSemaphoreSupport = true;
+    fFinishedProcAsyncCallbackSupport = true;
     // TODO: implement these
     fCrossContextTextureSupport = false;
     fHalfFloatVertexAttributeSupport = false;
@@ -973,9 +975,9 @@ GrBackendFormat GrD3DCaps::onGetDefaultBackendFormat(GrColorType ct) const {
 }
 
 GrBackendFormat GrD3DCaps::getBackendFormatFromCompressionType(
-    SkImage::CompressionType compressionType) const {
+    SkTextureCompressionType compressionType) const {
     switch (compressionType) {
-        case SkImage::CompressionType::kBC1_RGBA8_UNORM:
+        case SkTextureCompressionType::kBC1_RGBA8_UNORM:
             if (this->isFormatTexturable(DXGI_FORMAT_BC1_UNORM)) {
                 return GrBackendFormat::MakeDxgi(DXGI_FORMAT_BC1_UNORM);
             }
@@ -1034,9 +1036,9 @@ GrCaps::SupportedRead GrD3DCaps::onSupportedReadPixelsColorType(
         return { GrColorType::kUnknown, 0 };
     }
 
-    SkImage::CompressionType compression = GrBackendFormatToCompressionType(srcBackendFormat);
-    if (compression != SkImage::CompressionType::kNone) {
-        return { SkCompressionTypeIsOpaque(compression) ? GrColorType::kRGB_888x
+    SkTextureCompressionType compression = GrBackendFormatToCompressionType(srcBackendFormat);
+    if (compression != SkTextureCompressionType::kNone) {
+        return { SkTextureCompressionTypeIsOpaque(compression) ? GrColorType::kRGB_888x
                                                         : GrColorType::kRGBA_8888, 0 };
     }
 
@@ -1087,7 +1089,7 @@ GrProgramDesc GrD3DCaps::makeDesc(GrRenderTarget* rt,
     return desc;
 }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 std::vector<GrTest::TestFormatColorTypeCombination> GrD3DCaps::getTestingCombinations() const {
     std::vector<GrTest::TestFormatColorTypeCombination> combos = {
         {GrColorType::kAlpha_8,        GrBackendFormat::MakeDxgi(DXGI_FORMAT_R8_UNORM)           },

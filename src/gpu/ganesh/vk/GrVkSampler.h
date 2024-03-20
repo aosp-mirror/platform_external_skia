@@ -9,7 +9,7 @@
 #define GrVkSampler_DEFINED
 
 #include "include/gpu/vk/GrVkTypes.h"
-#include "src/core/SkOpts.h"
+#include "src/core/SkChecksum.h"
 #include "src/gpu/ganesh/vk/GrVkManagedResource.h"
 #include "src/gpu/ganesh/vk/GrVkSamplerYcbcrConversion.h"
 
@@ -26,29 +26,29 @@ public:
     VkSampler sampler() const { return fSampler; }
     const VkSampler* samplerPtr() const { return &fSampler; }
 
+    SK_BEGIN_REQUIRE_DENSE
     struct Key {
         Key(uint32_t samplerKey, const GrVkSamplerYcbcrConversion::Key& ycbcrKey) {
-            // We must memset here since the GrVkSamplerYcbcrConversion has a 64 bit value which may
-            // force alignment padding to occur in the middle of the Key struct.
-            memset(this, 0, sizeof(Key));
             fSamplerKey = samplerKey;
             fYcbcrKey = ycbcrKey;
         }
         GrVkSamplerYcbcrConversion::Key fYcbcrKey;
         uint32_t                        fSamplerKey;
+        uint32_t                        fPadding = 0;
 
         bool operator==(const Key& that) const {
             return this->fSamplerKey == that.fSamplerKey &&
                    this->fYcbcrKey == that.fYcbcrKey;
         }
     };
+    SK_END_REQUIRE_DENSE
 
     // Helpers for hashing GrVkSampler
     static Key GenerateKey(GrSamplerState, const GrVkYcbcrConversionInfo&);
 
     static const Key& GetKey(const GrVkSampler& sampler) { return sampler.fKey; }
     static uint32_t Hash(const Key& key) {
-        return SkOpts::hash(reinterpret_cast<const uint32_t*>(&key), sizeof(Key));
+        return SkChecksum::Hash32(&key, sizeof(Key));
     }
 
     uint32_t uniqueID() const { return fUniqueID; }

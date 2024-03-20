@@ -26,6 +26,7 @@
 #include "include/core/SkTypes.h"
 #include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 namespace skiagm {
 
@@ -47,13 +48,9 @@ protected:
         kNumShapeTypes
     };
 
-    SkString onShortName() override {
-        return SkString("dstreadshuffle");
-    }
+    SkString getName() const override { return SkString("dstreadshuffle"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(530, 680);
-    }
+    SkISize getISize() override { return SkISize::Make(530, 680); }
 
     void drawShape(SkCanvas* canvas, SkPaint* paint, ShapeType type) {
         const SkRect kRect = SkRect::MakeXYWH(0, 0, 75.f, 85.f);
@@ -100,7 +97,7 @@ protected:
                 break;
             case kText_ShapeType: {
                 const char* text = "N";
-                SkFont      font(ToolUtils::create_portable_typeface(), 100);
+                SkFont      font(ToolUtils::DefaultPortableTypeface(), 100);
                 font.setEmbolden(true);
                 canvas->drawString(text, 0.f, 100.f, font, *paint);
                 break;
@@ -183,7 +180,7 @@ protected:
                                          canvas->imageInfo().alphaType(),
                                          canvas->imageInfo().refColorSpace());
             }
-            surf = SkSurface::MakeRaster(info);
+            surf = SkSurfaces::Raster(info);
             SkASSERT(surf);
         }
         canvas->scale(5.f, 5.f);

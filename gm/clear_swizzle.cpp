@@ -13,6 +13,7 @@
 #include "include/private/SkColorData.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/gpu/Swizzle.h"
+#include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
 #include "src/gpu/ganesh/SurfaceFillContext.h"
 
@@ -27,7 +28,7 @@ DEF_SIMPLE_GPU_GM_CAN_FAIL(clear_swizzle, rContext, canvas, errorMsg, 6*kSize, 2
         return DrawResult::kSkip;
     }
 
-    auto sfc = SkCanvasPriv::TopDeviceSurfaceFillContext(canvas);
+    auto sfc = skgpu::ganesh::TopDeviceSurfaceFillContext(canvas);
     if (!sfc) {
         *errorMsg = GM::kErrorMsg_DrawSkippedGpuOnly;
         return DrawResult::kSkip;
@@ -44,7 +45,7 @@ DEF_SIMPLE_GPU_GM_CAN_FAIL(clear_swizzle, rContext, canvas, errorMsg, 6*kSize, 2
                                         SkBackingFit::kExact,
                                         sfc->asSurfaceProxy()->backendFormat(),
                                         /* sample count*/ 1,
-                                        GrMipmapped::kNo,
+                                        skgpu::Mipmapped::kNo,
                                         sfc->asSurfaceProxy()->isProtected(),
                                         readSwizzle,
                                         writeSwizzle,

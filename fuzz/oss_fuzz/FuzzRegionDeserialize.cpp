@@ -7,14 +7,13 @@
 
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkData.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
 #include "src/core/SkRegionPriv.h"
 
-bool FuzzRegionDeserialize(sk_sp<SkData> bytes) {
+bool FuzzRegionDeserialize(const uint8_t *data, size_t size) {
     SkRegion region;
-    if (!region.readFromMemory(bytes->data(), bytes->size())) {
+    if (!region.readFromMemory(data, size)) {
         return false;
     }
     region.computeRegionComplexity();
@@ -25,7 +24,7 @@ bool FuzzRegionDeserialize(sk_sp<SkData> bytes) {
     } else {
         region.contains(1,1);
     }
-    auto s = SkSurface::MakeRasterN32Premul(128, 128);
+    auto s = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(128, 128));
     if (!s) {
         // May return nullptr in memory-constrained fuzzing environments
         return false;
@@ -35,14 +34,12 @@ bool FuzzRegionDeserialize(sk_sp<SkData> bytes) {
     return true;
 }
 
-// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
-#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
+#if defined(SK_BUILD_FOR_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 512) {
         return 0;
     }
-    auto bytes = SkData::MakeWithoutCopy(data, size);
-    FuzzRegionDeserialize(bytes);
+    FuzzRegionDeserialize(data, size);
     return 0;
 }
 #endif

@@ -12,10 +12,13 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkRRect.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkColorFilterPriv.h"
+#include "tools/DecodeUtils.h"
+#include "tools/GpuToolUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -58,7 +61,7 @@ sk_sp<SkShader> create_image_shader(SkCanvas* destCanvas, SkTileMode tmX, SkTile
         bitmap.setImmutable();
     }
 
-    sk_sp<SkImage> img = SkImage::MakeFromBitmap(bitmap);
+    sk_sp<SkImage> img = SkImages::RasterFromBitmap(bitmap);
     img = ToolUtils::MakeTextureImage(destCanvas, std::move(img));
     if (img) {
         return img->makeShader(tmX, tmY, SkSamplingOptions());
@@ -254,7 +257,7 @@ class GraphiteStartGM : public GM {
 public:
     GraphiteStartGM() {
         this->setBGColor(SK_ColorBLACK);
-        GetResourceAsBitmap("images/color_wheel.gif", &fBitmap);
+        ToolUtils::GetResourceAsBitmap("images/color_wheel.gif", &fBitmap);
     }
 
 protected:
@@ -264,13 +267,9 @@ protected:
     static constexpr int kHeight = 3 * kTileHeight;
     static constexpr int kClipInset = 4;
 
-    SkString onShortName() override {
-        return SkString("graphitestart");
-    }
+    SkString getName() const override { return SkString("graphitestart"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(kWidth, kHeight);
-    }
+    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -309,7 +308,7 @@ protected:
 
         // Middle-right tile
         {
-            sk_sp<SkImage> image(GetResourceAsImage("images/mandrill_128.png"));
+            sk_sp<SkImage> image(ToolUtils::GetResourceAsImage("images/mandrill_128.png"));
             sk_sp<SkShader> shader;
 
             if (image) {

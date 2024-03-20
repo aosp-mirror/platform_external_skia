@@ -8,27 +8,39 @@
 #ifndef SkScalerContext_DEFINED
 #define SkScalerContext_DEFINED
 
-#include <memory>
-
-#include "include/core/SkFont.h"
-#include "include/core/SkFontTypes.h"
-#include "include/core/SkMaskFilter.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
 #include "include/private/base/SkMacros.h"
+#include "include/private/base/SkPoint_impl.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskGamma.h"
-#include "src/core/SkSurfacePriv.h"
-#include "src/core/SkWriteBuffer.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <utility>
+
+class SkArenaAlloc;
 class SkAutoDescriptor;
 class SkDescriptor;
+class SkDrawable;
+class SkFont;
 class SkMaskFilter;
+class SkPath;
 class SkPathEffect;
-class SkScalerContext;
-class SkScalerContext_DW;
+enum class SkFontHinting;
+struct SkFontMetrics;
 
 enum class SkScalerContextFlags : uint32_t {
     kNone                      = 0,
@@ -363,19 +375,32 @@ public:
 protected:
     SkScalerContextRec fRec;
 
-    /** Generates the contents of glyph.fAdvanceX and glyph.fAdvanceY if it can do so quickly.
-     *  Returns true if it could, false otherwise.
-     */
-    virtual bool generateAdvance(SkGlyph* glyph) = 0;
+    struct GlyphMetrics {
+        SkVector       advance;
+        SkRect         bounds;
+        SkMask::Format maskFormat;
+        uint16_t       extraBits;
+        bool           neverRequestPath;
+        bool           computeFromPath;
 
-    /** Generates the contents of glyph.fWidth, fHeight, fTop, fLeft,
-     *  as well as fAdvanceX and fAdvanceY if not already set.
-     *  The fMaskFormat will already be set to a requested format but may be changed.
-     */
-    virtual void generateMetrics(SkGlyph* glyph, SkArenaAlloc*) = 0;
-    static bool GenerateMetricsFromPath(
+        GlyphMetrics(SkMask::Format format)
+            : advance{0, 0}
+            , bounds{0, 0, 0, 0}
+            , maskFormat(format)
+            , extraBits(0)
+            , neverRequestPath(false)
+            , computeFromPath(false)
+        {}
+    };
+
+    virtual GlyphMetrics generateMetrics(const SkGlyph&, SkArenaAlloc*) = 0;
+
+    static void GenerateMetricsFromPath(
         SkGlyph* glyph, const SkPath& path, SkMask::Format format,
         bool verticalLCD, bool a8FromLCD, bool hairline);
+
+    static void SaturateGlyphBounds(SkGlyph* glyph, SkRect&&);
+    static void SaturateGlyphBounds(SkGlyph* glyph, SkIRect const &);
 
     /** Generates the contents of glyph.fImage.
      *  When called, glyph.fImage will be pointing to a pre-allocated,
@@ -385,9 +410,9 @@ protected:
      *  Because glyph.imageSize() will determine the size of fImage,
      *  generateMetrics will be called before generateImage.
      */
-    virtual void generateImage(const SkGlyph& glyph) = 0;
+    virtual void generateImage(const SkGlyph& glyph, void* imageBuffer) = 0;
     static void GenerateImageFromPath(
-        const SkMask& mask, const SkPath& path, const SkMaskGamma::PreBlend& maskPreBlend,
+        SkMaskBuilder& dst, const SkPath& path, const SkMaskGamma::PreBlend& maskPreBlend,
         bool doBGR, bool verticalLCD, bool a8FromLCD, bool hairline);
 
     /** Sets the passed path to the glyph outline.
@@ -395,7 +420,7 @@ protected:
      *  Does not apply subpixel positioning to the path.
      *  @return false if this glyph does not have any path.
      */
-    virtual bool SK_WARN_UNUSED_RESULT generatePath(const SkGlyph&, SkPath*) = 0;
+    [[nodiscard]] virtual bool generatePath(const SkGlyph&, SkPath*) = 0;
 
     /** Returns the drawable for the glyph (if any).
      *
@@ -403,7 +428,7 @@ protected:
      *  This means the drawable may refer to the scaler context and associated font data.
      *
      *  The drawable does not need to be flattenable (e.g. implement getFactory and getTypeName).
-     *  Any necessary serialization will be done with newPictureSnapshot.
+     *  Any necessary serialization will be done with makePictureSnapshot.
      */
     virtual sk_sp<SkDrawable> generateDrawable(const SkGlyph&); // TODO: = 0
 

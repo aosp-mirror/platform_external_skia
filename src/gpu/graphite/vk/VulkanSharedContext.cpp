@@ -9,11 +9,15 @@
 
 #include "include/gpu/graphite/ContextOptions.h"
 #include "include/gpu/vk/VulkanBackendContext.h"
+#include "include/private/base/SkMutex.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/ResourceTypes.h"
+#include "src/gpu/graphite/vk/VulkanBuffer.h"
 #include "src/gpu/graphite/vk/VulkanCaps.h"
 #include "src/gpu/graphite/vk/VulkanResourceProvider.h"
 #include "src/gpu/vk/VulkanAMDMemoryAllocator.h"
 #include "src/gpu/vk/VulkanInterface.h"
+#include "src/gpu/vk/VulkanUtilsPriv.h"
 
 namespace skgpu::graphite {
 
@@ -79,25 +83,36 @@ sk_sp<SharedContext> VulkanSharedContext::Make(const VulkanBackendContext& conte
         return nullptr;
     }
 
-    std::unique_ptr<const VulkanCaps> caps(new VulkanCaps(interface.get(),
+    VkPhysicalDeviceFeatures2 features;
+    const VkPhysicalDeviceFeatures2* featuresPtr;
+    // If fDeviceFeatures2 is not null, then we ignore fDeviceFeatures. If both are null, we assume
+    // no features are enabled.
+    if (!context.fDeviceFeatures2 && context.fDeviceFeatures) {
+        features.pNext = nullptr;
+        features.features = *context.fDeviceFeatures;
+        featuresPtr = &features;
+    } else {
+        featuresPtr = context.fDeviceFeatures2;
+    }
+
+    std::unique_ptr<const VulkanCaps> caps(new VulkanCaps(options,
+                                                          interface.get(),
                                                           context.fPhysicalDevice,
                                                           physDevVersion,
+                                                          featuresPtr,
                                                           context.fVkExtensions,
-                                                          options));
+                                                          context.fProtectedContext));
 
     sk_sp<skgpu::VulkanMemoryAllocator> memoryAllocator = context.fMemoryAllocator;
     if (!memoryAllocator) {
-        // TODO: fix this check when we have the caps check
         // We were not given a memory allocator at creation
-        bool mustUseCoherentHostVisibleMemory = false; /*caps->mustUseCoherentHostVisibleMemory();*/
         bool threadSafe = !options.fClientWillExternallySynchronizeAllThreads;
         memoryAllocator = skgpu::VulkanAMDMemoryAllocator::Make(context.fInstance,
                                                                 context.fPhysicalDevice,
                                                                 context.fDevice,
                                                                 physDevVersion,
                                                                 context.fVkExtensions,
-                                                                interface,
-                                                                mustUseCoherentHostVisibleMemory,
+                                                                interface.get(),
                                                                 threadSafe);
     }
     if (!memoryAllocator) {
@@ -119,14 +134,55 @@ VulkanSharedContext::VulkanSharedContext(const VulkanBackendContext& backendCont
         , fInterface(std::move(interface))
         , fMemoryAllocator(std::move(memoryAllocator))
         , fDevice(std::move(backendContext.fDevice))
-        , fQueueIndex(backendContext.fGraphicsQueueIndex) {}
+        , fQueueIndex(backendContext.fGraphicsQueueIndex)
+        , fDeviceLostContext(backendContext.fDeviceLostContext)
+        , fDeviceLostProc(backendContext.fDeviceLostProc) {}
 
 VulkanSharedContext::~VulkanSharedContext() {
+    // need to clear out resources before the allocator is removed
+    this->globalCache()->deleteResources();
 }
 
 std::unique_ptr<ResourceProvider> VulkanSharedContext::makeResourceProvider(
-        SingleOwner* singleOwner) {
-    return std::unique_ptr<ResourceProvider>(new VulkanResourceProvider(this, singleOwner));
+        SingleOwner* singleOwner,
+        uint32_t recorderID,
+        size_t resourceBudget) {
+    // Establish a uniform buffer that can be updated across multiple render passes and cmd buffers
+    size_t alignedIntrinsicConstantSize =
+            std::max(VulkanResourceProvider::kIntrinsicConstantSize,
+                     this->vulkanCaps().requiredUniformBufferAlignment());
+    sk_sp<Buffer> intrinsicConstantBuffer = VulkanBuffer::Make(this,
+                                                               alignedIntrinsicConstantSize,
+                                                               BufferType::kUniform,
+                                                               AccessPattern::kGpuOnly);
+    if (!intrinsicConstantBuffer) {
+        SKGPU_LOG_E("Failed to create intrinsic constant uniform buffer");
+        return nullptr;
+    }
+    SkASSERT(static_cast<VulkanBuffer*>(intrinsicConstantBuffer.get())->bufferUsageFlags()
+             & VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    // Establish a vertex buffer that can be updated across multiple render passes and cmd buffers
+    // for loading MSAA from resolve
+    sk_sp<Buffer> loadMSAAVertexBuffer =
+            VulkanBuffer::Make(this,
+                               VulkanResourceProvider::kLoadMSAAVertexBufferSize,
+                               BufferType::kVertex,
+                               AccessPattern::kGpuOnly);
+    if (!loadMSAAVertexBuffer) {
+        SKGPU_LOG_E("Failed to create vertex buffer for loading MSAA from resolve");
+        return nullptr;
+    }
+    SkASSERT(static_cast<VulkanBuffer*>(loadMSAAVertexBuffer.get())->bufferUsageFlags()
+             & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+    return std::unique_ptr<ResourceProvider>(
+            new VulkanResourceProvider(this,
+                                       singleOwner,
+                                       recorderID,
+                                       resourceBudget,
+                                       std::move(intrinsicConstantBuffer),
+                                       std::move(loadMSAAVertexBuffer)));
 }
 
 bool VulkanSharedContext::checkVkResult(VkResult result) const {
@@ -134,8 +190,21 @@ bool VulkanSharedContext::checkVkResult(VkResult result) const {
     case VK_SUCCESS:
         return true;
     case VK_ERROR_DEVICE_LOST:
-        // TODO: determine how we'll track this in a thread-safe manner
-        //fDeviceIsLost = true;
+        {
+            SkAutoMutexExclusive lock(fDeviceIsLostMutex);
+            if (fDeviceIsLost) {
+                return false;
+            }
+            fDeviceIsLost = true;
+            // Fall through to InvokeDeviceLostCallback (on first VK_ERROR_DEVICE_LOST) only afer
+            // releasing fDeviceIsLostMutex, otherwise clients might cause deadlock by checking
+            // isDeviceLost() from the callback.
+        }
+        skgpu::InvokeDeviceLostCallback(interface(),
+                                        device(),
+                                        fDeviceLostContext,
+                                        fDeviceLostProc,
+                                        vulkanCaps().supportsDeviceFaultInfo());
         return false;
     case VK_ERROR_OUT_OF_DEVICE_MEMORY:
     case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -147,4 +216,3 @@ bool VulkanSharedContext::checkVkResult(VkResult result) const {
     }
 }
 } // namespace skgpu::graphite
-
