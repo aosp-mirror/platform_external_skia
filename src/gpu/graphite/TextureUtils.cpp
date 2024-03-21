@@ -33,7 +33,6 @@
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandBuffer.h"
-#include "src/gpu/graphite/CopyTask.h"
 #include "src/gpu/graphite/Device.h"
 #include "src/gpu/graphite/Image_Graphite.h"
 #include "src/gpu/graphite/Log.h"
@@ -41,9 +40,11 @@
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/SpecialImage_Graphite.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
-#include "src/gpu/graphite/SynchronizeToCpuTask.h"
 #include "src/gpu/graphite/Texture.h"
-#include "src/gpu/graphite/UploadTask.h"
+#include "src/gpu/graphite/task/CopyTask.h"
+#include "src/gpu/graphite/task/SynchronizeToCpuTask.h"
+#include "src/gpu/graphite/task/UploadTask.h"
+
 
 #include <array>
 
@@ -524,6 +525,7 @@ sk_sp<SkImage> RescaleImage(Recorder* recorder,
         SkRect gammaDstRect = SkRect::Make(srcIRect.size());
 
         SkPaint paint;
+        paint.setBlendMode(SkBlendMode::kSrc);
         gammaDst->drawImageRect(tempInput, srcRect, gammaDstRect,
                                 SkSamplingOptions(SkFilterMode::kNearest), &paint,
                                 SkCanvas::kStrict_SrcRectConstraint);
@@ -575,6 +577,7 @@ sk_sp<SkImage> RescaleImage(Recorder* recorder,
                                SkSamplingOptions(SkFilterMode::kLinear);
         }
         SkPaint paint;
+        paint.setBlendMode(SkBlendMode::kSrc);
         stepDst->drawImageRect(tempInput, srcRect, stepDstRect, samplingOptions, &paint,
                                SkCanvas::kStrict_SrcRectConstraint);
 
