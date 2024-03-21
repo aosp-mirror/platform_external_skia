@@ -5153,6 +5153,7 @@ cc_library_shared {
         "tests/graphite/BackendTextureTest.cpp",
         "tests/graphite/BoundsManagerTest.cpp",
         "tests/graphite/BufferManagerTest.cpp",
+        "tests/graphite/CacheBudgetTest.cpp",
         "tests/graphite/CacheKeyTest.cpp",
         "tests/graphite/CombinationBuilderTest.cpp",
         "tests/graphite/ComputeTest.cpp",
