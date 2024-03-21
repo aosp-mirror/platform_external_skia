@@ -3,10 +3,6 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
-#ifndef SKSL_ENABLE_TRACING
-#define SKSL_ENABLE_TRACING
-#endif
-
 #ifndef SK_ANDROID_FRAMEWORK_USE_PERFETTO
 #define SK_ANDROID_FRAMEWORK_USE_PERFETTO
 #endif

@@ -813,6 +813,11 @@ size_t Context::currentBudgetedBytes() const {
     return fResourceProvider->getResourceCacheCurrentBudgetedBytes();
 }
 
+size_t Context::maxBudgetedBytes() const {
+    ASSERT_SINGLE_OWNER
+    return fResourceProvider->getResourceCacheLimit();
+}
+
 void Context::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
     ASSERT_SINGLE_OWNER
     fResourceProvider->dumpMemoryStatistics(traceMemoryDump);
@@ -822,6 +827,10 @@ void Context::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
 
 bool Context::isDeviceLost() const {
     return fSharedContext->isDeviceLost();
+}
+
+int Context::maxTextureSize() const {
+    return fSharedContext->caps()->maxTextureSize();
 }
 
 bool Context::supportsProtectedContent() const {
