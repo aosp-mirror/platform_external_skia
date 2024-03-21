@@ -2083,12 +2083,15 @@ cc_defaults {
         "libpiex",
         "libexpat",
         "libft2",
+        "libharfbuzz_subset",
     ],
     static_libs: [
         "libwebp-decode",
         "libwebp-encode",
-        "libsfntly",
         "libwuffs_mirror_release_c",
+    ],
+    cflags: [
+        "-DSK_PDF_USE_HARFBUZZ_SUBSET",
     ],
     target: {
       android: {
@@ -2486,6 +2489,7 @@ cc_defaults {
         "gm/readpixels.cpp",
         "gm/recordopts.cpp",
         "gm/rectangletexture.cpp",
+        "gm/rendertomipmappedyuvimageplanes.cpp",
         "gm/repeated_bitmap.cpp",
         "gm/resizeimagefilter.cpp",
         "gm/rippleshadergm.cpp",
@@ -3655,6 +3659,7 @@ cc_library_shared {
         "gm/readpixels.cpp",
         "gm/recordopts.cpp",
         "gm/rectangletexture.cpp",
+        "gm/rendertomipmappedyuvimageplanes.cpp",
         "gm/repeated_bitmap.cpp",
         "gm/resizeimagefilter.cpp",
         "gm/rippleshadergm.cpp",

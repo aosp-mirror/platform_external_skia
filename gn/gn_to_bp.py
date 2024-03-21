@@ -266,12 +266,15 @@ cc_defaults {
         "libpiex",
         "libexpat",
         "libft2",
+        "libharfbuzz_subset",
     ],
     static_libs: [
         "libwebp-decode",
         "libwebp-encode",
-        "libsfntly",
         "libwuffs_mirror_release_c",
+    ],
+    cflags: [
+        "-DSK_PDF_USE_HARFBUZZ_SUBSET",
     ],
     target: {
       android: {
@@ -450,6 +453,7 @@ def generate_args(target_os, enable_gpu, renderengine = False):
     'skia_use_fonthost_mac':                'false',
 
     'skia_use_system_harfbuzz':             'false',
+    'skia_pdf_subset_harfbuzz':             'true',
 
     # enable features used in skia_nanobench
     'skia_tools_require_resources':         'true',
