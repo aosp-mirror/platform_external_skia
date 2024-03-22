@@ -28,7 +28,6 @@
 #include "src/gpu/graphite/ClientMappedBufferManager.h"
 #include "src/gpu/graphite/CommandBuffer.h"
 #include "src/gpu/graphite/ContextPriv.h"
-#include "src/gpu/graphite/CopyTask.h"
 #include "src/gpu/graphite/DrawAtlas.h"
 #include "src/gpu/graphite/GlobalCache.h"
 #include "src/gpu/graphite/GraphicsPipeline.h"
@@ -46,10 +45,12 @@
 #include "src/gpu/graphite/ShaderCodeDictionary.h"
 #include "src/gpu/graphite/SharedContext.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
-#include "src/gpu/graphite/SynchronizeToCpuTask.h"
 #include "src/gpu/graphite/TextureProxyView.h"
 #include "src/gpu/graphite/TextureUtils.h"
-#include "src/gpu/graphite/UploadTask.h"
+#include "src/gpu/graphite/task/CopyTask.h"
+#include "src/gpu/graphite/task/SynchronizeToCpuTask.h"
+#include "src/gpu/graphite/task/UploadTask.h"
+
 #include "src/image/SkSurface_Base.h"
 
 #if defined(GRAPHITE_TEST_UTILS)
@@ -813,6 +814,11 @@ size_t Context::currentBudgetedBytes() const {
     return fResourceProvider->getResourceCacheCurrentBudgetedBytes();
 }
 
+size_t Context::maxBudgetedBytes() const {
+    ASSERT_SINGLE_OWNER
+    return fResourceProvider->getResourceCacheLimit();
+}
+
 void Context::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
     ASSERT_SINGLE_OWNER
     fResourceProvider->dumpMemoryStatistics(traceMemoryDump);
@@ -822,6 +828,10 @@ void Context::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
 
 bool Context::isDeviceLost() const {
     return fSharedContext->isDeviceLost();
+}
+
+int Context::maxTextureSize() const {
+    return fSharedContext->caps()->maxTextureSize();
 }
 
 bool Context::supportsProtectedContent() const {
