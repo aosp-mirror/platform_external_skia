@@ -84,8 +84,9 @@ enum class ShaderType {
     kRadialGradient,
     kSolidColor,
     kSweepGradient,
+    kWorkingColorSpace,
 
-    kLast          = kSweepGradient
+    kLast          = kWorkingColorSpace
 };
 
 static constexpr int kShaderTypeCount = static_cast<int>(ShaderType::kLast) + 1;
@@ -410,9 +411,10 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_localmatrix_shader(Sk
         return { nullptr, nullptr };
     }
 
-    SkMatrix tmp = SkMatrix::Scale(1.5f, 2.0f); // TODO: fuzz
+    SkMatrix lmStorage;
+    random_local_matrix(rand, &lmStorage);
 
-    return { s->makeWithLocalMatrix(tmp), o->makeWithLocalMatrix() };
+    return { s->makeWithLocalMatrix(lmStorage), o->makeWithLocalMatrix() };
 }
 
 std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_colorfilter_shader(SkRandom* rand,
@@ -484,6 +486,21 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_blend_shader(SkRandom
     return { s, o };
 }
 
+std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_workingCS_shader(SkRandom* rand,
+                                                                            Recorder* recorder) {
+    auto [wrappedS, wrappedO] = create_random_shader(rand, recorder);
+    SkASSERT(!wrappedS == !wrappedO);
+    if (!wrappedS) {
+        return { nullptr, nullptr };
+    }
+
+    sk_sp<SkColorSpace> cs = random_colorspace(rand);
+    sk_sp<SkShader> s = wrappedS->makeWithWorkingColorSpace(cs);
+    sk_sp<PrecompileShader> o = wrappedO->makeWithWorkingColorSpace(std::move(cs));
+
+    return { s, o };
+}
+
 std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>>  create_shader(SkRandom* rand,
                                                                    Recorder* recorder,
                                                                    ShaderType shaderType) {
@@ -517,6 +534,8 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>>  create_shader(SkRandom* ran
             return create_solid_shader(rand);
         case ShaderType::kSweepGradient:
             return create_gradient_shader(rand, SkShaderBase::GradientType::kSweep);
+        case ShaderType::kWorkingColorSpace:
+            return create_workingCS_shader(rand, recorder);
     }
 
     SkUNREACHABLE;
@@ -1051,6 +1070,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
             ShaderType::kPerlinNoise,
             ShaderType::kPicture,
             ShaderType::kSweepGradient,
+            ShaderType::kWorkingColorSpace,
 #endif
     };
 
