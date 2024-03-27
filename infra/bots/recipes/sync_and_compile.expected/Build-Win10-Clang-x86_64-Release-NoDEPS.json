@@ -90,6 +90,32 @@
   },
   {
     "cmd": [
+      "python3",
+      "[START_DIR]\\skia\\bin\\fetch-gn"
+    ],
+    "cwd": "[START_DIR]\\skia",
+    "env": {
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>;RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "fetch-gn"
+  },
+  {
+    "cmd": [
+      "python3",
+      "[START_DIR]\\skia\\bin\\fetch-ninja"
+    ],
+    "cwd": "[START_DIR]\\skia",
+    "env": {
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>;RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "fetch-ninja"
+  },
+  {
+    "cmd": [
       "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]\\resources\\fileutil.py",
@@ -108,19 +134,6 @@
   },
   {
     "cmd": [
-      "python3",
-      "[START_DIR]\\skia\\bin\\fetch-gn"
-    ],
-    "cwd": "[START_DIR]\\skia",
-    "env": {
-      "CHROME_HEADLESS": "1",
-      "PATH": "<PATH>;RECIPE_REPO[depot_tools]"
-    },
-    "infra_step": true,
-    "name": "fetch-gn"
-  },
-  {
-    "cmd": [
       "[START_DIR]\\skia\\bin\\gn",
       "gen",
       "[START_DIR]\\skia\\out\\Build-Win10-Clang-x86_64-Release-NoDEPS\\Release_x64",
@@ -135,7 +148,7 @@
   },
   {
     "cmd": [
-      "ninja",
+      "[START_DIR]\\skia\\third_party\\ninja\\ninja",
       "-C",
       "[START_DIR]\\skia\\out\\Build-Win10-Clang-x86_64-Release-NoDEPS\\Release_x64"
     ],
@@ -159,7 +172,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "RECIPE_MODULE[skia::build]\\resources\\cleanup_win_processes.py"
     ],
     "infra_step": true,
