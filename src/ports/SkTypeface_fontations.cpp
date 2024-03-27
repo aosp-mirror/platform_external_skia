@@ -54,8 +54,8 @@ static_assert(sizeof(fontations_ffi::SkiaDesignCoordinate) ==
               "SkFontArguments::VariationPosition::Coordinate.");
 
 rust::Box<fontations_ffi::BridgeNormalizedCoords> make_normalized_coords(
-        fontations_ffi::BridgeFontRef const& bridgeFontRef, const SkFontArguments& args) {
-    SkFontArguments::VariationPosition variationPosition = args.getVariationDesignPosition();
+        fontations_ffi::BridgeFontRef const& bridgeFontRef,
+        const SkFontArguments::VariationPosition& variationPosition) {
     // Cast is safe because of static_assert matching the structs above.
     rust::Slice<const fontations_ffi::SkiaDesignCoordinate> coordinates(
             reinterpret_cast<const fontations_ffi::SkiaDesignCoordinate*>(
@@ -88,6 +88,7 @@ SkTypeface_Fontations::SkTypeface_Fontations(
         const SkFontStyle& style,
         uint32_t ttcIndex,
         rust::Box<fontations_ffi::BridgeFontRef>&& fontRef,
+        rust::Box<fontations_ffi::BridgeMappingIndex>&& mappingIndex,
         rust::Box<fontations_ffi::BridgeNormalizedCoords>&& normalizedCoords,
         rust::Box<fontations_ffi::BridgeOutlineCollection>&& outlines,
         rust::Vec<uint32_t>&& palette)
@@ -95,6 +96,7 @@ SkTypeface_Fontations::SkTypeface_Fontations(
         , fFontData(std::move(fontData))
         , fTtcIndex(ttcIndex)
         , fBridgeFontRef(std::move(fontRef))
+        , fMappingIndex(std::move(mappingIndex))
         , fBridgeNormalizedCoords(std::move(normalizedCoords))
         , fOutlines(std::move(outlines))
         , fPalette(std::move(palette)) {}
@@ -119,9 +121,44 @@ sk_sp<SkTypeface> SkTypeface_Fontations::MakeFromData(sk_sp<SkData> data,
                             fontStyle.width,
                             static_cast<SkFontStyle::Slant>(fontStyle.slant));
     }
+    rust::Box<fontations_ffi::BridgeMappingIndex> mappingIndex =
+            fontations_ffi::make_mapping_index(*bridgeFontRef);
+
+    SkFontArguments::VariationPosition variationPosition = args.getVariationDesignPosition();
+    std::unique_ptr<SkFontArguments::VariationPosition::Coordinate[]> concatenatedCoords = nullptr;
+    // Handle FreeType behaviour of upper 15 bits of collection index
+    // representing a named instance choice. If so, prepopulate the variation
+    // coordinates with the values from the named instance and append the user
+    // coordinates after that so they can override the named instance's
+    // coordinates.
+    if (args.getCollectionIndex() & 0xFFFF0000) {
+        size_t numNamedInstanceCoords =
+                fontations_ffi::coordinates_for_shifted_named_instance_index(
+                        *bridgeFontRef,
+                        args.getCollectionIndex(),
+                        rust::cxxbridge1::Slice<fontations_ffi::SkiaDesignCoordinate>());
+        concatenatedCoords.reset(
+                new SkFontArguments::VariationPosition::Coordinate
+                        [numNamedInstanceCoords + variationPosition.coordinateCount]);
+
+        rust::cxxbridge1::Slice<fontations_ffi::SkiaDesignCoordinate> targetSlice(
+                reinterpret_cast<fontations_ffi::SkiaDesignCoordinate*>(concatenatedCoords.get()),
+                numNamedInstanceCoords);
+        size_t retrievedNamedInstanceCoords =
+                fontations_ffi::coordinates_for_shifted_named_instance_index(
+                        *bridgeFontRef, args.getCollectionIndex(), targetSlice);
+        if (numNamedInstanceCoords != retrievedNamedInstanceCoords) {
+            return nullptr;
+        }
+        for (int i = 0; i < variationPosition.coordinateCount; ++i) {
+            concatenatedCoords[numNamedInstanceCoords + i] = variationPosition.coordinates[i];
+        }
+        variationPosition.coordinateCount += numNamedInstanceCoords;
+        variationPosition.coordinates = concatenatedCoords.get();
+    }
 
     rust::Box<fontations_ffi::BridgeNormalizedCoords> normalizedCoords =
-            make_normalized_coords(*bridgeFontRef, args);
+            make_normalized_coords(*bridgeFontRef, variationPosition);
     rust::Box<fontations_ffi::BridgeOutlineCollection> outlines =
             fontations_ffi::get_outline_collection(*bridgeFontRef);
 
@@ -135,6 +172,7 @@ sk_sp<SkTypeface> SkTypeface_Fontations::MakeFromData(sk_sp<SkData> data,
                                                        style,
                                                        ttcIndex,
                                                        std::move(bridgeFontRef),
+                                                       std::move(mappingIndex),
                                                        std::move(normalizedCoords),
                                                        std::move(outlines),
                                                        std::move(palette)));
@@ -247,7 +285,7 @@ void SkTypeface_Fontations::onCharsToGlyphs(const SkUnichar* chars,
     sk_bzero(glyphs, count * sizeof(glyphs[0]));
 
     for (int i = 0; i < count; ++i) {
-        glyphs[i] = fontations_ffi::lookup_glyph_or_zero(*fBridgeFontRef, chars[i]);
+        glyphs[i] = fontations_ffi::lookup_glyph_or_zero(*fBridgeFontRef, *fMappingIndex, chars[i]);
     }
 }
 int SkTypeface_Fontations::onCountGlyphs() const {
@@ -256,8 +294,11 @@ int SkTypeface_Fontations::onCountGlyphs() const {
 
 void SkTypeface_Fontations::getGlyphToUnicodeMap(SkUnichar* codepointForGlyphMap) const {
     size_t numGlyphs = SkToSizeT(onCountGlyphs());
-    if (!codepointForGlyphMap) { SkASSERT(numGlyphs == 0); }
-    rust::Slice<uint32_t> codepointForGlyphSlice{reinterpret_cast<uint32_t*>(codepointForGlyphMap), numGlyphs};
+    if (!codepointForGlyphMap) {
+        SkASSERT(numGlyphs == 0);
+    }
+    rust::Slice<uint32_t> codepointForGlyphSlice{reinterpret_cast<uint32_t*>(codepointForGlyphMap),
+                                                 numGlyphs};
     fontations_ffi::fill_glyph_to_unicode_map(*fBridgeFontRef, codepointForGlyphSlice);
 }
 
@@ -629,9 +670,9 @@ protected:
         SkVector scale;
         SkMatrix remainingMatrix;
         fRec.computeMatrices(
-                    SkScalerContextRec::PreMatrixScale::kVertical, &scale, &remainingMatrix);
-        fontations_ffi::Metrics metrics = fontations_ffi::get_skia_metrics(
-                fBridgeFontRef, scale.fY, fBridgeNormalizedCoords);
+                SkScalerContextRec::PreMatrixScale::kVertical, &scale, &remainingMatrix);
+        fontations_ffi::Metrics metrics =
+                fontations_ffi::get_skia_metrics(fBridgeFontRef, scale.fY, fBridgeNormalizedCoords);
         out_metrics->fTop = -metrics.top;
         out_metrics->fAscent = -metrics.ascent;
         out_metrics->fDescent = -metrics.descent;
@@ -697,7 +738,7 @@ sk_sp<SkTypeface> SkTypeface_Fontations::onMakeClone(const SkFontArguments& args
     fusedArgs.setPalette(args.getPalette());
 
     rust::cxxbridge1::Box<fontations_ffi::BridgeNormalizedCoords> normalized_args =
-            make_normalized_coords(*fBridgeFontRef, fusedArgs);
+            make_normalized_coords(*fBridgeFontRef, fusedArgs.getVariationDesignPosition());
 
     if (!fontations_ffi::normalized_coords_equal(*normalized_args, *fBridgeNormalizedCoords)) {
         return MakeFromData(fFontData, fusedArgs);
