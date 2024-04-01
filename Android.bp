@@ -2158,6 +2158,7 @@ cc_defaults {
         "modules/skparagraph/utils/",
         "modules/skresources/include/",
         "modules/skshaper/include/",
+        "modules/skunicode/include/",
         "third_party/externals/vulkanmemoryallocator/include/",
     ],
 
