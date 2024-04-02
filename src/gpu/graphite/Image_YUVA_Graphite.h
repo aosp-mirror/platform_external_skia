@@ -57,22 +57,16 @@ public:
             SkImages::GraphitePromiseTextureReleaseProc);
 
 private:
-    sk_sp<SkImage> makeTextureImage(Recorder*, RequiredProperties) const override {
-        return nullptr;
-    }
+    sk_sp<SkImage> makeTextureImage(Recorder*, RequiredProperties) const override;
     using Image_Base::onMakeSubset;
-    sk_sp<SkImage> onMakeSubset(Recorder*, const SkIRect&, RequiredProperties) const override {
-        return nullptr;
-    }
+    sk_sp<SkImage> onMakeSubset(Recorder*, const SkIRect&, RequiredProperties) const override;
     using Image_Base::onMakeColorTypeAndColorSpace;
     sk_sp<SkImage> makeColorTypeAndColorSpace(Recorder*,
                                               SkColorType targetCT,
                                               sk_sp<SkColorSpace> targetCS,
-                                              RequiredProperties) const override {
-        return nullptr;
-    }
+                                              RequiredProperties) const override;
 
-    mutable YUVATextureProxies fYUVAProxies;
+    YUVATextureProxies fYUVAProxies;
 };
 
 } // namespace skgpu::graphite

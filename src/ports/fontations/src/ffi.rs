@@ -3,7 +3,11 @@ use ffi::{FillLinearParams, FillRadialParams};
 // Use of this source code is governed by a BSD-style license that can be found
 // in the LICENSE file.
 use font_types::{BoundingBox, GlyphId, Pen};
-use read_fonts::{tables::colr::CompositeMode, FileRef, FontRef, ReadError, TableProvider};
+use read_fonts::{
+    tables::colr::CompositeMode,
+    tables::os2::SelectionFlags,
+    FileRef, FontRef, ReadError, TableProvider
+};
 use skrifa::{
     attribute::Style,
     charmap::MappingIndex,
@@ -375,10 +379,10 @@ fn units_per_em_or_zero(font_ref: &BridgeFontRef) -> u16 {
 
 fn convert_metrics(skrifa_metrics: &Metrics) -> ffi::Metrics {
     ffi::Metrics {
-        top: skrifa_metrics.bounds.map_or_else(|| 0.0, |b| b.y_max),
-        bottom: skrifa_metrics.bounds.map_or_else(|| 0.0, |b| b.y_min),
-        x_min: skrifa_metrics.bounds.map_or_else(|| 0.0, |b| b.x_min),
-        x_max: skrifa_metrics.bounds.map_or_else(|| 0.0, |b| b.x_max),
+        top: skrifa_metrics.bounds.map_or(0.0, |b| b.y_max),
+        bottom: skrifa_metrics.bounds.map_or(0.0, |b| b.y_min),
+        x_min: skrifa_metrics.bounds.map_or(0.0, |b| b.x_min),
+        x_max: skrifa_metrics.bounds.map_or(0.0, |b| b.x_max),
         ascent: skrifa_metrics.ascent,
         descent: skrifa_metrics.descent,
         leading: skrifa_metrics.leading,
@@ -386,6 +390,10 @@ fn convert_metrics(skrifa_metrics: &Metrics) -> ffi::Metrics {
         max_char_width: skrifa_metrics.max_width.unwrap_or(0.0),
         x_height: skrifa_metrics.x_height.unwrap_or(0.0),
         cap_height: skrifa_metrics.cap_height.unwrap_or(0.0),
+        underline_position: skrifa_metrics.underline.map_or(f32::NAN, |u| u.offset),
+        underline_thickness: skrifa_metrics.underline.map_or(f32::NAN, |u| u.thickness),
+        strikeout_position: skrifa_metrics.strikeout.map_or(f32::NAN, |s| s.offset),
+        strikeout_thickness: skrifa_metrics.strikeout.map_or(f32::NAN, |s| s.thickness),
     }
 }
 
@@ -449,7 +457,15 @@ fn english_or_first_font_name(font_ref: &BridgeFontRef, name_id: StringId) -> Op
 }
 
 fn family_name(font_ref: &BridgeFontRef) -> String {
-    english_or_first_font_name(font_ref, StringId::FAMILY_NAME).unwrap_or_default()
+    font_ref.with_font(|f| {
+        // https://learn.microsoft.com/en-us/typography/opentype/spec/os2#fsselection
+        // Bit 8 of the `fsSelection' field in the `OS/2' table indicates a WWS-only font face.
+        // When this bit is set it means *do not* use the WWS strings.
+        let use_wws = !f.os2().map_or(false, |t| t.fs_selection().contains(SelectionFlags::WWS));
+        if use_wws { english_or_first_font_name(font_ref, StringId::WWS_FAMILY_NAME) } else { None }
+         .or_else(|| english_or_first_font_name(font_ref, StringId::TYPOGRAPHIC_FAMILY_NAME))
+         .or_else(|| english_or_first_font_name(font_ref, StringId::FAMILY_NAME))
+    }).unwrap_or_default()
 }
 
 fn postscript_name(font_ref: &BridgeFontRef, out_string: &mut String) -> bool {
@@ -1138,6 +1154,10 @@ mod ffi {
         x_max: f32,
         x_height: f32,
         cap_height: f32,
+        underline_position: f32,
+        underline_thickness: f32,
+        strikeout_position: f32,
+        strikeout_thickness: f32,
     }
 
     struct BridgeLocalizedName {

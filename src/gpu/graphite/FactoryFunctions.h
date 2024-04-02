@@ -25,6 +25,21 @@ class PrecompileShader;
 // All of these factory functions will be moved elsewhere once the pre-compile API becomes public
 
 //--------------------------------------------------------------------------------------------------
+namespace PrecompileBlenders {
+
+    // --- This call matches the SkBlenders factory in include/effects/SkBlenders.h
+    SK_API sk_sp<PrecompileBlender> Arithmetic();
+
+    // Note: the other main API SkBlender factories are:
+    //   SkBlender::Mode in include/core/SkBlender.h
+    //   SkRuntimeEffect::makeBlender in include/effects/SkRuntimeEffect.h
+    // Their precompilation correlates are:
+    //   PrecompileBlender::Mode(bm) in src/gpu/graphite/Precompile.h
+    //   MakePrecompileBlender() in src/gpu/graphite/FactoryFunctions.h
+
+} // namespace PrecompileBlenders
+
+//--------------------------------------------------------------------------------------------------
 namespace PrecompileShaders {
     // --- This block of six matches the SkShaders factories in include/core/SkShader.h
     SK_API sk_sp<PrecompileShader> Empty();
@@ -117,40 +132,30 @@ private:
 
 //--------------------------------------------------------------------------------------------------
 // This will move to be beside SkColorFilters in include/core/SkColorFilter.h
-class PrecompileColorFilters {
-public:
-    static sk_sp<PrecompileColorFilter> Compose(SkSpan<const sk_sp<PrecompileColorFilter>> outer,
+namespace PrecompileColorFilters {
+    // -- The next 8 entries match those in include/core/SkColorFilter.h
+    SK_API sk_sp<PrecompileColorFilter> Compose(SkSpan<const sk_sp<PrecompileColorFilter>> outer,
                                                 SkSpan<const sk_sp<PrecompileColorFilter>> inner);
 
     // This encompasses both variants of SkColorFilters::Blend
-    static sk_sp<PrecompileColorFilter> Blend();
+    SK_API sk_sp<PrecompileColorFilter> Blend();
 
     // This encompasses both variants of SkColorFilters::Matrix
-    static sk_sp<PrecompileColorFilter> Matrix();
+    SK_API sk_sp<PrecompileColorFilter> Matrix();
 
     // This encompasses both variants of SkColorFilters::HSLAMatrix
-    static sk_sp<PrecompileColorFilter> HSLAMatrix();
+    SK_API sk_sp<PrecompileColorFilter> HSLAMatrix();
 
     // TODO: add Lerp
-    static sk_sp<PrecompileColorFilter> LinearToSRGBGamma();
-    static sk_sp<PrecompileColorFilter> SRGBToLinearGamma();
+    SK_API sk_sp<PrecompileColorFilter> LinearToSRGBGamma();
+    SK_API sk_sp<PrecompileColorFilter> SRGBToLinearGamma();
 
     // This encompases both variants of SkColorFilters::Table and TableARGB
-    static sk_sp<PrecompileColorFilter> Table();
+    SK_API sk_sp<PrecompileColorFilter> Table();
 
-    static sk_sp<PrecompileColorFilter> Lighting();
+    SK_API sk_sp<PrecompileColorFilter> Lighting();
 
-    // The remaining three match those in SkColorFilterPriv
-    static sk_sp<PrecompileColorFilter> Gaussian();
-
-    static sk_sp<PrecompileColorFilter> ColorSpaceXform();
-
-    static sk_sp<PrecompileColorFilter> WithWorkingFormat(
-            SkSpan<const sk_sp<PrecompileColorFilter>> childOptions);
-
-private:
-    PrecompileColorFilters() = delete;
-};
+} // namespace PrecompileColorFilters
 
 //--------------------------------------------------------------------------------------------------
 // This will move to be beside SkImageFilters in include/effects/SkImageFilters.h

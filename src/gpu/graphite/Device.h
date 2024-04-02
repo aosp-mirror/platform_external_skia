@@ -85,6 +85,13 @@ public:
 
     const Transform& localToDeviceTransform();
 
+    bool isImmutable() const { return fImmutable; }
+    void setImmutable() override {
+        // Don't abandon the recorder, we might still need to flush pending work or create copies
+        // for snapSpecialImage().
+        fImmutable = true;
+    }
+
     SkStrikeDeviceInfo strikeDeviceInfo() const override;
 
     TextureProxy* target();
@@ -263,6 +270,9 @@ private:
 
     bool needsFlushBeforeDraw(int numNewDraws, DstReadRequirement) const;
 
+    // Flush internal work, such as pending clip draws and atlas uploads, into the Device's DrawTask
+    void internalFlush();
+
     Recorder* fRecorder;
     sk_sp<DrawContext> fDC;
 
@@ -282,6 +292,9 @@ private:
 
     // The DrawContext's target supports MSAA
     bool fMSAASupported = false;
+
+    // Whether or not setImmutable() has been called.
+    bool fImmutable = false;
 
     const sktext::gpu::SDFTControl fSDFTControl;
 

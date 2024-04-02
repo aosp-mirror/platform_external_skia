@@ -10,6 +10,7 @@
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkKnownRuntimeEffects.h"
 #include "src/gpu/Blend.h"
+#include "src/gpu/graphite/FactoryFunctionsPriv.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParams.h"
@@ -82,6 +83,13 @@ private:
 
 sk_sp<PrecompileBlender> PrecompileBlender::Mode(SkBlendMode blendMode) {
     return sk_make_sp<PrecompileBlendModeBlender>(blendMode);
+}
+
+sk_sp<PrecompileBlender> PrecompileBlenders::Arithmetic() {
+    const SkRuntimeEffect* arithmeticEffect =
+            GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kArithmetic);
+
+    return MakePrecompileBlender(sk_ref_sp(arithmeticEffect));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -645,9 +653,9 @@ private:
         SkASSERT(desiredWrappedCombination < fNumWrappedCombos);
 
         if (desiredLMCombination) {
-            LocalMatrixShaderBlock::LMShaderData lmShaderData(SkMatrix::I());
+            LocalMatrixShaderBlock::LMShaderData kIgnoredLMShaderData(SkMatrix::I());
 
-            LocalMatrixShaderBlock::BeginBlock(keyContext, builder, gatherer, lmShaderData);
+            LocalMatrixShaderBlock::BeginBlock(keyContext, builder, gatherer, kIgnoredLMShaderData);
         }
 
             AddToKey<PrecompileShader>(keyContext, builder, gatherer, fWrapped,
@@ -782,6 +790,55 @@ sk_sp<PrecompileShader> PrecompileShaders::WorkingColorSpace(
 }
 
 //--------------------------------------------------------------------------------------------------
+// In Graphite this acts as a non-elidable LocalMatrixShader
+class PrecompileCTMShader : public PrecompileShader {
+public:
+    PrecompileCTMShader(SkSpan<const sk_sp<PrecompileShader>> wrapped)
+            : fWrapped(wrapped.begin(), wrapped.end()) {
+        fNumWrappedCombos = 0;
+        for (const auto& s : fWrapped) {
+            fNumWrappedCombos += s->numCombinations();
+        }
+    }
+
+    bool isConstant(int desiredCombination) const override {
+        SkASSERT(desiredCombination < fNumWrappedCombos);
+
+        auto wrapped = PrecompileBase::SelectOption(fWrapped, desiredCombination);
+        if (wrapped.first) {
+            return wrapped.first->isConstant(wrapped.second);
+        }
+
+        return false;
+    }
+
+private:
+    int numChildCombinations() const override { return fNumWrappedCombos; }
+
+    void addToKey(const KeyContext& keyContext,
+                  PaintParamsKeyBuilder* builder,
+                  PipelineDataGatherer* gatherer,
+                  int desiredCombination) const override {
+        SkASSERT(desiredCombination < fNumWrappedCombos);
+
+        LocalMatrixShaderBlock::LMShaderData kIgnoredLMShaderData(SkMatrix::I());
+
+        LocalMatrixShaderBlock::BeginBlock(keyContext, builder, gatherer, kIgnoredLMShaderData);
+
+            AddToKey<PrecompileShader>(keyContext, builder, gatherer, fWrapped, desiredCombination);
+
+        builder->endBlock();
+    }
+
+    std::vector<sk_sp<PrecompileShader>> fWrapped;
+    int fNumWrappedCombos;
+};
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::CTM(SkSpan<const sk_sp<PrecompileShader>> wrapped) {
+    return sk_make_sp<PrecompileCTMShader>(std::move(wrapped));
+}
+
+//--------------------------------------------------------------------------------------------------
 class PrecompileBlurMaskFilter : public PrecompileMaskFilter {
 public:
     PrecompileBlurMaskFilter() {}
@@ -850,7 +907,7 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::SRGBToLinearGamma() {
     return sk_make_sp<PrecompileColorSpaceXformColorFilter>();
 }
 
-sk_sp<PrecompileColorFilter> PrecompileColorFilters::ColorSpaceXform() {
+sk_sp<PrecompileColorFilter> PrecompileColorFiltersPriv::ColorSpaceXform() {
     return sk_make_sp<PrecompileColorSpaceXformColorFilter>();
 }
 
@@ -945,7 +1002,7 @@ class PrecompileGaussianColorFilter : public PrecompileColorFilter {
     }
 };
 
-sk_sp<PrecompileColorFilter> PrecompileColorFilters::Gaussian() {
+sk_sp<PrecompileColorFilter> PrecompileColorFiltersPriv::Gaussian() {
     return sk_make_sp<PrecompileGaussianColorFilter>();
 }
 
@@ -1052,7 +1109,7 @@ private:
     int fNumChildCombos;
 };
 
-sk_sp<PrecompileColorFilter> PrecompileColorFilters::WithWorkingFormat(
+sk_sp<PrecompileColorFilter> PrecompileColorFiltersPriv::WithWorkingFormat(
         SkSpan<const sk_sp<PrecompileColorFilter>> childOptions) {
     return sk_make_sp<PrecompileWithWorkingFormatColorFilter>(childOptions);
 }
