@@ -2706,6 +2706,7 @@ cc_defaults {
         "modules/sksg/src/SkSGText.cpp",
         "modules/sksg/src/SkSGTransform.cpp",
         "modules/skshaper/src/SkShaper.cpp",
+        "modules/skshaper/src/SkShaper_factory.cpp",
         "modules/skshaper/src/SkShaper_harfbuzz.cpp",
         "modules/skshaper/src/SkShaper_primitive.cpp",
         "modules/skshaper/src/SkShaper_skunicode.cpp",

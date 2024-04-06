@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "7eeefdef6b539dadfede41295cae186ba92bb36d",
+        commit = "20a67ef1dbbf974a976c27d68be3ee66e68b77e9",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -249,6 +249,15 @@ def bazel_deps():
     )
 
 def header_based_configs():
+    maybe(
+        download_config_files,
+        name = "expat_config",
+        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        files = {
+            "BUILD.bazel": "bazel/external/expat/config/BUILD.bazel",
+            "expat_config.h": "third_party/expat/include/expat_config/expat_config.h",
+        },
+    )
     maybe(
         download_config_files,
         name = "freetype_config",
