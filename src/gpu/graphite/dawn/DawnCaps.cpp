@@ -443,7 +443,6 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
 #endif
 
     fDrawBufferCanBeMapped = false;
-    fBufferMapsAreAsync = true;
 
     fComputeSupport = true;
 
@@ -454,7 +453,12 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
     fDrawBufferCanBeMappedForReadback = false;
 #endif
 
-#if !defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__)
+    // For wasm, we use async map.
+    fBufferMapsAreAsync = true;
+#else
+    // For Dawn native, we use direct mapping.
+    fBufferMapsAreAsync = false;
     fDrawBufferCanBeMapped =
             backendContext.fDevice.HasFeature(wgpu::FeatureName::BufferMapExtendedUsages);
 
@@ -464,6 +468,7 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
     fTransientAttachmentSupport =
             backendContext.fDevice.HasFeature(wgpu::FeatureName::TransientAttachments);
 #endif
+
     if (!backendContext.fTick) {
         fAllowCpuSync = false;
         // This seems paradoxical. However, if we use the async pipeline creation methods (e.g
@@ -556,12 +561,12 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
     }
 
 #if !defined(__EMSCRIPTEN__)
-    const bool supportNorm16 = device.HasFeature(wgpu::FeatureName::Norm16TextureFormats);
+    const bool supportUnorm16 = device.HasFeature(wgpu::FeatureName::Unorm16TextureFormats);
     // TODO(crbug.com/dawn/1856): Support storage binding for compute shader in Dawn.
     // Format: R16Unorm
     {
         info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::R16Unorm)];
-        if (supportNorm16) {
+        if (supportUnorm16) {
             info->fFlags = FormatInfo::kAllFlags & ~FormatInfo::kStorage_Flag;
             info->fColorTypeInfoCount = 1;
             info->fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info->fColorTypeInfoCount);
@@ -652,7 +657,7 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
     // Format: RG16Unorm
     {
         info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::RG16Unorm)];
-        if (supportNorm16) {
+        if (supportUnorm16) {
             info->fFlags = FormatInfo::kAllFlags;
             info->fColorTypeInfoCount = 1;
             info->fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info->fColorTypeInfoCount);
