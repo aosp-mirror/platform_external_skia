@@ -92420,26 +92420,12 @@
     },
     "Build-Mac-Clang-arm64-Debug-Graphite_Native_Metal": {},
     "Build-Mac-Clang-arm64-Debug-Graphite_Native_Metal_NoGpu": {},
-    "Build-Mac-Clang-arm64-Debug-iOS_Graphite_Native_Metal": {
-      "location_regexes": [
-        "(tests|src/gpu)/graphite/.*",
-        "src/sksl/generated/.*"
-      ]
-    },
     "Build-Mac-Clang-arm64-Release-Graphite_Native_Metal": {
       "location_regexes": [
         "(tests|src/gpu)/graphite/.*",
         "src/sksl/generated/.*"
       ]
     },
-    "Build-Mac-Clang-arm64-Release-iOS": {},
-    "Build-Mac-Clang-arm64-Release-iOS_Graphite_Native_Metal": {
-      "location_regexes": [
-        "(tests|src/gpu)/graphite/.*",
-        "src/sksl/generated/.*"
-      ]
-    },
-    "Build-Mac-Clang-arm64-Release-iOS_Metal": {},
     "Build-Mac-Clang-x86_64-Debug-Graphite_Dawn_Metal": {
       "location_regexes": [
         "(tests|src/gpu)/graphite/.*",
