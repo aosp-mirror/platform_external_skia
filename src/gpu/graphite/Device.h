@@ -32,6 +32,7 @@ class DrawContext;
 enum class DstReadRequirement;
 class Geometry;
 class Image;
+enum class LoadOp : uint8_t;
 class PaintParams;
 class Recorder;
 class Renderer;
@@ -52,7 +53,7 @@ public:
                               SkISize deviceSize,
                               const SkColorInfo&,
                               const SkSurfaceProps&,
-                              bool addInitialClear,
+                              LoadOp initialLoadOp,
                               bool registerWithRecorder=true);
     // Convenience factory to create the underlying TextureProxy based on the configuration provided
     static sk_sp<Device> Make(Recorder*,
@@ -61,7 +62,7 @@ public:
                               Mipmapped,
                               SkBackingFit,
                               const SkSurfaceProps&,
-                              bool addInitialClear,
+                              LoadOp initialLoadOp,
                               bool registerWithRecorder=true);
 
     Device* asGraphiteDevice() override { return this; }
@@ -69,11 +70,12 @@ public:
     Recorder* recorder() const override { return fRecorder; }
     // This call is triggered from the Recorder on its registered Devices. It is typically called
     // when the Recorder is abandoned or deleted.
-    void abandonRecorder();
+    void abandonRecorder() { fRecorder = nullptr; }
 
     // Ensures clip elements are drawn that will clip previous draw calls, snaps all pending work
     // from the DrawContext as a RenderPassTask and records it in the Device's recorder.
-    void flushPendingWorkToRecorder();
+    // TODO(b/333073673): Optionally pass in the Recorder that triggered the flush for validation.
+    void flushPendingWorkToRecorder(Recorder* recorder=nullptr);
 
     const Transform& localToDeviceTransform();
 
@@ -87,6 +89,24 @@ public:
     TextureProxyView readSurfaceView() const;
     // Can succeed if target is readable but not sampleable. Assumes 'subset' is contained in bounds
     sk_sp<Image> makeImageCopy(const SkIRect& subset, Budgeted, Mipmapped, SkBackingFit);
+
+    // True if this Device represents an internal renderable surface that will go out of scope
+    // before the next Recorder snap.
+    // NOTE: Currently, there are two different notions of "scratch" that are being merged together.
+    // 1. Devices whose targets are not instantiated (Device::Make).
+    // 2. Devices that are not registered with the Recorder (Surface::MakeScratch).
+    //
+    // This function reflects notion #1, since the long-term plan will be that all Devices that are
+    // not instantiated will also not be registered with the Recorder. For the time being, due to
+    // shared atlas management, layer-backing Devices need to be registered with the Recorder but
+    // are otherwise the canonical scratch device.
+    //
+    // Existing uses of Surface::MakeScratch() will migrate to using un-instantiated Devices with
+    // the requirement that if the Device's target is being returned in a client-owned object
+    // (e.g. SkImages::MakeWithFilter), that it should then be explicitly instantiated. Once scratch
+    // tasks are fully organized in a graph and not automatically appended to the root task list,
+    // this explicit instantiation will be responsible for moving the scratch tasks to the root list
+    bool isScratchDevice() const;
 
     // SkCanvas only uses drawCoverageMask w/o this staging flag, so only enable
     // mask filters in clients that have finished migrating.
@@ -264,7 +284,11 @@ private:
     // Flush internal work, such as pending clip draws and atlas uploads, into the Device's DrawTask
     void internalFlush();
 
+    // TODO(b/333073673): Detect memory stomping over fRecorder to see if that's the cause of
+    // crashes; can be removed once the issue is resolved.
+    SkDEBUGCODE(const intptr_t fPreRecorderSentinel;)
     Recorder* fRecorder;
+    SkDEBUGCODE(const intptr_t fPostRecorderSentinel;)
     sk_sp<DrawContext> fDC;
 
     ClipStack fClip;

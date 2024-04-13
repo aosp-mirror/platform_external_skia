@@ -31,6 +31,7 @@
 #include "include/gpu/graphite/Surface.h"
 #include "src/gpu/BlurUtils.h"
 #include "src/gpu/SkBackingFit.h"
+#include "src/gpu/graphite/AttachmentTypes.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandBuffer.h"
@@ -114,7 +115,7 @@ sk_sp<SkSpecialImage> eval_blur(skgpu::graphite::Recorder* recorder,
                                                 SkBackingFit::kExact,
 #endif
                                                 outProps,
-                                                /*addInitialClear=*/false);
+                                                skgpu::graphite::LoadOp::kDiscard);
     if (!device) {
         return nullptr;
     }
@@ -425,9 +426,7 @@ sk_sp<SkImage> MakeFromBitmap(Recorder* recorder,
     }
 
     SkASSERT(!requiredProps.fMipmapped || view.proxy()->mipmapped() == skgpu::Mipmapped::kYes);
-    return sk_make_sp<skgpu::graphite::Image>(kNeedNewImageUniqueID,
-                                              std::move(view),
-                                              colorInfo.makeColorType(ct));
+    return sk_make_sp<skgpu::graphite::Image>(std::move(view), colorInfo.makeColorType(ct));
 }
 
 size_t ComputeSize(SkISize dimensions,
@@ -501,9 +500,7 @@ sk_sp<SkImage> RescaleImage(Recorder* recorder,
     // Within a rescaling pass tempInput is read from and tempOutput is written to.
     // At the end of the pass tempOutput's texture is wrapped and assigned to tempInput.
     const SkImageInfo& srcImageInfo = srcImage->imageInfo();
-    sk_sp<SkImage> tempInput(new Image(kNeedNewImageUniqueID,
-                                       imageView,
-                                       srcImageInfo.colorInfo()));
+    sk_sp<SkImage> tempInput(new Image(imageView, srcImageInfo.colorInfo()));
     sk_sp<SkSurface> tempOutput;
 
     // Assume we should ignore the rescale linear request if the surface has no color space since
@@ -597,8 +594,7 @@ bool GenerateMipmaps(Recorder* recorder,
     // pixel format. We have to be consistent and swizzle on the read.
     auto imgSwizzle = recorder->priv().caps()->getReadSwizzle(colorInfo.colorType(),
                                                               texture->textureInfo());
-    sk_sp<SkImage> scratchImg(
-            new Image(kNeedNewImageUniqueID, TextureProxyView(texture, imgSwizzle), colorInfo));
+    sk_sp<SkImage> scratchImg(new Image(TextureProxyView(texture, imgSwizzle), colorInfo));
 
     SkISize srcSize = texture->dimensions();
     const SkColorInfo outColorInfo = colorInfo.makeAlphaType(kPremul_SkAlphaType);
@@ -759,7 +755,7 @@ public:
                                              SkBackingFit::kExact,
 #endif
                                              props ? *props : this->surfaceProps(),
-                                             /*addInitialClear=*/false);
+                                             skgpu::graphite::LoadOp::kDiscard);
     }
 
     sk_sp<SkSpecialImage> makeImage(const SkIRect& subset, sk_sp<SkImage> image) const override {
@@ -776,7 +772,6 @@ public:
         skgpu::Swizzle swizzle = fRecorder->priv().caps()->getReadSwizzle(colorInfo.colorType(),
                                                                           proxy->textureInfo());
         return sk_make_sp<skgpu::graphite::Image>(
-                data.getGenerationID(),
                 skgpu::graphite::TextureProxyView(std::move(proxy), swizzle),
                 colorInfo);
     }
