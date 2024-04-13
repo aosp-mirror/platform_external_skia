@@ -406,12 +406,12 @@ sk_sp<PrecompileShader> PrecompileShaders::CoordClamp(SkSpan<const sk_sp<Precomp
 // TODO: Investigate the YUV-image use case
 class PrecompileImageShader : public PrecompileShader {
 public:
-    PrecompileImageShader(bool isRaw) : fIsRaw(isRaw) {}
+    PrecompileImageShader(SkEnumBitMask<PrecompileImageShaderFlags> flags) : fFlags(flags) {}
 
 private:
-    // The ImageShader has 3 sampling/tiling variants: hardware-tiled, shader-tiled and
+    // The ImageShader has 3 potential sampling/tiling variants: hardware-tiled, shader-tiled and
     // cubic sampling (which always uses shader-tiling)
-    inline static constexpr int kNumSamplingTilingCombinations = 3;
+    inline static constexpr int kNumSamplingTilingCombos = 3;
     inline static constexpr int kCubicSampled = 2;
     inline static constexpr int kHWTiled      = 1;
     inline static constexpr int kShaderTiled  = 0;
@@ -422,11 +422,14 @@ private:
     inline static constexpr int kNonAlphaOnly = 0;
 
     int numIntrinsicCombinations() const override {
-        if (fIsRaw) {
+        int numSamplingTilingCombos =
+                (fFlags & PrecompileImageShaderFlags::kExcludeCubic) ? 2 : kNumSamplingTilingCombos;
+
+        if (fFlags & PrecompileImageShaderFlags::kExcludeAlpha) {
             // RawImageShaders don't blend alpha-only images w/ the paint color
-            return kNumSamplingTilingCombinations;
+            return numSamplingTilingCombos;
         }
-        return kNumSamplingTilingCombinations * kNumAlphaCombinations;
+        return numSamplingTilingCombos * kNumAlphaCombinations;
     }
 
     void addToKey(const KeyContext& keyContext,
@@ -437,14 +440,16 @@ private:
 
         int desiredAlphaCombo, desiredSamplingTilingCombo;
 
-        if (fIsRaw) {
+        if (fFlags & PrecompileImageShaderFlags::kExcludeAlpha) {
             desiredAlphaCombo = kNonAlphaOnly;
             desiredSamplingTilingCombo = desiredCombination;
         } else {
             desiredAlphaCombo = desiredCombination % kNumAlphaCombinations;
             desiredSamplingTilingCombo = desiredCombination / kNumAlphaCombinations;
         }
-        SkASSERT(desiredSamplingTilingCombo < kNumSamplingTilingCombinations);
+        SkDEBUGCODE(int numSamplingTilingCombos =
+            (fFlags & PrecompileImageShaderFlags::kExcludeCubic) ? 2 : kNumSamplingTilingCombos;)
+        SkASSERT(desiredSamplingTilingCombo < numSamplingTilingCombos);
 
         static constexpr SkSamplingOptions kDefaultCubicSampling(SkCubicResampler::Mitchell());
         static constexpr SkSamplingOptions kDefaultSampling;
@@ -465,7 +470,7 @@ private:
                 kSubset, kIgnoredSwizzle);
 
         if (desiredAlphaCombo == kAlphaOnly) {
-            SkASSERT(!fIsRaw);
+            SkASSERT(!(fFlags & PrecompileImageShaderFlags::kExcludeAlpha));
 
             Blend(keyContext, builder, gatherer,
                   /* addBlendToKey= */ [&] () -> void {
@@ -482,19 +487,24 @@ private:
         }
     }
 
-    bool fIsRaw;
+    SkEnumBitMask<PrecompileImageShaderFlags> fFlags;
 };
 
 sk_sp<PrecompileShader> PrecompileShaders::Image() {
-    constexpr bool kIsNotRaw = false;
-    return PrecompileShaders::LocalMatrix({ sk_make_sp<PrecompileImageShader>(kIsNotRaw) });
+    return PrecompileShaders::LocalMatrix(
+            { sk_make_sp<PrecompileImageShader>(PrecompileImageShaderFlags::kNone) });
 }
 
 sk_sp<PrecompileShader> PrecompileShaders::RawImage() {
-    constexpr bool kIsRaw = false;
     // Raw images do not perform color space conversion, but in Graphite, this is represented as
     // an identity color space xform, not as a distinct shader
-    return PrecompileShaders::LocalMatrix({ sk_make_sp<PrecompileImageShader>(kIsRaw) });
+    return PrecompileShaders::LocalMatrix(
+            { sk_make_sp<PrecompileImageShader>(PrecompileImageShaderFlags::kExcludeAlpha) });
+}
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::Image(
+        SkEnumBitMask<PrecompileImageShaderFlags> flags) {
+    return PrecompileShaders::LocalMatrix({ sk_make_sp<PrecompileImageShader>(flags) });
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -837,6 +847,59 @@ private:
 
 sk_sp<PrecompileShader> PrecompileShadersPriv::CTM(SkSpan<const sk_sp<PrecompileShader>> wrapped) {
     return sk_make_sp<PrecompileCTMShader>(std::move(wrapped));
+}
+
+//--------------------------------------------------------------------------------------------------
+class PrecompileBlurShader : public PrecompileShader {
+public:
+    PrecompileBlurShader(sk_sp<PrecompileShader> wrapped)
+            : fWrapped(std::move(wrapped)) {
+        fNumWrappedCombos = fWrapped->numCombinations();
+    }
+
+private:
+    // 6 known 1D blur effects + 6 known 2D blur effects
+    inline static constexpr int kNumIntrinsicCombinations = 12;
+
+    int numIntrinsicCombinations() const override { return kNumIntrinsicCombinations; }
+
+    int numChildCombinations() const override { return fNumWrappedCombos; }
+
+    void addToKey(const KeyContext& keyContext,
+                  PaintParamsKeyBuilder* builder,
+                  PipelineDataGatherer* gatherer,
+                  int desiredCombination) const override {
+        SkASSERT(desiredCombination < this->numCombinations());
+
+        using namespace SkKnownRuntimeEffects;
+
+        int desiredBlurCombination = desiredCombination % kNumIntrinsicCombinations;
+        int desiredWrappedCombination = desiredCombination / kNumIntrinsicCombinations;
+        SkASSERT(desiredWrappedCombination < fNumWrappedCombos);
+
+        static const StableKey kIDs[kNumIntrinsicCombinations] = {
+                StableKey::k1DBlur4,  StableKey::k1DBlur8,  StableKey::k1DBlur12,
+                StableKey::k1DBlur16, StableKey::k1DBlur20, StableKey::k1DBlur28,
+
+                StableKey::k2DBlur4,  StableKey::k2DBlur8,  StableKey::k2DBlur12,
+                StableKey::k2DBlur16, StableKey::k2DBlur20, StableKey::k2DBlur28,
+        };
+
+        const SkRuntimeEffect* fEffect = GetKnownRuntimeEffect(kIDs[desiredBlurCombination]);
+
+        KeyContextWithScope childContext(keyContext, KeyContext::Scope::kRuntimeEffect);
+
+        RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer, { sk_ref_sp(fEffect) });
+            fWrapped->priv().addToKey(childContext, builder, gatherer, desiredWrappedCombination);
+        builder->endBlock();
+    }
+
+    sk_sp<PrecompileShader> fWrapped;
+    int fNumWrappedCombos;
+};
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::Blur(sk_sp<PrecompileShader> wrapped) {
+    return sk_make_sp<PrecompileBlurShader>(std::move(wrapped));
 }
 
 //--------------------------------------------------------------------------------------------------
