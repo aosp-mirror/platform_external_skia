@@ -25,12 +25,22 @@ class Recorder;
 
 class Image final : public Image_Base {
 public:
-    Image(uint32_t uniqueID, TextureProxyView, const SkColorInfo&);
+    Image(TextureProxyView, const SkColorInfo&);
     ~Image() override;
 
     // Create an Image that wraps the Device and automatically flushes or references the Device's
     // pending tasks when the Image is used in a draw to another canvas.
-    static sk_sp<Image> MakeView(sk_sp<Device> device);
+    static sk_sp<Image> WrapDevice(sk_sp<Device> device);
+
+    // Create an Image by copying the provided texture proxy view into a new texturable proxy.
+    // The source texture does not have to be texturable if it is blittable.
+    static sk_sp<Image> Copy(Recorder*,
+                             const TextureProxyView& srcView,
+                             const SkColorInfo&,
+                             const SkIRect& subset,
+                             Budgeted,
+                             Mipmapped,
+                             SkBackingFit);
 
     const TextureProxyView& textureProxyView() const { return fTextureProxyView; }
 
