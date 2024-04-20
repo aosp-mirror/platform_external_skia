@@ -1657,7 +1657,7 @@ bool Device::isScratchDevice() const {
     // Recorder::snap(). Truly scratch devices that have gone out of scope as intended will have
     // already been destroyed at this point. Scratch devices that become longer-lived (linked to
     // a client-owned object) automatically transition to non-scratch usage.
-    return !fDC->target()->isInstantiated();
+    return !fDC->target()->isInstantiated() && !fDC->target()->isLazy();
 }
 
 sk_sp<sktext::gpu::Slug> Device::convertGlyphRunListToSlug(const sktext::GlyphRunList& glyphRunList,

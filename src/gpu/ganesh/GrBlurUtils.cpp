@@ -41,11 +41,11 @@
 #include "include/private/SkColorData.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkFixed.h"
-#include "include/private/base/SkFloatBits.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkMath.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/base/SkFloatBits.h"
 #include "src/base/SkTLazy.h"
 #include "src/core/SkBlurMaskFilterImpl.h"
 #include "src/core/SkDraw.h"
@@ -424,7 +424,7 @@ static std::unique_ptr<GrFragmentProcessor> create_profile_effect(GrRecordingCon
                                                                   float* solidRadius,
                                                                   float* textureRadius) {
     float circleR = circle.width() / 2.0f;
-    if (!std::isfinite(circleR) || circleR < SK_ScalarNearlyZero) {
+    if (!SkIsFinite(circleR) || circleR < SK_ScalarNearlyZero) {
         return nullptr;
     }
 

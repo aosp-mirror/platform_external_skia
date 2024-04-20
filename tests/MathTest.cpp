@@ -180,25 +180,43 @@ static void check_length(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, len > 0.999f && len < 1.001f);
 }
 
+template <typename T>
 static void unittest_isfinite(skiatest::Reporter* reporter) {
-    float nan = std::asin(2);
-    float inf = SK_ScalarInfinity;
-    float big = 3.40282e+038f;
+    const T zero = T(0);
+    const T plain = T(123);
+    const T inf = std::numeric_limits<T>::infinity();
+    const T big = std::numeric_limits<T>::max();
+    const T nan = inf * zero;
 
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(inf));
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(-inf));
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(inf));
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(-inf));
+    REPORTER_ASSERT(reporter, !SkIsNaN(inf));
+    REPORTER_ASSERT(reporter, !SkIsNaN(-inf));
+    REPORTER_ASSERT(reporter, !SkIsFinite(inf));
+    REPORTER_ASSERT(reporter, !SkIsFinite(-inf));
 
-    REPORTER_ASSERT(reporter,  SkScalarIsNaN(nan));
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(big));
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(-big));
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(0));
+    REPORTER_ASSERT(reporter,  SkIsNaN(nan));
+    REPORTER_ASSERT(reporter, !SkIsNaN(big));
+    REPORTER_ASSERT(reporter, !SkIsNaN(-big));
+    REPORTER_ASSERT(reporter, !SkIsNaN(zero));
 
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(nan));
-    REPORTER_ASSERT(reporter,  SkScalarIsFinite(big));
-    REPORTER_ASSERT(reporter,  SkScalarIsFinite(-big));
-    REPORTER_ASSERT(reporter,  SkScalarIsFinite(0));
+    REPORTER_ASSERT(reporter, !SkIsFinite(nan));
+    REPORTER_ASSERT(reporter,  SkIsFinite(big));
+    REPORTER_ASSERT(reporter,  SkIsFinite(-big));
+    REPORTER_ASSERT(reporter,  SkIsFinite(zero));
+
+    // SkIsFinite supports testing multiple values at once.
+    REPORTER_ASSERT(reporter, !SkIsFinite(inf, plain));
+    REPORTER_ASSERT(reporter, !SkIsFinite(plain, -inf));
+    REPORTER_ASSERT(reporter, !SkIsFinite(nan, plain));
+    REPORTER_ASSERT(reporter,  SkIsFinite(plain, big));
+    REPORTER_ASSERT(reporter,  SkIsFinite(-big, plain));
+    REPORTER_ASSERT(reporter,  SkIsFinite(plain, zero));
+
+    REPORTER_ASSERT(reporter, !SkIsFinite(inf, plain, plain));
+    REPORTER_ASSERT(reporter, !SkIsFinite(plain, -inf, plain));
+    REPORTER_ASSERT(reporter, !SkIsFinite(plain, plain, nan));
+    REPORTER_ASSERT(reporter,  SkIsFinite(big, plain, plain));
+    REPORTER_ASSERT(reporter,  SkIsFinite(plain, -big, plain));
+    REPORTER_ASSERT(reporter,  SkIsFinite(plain, plain, zero));
 }
 
 static void unittest_half(skiatest::Reporter* reporter) {
@@ -237,7 +255,7 @@ static void unittest_half(skiatest::Reporter* reporter) {
     static const FloatUnion overflowHalf = { ((143 << 23) | (1023 << 13)) };
     h = SkFloatToHalf(overflowHalf.fF);
     f = SkHalfToFloat(h);
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(f) );
+    REPORTER_ASSERT(reporter, !SkIsFinite(f) );
 
     static const FloatUnion underflowHalf = { 101 << 23 };
     h = SkFloatToHalf(underflowHalf.fF);
@@ -247,12 +265,12 @@ static void unittest_half(skiatest::Reporter* reporter) {
     static const FloatUnion inf32 = { 255 << 23 };
     h = SkFloatToHalf(inf32.fF);
     f = SkHalfToFloat(h);
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(f) );
+    REPORTER_ASSERT(reporter, !SkIsFinite(f) );
 
     static const FloatUnion nan32 = { 255 << 23 | 1 };
     h = SkFloatToHalf(nan32.fF);
     f = SkHalfToFloat(h);
-    REPORTER_ASSERT(reporter, SkScalarIsNaN(f) );
+    REPORTER_ASSERT(reporter, SkIsNaN(f) );
 
 }
 
@@ -505,7 +523,7 @@ DEF_TEST(Math, reporter) {
 
     {
         SkScalar x = SK_ScalarNaN;
-        REPORTER_ASSERT(reporter, SkScalarIsNaN(x));
+        REPORTER_ASSERT(reporter, SkIsNaN(x));
     }
 
     for (i = 0; i < 10000; i++) {
@@ -539,7 +557,8 @@ DEF_TEST(Math, reporter) {
     }
 
     huge_vector_normalize(reporter);
-    unittest_isfinite(reporter);
+    unittest_isfinite<float>(reporter);
+    unittest_isfinite<double>(reporter);
     unittest_half(reporter);
     test_rsqrt(reporter, sk_float_rsqrt);
     test_rsqrt(reporter, sk_float_rsqrt_portable);
