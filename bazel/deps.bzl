@@ -187,7 +187,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "vello",
         build_file = ws + "//bazel/external/vello:BUILD.bazel",
-        commit = "74715ee4650ec3f4483ccc86540b32d15d5bfaa3",
+        commit = "6c1e8b815b1ed5d2437e5c8b8a36a144307ac97b",
         remote = "https://skia.googlesource.com/external/github.com/linebender/vello.git",
     )
 
@@ -201,14 +201,14 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "vulkan_tools",
         build_file = ws + "//bazel/external/vulkan_tools:BUILD.bazel",
-        commit = "bfdd09240f60ae643a91518cba44526c94fbc635",
+        commit = "9aec60c387fb0cd065d3ba921b56c3ef19ad958e",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
     )
 
     new_git_repository(
         name = "vulkan_utility_libraries",
         build_file = ws + "//bazel/external/vulkan_utility_libraries:BUILD.bazel",
-        commit = "d0670f9ff0da1a2f7596d4861f601dc4c8810aea",
+        commit = "6e6a4e05bf48db1f302b9988e50b1c723e46dc5a",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries",
     )
 
