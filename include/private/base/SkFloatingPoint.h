@@ -9,7 +9,6 @@
 #define SkFloatingPoint_DEFINED
 
 #include "include/private/base/SkAttributes.h"
-#include "include/private/base/SkFloatBits.h"
 #include "include/private/base/SkMath.h"
 
 #include <cmath>
@@ -19,24 +18,6 @@
 inline constexpr float SK_FloatSqrt2 = 1.41421356f;
 inline constexpr float SK_FloatPI    = 3.14159265f;
 inline constexpr double SK_DoublePI  = 3.14159265358979323846264338327950288;
-
-static inline float sk_float_sqrt(float x) { return std::sqrt(x); }
-static inline float sk_float_sin(float x) { return std::sin(x); }
-static inline float sk_float_cos(float x) { return std::cos(x); }
-static inline float sk_float_tan(float x) { return std::tan(x); }
-static inline float sk_float_floor(float x) { return std::floor(x); }
-static inline float sk_float_ceil(float x) { return std::ceil(x); }
-static inline float sk_float_trunc(float x) { return std::trunc(x); }
-static inline float sk_float_acos(float x) { return std::acos(x); }
-static inline float sk_float_asin(float x) { return std::asin(x); }
-static inline float sk_float_atan2(float y, float x) { return std::atan2(y,x); }
-static inline float sk_float_abs(float x) { return std::fabs(x); }
-static inline float sk_float_copysign(float x, float y) { return std::copysign(x, y); }
-static inline float sk_float_mod(float x, float y) { return std::fmod(x,y); }
-static inline float sk_float_pow(float x, float y) { return std::pow(x, y); }
-static inline float sk_float_exp(float x) { return std::exp(x); }
-static inline float sk_float_log(float x) { return std::log(x); }
-static inline float sk_float_log2(float x) { return std::log2(x); }
 
 static constexpr int sk_float_sgn(float x) {
     return (0.0f < x) - (x < 0.0f);
@@ -55,14 +36,6 @@ static constexpr float sk_float_radians_to_degrees(float radians) {
 // as floatf(x + .5f), they would be 1 higher than expected.
 #define sk_float_round(x) (float)sk_double_round((double)(x))
 
-static inline bool sk_float_isfinite(float x) {
-    return SkFloatBits_IsFinite(SkFloat2Bits(x));
-}
-
-static inline bool sk_floats_are_finite(float a, float b) {
-    return sk_float_isfinite(a) && sk_float_isfinite(b);
-}
-
 static inline bool sk_floats_are_finite(const float array[], int count) {
     float prod = 0;
     for (int i = 0; i < count; ++i) {
@@ -71,13 +44,6 @@ static inline bool sk_floats_are_finite(const float array[], int count) {
     // At this point, prod will either be NaN or 0
     return prod == 0;   // if prod is NaN, this check will return false
 }
-
-static inline bool sk_float_isinf(float x) {
-    return SkFloatBits_IsInf(SkFloat2Bits(x));
-}
-
-static constexpr bool sk_float_isnan(float x) { return x != x; }
-static constexpr bool sk_double_isnan(double x) { return x != x; }
 
 inline constexpr int SK_MaxS32FitsInFloat = 2147483520;
 inline constexpr int SK_MinS32FitsInFloat = -SK_MaxS32FitsInFloat;
@@ -113,20 +79,18 @@ static constexpr int64_t sk_float_saturate2int64(float x) {
     return (int64_t)x;
 }
 
-#define sk_float_floor2int(x)   sk_float_saturate2int(sk_float_floor(x))
+#define sk_float_floor2int(x)   sk_float_saturate2int(std::floor(x))
 #define sk_float_round2int(x)   sk_float_saturate2int(sk_float_round(x))
-#define sk_float_ceil2int(x)    sk_float_saturate2int(sk_float_ceil(x))
+#define sk_float_ceil2int(x)    sk_float_saturate2int(std::ceil(x))
 
-#define sk_float_floor2int_no_saturate(x)   (int)sk_float_floor(x)
-#define sk_float_round2int_no_saturate(x)   (int)sk_float_round(x)
-#define sk_float_ceil2int_no_saturate(x)    (int)sk_float_ceil(x)
+#define sk_float_floor2int_no_saturate(x)   ((int)std::floor(x))
+#define sk_float_round2int_no_saturate(x)   ((int)sk_float_round(x))
+#define sk_float_ceil2int_no_saturate(x)    ((int)std::ceil(x))
 
-#define sk_double_floor(x)          floor(x)
-#define sk_double_round(x)          floor((x) + 0.5)
-#define sk_double_ceil(x)           ceil(x)
-#define sk_double_floor2int(x)      (int)sk_double_floor(x)
-#define sk_double_round2int(x)      (int)sk_double_round(x)
-#define sk_double_ceil2int(x)       (int)sk_double_ceil(x)
+#define sk_double_round(x)          (std::floor((x) + 0.5))
+#define sk_double_floor2int(x)      ((int)std::floor(x))
+#define sk_double_round2int(x)      ((int)std::round(x))
+#define sk_double_ceil2int(x)       ((int)std::ceil(x))
 
 // Cast double to float, ignoring any warning about too-large finite values being cast to float.
 // Clang thinks this is undefined, but it's actually implementation defined to return either
@@ -148,19 +112,15 @@ static constexpr float sk_float_midpoint(float a, float b) {
     return static_cast<float>(0.5 * (static_cast<double>(a) + b));
 }
 
-static inline float sk_float_rsqrt_portable(float x) { return 1.0f / sk_float_sqrt(x); }
-static inline float sk_float_rsqrt         (float x) { return 1.0f / sk_float_sqrt(x); }
-
-// The number of significant digits to print.
-inline constexpr int SK_FLT_DECIMAL_DIG = std::numeric_limits<float>::max_digits10;
+static inline float sk_float_rsqrt_portable(float x) { return 1.0f / std::sqrt(x); }
+static inline float sk_float_rsqrt         (float x) { return 1.0f / std::sqrt(x); }
 
 // IEEE defines how float divide behaves for non-finite values and zero-denoms, but C does not,
 // so we have a helper that suppresses the possible undefined-behavior warnings.
 #ifdef SK_BUILD_FOR_WIN
-#pragma warning( push )
-#pragma warning( disable : 4723)
+#pragma warning(push)
+#pragma warning(disable : 4723)
 #endif
-// Your function
 SK_NO_SANITIZE("float-divide-by-zero")
 static constexpr float sk_ieee_float_divide(float numer, float denom) {
     return numer / denom;
@@ -174,11 +134,6 @@ static constexpr double sk_ieee_double_divide(double numer, double denom) {
 #pragma warning( pop )
 #endif
 
-// Return a*b + c.
-static inline float sk_fmaf(float a, float b, float c) {
-    return std::fma(a, b, c);
-}
-
 // Returns true iff the provided number is within a small epsilon of 0.
 bool sk_double_nearly_zero(double a);
 
@@ -188,6 +143,6 @@ bool sk_double_nearly_zero(double a);
 // * infinity and any other number - returns false.
 //
 // ulp is an initialism for Units in the Last Place.
-bool sk_doubles_nearly_equal_ulps(double a, double b, uint8_t maxUlpsDiff=16);
+bool sk_doubles_nearly_equal_ulps(double a, double b, uint8_t maxUlpsDiff = 16);
 
 #endif
