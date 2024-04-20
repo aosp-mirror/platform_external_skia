@@ -26,6 +26,7 @@ SKIA_PUBLIC_HDRS = [
     "include/config/SkUserConfig.h",
     "include/core/SkAlphaType.h",
     "include/core/SkAnnotation.h",
+    "include/core/SkArc.h",
     "include/core/SkBBHFactory.h",
     "include/core/SkBitmap.h",
     "include/core/SkBlendMode.h",
@@ -146,6 +147,10 @@ SKIA_PUBLIC_HDRS = [
     "include/gpu/ganesh/SkSurfaceGanesh.h",
     "include/gpu/ganesh/gl/GrGLBackendSurface.h",
     "include/gpu/ganesh/gl/GrGLDirectContext.h",
+    "include/gpu/ganesh/gl/egl/GrGLMakeEGLInterface.h",
+    "include/gpu/ganesh/gl/glx/GrGLMakeGLXInterface.h",
+    "include/gpu/ganesh/gl/ios/GrGLMakeIOSInterface.h",
+    "include/gpu/ganesh/gl/mac/GrGLMakeMacInterface.h",
     "include/gpu/ganesh/mtl/GrMtlBackendContext.h",
     "include/gpu/ganesh/mtl/GrMtlBackendSemaphore.h",
     "include/gpu/ganesh/mtl/GrMtlBackendSurface.h",
@@ -156,12 +161,12 @@ SKIA_PUBLIC_HDRS = [
     "include/gpu/ganesh/vk/GrVkBackendSemaphore.h",
     "include/gpu/ganesh/vk/GrVkBackendSurface.h",
     "include/gpu/ganesh/vk/GrVkDirectContext.h",
-    "include/gpu/gl/egl/GrGLMakeEGLInterface.h",
-    "include/gpu/gl/glx/GrGLMakeGLXInterface.h",
     "include/gpu/gl/GrGLAssembleHelpers.h",
     "include/gpu/gl/GrGLAssembleInterface.h",
     "include/gpu/gl/GrGLConfig.h",
     "include/gpu/gl/GrGLConfig_chrome.h",
+    "include/gpu/gl/egl/GrGLMakeEGLInterface.h",
+    "include/gpu/gl/glx/GrGLMakeGLXInterface.h",
     "include/gpu/GpuTypes.h",
     "include/gpu/GrBackendSemaphore.h",
     "include/gpu/GrBackendSurface.h",
@@ -256,7 +261,6 @@ BASE_SRCS_ALL = [
     "include/private/base/SkDeque.h",
     "include/private/base/SkFeatures.h",
     "include/private/base/SkFixed.h",
-    "include/private/base/SkFloatBits.h",
     "include/private/base/SkFloatingPoint.h",
     "include/private/base/SkLoadUserConfig.h",
     "include/private/base/SkMacros.h",
@@ -313,6 +317,7 @@ BASE_SRCS_ALL = [
     "src/base/SkDeque.cpp",
     "src/base/SkEndian.h",
     "src/base/SkEnumBitMask.h",
+    "src/base/SkFloatBits.h",
     "src/base/SkFloatingPoint.cpp",
     "src/base/SkHalf.cpp",
     "src/base/SkHalf.h",
@@ -2764,5 +2769,8 @@ XML_HDRS = [
 ## EGL support
 ################################################################################
 
-SKIA_EGL_HDRS = ["include/gpu/gl/egl/GrGLMakeEGLInterface.h"]
+SKIA_EGL_HDRS = [
+    "include/gpu/gl/egl/GrGLMakeEGLInterface.h",
+    "include/gpu/ganesh/gl/egl/GrGLMakeEGLInterface.h",
+]
 SKIA_EGL_SRCS = ["src/gpu/ganesh/gl/egl/GrGLMakeEGLInterface.cpp"]

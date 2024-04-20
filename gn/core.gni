@@ -27,6 +27,7 @@ _include = get_path_info("../include", "abspath")
 skia_core_public = [
   "$_include/core/SkAlphaType.h",
   "$_include/core/SkAnnotation.h",
+  "$_include/core/SkArc.h",
   "$_include/core/SkBBHFactory.h",
   "$_include/core/SkBitmap.h",
   "$_include/core/SkBlendMode.h",
@@ -162,7 +163,6 @@ skia_core_sources = [
   "$_include/private/base/SkDeque.h",
   "$_include/private/base/SkFeatures.h",
   "$_include/private/base/SkFixed.h",
-  "$_include/private/base/SkFloatBits.h",
   "$_include/private/base/SkFloatingPoint.h",
   "$_include/private/base/SkLoadUserConfig.h",
   "$_include/private/base/SkMacros.h",
@@ -207,6 +207,7 @@ skia_core_sources = [
   "$_src/base/SkDeque.cpp",
   "$_src/base/SkEndian.h",
   "$_src/base/SkEnumBitMask.h",
+  "$_src/base/SkFloatBits.h",
   "$_src/base/SkFloatingPoint.cpp",
   "$_src/base/SkHalf.cpp",
   "$_src/base/SkHalf.h",

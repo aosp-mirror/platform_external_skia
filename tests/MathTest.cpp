@@ -76,7 +76,7 @@ static float fast_floor(float x) {
 }
 
 static float std_floor(float x) {
-    return sk_float_floor(x);
+    return std::floor(x);
 }
 
 static void test_floor_value(skiatest::Reporter* reporter, float value) {
@@ -173,32 +173,34 @@ static void check_length(skiatest::Reporter* reporter,
                          const SkPoint& p, SkScalar targetLen) {
     float x = SkScalarToFloat(p.fX);
     float y = SkScalarToFloat(p.fY);
-    float len = sk_float_sqrt(x*x + y*y);
+    float len = std::sqrt(x*x + y*y);
 
     len /= SkScalarToFloat(targetLen);
 
     REPORTER_ASSERT(reporter, len > 0.999f && len < 1.001f);
 }
 
+template <typename T>
 static void unittest_isfinite(skiatest::Reporter* reporter) {
-    float nan = sk_float_asin(2);
-    float inf = SK_ScalarInfinity;
-    float big = 3.40282e+038f;
+    const T inf = std::numeric_limits<T>::infinity();
+    const T big = std::numeric_limits<T>::max();
+    const T nan = inf * 0;
+    const T zero = 0;
 
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(inf));
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(-inf));
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(inf));
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(-inf));
+    REPORTER_ASSERT(reporter, !SkIsNaN(inf));
+    REPORTER_ASSERT(reporter, !SkIsNaN(-inf));
+    REPORTER_ASSERT(reporter, !SkIsFinite(inf));
+    REPORTER_ASSERT(reporter, !SkIsFinite(-inf));
 
-    REPORTER_ASSERT(reporter,  SkScalarIsNaN(nan));
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(big));
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(-big));
-    REPORTER_ASSERT(reporter, !SkScalarIsNaN(0));
+    REPORTER_ASSERT(reporter,  SkIsNaN(nan));
+    REPORTER_ASSERT(reporter, !SkIsNaN(big));
+    REPORTER_ASSERT(reporter, !SkIsNaN(-big));
+    REPORTER_ASSERT(reporter, !SkIsNaN(zero));
 
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(nan));
-    REPORTER_ASSERT(reporter,  SkScalarIsFinite(big));
-    REPORTER_ASSERT(reporter,  SkScalarIsFinite(-big));
-    REPORTER_ASSERT(reporter,  SkScalarIsFinite(0));
+    REPORTER_ASSERT(reporter, !SkIsFinite(nan));
+    REPORTER_ASSERT(reporter,  SkIsFinite(big));
+    REPORTER_ASSERT(reporter,  SkIsFinite(-big));
+    REPORTER_ASSERT(reporter,  SkIsFinite(zero));
 }
 
 static void unittest_half(skiatest::Reporter* reporter) {
@@ -237,7 +239,7 @@ static void unittest_half(skiatest::Reporter* reporter) {
     static const FloatUnion overflowHalf = { ((143 << 23) | (1023 << 13)) };
     h = SkFloatToHalf(overflowHalf.fF);
     f = SkHalfToFloat(h);
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(f) );
+    REPORTER_ASSERT(reporter, !SkIsFinite(f) );
 
     static const FloatUnion underflowHalf = { 101 << 23 };
     h = SkFloatToHalf(underflowHalf.fF);
@@ -247,12 +249,12 @@ static void unittest_half(skiatest::Reporter* reporter) {
     static const FloatUnion inf32 = { 255 << 23 };
     h = SkFloatToHalf(inf32.fF);
     f = SkHalfToFloat(h);
-    REPORTER_ASSERT(reporter, !SkScalarIsFinite(f) );
+    REPORTER_ASSERT(reporter, !SkIsFinite(f) );
 
     static const FloatUnion nan32 = { 255 << 23 | 1 };
     h = SkFloatToHalf(nan32.fF);
     f = SkHalfToFloat(h);
-    REPORTER_ASSERT(reporter, SkScalarIsNaN(f) );
+    REPORTER_ASSERT(reporter, SkIsNaN(f) );
 
 }
 
@@ -263,9 +265,9 @@ static void test_rsqrt(skiatest::Reporter* reporter, RSqrtFn rsqrt) {
     // test close to 0 up to 1
     float input = 0.000001f;
     for (int i = 0; i < 1000; ++i) {
-        float exact = 1.0f/sk_float_sqrt(input);
+        float exact = 1.0f/std::sqrt(input);
         float estimate = rsqrt(input);
-        float relativeError = sk_float_abs(exact - estimate)/exact;
+        float relativeError = std::fabs(exact - estimate)/exact;
         REPORTER_ASSERT(reporter, relativeError <= maxRelativeError);
         input += 0.001f;
     }
@@ -273,9 +275,9 @@ static void test_rsqrt(skiatest::Reporter* reporter, RSqrtFn rsqrt) {
     // test 1 to ~100
     input = 1.0f;
     for (int i = 0; i < 1000; ++i) {
-        float exact = 1.0f/sk_float_sqrt(input);
+        float exact = 1.0f/std::sqrt(input);
         float estimate = rsqrt(input);
-        float relativeError = sk_float_abs(exact - estimate)/exact;
+        float relativeError = std::fabs(exact - estimate)/exact;
         REPORTER_ASSERT(reporter, relativeError <= maxRelativeError);
         input += 0.01f;
     }
@@ -283,9 +285,9 @@ static void test_rsqrt(skiatest::Reporter* reporter, RSqrtFn rsqrt) {
     // test some big numbers
     input = 1000000.0f;
     for (int i = 0; i < 100; ++i) {
-        float exact = 1.0f/sk_float_sqrt(input);
+        float exact = 1.0f/std::sqrt(input);
         float estimate = rsqrt(input);
-        float relativeError = sk_float_abs(exact - estimate)/exact;
+        float relativeError = std::fabs(exact - estimate)/exact;
         REPORTER_ASSERT(reporter, relativeError <= maxRelativeError);
         input += 754326.f;
     }
@@ -344,7 +346,7 @@ static void test_copysign(skiatest::Reporter* reporter) {
         float x = (float)gTriples[i];
         float y = (float)gTriples[i+1];
         float expected = (float)gTriples[i+2];
-        REPORTER_ASSERT(reporter, sk_float_copysign(x, y) == expected);
+        REPORTER_ASSERT(reporter, std::copysign(x, y) == expected);
     }
 
     SkRandom rand;
@@ -505,7 +507,7 @@ DEF_TEST(Math, reporter) {
 
     {
         SkScalar x = SK_ScalarNaN;
-        REPORTER_ASSERT(reporter, SkScalarIsNaN(x));
+        REPORTER_ASSERT(reporter, SkIsNaN(x));
     }
 
     for (i = 0; i < 10000; i++) {
@@ -539,7 +541,8 @@ DEF_TEST(Math, reporter) {
     }
 
     huge_vector_normalize(reporter);
-    unittest_isfinite(reporter);
+    unittest_isfinite<float>(reporter);
+    unittest_isfinite<double>(reporter);
     unittest_half(reporter);
     test_rsqrt(reporter, sk_float_rsqrt);
     test_rsqrt(reporter, sk_float_rsqrt_portable);
