@@ -320,7 +320,8 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
                  "or kTrueType_Font.\n", face, fontAsset.get());
     } else {
         switch (type) {
-            case SkAdvancedTypefaceMetrics::kTrueType_Font: {
+            case SkAdvancedTypefaceMetrics::kTrueType_Font:
+            case SkAdvancedTypefaceMetrics::kCFF_Font: {
                 if (!SkToBool(metrics.fFlags &
                               SkAdvancedTypefaceMetrics::kNotSubsettable_FontFlag)) {
                     SkASSERT(font.firstGlyphID() == 1);
@@ -373,6 +374,7 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
             newCIDFont->insertName("Subtype", "CIDFontType0");
             break;
         case SkAdvancedTypefaceMetrics::kTrueType_Font:
+        case SkAdvancedTypefaceMetrics::kCFF_Font:
             newCIDFont->insertName("Subtype", "CIDFontType2");
             newCIDFont->insertName("CIDToGIDMap", "Identity");
             break;
@@ -510,6 +512,33 @@ static SkPDFIndirectReference type3_descriptor(SkPDFDocument* doc,
 
     SkPDFDict descriptor("FontDescriptor");
     int32_t fontDescriptorFlags = kPdfSymbolic;
+
+    /** PDF32000_2008: FontFamily should be used for Type3 fonts in Tagged PDF documents. */
+    SkString familyName;
+    typeface->getFamilyName(&familyName);
+    if (!familyName.isEmpty()) {
+        descriptor.insertByteString("FontFamily", familyName);
+    }
+
+    /** PDF32000_2008: FontStretch should be used for Type3 fonts in Tagged PDF documents. */
+    static constexpr const char* stretchNames[9] = {
+        "UltraCondensed",
+        "ExtraCondensed",
+        "Condensed",
+        "SemiCondensed",
+        "Normal",
+        "SemiExpanded",
+        "Expanded",
+        "ExtraExpanded",
+        "UltraExpanded",
+    };
+    const char* stretchName = stretchNames[typeface->fontStyle().width() - 1];
+    descriptor.insertName("FontStretch", stretchName);
+
+    /** PDF32000_2008: FontWeight should be used for Type3 fonts in Tagged PDF documents. */
+    int weight = (typeface->fontStyle().weight() + 50) / 100;
+    descriptor.insertInt("FontWeight", SkTPin(weight, 1, 9) * 100);
+
     if (const SkAdvancedTypefaceMetrics* metrics = SkPDFFont::GetMetrics(typeface, doc)) {
         // Type3 FontDescriptor does not require all the same fields.
         descriptor.insertName("FontName", metrics->fPostScriptName);
@@ -708,6 +737,7 @@ void SkPDFFont::emitSubset(SkPDFDocument* doc) const {
     switch (fFontType) {
         case SkAdvancedTypefaceMetrics::kType1CID_Font:
         case SkAdvancedTypefaceMetrics::kTrueType_Font:
+        case SkAdvancedTypefaceMetrics::kCFF_Font:
             return emit_subset_type0(*this, doc);
 #ifndef SK_PDF_DO_NOT_SUPPORT_TYPE_1_FONTS
         case SkAdvancedTypefaceMetrics::kType1_Font:

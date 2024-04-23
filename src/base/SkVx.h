@@ -212,7 +212,7 @@ struct alignas(2*sizeof(T)) Vec<2,T> {
 
 template <typename T>
 struct Vec<1,T> {
-    T val;
+    T val = {};
 
     SKVX_ALWAYS_INLINE Vec() = default;
     SKVX_ALWAYS_INLINE Vec(T s) : val(s) {}
@@ -1003,7 +1003,7 @@ SIN Vec<N, double> normalize(const Vec<N, double>& v) {
 SINT bool isfinite(const Vec<N, T>& v) {
     // Multiply all values together with 0. If they were all finite, the output is
     // 0 (also finite). If any were not, we'll get nan.
-    return std::isfinite(dot(v, Vec<N, T>(0)));
+    return SkIsFinite(dot(v, Vec<N, T>(0)));
 }
 
 // De-interleaving load of 4 vectors.

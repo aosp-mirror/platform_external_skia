@@ -68,6 +68,7 @@ genrule(
 CK_DEFINES = [
     "CK_INCLUDE_PATHOPS",
     "EMSCRIPTEN_HAS_UNBOUND_TYPE_NAMES=0",  # Allows us to compile with -fno-rtti
+    "SK_DISABLE_LEGACY_PARAGRAPH_UNICODE=1",
 ] + select({
     ":enable_fonts_true": ["CK_INCLUDE_PARAGRAPH"],
     ":enable_fonts_false": ["CK_NO_FONTS"],
@@ -292,12 +293,16 @@ cc_binary(
     ] + select({
         ":enable_fonts_true": [
             "//:fontmgr_data_freetype",
+            "//:fontmgr_empty_freetype",
             "//modules/skparagraph:skparagraph_harfbuzz_icu",
         ],
         ":enable_fonts_false": [],
     }) + select({
         ":enable_skottie_true": [
-            "//modules/skottie:skottie_harfbuzz_icu",
+            "//:skshaper_harfbuzz",
+            "//:skshaper_unicode",
+            "//:skunicode_icu",
+            "//modules/skottie",
             "//modules/skottie:utils",
         ],
         ":enable_skottie_false": [],

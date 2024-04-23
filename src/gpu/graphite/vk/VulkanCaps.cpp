@@ -7,6 +7,7 @@
 
 #include "src/gpu/graphite/vk/VulkanCaps.h"
 
+#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/graphite/ContextOptions.h"
 #include "include/gpu/graphite/TextureInfo.h"
 #include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
@@ -259,6 +260,47 @@ TextureInfo VulkanCaps::getTextureInfoForSampledCopy(const TextureInfo& textureI
     info.fImageUsageFlags = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                             VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     info.fSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    return info;
+}
+
+namespace {
+VkFormat format_from_compression(SkTextureCompressionType compression) {
+    switch (compression) {
+        case SkTextureCompressionType::kETC2_RGB8_UNORM:
+            return VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
+        case SkTextureCompressionType::kBC1_RGB8_UNORM:
+            return VK_FORMAT_BC1_RGB_UNORM_BLOCK;
+        case SkTextureCompressionType::kBC1_RGBA8_UNORM:
+            return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+        default:
+            return VK_FORMAT_UNDEFINED;
+    }
+}
+}
+
+TextureInfo VulkanCaps::getDefaultCompressedTextureInfo(SkTextureCompressionType compression,
+                                                        Mipmapped mipmapped,
+                                                        Protected isProtected) const {
+    VkFormat format = format_from_compression(compression);
+    const FormatInfo& formatInfo = this->getFormatInfo(format);
+    static constexpr int defaultSampleCount = 1;
+    if ((isProtected == Protected::kYes && !this->protectedSupport()) ||
+        !formatInfo.isTexturable(VK_IMAGE_TILING_OPTIMAL)) {
+        return {};
+    }
+
+    VulkanTextureInfo info;
+    info.fSampleCount = defaultSampleCount;
+    info.fMipmapped = mipmapped;
+    info.fFlags = (isProtected == Protected::kYes) ? VK_IMAGE_CREATE_PROTECTED_BIT : 0;
+    info.fFormat = format;
+    info.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
+    info.fImageUsageFlags = VK_IMAGE_USAGE_SAMPLED_BIT |
+                            VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                            VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    info.fSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    info.fAspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
     return info;
 }
@@ -922,16 +964,20 @@ void VulkanCaps::SupportedSampleCounts::initSampleCounts(const skgpu::VulkanInte
     VkImageFormatProperties properties;
 
     VkResult result;
-    VULKAN_CALL_RESULT(interface, result,
-                       GetPhysicalDeviceImageFormatProperties(physDev,
-                                                              format,
-                                                              VK_IMAGE_TYPE_2D,
-                                                              VK_IMAGE_TILING_OPTIMAL,
-                                                              usage,
-                                                              0,  // createFlags
-                                                              &properties));
+    // VULKAN_CALL_RESULT requires a VulkanSharedContext for tracking DEVICE_LOST, but VulkanCaps
+    // are initialized before a VulkanSharedContext is available. The _NOCHECK variant only requires
+    // a VulkanInterface, so we can use that and log failures manually.
+    VULKAN_CALL_RESULT_NOCHECK(interface,
+                               result,
+                               GetPhysicalDeviceImageFormatProperties(physDev,
+                                                                      format,
+                                                                      VK_IMAGE_TYPE_2D,
+                                                                      VK_IMAGE_TILING_OPTIMAL,
+                                                                      usage,
+                                                                      0,  // createFlags
+                                                                      &properties));
     if (result != VK_SUCCESS) {
-        SKGPU_LOG_W("Vulkan call GetPhysicalDeviceImageFormatProperties failed");
+        SKGPU_LOG_W("Vulkan call GetPhysicalDeviceImageFormatProperties failed: %d", result);
         return;
     }
 
@@ -1361,6 +1407,18 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
     }
 
     return pipelineKey;
+}
+
+GraphiteResourceKey VulkanCaps::makeSamplerKey(const SamplerDesc& samplerDesc) const {
+    GraphiteResourceKey samplerKey;
+    static const ResourceType kType = GraphiteResourceKey::GenerateResourceType();
+    GraphiteResourceKey::Builder builder(&samplerKey, kType, 1, Shareable::kYes);
+
+    // TODO(b/311392779): When needed, add YCbCr info to the sampler key.
+
+    builder[0] = samplerDesc.desc();
+    builder.finish();
+    return samplerKey;
 }
 
 void VulkanCaps::buildKeyForTexture(SkISize dimensions,

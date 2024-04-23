@@ -189,14 +189,15 @@ struct YUVImageShaderBlock {
                   SkRect subset);
 
         SkSamplingOptions fSampling;
+        SkSamplingOptions fSamplingUV;
         SkTileMode fTileModes[2];
         SkISize fImgSize;
+        SkISize fImgSizeUV;  // Size of UV planes relative to Y's texel space
         SkRect fSubset;
+        SkPoint fLinearFilterUVInset = { 0.50001f, 0.50001f };
         SkV4 fChannelSelect[4];
         SkMatrix fYUVtoRGBMatrix;
         SkPoint3 fYUVtoRGBTranslate;
-
-        SkColorSpaceXformSteps fSteps;
 
         // TODO: Currently these are only filled in when we're generating the key from an actual
         // SkImageShader. In the pre-compile case we will need to create Graphite promise
@@ -348,6 +349,7 @@ struct ColorSpaceTransformBlock {
                                 SkAlphaType srcAT,
                                 const SkColorSpace* dst,
                                 SkAlphaType dstAT);
+        ColorSpaceTransformData(const SkColorSpaceXformSteps& steps) { fSteps = steps; }
         SkColorSpaceXformSteps fSteps;
     };
 

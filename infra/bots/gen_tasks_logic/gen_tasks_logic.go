@@ -609,7 +609,6 @@ func GenTasks(cfg *Config) {
 			"skia/bin/fetch-sk",
 			"skia/infra/bots/assets/skp",
 			"skia/infra/bots/utils.py",
-			"skia/infra/config/recipes.cfg",
 			"skia/tools/skp",
 		},
 		Excludes: []string{rbe.ExcludeGitDir},
@@ -860,9 +859,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Debian10":   DEFAULT_OS_LINUX_GCE,
 			"Debian11":   DEBIAN_11_OS,
 			"Mac":        DEFAULT_OS_MAC,
-			"Mac10.12":   "Mac-10.12",
-			"Mac10.13":   "Mac-10.13.6",
-			"Mac10.14":   "Mac-10.14",
 			"Mac10.15.1": "Mac-10.15.1",
 			"Mac10.15.7": "Mac-10.15.7", // Same as 'Mac', but explicit.
 			"Mac11":      "Mac-11.4",
@@ -2193,14 +2189,16 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"cpu_8888_benchmark_test":        {"//bench:cpu_8888_test", ""},
 
 	// Note: these paths are relative to the WORKSPACE in //example/external_client
-	"decode_everything": {"//:decode_everything", ""},
-	"path_combiner":     {"//:path_combiner", ""},
-	"png_decoder":       {"//:png_decoder", ""},
-	"shape_text":        {"//:shape_text", ""},
-	"use_ganesh_gl":     {"//:use_ganesh_gl", ""},
-	"use_ganesh_vulkan": {"//:use_ganesh_vulkan", ""},
-	"use_skresources":   {"//:use_skresources", ""},
-	"write_text_to_png": {"//:write_text_to_png", ""},
+	"decode_everything":  {"//:decode_everything", ""},
+	"path_combiner":      {"//:path_combiner", ""},
+	"png_decoder":        {"//:png_decoder", ""},
+	"shape_text":         {"//:shape_text", ""},
+	"svg_with_harfbuzz":  {"//:svg_with_harfbuzz", ""},
+	"svg_with_primitive": {"//:svg_with_primitive", ""},
+	"use_ganesh_gl":      {"//:use_ganesh_gl", ""},
+	"use_ganesh_vulkan":  {"//:use_ganesh_vulkan", ""},
+	"use_skresources":    {"//:use_skresources", ""},
+	"write_text_to_png":  {"//:write_text_to_png", ""},
 
 	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
 	// under a test_suite.

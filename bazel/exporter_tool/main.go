@@ -52,7 +52,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_core_public",
 			Rules: []string{
 				"//include/core:public_hdrs",
-				"//include/core:legacy_draw_looper",
 			}},
 		{Var: "skia_core_sources",
 			Rules: []string{
@@ -68,7 +67,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/core:legacy_core_srcs",
 				"//src/core:core_skslc_hdrs",
 				"//src/core:core_skslc_srcs",
-				"//src/core:legacy_draw_looper",
 				"//src/image:image_hdrs",
 				"//src/image:image_srcs",
 				"//src/lazy:lazy_hdrs",
@@ -130,7 +128,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{
 				"//src/effects:effects_hdrs",
 				"//src/effects:effects_srcs",
-				"//src/effects:legacy_draw_looper",
 				"//src/shaders/gradients:gradient_hdrs",
 				"//src/shaders/gradients:gradient_srcs",
 			}},
@@ -232,7 +229,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_utils_chromium",
 			Rules: []string{
 				"//include/docs:multi_picture_document_hdrs",
-				"//src/utils:chromium_hdrs"}},
+			}},
 		{Var: "skia_utils_private",
 			Rules: []string{
 				"//src/utils:utils_hdrs",
@@ -265,8 +262,8 @@ var gniExportDescs = []exporter.GNIExportDesc{
 	{GNI: "gn/xml.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skia_xml_sources",
 			Rules: []string{
-				"//src/xml:xml_hdrs",
-				"//src/xml:xml_srcs",
+				"//src/xml:_xml_hdrs",
+				"//src/xml:_xml_srcs",
 			}}},
 	},
 	{GNI: "gn/gpu.gni", Vars: []exporter.GNIFileListExportDesc{
@@ -389,6 +386,9 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//include/gpu/gl/egl:public_hdrs",
 				"//include/gpu/gl/epoxy:public_hdrs",
 				"//include/gpu/gl/glx:public_hdrs",
+				"//include/gpu/ganesh/gl/egl:public_hdrs",
+				"//include/gpu/ganesh/gl/epoxy:public_hdrs",
+				"//include/gpu/ganesh/gl/glx:public_hdrs",
 				"//src/gpu/ganesh/gl/android:srcs",
 				"//src/gpu/ganesh/gl/egl:srcs",
 				"//src/gpu/ganesh/gl/epoxy:srcs",
@@ -478,7 +478,9 @@ var gniExportDescs = []exporter.GNIExportDesc{
 	}},
 	{GNI: "modules/skshaper/skshaper.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skia_shaper_public",
-			Rules: []string{"//modules/skshaper/include:hdrs"}},
+			Rules: []string{"//modules/skshaper/include:hdrs",
+				"//modules/skshaper/utils:core_hdrs",
+			}},
 		{Var: "skia_shaper_primitive_sources",
 			Rules: []string{"//modules/skshaper/src:base_srcs"}},
 		{Var: "skia_shaper_harfbuzz_sources",

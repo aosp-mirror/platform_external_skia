@@ -18,7 +18,6 @@ namespace skgpu::graphite {
 class PrecompileBase;
 class PrecompileBlender;
 class PrecompileColorFilter;
-class PrecompileImageFilter;
 class PrecompileMaskFilter;
 class PrecompileShader;
 
@@ -146,9 +145,13 @@ namespace PrecompileColorFilters {
     // This encompasses both variants of SkColorFilters::HSLAMatrix
     SK_API sk_sp<PrecompileColorFilter> HSLAMatrix();
 
-    // TODO: add Lerp
     SK_API sk_sp<PrecompileColorFilter> LinearToSRGBGamma();
     SK_API sk_sp<PrecompileColorFilter> SRGBToLinearGamma();
+    SK_API sk_sp<PrecompileColorFilter> Lerp(SkSpan<const sk_sp<PrecompileColorFilter>> dstOptions,
+                                             SkSpan<const sk_sp<PrecompileColorFilter>> srcOptions);
+
+    // This matches the main API's factory in include/effects/SkLumaColorFilter.h
+    SK_API sk_sp<PrecompileColorFilter> Luma();
 
     // This encompases both variants of SkColorFilters::Table and TableARGB
     SK_API sk_sp<PrecompileColorFilter> Table();
@@ -156,21 +159,6 @@ namespace PrecompileColorFilters {
     SK_API sk_sp<PrecompileColorFilter> Lighting();
 
 } // namespace PrecompileColorFilters
-
-//--------------------------------------------------------------------------------------------------
-// This will move to be beside SkImageFilters in include/effects/SkImageFilters.h
-class PrecompileImageFilters {
-public:
-    static sk_sp<PrecompileImageFilter> Blur();
-    static sk_sp<PrecompileImageFilter> Image();
-    // TODO: Arithmetic, Blend (2 kinds), ColorFilter, Compose, DisplacementMap,
-    // DropShadow, DropShadowOnly, Magnifier, MatrixConvolution, MatrixTransform, Merge, Offset,
-    // Picture, Runtime, Shader, Tile, Dilate, Erode, DistantLitDiffuse, PointLitDiffuse,
-    // SpotLitDiffuse, DistantLitSpecular, PointLitSpecular, SpotLitSpecular
-
-private:
-    PrecompileImageFilters() = delete;
-};
 
 //--------------------------------------------------------------------------------------------------
 // Object that allows passing a SkPrecompileShader, SkPrecompileColorFilter or

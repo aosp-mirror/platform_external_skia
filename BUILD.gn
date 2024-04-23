@@ -466,9 +466,6 @@ optional("fontmgr_win") {
   ]
   public = [ "include/ports/SkTypeface_win.h" ]
   sources = [
-    "include/ports/SkFontMgr_indirect.h",
-    "include/ports/SkRemotableFontMgr.h",
-    "src/fonts/SkFontMgr_indirect.cpp",
     "src/ports/SkFontMgr_win_dw.cpp",
     "src/ports/SkScalerContext_win_dw.cpp",
     "src/ports/SkScalerContext_win_dw.h",
@@ -2210,10 +2207,10 @@ if (skia_enable_tools) {
     if (skia_tools_require_resources) {
       defines += [ "SK_TOOLS_REQUIRE_RESOURCES" ]
     }
-    deps = [
-      ":flags",
-      "modules/svg",
-    ]
+    deps = [ ":flags" ]
+    if (skia_enable_svg) {
+      deps += [ "modules/svg" ]
+    }
     public_deps = [ ":gpu_tool_utils" ]
   }
 
@@ -2368,6 +2365,9 @@ if (skia_enable_tools) {
       test_app("skottie_tool_gpu") {
         deps = [ "modules/skottie:tool_gpu" ]
       }
+      test_app("skottie_preshape_tool") {
+        deps = [ "modules/skottie:preshape_tool" ]
+      }
     }
     if (skia_enable_svg && skia_use_expat && defined(is_skia_standalone)) {
       test_app("svg_tool") {
@@ -2423,6 +2423,8 @@ if (skia_enable_tools) {
         ":trace",
         "modules/skottie",
         "modules/skottie:utils",
+        "modules/skshaper",
+        "modules/skunicode",
         "modules/svg",
       ]
     }
@@ -2476,6 +2478,7 @@ if (skia_enable_tools) {
       ":trace",
       "modules/skparagraph",
       "modules/skshaper",
+      "modules/skunicode",
       "modules/svg",
     ]
   }
@@ -2996,6 +2999,7 @@ if (skia_enable_tools) {
         "modules/skparagraph:slides",
         "modules/sksg:slides",
         "modules/skshaper:skshaper",
+        "modules/skunicode",
         "modules/svg",
         "//third_party/imgui",
       ]

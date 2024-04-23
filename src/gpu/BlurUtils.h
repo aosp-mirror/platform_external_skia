@@ -14,6 +14,7 @@
 
 #include <array>
 
+class SkBitmap;
 class SkRuntimeEffect;
 struct SkV4;
 
@@ -37,7 +38,7 @@ constexpr bool BlurIsEffectivelyIdentity(float sigma) { return sigma <= 0.03f; }
 // Convert from a sigma Gaussian standard deviation to a pixel radius such that pixels outside the
 // radius would have an insignificant contribution to the final blurred value.
 inline int BlurSigmaRadius(float sigma) {
-    // sk_float_ceil is not constexpr
+    // sk_float_ceil2int is not constexpr
     return BlurIsEffectivelyIdentity(sigma) ? 0 : sk_float_ceil2int(3.f * sigma);
 }
 
@@ -139,6 +140,19 @@ void Compute2DBlurOffsets(SkISize radius, std::array<SkV4, kMaxBlurSamples/2>& o
 void Compute1DBlurLinearKernel(float sigma,
                                int radius,
                                std::array<SkV4, kMaxBlurSamples/2>& offsetsAndKernel);
+
+// Calculates the integral table for an analytic rectangle blur. The integral values are stored in
+// the red channel of the provided bitmap, which will be 1D with a 1-pixel height.
+SkBitmap CreateIntegralTable(float sixSigma);
+
+// Returns the width of an integral table we will create for the given 6*sigma.
+int ComputeIntegralTableWidth(float sixSigma);
+
+// Creates a profile of a blurred circle.
+SkBitmap CreateCircleProfile(float sigma, float radius, int profileWidth);
+
+// Creates a half plane approximation profile of a blurred circle.
+SkBitmap CreateHalfPlaneProfile(int profileWidth);
 
 } // namespace skgpu
 

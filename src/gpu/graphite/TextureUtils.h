@@ -11,6 +11,7 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GpuTypes.h"
+#include "include/gpu/graphite/Image.h"
 #include "src/gpu/graphite/TextureProxyView.h"
 
 #include <functional>
@@ -22,6 +23,10 @@ enum SkColorType : int;
 class SkImage;
 struct SkImageInfo;
 struct SkSamplingOptions;
+
+namespace skgpu {
+    class RefCntedCallback;
+}
 
 namespace skgpu::graphite {
 
@@ -37,6 +42,15 @@ std::tuple<TextureProxyView, SkColorType> MakeBitmapProxyView(Recorder*,
                                                               sk_sp<SkMipmap>,
                                                               Mipmapped,
                                                               skgpu::Budgeted);
+
+sk_sp<TextureProxy> MakePromiseImageLazyProxy(const Caps*,
+                                              SkISize dimensions,
+                                              TextureInfo,
+                                              Volatile,
+                                              sk_sp<skgpu::RefCntedCallback> releaseHelper,
+                                              SkImages::GraphitePromiseTextureFulfillProc,
+                                              SkImages::GraphitePromiseTextureFulfillContext,
+                                              SkImages::GraphitePromiseTextureReleaseProc);
 
 sk_sp<SkImage> MakeFromBitmap(Recorder*,
                               const SkColorInfo&,
@@ -56,9 +70,9 @@ sk_sp<SkImage> RescaleImage(Recorder*,
 
 bool GenerateMipmaps(Recorder*, sk_sp<TextureProxy>, const SkColorInfo&);
 
-std::tuple<skgpu::graphite::TextureProxyView, SkColorType> AsView(Recorder*,
-                                                                  const SkImage*,
-                                                                  skgpu::Mipmapped);
+// Returns the underlying TextureProxyView if it's a non-YUVA Graphite-backed image.
+TextureProxyView AsView(const SkImage*);
+inline TextureProxyView AsView(sk_sp<SkImage> image) { return AsView(image.get()); }
 
 std::pair<sk_sp<SkImage>, SkSamplingOptions> GetGraphiteBacked(Recorder*,
                                                                const SkImage*,

@@ -38,11 +38,15 @@ void empty_test(const KeyContext& keyContext,
     std::vector<UniquePaintParamsID> precompileIDs;
     paintOptions.priv().buildCombinations(keyContext,
                                           gatherer,
-                                          /* addPrimitiveBlender= */ false,
+                                          DrawTypeFlags::kNone,
+                                          /* withPrimitiveBlender= */ false,
                                           Coverage::kNone,
-                                          [&](UniquePaintParamsID id) {
-                                              precompileIDs.push_back(id);
-                                          });
+                                          [&precompileIDs](UniquePaintParamsID id,
+                                                           DrawTypeFlags,
+                                                           bool /* withPrimitiveBlender */,
+                                                           Coverage) {
+                                                               precompileIDs.push_back(id);
+                                                           });
 
     SkASSERT(precompileIDs.size() == 1);
 }
@@ -61,11 +65,15 @@ void no_shader_option_test(const KeyContext& keyContext,
     std::vector<UniquePaintParamsID> precompileIDs;
     paintOptions.priv().buildCombinations(keyContext,
                                           gatherer,
-                                          /* addPrimitiveBlender= */ false,
+                                          DrawTypeFlags::kNone,
+                                          /* withPrimitiveBlender= */ false,
                                           Coverage::kNone,
-                                          [&](UniquePaintParamsID id) {
-                                              precompileIDs.push_back(id);
-                                          });
+                                          [&precompileIDs](UniquePaintParamsID id,
+                                                           DrawTypeFlags,
+                                                           bool /* withPrimitiveBlender */,
+                                                           Coverage) {
+                                                               precompileIDs.push_back(id);
+                                                           });
 
     SkASSERT(precompileIDs.size() == 1);
 }
@@ -82,11 +90,15 @@ void no_blend_mode_option_test(const KeyContext& keyContext,
     std::vector<UniquePaintParamsID> precompileIDs;
     paintOptions.priv().buildCombinations(keyContext,
                                           gatherer,
-                                          /* addPrimitiveBlender= */ false,
+                                          DrawTypeFlags::kNone,
+                                          /* withPrimitiveBlender= */ false,
                                           Coverage::kNone,
-                                          [&](UniquePaintParamsID id) {
-                                              precompileIDs.push_back(id);
-                                          });
+                                          [&precompileIDs](UniquePaintParamsID id,
+                                                           DrawTypeFlags,
+                                                           bool /* withPrimitiveBlender */,
+                                                           Coverage) {
+                                                               precompileIDs.push_back(id);
+                                                           });
 
     SkASSERT(precompileIDs.size() == 1);
 }
@@ -94,7 +106,7 @@ void no_blend_mode_option_test(const KeyContext& keyContext,
 void big_test(const KeyContext& keyContext,
               PipelineDataGatherer* gatherer,
               skiatest::Reporter* reporter) {
-    // paintOptions (116)
+    // paintOptions (464)
     //  |- sweepGrad_0 (2) | blendShader_0 (114)
     //  |                     0: kSrc (1)
     //  |                     1: (dsts) linearGrad_0 (2) | solid_0 (1)
@@ -103,7 +115,7 @@ void big_test(const KeyContext& keyContext,
     //  |                                            1: (dsts) radGrad_0 (2) | solid_1 (1)
     //  |                                            2: (srcs) imageShader_0 (12)
     //  |
-    //  |- 4-built-in-blend-modes (just 1 since all are PorterDuff)
+    //  |- 4-built-in-blend-modes
 
     PaintOptions paintOptions;
 
@@ -146,19 +158,23 @@ void big_test(const KeyContext& keyContext,
     // now, blend modes
     paintOptions.setBlendModes(evenMoreBlendModes);                             // c array
 
-    REPORTER_ASSERT(reporter, paintOptions.priv().numCombinations() == 116,
+    REPORTER_ASSERT(reporter, paintOptions.priv().numCombinations() == 464,
                     "Actual # of combinations %d", paintOptions.priv().numCombinations());
 
     std::vector<UniquePaintParamsID> precompileIDs;
     paintOptions.priv().buildCombinations(keyContext,
                                           gatherer,
-                                          /* addPrimitiveBlender= */ false,
+                                          DrawTypeFlags::kNone,
+                                          /* withPrimitiveBlender= */ false,
                                           Coverage::kNone,
-                                          [&](UniquePaintParamsID id) {
-                                              precompileIDs.push_back(id);
-                                          });
+                                          [&precompileIDs](UniquePaintParamsID id,
+                                                           DrawTypeFlags,
+                                                           bool /* withPrimitiveBlender */,
+                                                           Coverage) {
+                                                               precompileIDs.push_back(id);
+                                                           });
 
-    SkASSERT(precompileIDs.size() == 116);
+    SkASSERT(precompileIDs.size() == 464);
 }
 
 template <typename T>
@@ -291,11 +307,15 @@ void runtime_effect_test(const KeyContext& keyContext,
     std::vector<UniquePaintParamsID> precompileIDs;
     paintOptions.priv().buildCombinations(keyContext,
                                           gatherer,
-                                          /* addPrimitiveBlender= */ false,
+                                          DrawTypeFlags::kNone,
+                                          /* withPrimitiveBlender= */ false,
                                           Coverage::kNone,
-                                          [&](UniquePaintParamsID id) {
-                                              precompileIDs.push_back(id);
-                                          });
+                                          [&precompileIDs](UniquePaintParamsID id,
+                                                           DrawTypeFlags,
+                                                           bool /* withPrimitiveBlender */,
+                                                           Coverage) {
+                                                               precompileIDs.push_back(id);
+                                                           });
 
     SkASSERT(precompileIDs.size() == 8);
 }

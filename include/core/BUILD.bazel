@@ -9,6 +9,7 @@ skia_filegroup(
     srcs = [
         "SkAlphaType.h",
         "SkAnnotation.h",
+        "SkArc.h",
         "SkBBHFactory.h",
         "SkBitmap.h",
         "SkBlendMode.h",
@@ -100,17 +101,11 @@ skia_filegroup(
 )
 
 skia_filegroup(
-    name = "legacy_draw_looper",
-    srcs = [
-        "SkDrawLooper.h",
-    ],
-)
-
-skia_filegroup(
     name = "core_hdrs",
     srcs = [
         "SkAlphaType.h",
         "SkAnnotation.h",
+        "SkArc.h",
         "SkBBHFactory.h",
         "SkBitmap.h",
         "SkBlendMode.h",

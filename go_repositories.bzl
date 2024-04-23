@@ -477,6 +477,19 @@ def go_repositories():
         version = "v1.0.0",
     )
     go_repository(
+        name = "com_github_google_go_replayers_grpcreplay",
+        importpath = "github.com/google/go-replayers/grpcreplay",
+        sum = "h1:S5+I3zYyZ+GQz68OfbURDdt/+cSMqCK1wrvNx7WBzTE=",
+        version = "v1.1.0",
+    )
+    go_repository(
+        name = "com_github_google_go_replayers_httpreplay",
+        importpath = "github.com/google/go-replayers/httpreplay",
+        sum = "h1:VM1wEyyjaoU53BwrOnaf9VhAyQQEEioJvFYxYcLRKzk=",
+        version = "v1.2.0",
+    )
+
+    go_repository(
         name = "com_github_google_gofuzz",
         importpath = "github.com/google/gofuzz",
         sum = "h1:xRy4A+RhZaiKjJ1bPfwQ8sedCA+YS2YcCHW6ec7JMi0=",
@@ -492,8 +505,8 @@ def go_repositories():
     go_repository(
         name = "com_github_google_martian_v3",
         importpath = "github.com/google/martian/v3",
-        sum = "h1:IqNFLAmvJOgVlpdEBiQbDc2EwKW77amAycfTuWKdfvw=",
-        version = "v3.3.2",
+        sum = "h1:DIhPTQrbPkgs2yJYdXU/eNACCG5DVQjySNRNlflZ9Fc=",
+        version = "v3.3.3",
     )
     go_repository(
         name = "com_github_google_pprof",
@@ -2670,8 +2683,8 @@ def go_repositories():
     go_repository(
         name = "org_skia_go_infra",
         importpath = "go.skia.org/infra",
-        sum = "h1:o3Cu745VQJns/vZcocB8l+BuSt1xzUl2CymI+DbIxxI=",
-        version = "v0.0.0-20240331052201-df0949e75440",
+        sum = "h1:3AmkH+MthWTjNTeQQNfLryg3p/4Pz5msxhz7uwJFkos=",
+        version = "v0.0.0-20240421052236-b7cc986dba6d",
     )
     go_repository(
         name = "org_uber_go_atomic",

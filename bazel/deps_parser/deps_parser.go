@@ -93,6 +93,10 @@ This is done automatically via:
 	contents := strings.Split(string(b), "\n")
 
 	outputFile, count, err := parseDEPSFile(contents, *workspaceFile)
+	if err != nil {
+		fmt.Printf("Parsing error %s\n", err)
+		os.Exit(1)
+	}
 	if err := os.Rename(outputFile, *genBzlFile); err != nil {
 		fmt.Printf("Could not write from %s to %s: %s\n", outputFile, *depsFile, err)
 		os.Exit(1)
@@ -279,6 +283,15 @@ def bazel_deps():
     )
 
 def header_based_configs():
+    maybe(
+        download_config_files,
+        name = "expat_config",
+        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        files = {
+            "BUILD.bazel": "bazel/external/expat/config/BUILD.bazel",
+            "expat_config.h": "third_party/expat/include/expat_config/expat_config.h",
+        },
+    )
     maybe(
         download_config_files,
         name = "freetype_config",

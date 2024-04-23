@@ -9,6 +9,7 @@
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkTraceMemoryDump.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/BackendTexture.h"
@@ -16,9 +17,11 @@
 #include "include/gpu/graphite/ImageProvider.h"
 #include "include/gpu/graphite/Recording.h"
 
+#include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/AtlasTypes.h"
+#include "src/gpu/DataUtils.h"
 #include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/graphite/AtlasProvider.h"
 #include "src/gpu/graphite/BufferManager.h"
@@ -124,8 +127,12 @@ Recorder::~Recorder() {
     for (int i = 0; i < fFinishedProcs.size(); ++i) {
         fFinishedProcs[i]->setFailureResult();
     }
+
     for (auto& device : fTrackedDevices) {
-        device->abandonRecorder();
+        // deregisterDevice() may have left an entry as null previously.
+        if (device) {
+            device->abandonRecorder();
+        }
     }
 #if defined(GRAPHITE_TEST_UTILS)
     if (fContext) {
@@ -160,10 +167,15 @@ std::unique_ptr<Recording> Recorder::snap() {
         }
     });
 
-    // TODO: fulfill all promise images in the TextureDataCache here
-    // TODO: create all the samplers needed in the TextureDataCache here
+    std::unique_ptr<Recording::LazyProxyData> targetProxyData;
+    if (fTargetProxyData) {
+        targetProxyData = std::move(fTargetProxyData);
+        fTargetProxyDevice.reset();
+        fTargetProxyCanvas.reset();
+    }
 
-    if (!fRootTaskList->prepareResources(fResourceProvider.get(), fRuntimeEffectDict.get())) {
+    if (fDrawBufferManager->hasMappingFailed() ||
+        !fRootTaskList->prepareResources(fResourceProvider.get(), fRuntimeEffectDict.get())) {
         // Leaving 'fTrackedDevices' alone since they were flushed earlier and could still be
         // attached to extant SkSurfaces.
         fDrawBufferManager = std::make_unique<DrawBufferManager>(fResourceProvider.get(),
@@ -176,12 +188,6 @@ std::unique_ptr<Recording> Recorder::snap() {
         return nullptr;
     }
 
-    std::unique_ptr<Recording::LazyProxyData> targetProxyData;
-    if (fTargetProxyData) {
-        targetProxyData = std::move(fTargetProxyData);
-        fTargetProxyDevice.reset();
-        fTargetProxyCanvas.reset();
-    }
     std::unique_ptr<Recording> recording(new Recording(fNextRecordingID++,
                                                        fUniqueID,
                                                        std::move(nonVolatileLazyProxies),
@@ -221,29 +227,51 @@ SkCanvas* Recorder::makeDeferredCanvas(const SkImageInfo& imageInfo,
     }
 
     fTargetProxyData = std::make_unique<Recording::LazyProxyData>(textureInfo);
+    // Use kLoad for the initial load op since the purpose of a deferred canvas is to draw on top
+    // of an existing, late-bound texture.
     fTargetProxyDevice = Device::Make(this,
                                       fTargetProxyData->refLazyProxy(),
                                       imageInfo.dimensions(),
                                       imageInfo.colorInfo(),
                                       {},
-                                      false);
+                                      LoadOp::kLoad);
     fTargetProxyCanvas = std::make_unique<SkCanvas>(fTargetProxyDevice);
     return fTargetProxyCanvas.get();
 }
 
-void Recorder::registerDevice(Device* device) {
+void Recorder::registerDevice(sk_sp<Device> device) {
     ASSERT_SINGLE_OWNER
-    fTrackedDevices.push_back(device);
+
+    SkASSERT(device);
+#if defined(SK_DEBUG)
+    // TODO(b/333073673): Confirm the device isn't already in the tracked list
+    for (const sk_sp<Device>& tracked : fTrackedDevices) {
+        SkASSERT(tracked.get() != device.get());
+    }
+#endif
+
+    // By taking a ref on tracked devices, the Recorder prevents the Device from being deleted on
+    // another thread unless the Recorder has been destroyed or the device has abandoned its
+    // recorder (e.g. was marked immutable).
+    fTrackedDevices.emplace_back(std::move(device));
 }
 
 void Recorder::deregisterDevice(const Device* device) {
     ASSERT_SINGLE_OWNER
-    for (auto it = fTrackedDevices.begin(); it != fTrackedDevices.end(); it++) {
-        if (*it == device) {
-            fTrackedDevices.erase(it);
-            return;
+    for (int i = 0; i < fTrackedDevices.size(); ++i) {
+        if (fTrackedDevices[i].get() == device) {
+            // Don't modify the list structure of fTrackedDevices within this loop
+            fTrackedDevices[i] = nullptr;
+            break;
         }
     }
+
+#if defined(SK_DEBUG)
+    // TODO(b/333073673): Confirm that the device is not in the tracked list anymore.
+    for (const sk_sp<Device>& tracked : fTrackedDevices) {
+        SkASSERT(tracked.get() != device);
+    }
+#endif
 }
 
 BackendTexture Recorder::createBackendTexture(SkISize dimensions, const TextureInfo& info) {
@@ -346,6 +374,45 @@ bool Recorder::updateBackendTexture(const BackendTexture& backendTex,
     return true;
 }
 
+bool Recorder::updateCompressedBackendTexture(const BackendTexture& backendTex,
+                                              const void* data,
+                                              size_t dataSize) {
+    ASSERT_SINGLE_OWNER
+
+    if (!backendTex.isValid() || backendTex.backend() != this->backend()) {
+        return false;
+    }
+
+    if (!data) {
+        return false;
+    }
+
+    sk_sp<Texture> texture = this->priv().resourceProvider()->createWrappedTexture(backendTex);
+    if (!texture) {
+        return false;
+    }
+
+    sk_sp<TextureProxy> proxy = TextureProxy::Wrap(std::move(texture));
+
+    // Add UploadTask to Recorder
+    UploadInstance upload = UploadInstance::MakeCompressed(this,
+                                                           std::move(proxy),
+                                                           data,
+                                                           dataSize);
+    if (!upload.isValid()) {
+        SKGPU_LOG_E("Recorder::updateBackendTexture: Could not create UploadInstance");
+        return false;
+    }
+    sk_sp<Task> uploadTask = UploadTask::Make(std::move(upload));
+
+    // Need to flush any pending work in case it depends on this texture
+    this->priv().flushTrackedDevices();
+
+    this->priv().add(std::move(uploadTask));
+
+    return true;
+}
+
 void Recorder::deleteBackendTexture(const BackendTexture& texture) {
     ASSERT_SINGLE_OWNER
 
@@ -410,13 +477,56 @@ void RecorderPriv::add(sk_sp<Task> task) {
 
 void RecorderPriv::flushTrackedDevices() {
     ASSERT_SINGLE_OWNER_PRIV
-    for (Device* device : fRecorder->fTrackedDevices) {
-        device->flushPendingWorkToRecorder();
+
+    // If this is the initial flushTrackedDevices() call, fFlushingTrackedDevicesIndex will be -1
+    // so we start iterating at 0. We remember the starting device index to perform clean up only
+    // when it was 0 to prevent modifying the underlying data structure while iterating over it.
+    // However, when flushing one device it may register new devices as well as recursively call
+    // flushTrackedDevices(). In that case, it picks up the next device after the current one that
+    // triggered the recursive flush since all prior devices have been flushed are in progress
+    // (and they should not be flushed while in an unfinished flush). When the control flow returns
+    // to the outer flushTrackedDevices(), it will pick up with wherever the inner flush had ended.
+    // TODO(b/330864257): Once paint data is extracted at draw time (so picture shaders are rendered
+    // to images before a flush instead of inside a flush), we can simplify this and assert that
+    // flushTrackedDevices() is not recursively called and that devices are not added or removed
+    // while flushing.
+    const int startingIndex = fRecorder->fFlushingDevicesIndex;
+    while (fRecorder->fFlushingDevicesIndex < fRecorder->fTrackedDevices.size() - 1) {
+        // Advance before calling flushPendingWorkToRecorder() so that any re-entrant clal to
+        // flushTrackedDevices() will skip the current device.
+        fRecorder->fFlushingDevicesIndex++;
+        // Entries may be set to null from a call to deregisterDevice(), which will be cleaned up
+        // along with any immutable or uniquely held Devices once everything is flushed.
+        Device* device = fRecorder->fTrackedDevices[fRecorder->fFlushingDevicesIndex].get();
+        if (device) {
+            device->flushPendingWorkToRecorder(fRecorder);
+        }
     }
+
     // Issue next upload flush token. This is only used by the atlasing code which
     // always uses this method. Calling in Device::flushPendingWorkToRecorder may
     // miss parent device flushes, increment too often, and lead to atlas corruption.
     this->tokenTracker()->issueFlushToken();
+
+    if (startingIndex < 0) {
+        // Initial call to flushTrackedDevices() so cleanup null/immutable devices and reset the
+        // loop index.
+        int i = 0;
+        while (i < fRecorder->fTrackedDevices.size()) {
+            Device* device = fRecorder->fTrackedDevices[i].get();
+            if (!device || !device->recorder() || device->unique()) {
+                if (device) {
+                    device->abandonRecorder(); // Keep ~Device() happy
+                }
+                fRecorder->fTrackedDevices.removeShuffle(i);
+                // Keep i as-is to process what was just shuffled to the ith index.
+            } else {
+                i++;
+            }
+        }
+
+        fRecorder->fFlushingDevicesIndex = -1;
+    }
 }
 
 sk_sp<TextureProxy> RecorderPriv::CreateCachedProxy(Recorder* recorder,
@@ -435,10 +545,10 @@ size_t RecorderPriv::getResourceCacheLimit() const {
 }
 
 #if defined(GRAPHITE_TEST_UTILS)
-bool RecorderPriv::deviceIsRegistered(Device* device) {
+bool RecorderPriv::deviceIsRegistered(Device* device) const {
     ASSERT_SINGLE_OWNER_PRIV
-    for (auto& currentDevice : fRecorder->fTrackedDevices) {
-        if (device == currentDevice) {
+    for (const sk_sp<Device>& currentDevice : fRecorder->fTrackedDevices) {
+        if (device == currentDevice.get()) {
             return true;
         }
     }

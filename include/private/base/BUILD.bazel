@@ -15,6 +15,7 @@ skia_filegroup(
 # Headers with no corresponding .cpp files
 IWYU_HDRS = [
     "SkAPI.h",
+    "SkASAN.h",
     "SkAlign.h",
     "SkAlignedStorage.h",
     "SkAnySubclass.h",
@@ -24,7 +25,6 @@ IWYU_HDRS = [
     "SkDebug.h",
     "SkFeatures.h",
     "SkFixed.h",
-    "SkFloatBits.h",
     "SkLoadUserConfig.h",
     "SkMacros.h",
     "SkMath.h",
@@ -54,7 +54,7 @@ generate_cpp_files_for_header_list(
     headers = SHARED_GPU_HEADERS,
 )
 
-filegroup(
+skia_filegroup(
     name = "generated_base_header_cpps",
     srcs = [
         ":generated_base_header_cpps1",
