@@ -389,7 +389,7 @@ static bool can_filter_mask(const SkMaskFilterBase* maskFilter,
     }
 
     if (maskRect) {
-        float sigma3 = 3 * SkScalarToFloat(xformedSigma);
+        float sigma3 = 3 * xformedSigma;
 
         // Outset srcRect and clipRect by 3 * sigma, to compute affected blur area.
         SkIRect clipRect = clipBounds.makeOutset(sigma3, sigma3);
@@ -485,7 +485,6 @@ static std::unique_ptr<GrFragmentProcessor> create_profile_effect(GrRecordingCon
         SkScalar scale = kProfileTextureWidth / *textureRadius;
         bm = skgpu::CreateCircleProfile(sigma * scale, circleR * scale, kProfileTextureWidth);
     }
-    bm.setImmutable();
 
     profileView = std::get<0>(GrMakeUncachedBitmapProxyView(rContext, bm));
     if (!profileView) {

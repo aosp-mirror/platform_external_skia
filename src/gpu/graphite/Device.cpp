@@ -1297,11 +1297,17 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
         SkASSERT(!requireMSAA && style.isFillStyle());
         // handled by specialized system, simplified from rects and round rects
         return {renderers->perEdgeAAQuad(), nullptr};
-    } else if (geometry.isRectBlur()) {
-        return {renderers->rectBlur(), nullptr};
+    } else if (geometry.isAnalyticBlur()) {
+        return {renderers->analyticBlur(), nullptr};
     } else if (!geometry.isShape()) {
         // We must account for new Geometry types with specific Renderers
         return {nullptr, nullptr};
+    }
+
+    const Shape& shape = geometry.shape();
+    // We can't use this renderer if we require MSAA for an effect (i.e. clipping or stroke+fill).
+    if (!requireMSAA && is_simple_shape(shape, type)) {
+        return {renderers->analyticRRect(), nullptr};
     }
 
     // Path rendering options. For now the strategy is very simple and not optimal:
@@ -1316,14 +1322,6 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
 #else
     PathRendererStrategy strategy = PathRendererStrategy::kDefault;
 #endif
-
-    const Shape& shape = geometry.shape();
-    // We can't use this renderer if we require MSAA for an effect (i.e. clipping or stroke+fill).
-    if (!requireMSAA && is_simple_shape(shape, type) &&
-        (strategy == PathRendererStrategy::kDefault ||
-         strategy == PathRendererStrategy::kRasterAA)) {
-        return {renderers->analyticRRect(), nullptr};
-    }
 
     PathAtlas* pathAtlas = nullptr;
 
@@ -1472,7 +1470,14 @@ void Device::flushPendingWorkToRecorder(Recorder* recorder) {
     } else {
         // Non-scratch devices do not need to point back to the last snapped task since they are
         // always added to the root task list.
-        SkASSERT(!fLastTask);
+        // TODO: It is currently possible for scratch devices to be flushed and instantiated before
+        // their work is finished, meaning they will produce additional tasks to be included in
+        // a follow-up Recording: https://chat.google.com/room/AAAA2HlH94I/YU0XdFqX2Uw.
+        // However, in this case they no longer appear scratch because the first Recording
+        // instantiated the targets. When scratch devices are not actually registered with the
+        // Recorder and are only included when they are drawn (e.g. restored), we should be able to
+        // assert that `fLastTask` is null.
+        fLastTask = nullptr;
     }
 
     if (drawTask) {
@@ -1684,13 +1689,13 @@ bool Device::drawBlurredRRect(const SkRRect& rrect, const SkPaint& paint, float 
         return true;
     }
 
-    std::optional<RectBlurData> rectBlurData = RectBlurData::Make(
+    std::optional<AnalyticBlurMask> analyticBlur = AnalyticBlurMask::Make(
             this->recorder(), this->localToDeviceTransform(), deviceSigma, rrect);
-    if (!rectBlurData) {
+    if (!analyticBlur) {
         return false;
     }
 
-    this->drawGeometry(this->localToDeviceTransform(), Geometry(*rectBlurData), paint, style);
+    this->drawGeometry(this->localToDeviceTransform(), Geometry(*analyticBlur), paint, style);
     return true;
 }
 
