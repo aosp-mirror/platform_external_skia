@@ -140,7 +140,7 @@ static void S32_alpha_D32_nofilter_DXDY(const SkBitmapProcState& s,
                  y  = XY >> 16;
         SkASSERT(x < (unsigned)s.fPixmap.width ());
         SkASSERT(y < (unsigned)s.fPixmap.height());
-        *colors++ = ((const SkPMColor*)(src + y*rb))[x];
+        *colors++ = SkAlphaMulQ(((const SkPMColor*)(src + y*rb))[x], s.fAlphaScale);
     }
 }
 
