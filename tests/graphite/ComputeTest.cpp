@@ -60,8 +60,11 @@ sk_sp<Buffer> sync_buffer_to_cpu(Recorder* recorder, const Buffer* buffer) {
     }
 
     // The backend requires a transfer buffer for CPU read-back
-    auto xferBuffer = recorder->priv().resourceProvider()->findOrCreateBuffer(
-            buffer->size(), BufferType::kXferGpuToCpu, AccessPattern::kHostVisible);
+    auto xferBuffer =
+            recorder->priv().resourceProvider()->findOrCreateBuffer(buffer->size(),
+                                                                    BufferType::kXferGpuToCpu,
+                                                                    AccessPattern::kHostVisible,
+                                                                    "ComputeTest_TransferToCpu");
     SkASSERT(xferBuffer);
 
     recorder->priv().add(CopyBufferToBufferTask::Make(buffer,
@@ -934,12 +937,14 @@ DEF_GRAPHITE_TEST_FOR_DAWN_AND_METAL_CONTEXTS(Compute_StorageTextureReadAndWrite
         }
     }
 
+    auto texInfo = context->priv().caps()->getDefaultSampledTextureInfo(kRGBA_8888_SkColorType,
+                                                                        skgpu::Mipmapped::kNo,
+                                                                        skgpu::Protected::kNo,
+                                                                        skgpu::Renderable::kNo);
     sk_sp<TextureProxy> srcProxy = TextureProxy::Make(context->priv().caps(),
+                                                      recorder->priv().resourceProvider(),
                                                       {kDim, kDim},
-                                                      kRGBA_8888_SkColorType,
-                                                      skgpu::Mipmapped::kNo,
-                                                      skgpu::Protected::kNo,
-                                                      skgpu::Renderable::kNo,
+                                                      texInfo,
                                                       skgpu::Budgeted::kNo);
     MipLevel mipLevel;
     mipLevel.fPixels = srcPixels.addr();
