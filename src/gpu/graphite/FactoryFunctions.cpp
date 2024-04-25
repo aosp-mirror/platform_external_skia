@@ -416,7 +416,7 @@ private:
     inline static constexpr int kHWTiled      = 1;
     inline static constexpr int kShaderTiled  = 0;
 
-    // There are 2 alpha combinations: alpha-only and not-alpha-only
+    // There are also 2 potential alpha combinations: alpha-only and not-alpha-only
     inline static constexpr int kNumAlphaCombinations = 2;
     inline static constexpr int kAlphaOnly    = 1;
     inline static constexpr int kNonAlphaOnly = 0;
@@ -548,7 +548,15 @@ sk_sp<PrecompileShader> PrecompileShaders::YUVImage() {
 sk_sp<PrecompileShader> PrecompileShaders::Picture() {
     // Note: We don't need to consider the PrecompileYUVImageShader since the image
     // being drawn was created internally by Skia (as non-YUV).
-    return PrecompileShaders::LocalMatrix({ PrecompileShaders::Image() });
+    return PrecompileShadersPriv::LocalMatrixBothVariants({ PrecompileShaders::Image() });
+}
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::Picture(bool withLM) {
+    sk_sp<PrecompileShader> s = PrecompileShaders::Image();
+    if (withLM) {
+        return PrecompileShaders::LocalMatrix({ std::move(s) });
+    }
+    return s;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -582,7 +590,6 @@ private:
         ColorSpaceTransformBlock::ColorSpaceTransformData csData(sk_srgb_singleton(), kAlphaType,
                                                                  sk_srgb_singleton(), kAlphaType);
 
-        // TODO: we may need SkLocalMatrixShader-wrapped versions too
         Compose(keyContext, builder, gatherer,
                 /* addInnerToKey= */ [&]() -> void {
                     GradientShaderBlocks::AddBlock(keyContext, builder, gatherer, gradData);
@@ -596,19 +603,63 @@ private:
 };
 
 sk_sp<PrecompileShader> PrecompileShaders::LinearGradient() {
-    return sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kLinear);
+    sk_sp<PrecompileShader> s =
+            sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kLinear);
+    return PrecompileShadersPriv::LocalMatrixBothVariants({ std::move(s) });
+}
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::LinearGradient(bool withLM) {
+    sk_sp<PrecompileShader> s =
+            sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kLinear);
+    if (withLM) {
+        return PrecompileShaders::LocalMatrix({ std::move(s) });
+    }
+    return s;
 }
 
 sk_sp<PrecompileShader> PrecompileShaders::RadialGradient() {
-    return sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kRadial);
+    sk_sp<PrecompileShader> s =
+            sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kRadial);
+    return PrecompileShadersPriv::LocalMatrixBothVariants({ std::move(s) });
+}
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::RadialGradient(bool withLM) {
+    sk_sp<PrecompileShader> s =
+            sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kRadial);
+    if (withLM) {
+        return PrecompileShaders::LocalMatrix({ std::move(s) });
+    }
+    return s;
 }
 
 sk_sp<PrecompileShader> PrecompileShaders::SweepGradient() {
-    return sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kSweep);
+    sk_sp<PrecompileShader> s =
+            sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kSweep);
+    return PrecompileShadersPriv::LocalMatrixBothVariants({ std::move(s) });
+}
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::SweepGradient(bool withLM) {
+    sk_sp<PrecompileShader> s =
+            sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kSweep);
+    if (withLM) {
+        return PrecompileShaders::LocalMatrix({ std::move(s) });
+    }
+    return s;
 }
 
 sk_sp<PrecompileShader> PrecompileShaders::TwoPointConicalGradient() {
-    return sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kConical);
+    sk_sp<PrecompileShader> s =
+            sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kConical);
+    return PrecompileShadersPriv::LocalMatrixBothVariants({ std::move(s) });
+}
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::TwoPointConicalGradient(bool withLM) {
+    sk_sp<PrecompileShader> s =
+            sk_make_sp<PrecompileGradientShader>(SkShaderBase::GradientType::kConical);
+    if (withLM) {
+        return PrecompileShaders::LocalMatrix({ std::move(s) });
+    }
+    return s;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -617,8 +668,15 @@ sk_sp<PrecompileShader> PrecompileShaders::TwoPointConicalGradient() {
 // One with the LMShader wrapping the child and one without the LMShader.
 class PrecompileLocalMatrixShader : public PrecompileShader {
 public:
-    PrecompileLocalMatrixShader(SkSpan<const sk_sp<PrecompileShader>> wrapped)
-            : fWrapped(wrapped.begin(), wrapped.end()) {
+    enum class Flags {
+        kNone,
+        kIncludeWithOutVariant,
+    };
+
+    PrecompileLocalMatrixShader(SkSpan<const sk_sp<PrecompileShader>> wrapped,
+                                Flags flags = Flags::kNone)
+            : fWrapped(wrapped.begin(), wrapped.end())
+            , fFlags(flags) {
         fNumWrappedCombos = 0;
         for (const auto& s : fWrapped) {
             fNumWrappedCombos += s->numCombinations();
@@ -644,12 +702,19 @@ public:
     }
 
 private:
+    // The LocalMatrixShader has two potential variants: with and without the LocalMatrixShader
+    inline static constexpr int kNumIntrinsicCombinations = 2;
+    inline static constexpr int kWithLocalMatrix    = 1;
+    inline static constexpr int kWithoutLocalMatrix = 0;
+
     bool isALocalMatrixShader() const override { return true; }
 
-    // Two combinations: with and without the LocalMatrixShader
-    inline static constexpr int kNumIntrinsicCombinations = 2;
-
-    int numIntrinsicCombinations() const override { return kNumIntrinsicCombinations; }
+    int numIntrinsicCombinations() const override {
+        if (fFlags != Flags::kIncludeWithOutVariant) {
+            return 1;   // just kWithLocalMatrix
+        }
+        return kNumIntrinsicCombinations;
+    }
 
     int numChildCombinations() const override { return fNumWrappedCombos; }
 
@@ -659,11 +724,18 @@ private:
                   int desiredCombination) const override {
         SkASSERT(desiredCombination < this->numCombinations());
 
-        int desiredLMCombination = desiredCombination % kNumIntrinsicCombinations;
-        int desiredWrappedCombination = desiredCombination / kNumIntrinsicCombinations;
+        int desiredLMCombination, desiredWrappedCombination;
+
+        if (fFlags != Flags::kIncludeWithOutVariant) {
+            desiredLMCombination = kWithLocalMatrix;
+            desiredWrappedCombination = desiredCombination;
+        } else {
+            desiredLMCombination = desiredCombination % kNumIntrinsicCombinations;
+            desiredWrappedCombination = desiredCombination / kNumIntrinsicCombinations;
+        }
         SkASSERT(desiredWrappedCombination < fNumWrappedCombos);
 
-        if (desiredLMCombination) {
+        if (desiredLMCombination == kWithLocalMatrix) {
             LocalMatrixShaderBlock::LMShaderData kIgnoredLMShaderData(SkMatrix::I());
 
             LocalMatrixShaderBlock::BeginBlock(keyContext, builder, gatherer, kIgnoredLMShaderData);
@@ -672,18 +744,26 @@ private:
             AddToKey<PrecompileShader>(keyContext, builder, gatherer, fWrapped,
                                        desiredWrappedCombination);
 
-        if (desiredLMCombination) {
+        if (desiredLMCombination == kWithLocalMatrix) {
             builder->endBlock();
         }
     }
 
     std::vector<sk_sp<PrecompileShader>> fWrapped;
     int fNumWrappedCombos;
+    Flags fFlags;
 };
 
 sk_sp<PrecompileShader> PrecompileShaders::LocalMatrix(
         SkSpan<const sk_sp<PrecompileShader>> wrapped) {
     return sk_make_sp<PrecompileLocalMatrixShader>(std::move(wrapped));
+}
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::LocalMatrixBothVariants(
+        SkSpan<const sk_sp<PrecompileShader>> wrapped) {
+    return sk_make_sp<PrecompileLocalMatrixShader>(
+            std::move(wrapped),
+            PrecompileLocalMatrixShader::Flags::kIncludeWithOutVariant);
 }
 
 //--------------------------------------------------------------------------------------------------

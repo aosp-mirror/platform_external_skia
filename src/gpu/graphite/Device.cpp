@@ -15,7 +15,6 @@
 #include "src/gpu/BlurUtils.h"
 #include "src/gpu/SkBackingFit.h"
 #include "src/gpu/graphite/AtlasProvider.h"
-#include "src/gpu/graphite/AttachmentTypes.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandBuffer.h"
@@ -31,6 +30,7 @@
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RendererProvider.h"
+#include "src/gpu/graphite/ResourceTypes.h"
 #include "src/gpu/graphite/SharedContext.h"
 #include "src/gpu/graphite/SpecialImage_Graphite.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
@@ -247,17 +247,17 @@ sk_sp<Device> Device::Make(Recorder* recorder,
         return nullptr;
     }
 
-    Protected isProtected = Protected(recorder->priv().caps()->protectedSupport());
+    const Caps* caps = recorder->priv().caps();
     SkISize backingDimensions = backingFit == SkBackingFit::kApprox ? GetApproxSize(ii.dimensions())
                                                                     : ii.dimensions();
+    auto textureInfo = caps->getDefaultSampledTextureInfo(ii.colorType(),
+                                                          mipmapped,
+                                                          recorder->priv().isProtected(),
+                                                          Renderable::kYes);
+
     return Make(recorder,
-                TextureProxy::Make(recorder->priv().caps(),
-                                   backingDimensions,
-                                   ii.colorType(),
-                                   mipmapped,
-                                   isProtected,
-                                   Renderable::kYes,
-                                   budgeted),
+                TextureProxy::Make(caps, recorder->priv().resourceProvider(),
+                                   backingDimensions, textureInfo, budgeted),
                 ii.dimensions(),
                 ii.colorInfo(),
                 props,
