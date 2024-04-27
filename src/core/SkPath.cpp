@@ -7,6 +7,7 @@
 
 #include "include/core/SkPath.h"
 
+#include "include/core/SkArc.h"
 #include "include/core/SkPathBuilder.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkStream.h"
@@ -1015,11 +1016,17 @@ SkPath& SkPath::addRRect(const SkRRect &rrect, SkPathDirection dir, unsigned sta
         const bool startsWithConic = ((startIndex & 1) == (dir == SkPathDirection::kCW));
         const SkScalar weight = SK_ScalarRoot2Over2;
 
-        SkDEBUGCODE(int initialVerbCount = this->countVerbs());
+        SkDEBUGCODE(int initialVerbCount = fPathRef->countVerbs());
+        SkDEBUGCODE(int initialPointCount = fPathRef->countPoints());
+        SkDEBUGCODE(int initialWeightCount = fPathRef->countWeights());
         const int kVerbs = startsWithConic
             ? 9   // moveTo + 4x conicTo + 3x lineTo + close
             : 10; // moveTo + 4x lineTo + 4x conicTo + close
-        this->incReserve(kVerbs);
+        const int kPoints = startsWithConic
+            ? 12  // moveTo (1) + 4x conicTo (2) + 3x lineTo (1) + close
+            : 13; // moveTo (1) + 4x lineTo (1) + 4x conicTo (2) + close
+        const int kWeights = 4; // 4x conicTo
+        this->incReserve(kPoints, kVerbs, kWeights);
 
         SkPath_RRectPointIterator rrectIter(rrect, dir, startIndex);
         // Corner iterator indices follow the collapsed radii model,
@@ -1048,7 +1055,9 @@ SkPath& SkPath::addRRect(const SkRRect &rrect, SkPathDirection dir, unsigned sta
             ed.setIsRRect(dir == SkPathDirection::kCCW, startIndex % 8);
         }
 
-        SkASSERT(this->countVerbs() == initialVerbCount + kVerbs);
+        SkASSERT(fPathRef->countVerbs() == initialVerbCount + kVerbs);
+        SkASSERT(fPathRef->countPoints() == initialPointCount + kPoints);
+        SkASSERT(fPathRef->countWeights() == initialWeightCount + kWeights);
     }
 
     SkDEBUGCODE(fPathRef->validate();)
@@ -1122,9 +1131,13 @@ SkPath& SkPath::addOval(const SkRect &oval, SkPathDirection dir, unsigned startP
     SkAutoDisableDirectionCheck addc(this);
     SkAutoPathBoundsUpdate apbu(this, oval);
 
-    SkDEBUGCODE(int initialVerbCount = this->countVerbs());
+    SkDEBUGCODE(int initialVerbCount = fPathRef->countVerbs());
+    SkDEBUGCODE(int initialPointCount = fPathRef->countPoints());
+    SkDEBUGCODE(int initialWeightCount = fPathRef->countWeights());
     const int kVerbs = 6; // moveTo + 4x conicTo + close
-    this->incReserve(kVerbs);
+    const int kPoints = 9;
+    const int kWeights = 4;
+    this->incReserve(kPoints, kVerbs, kWeights);
 
     SkPath_OvalPointIterator ovalIter(oval, dir, startPointIndex);
     // The corner iterator pts are tracking "behind" the oval/radii pts.
@@ -1137,7 +1150,9 @@ SkPath& SkPath::addOval(const SkRect &oval, SkPathDirection dir, unsigned startP
     }
     this->close();
 
-    SkASSERT(this->countVerbs() == initialVerbCount + kVerbs);
+    SkASSERT(fPathRef->countVerbs() == initialVerbCount + kVerbs);
+    SkASSERT(fPathRef->countPoints() == initialPointCount + kPoints);
+    SkASSERT(fPathRef->countWeights() == initialWeightCount + kWeights);
 
     if (isOval) {
         SkPathRef::Editor ed(&fPathRef);
@@ -1221,7 +1236,7 @@ SkPath& SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAng
         }
         if (isArc) {
             SkPathRef::Editor ed(&fPathRef);
-            ed.setIsArc({oval, startAngle, sweepAngle, false});
+            ed.setIsArc(SkArc::Make(oval, startAngle, sweepAngle, SkArc::Type::kArc));
         }
     } else {
         addPt(singlePt);
@@ -3273,12 +3288,14 @@ bool SkPathPriv::IsSimpleRect(const SkPath& path, bool isSimpleFill, SkRect* rec
     return true;
 }
 
-bool SkPathPriv::DrawArcIsConvex(SkScalar sweepAngle, bool useCenter, bool isFillNoPathEffect) {
+bool SkPathPriv::DrawArcIsConvex(SkScalar sweepAngle,
+                                 SkArc::Type arcType,
+                                 bool isFillNoPathEffect) {
     if (isFillNoPathEffect && SkScalarAbs(sweepAngle) >= 360.f) {
         // This gets converted to an oval.
         return true;
     }
-    if (useCenter) {
+    if (arcType == SkArc::Type::kWedge) {
         // This is a pie wedge. It's convex if the angle is <= 180.
         return SkScalarAbs(sweepAngle) <= 180.f;
     }
@@ -3287,8 +3304,9 @@ bool SkPathPriv::DrawArcIsConvex(SkScalar sweepAngle, bool useCenter, bool isFil
     return SkScalarAbs(sweepAngle) <= 360.f;
 }
 
-void SkPathPriv::CreateDrawArcPath(SkPath* path, const SkRect& oval, SkScalar startAngle,
-                                   SkScalar sweepAngle, bool useCenter, bool isFillNoPathEffect) {
+void SkPathPriv::CreateDrawArcPath(SkPath* path, const SkArc& arc, bool isFillNoPathEffect) {
+    SkRect oval = arc.fOval;
+    SkScalar startAngle = arc.fStartAngle, sweepAngle = arc.fSweepAngle;
     SkASSERT(!oval.isEmpty());
     SkASSERT(sweepAngle);
     // We cap the number of total rotations. This keeps the resulting paths simpler. More important,
@@ -3301,17 +3319,18 @@ void SkPathPriv::CreateDrawArcPath(SkPath* path, const SkRect& oval, SkScalar st
     path->setFillType(SkPathFillType::kWinding);
     if (isFillNoPathEffect && SkScalarAbs(sweepAngle) >= 360.f) {
         path->addOval(oval);
-        SkASSERT(path->isConvex() && DrawArcIsConvex(sweepAngle, false, isFillNoPathEffect));
+        SkASSERT(path->isConvex() &&
+                 DrawArcIsConvex(sweepAngle, SkArc::Type::kArc, isFillNoPathEffect));
         return;
     }
-    if (useCenter) {
+    if (arc.isWedge()) {
         path->moveTo(oval.centerX(), oval.centerY());
     }
     auto firstDir =
             sweepAngle > 0 ? SkPathFirstDirection::kCW : SkPathFirstDirection::kCCW;
-    bool convex = DrawArcIsConvex(sweepAngle, useCenter, isFillNoPathEffect);
+    bool convex = DrawArcIsConvex(sweepAngle, arc.fType, isFillNoPathEffect);
     // Arc to mods at 360 and drawArc is not supposed to.
-    bool forceMoveTo = !useCenter;
+    bool forceMoveTo = !arc.isWedge();
     while (sweepAngle <= -360.f) {
         path->arcTo(oval, startAngle, -180.f, forceMoveTo);
         startAngle -= 180.f;
@@ -3329,7 +3348,7 @@ void SkPathPriv::CreateDrawArcPath(SkPath* path, const SkRect& oval, SkScalar st
         sweepAngle -= 360.f;
     }
     path->arcTo(oval, startAngle, sweepAngle, forceMoveTo);
-    if (useCenter) {
+    if (arc.isWedge()) {
         path->close();
     }
     path->setConvexity(convex ? SkPathConvexity::kConvex : SkPathConvexity::kConcave);
