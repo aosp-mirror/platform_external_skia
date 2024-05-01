@@ -8,8 +8,10 @@
 #include "src/gpu/graphite/dawn/DawnResourceProvider.h"
 
 #include "include/gpu/graphite/BackendTexture.h"
+#include "include/gpu/graphite/TextureInfo.h"
 #include "include/private/base/SkAlign.h"
 #include "src/gpu/graphite/ComputePipeline.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/dawn/DawnBuffer.h"
 #include "src/gpu/graphite/dawn/DawnComputePipeline.h"
 #include "src/gpu/graphite/dawn/DawnErrorChecker.h"
@@ -282,11 +284,13 @@ sk_sp<Texture> DawnResourceProvider::createTexture(SkISize dimensions,
 
 sk_sp<Buffer> DawnResourceProvider::createBuffer(size_t size,
                                                  BufferType type,
-                                                 AccessPattern accessPattern) {
+                                                 AccessPattern accessPattern,
+                                                 std::string_view label) {
     return DawnBuffer::Make(this->dawnSharedContext(),
                             size,
                             type,
-                            accessPattern);
+                            accessPattern,
+                            std::move(label));
 }
 
 sk_sp<Sampler> DawnResourceProvider::createSampler(const SamplerDesc& samplerDesc) {
@@ -331,8 +335,9 @@ DawnSharedContext* DawnResourceProvider::dawnSharedContext() const {
 
 sk_sp<DawnBuffer> DawnResourceProvider::findOrCreateDawnBuffer(size_t size,
                                                                BufferType type,
-                                                               AccessPattern accessPattern) {
-    sk_sp<Buffer> buffer = this->findOrCreateBuffer(size, type, accessPattern);
+                                                               AccessPattern accessPattern,
+                                                               std::string_view label) {
+    sk_sp<Buffer> buffer = this->findOrCreateBuffer(size, type, accessPattern, std::move(label));
     DawnBuffer* ptr = static_cast<DawnBuffer*>(buffer.release());
     return sk_sp<DawnBuffer>(ptr);
 }

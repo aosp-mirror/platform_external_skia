@@ -329,10 +329,9 @@ UploadInstance UploadInstance::MakeCompressed(Recorder* recorder,
 }
 
 bool UploadInstance::prepareResources(ResourceProvider* resourceProvider) {
-    if (!fTextureProxy) {
-        SKGPU_LOG_E("No texture proxy specified for UploadTask");
-        return false;
-    }
+    // While most uploads are to already instantiated proxies (e.g. for client-created texture
+    // images) it is possible that writePixels() was issued as the first operation on a scratch
+    // Device, or that this is the first upload to the raster or text atlas proxies.
     if (!TextureProxy::InstantiateIfNotLazy(resourceProvider, fTextureProxy.get())) {
         SKGPU_LOG_E("Could not instantiate texture proxy for UploadTask!");
         return false;
@@ -340,22 +339,27 @@ bool UploadInstance::prepareResources(ResourceProvider* resourceProvider) {
     return true;
 }
 
-bool UploadInstance::addCommand(Context* context,
-                                CommandBuffer* commandBuffer,
-                                Task::ReplayTargetData replayData) const {
+Task::Status UploadInstance::addCommand(Context* context,
+                                        CommandBuffer* commandBuffer,
+                                        Task::ReplayTargetData replayData) const {
+    using Status = Task::Status;
     SkASSERT(fTextureProxy && fTextureProxy->isInstantiated());
 
     if (fConditionalContext && !fConditionalContext->needsUpload(context)) {
         // Assume that if a conditional context says to dynamically not upload that another
         // time through the tasks should try to upload again.
-        return true;
+        return Status::kSuccess;
     }
 
     if (fTextureProxy->texture() != replayData.fTarget) {
         // The CommandBuffer doesn't take ownership of the upload buffer here; it's owned by
         // UploadBufferManager, which will transfer ownership in transferToCommandBuffer.
-        commandBuffer->copyBufferToTexture(
-                fBuffer, fTextureProxy->refTexture(), fCopyData.data(), fCopyData.size());
+        if (!commandBuffer->copyBufferToTexture(fBuffer,
+                                                fTextureProxy->refTexture(),
+                                                fCopyData.data(),
+                                                fCopyData.size())) {
+            return Status::kFail;
+        }
     } else {
         // Here we assume that multiple copies in a single UploadInstance are always used for
         // mipmaps of a single image, and that we won't ever copy to a replay target with mipmaps.
@@ -367,7 +371,7 @@ bool UploadInstance::addCommand(Context* context,
         if (!croppedDstRect.intersect(SkIRect::MakeSize(fTextureProxy->dimensions()))) {
             // The replay translation can change on each insert, so subsequent replays may
             // actually intersect the copy rect.
-            return true;
+            return Status::kSuccess;
         }
 
         BufferTextureCopyData transformedCopyData = copyData;
@@ -376,13 +380,20 @@ bool UploadInstance::addCommand(Context* context,
                 (croppedDstRect.x() - dstRect.x()) * fBytesPerPixel;
         transformedCopyData.fRect = croppedDstRect;
 
-        commandBuffer->copyBufferToTexture(
-                fBuffer, fTextureProxy->refTexture(), &transformedCopyData, 1);
+        if (!commandBuffer->copyBufferToTexture(fBuffer,
+                                                fTextureProxy->refTexture(),
+                                                &transformedCopyData, 1)) {
+            return Status::kFail;
+        }
     }
 
-    // Let the conditional context return false if the upload should not happen anymore. If there's
+    // The conditional context will return false if the upload should not happen anymore. If there's
     // no context assume that the upload should always be executed on replay.
-    return !fConditionalContext || fConditionalContext->uploadSubmitted();
+    if (!fConditionalContext || fConditionalContext->uploadSubmitted()) {
+        return Status::kSuccess;
+    } else {
+        return Status::kDiscard;
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -431,34 +442,42 @@ UploadTask::UploadTask(UploadInstance instance) {
 
 UploadTask::~UploadTask() {}
 
-bool UploadTask::prepareResources(ResourceProvider* resourceProvider,
-                                  const RuntimeEffectDictionary*) {
+Task::Status UploadTask::prepareResources(ResourceProvider* resourceProvider,
+                                          const RuntimeEffectDictionary*) {
     for (int i = 0; i < fInstances.size(); ++i) {
         // No upload should be invalidated before prepareResources() is called.
         SkASSERT(fInstances[i].isValid());
         if (!fInstances[i].prepareResources(resourceProvider)) {
-            return false;
+            return Status::kFail;
         }
     }
 
-    return true;
+    return Status::kSuccess;
 }
 
-bool UploadTask::addCommands(Context* context,
-                             CommandBuffer* commandBuffer,
-                             ReplayTargetData replayData) {
+Task::Status UploadTask::addCommands(Context* context,
+                                     CommandBuffer* commandBuffer,
+                                     ReplayTargetData replayData) {
+    int discardCount = 0;
     for (int i = 0; i < fInstances.size(); ++i) {
         if (!fInstances[i].isValid()) {
+            discardCount++;
             continue;
         }
-        if (!fInstances[i].addCommand(context, commandBuffer, replayData)) {
+        Status status = fInstances[i].addCommand(context, commandBuffer, replayData);
+        if (status == Status::kFail) {
+            return Status::kFail;
+        } else if (status == Status::kDiscard) {
             fInstances[i] = UploadInstance::Invalid();
+            discardCount++;
         }
     }
 
-    // TODO(b/332681367): Once tasks can be discarded, if all upload instances are discarded then
-    // the task can be discarded.
-    return true;
+    if (discardCount == fInstances.size()) {
+        return Status::kDiscard;
+    } else {
+        return Status::kSuccess;
+    }
 }
 
 } // namespace skgpu::graphite

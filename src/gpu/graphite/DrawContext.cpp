@@ -25,6 +25,7 @@
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/RasterPathAtlas.h"
 #include "src/gpu/graphite/RecorderPriv.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/ResourceTypes.h"
 #include "src/gpu/graphite/SharedContext.h"
 #include "src/gpu/graphite/TextureProxy.h"
@@ -33,6 +34,7 @@
 #include "src/gpu/graphite/geom/BoundsManager.h"
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/task/ComputeTask.h"
+#include "src/gpu/graphite/task/CopyTask.h"
 #include "src/gpu/graphite/task/DrawTask.h"
 #include "src/gpu/graphite/task/RenderPassTask.h"
 #include "src/gpu/graphite/task/UploadTask.h"
@@ -220,16 +222,39 @@ void DrawContext::flush(Recorder* recorder) {
     }
 
     // Convert the pending draws and load/store ops into a DrawPass that will be executed after
-    // the collected uploads and compute dispatches.
+    // the collected uploads and compute dispatches. If there's a dst readback copy required it
+    // inserts a CopyTextureToTexture task before the RenderPassTask.
     // TODO: At this point, there's only ever one DrawPass in a RenderPassTask to a target. When
     // subpasses are implemented, they will either be collected alongside fPendingDraws or added
     // to the RenderPassTask separately.
+    sk_sp<TextureProxy> dstCopy;
+    SkIRect dstCopyPixelBounds = SkIRect::MakeEmpty();
+    if (!fPendingDraws->dstCopyBounds().isEmptyNegativeOrNaN()) {
+        TRACE_EVENT_INSTANT0("skia.gpu", "DrawPass requires dst copy", TRACE_EVENT_SCOPE_THREAD);
+
+        dstCopyPixelBounds = fPendingDraws->dstCopyBounds().makeRoundOut().asSkIRect();
+
+        // TODO: Right now this assert is ensuring that the dstCopy will be texturable since it
+        // uses the same texture info as fTarget. Ideally, if fTarget were not texturable but
+        // still readable, we would perform a fallback to a compatible texturable info. We also
+        // should decide whether or not a copy-as-draw fallback is necessary here too. All of
+        // this is handled inside Image::Copy() except we would need it to expose the task in
+        // order to link it correctly.
+        SkASSERT(recorder->priv().caps()->isTexturable(fTarget->textureInfo()));
+        dstCopy = TextureProxy::Make(recorder->priv().caps(),
+                                     recorder->priv().resourceProvider(),
+                                     dstCopyPixelBounds.size(),
+                                     fTarget->textureInfo(),
+                                     skgpu::Budgeted::kYes);
+    }
     std::unique_ptr<DrawPass> pass = DrawPass::Make(recorder,
                                                     std::move(fPendingDraws),
                                                     fTarget,
                                                     this->imageInfo(),
                                                     std::make_pair(fPendingLoadOp, fPendingStoreOp),
-                                                    fPendingClearColor);
+                                                    fPendingClearColor,
+                                                    dstCopy,
+                                                    dstCopyPixelBounds.topLeft());
     fPendingDraws = std::make_unique<DrawList>();
     // Now that there is content drawn to the target, that content must be loaded on any subsequent
     // render pass.
@@ -238,6 +263,12 @@ void DrawContext::flush(Recorder* recorder) {
 
     if (pass) {
         SkASSERT(fTarget.get() == pass->target());
+
+        if (dstCopy) {
+            // Add the copy task to initialize dstCopy before the render pass task.
+            fCurrentDrawTask->addTask(CopyTextureToTextureTask::Make(
+                    fTarget, dstCopyPixelBounds, dstCopy, /*dstPoint=*/{0, 0}));
+        }
 
         const Caps* caps = recorder->priv().caps();
         auto [loadOp, storeOp] = pass->ops();
@@ -271,76 +302,6 @@ sk_sp<Task> DrawContext::snapDrawTask(Recorder* recorder) {
     sk_sp<Task> snappedTask = std::move(fCurrentDrawTask);
     fCurrentDrawTask = sk_make_sp<DrawTask>(fTarget);
     return snappedTask;
-}
-
-RenderPassDesc RenderPassDesc::Make(const Caps* caps,
-                                    const TextureInfo& targetInfo,
-                                    LoadOp loadOp,
-                                    StoreOp storeOp,
-                                    SkEnumBitMask<DepthStencilFlags> depthStencilFlags,
-                                    const std::array<float, 4>& clearColor,
-                                    bool requiresMSAA,
-                                    Swizzle writeSwizzle) {
-    RenderPassDesc desc;
-    desc.fWriteSwizzle = writeSwizzle;
-    desc.fSampleCount = 1;
-    // It doesn't make sense to have a storeOp for our main target not be store. Why are we doing
-    // this DrawPass then
-    SkASSERT(storeOp == StoreOp::kStore);
-    if (requiresMSAA) {
-        if (caps->msaaRenderToSingleSampledSupport()) {
-            desc.fColorAttachment.fTextureInfo = targetInfo;
-            desc.fColorAttachment.fLoadOp = loadOp;
-            desc.fColorAttachment.fStoreOp = storeOp;
-            desc.fSampleCount = caps->defaultMSAASamplesCount();
-        } else {
-            // TODO: If the resolve texture isn't readable, the MSAA color attachment will need to
-            // be persistently associated with the framebuffer, in which case it's not discardable.
-            auto msaaTextureInfo = caps->getDefaultMSAATextureInfo(targetInfo, Discardable::kYes);
-            if (msaaTextureInfo.isValid()) {
-                desc.fColorAttachment.fTextureInfo = msaaTextureInfo;
-                if (loadOp != LoadOp::kClear) {
-                    desc.fColorAttachment.fLoadOp = LoadOp::kDiscard;
-                } else {
-                    desc.fColorAttachment.fLoadOp = LoadOp::kClear;
-                }
-                desc.fColorAttachment.fStoreOp = StoreOp::kDiscard;
-
-                desc.fColorResolveAttachment.fTextureInfo = targetInfo;
-                if (loadOp != LoadOp::kLoad) {
-                    desc.fColorResolveAttachment.fLoadOp = LoadOp::kDiscard;
-                } else {
-                    desc.fColorResolveAttachment.fLoadOp = LoadOp::kLoad;
-                }
-                desc.fColorResolveAttachment.fStoreOp = storeOp;
-
-                desc.fSampleCount = msaaTextureInfo.numSamples();
-            } else {
-                // fall back to single sampled
-                desc.fColorAttachment.fTextureInfo = targetInfo;
-                desc.fColorAttachment.fLoadOp = loadOp;
-                desc.fColorAttachment.fStoreOp = storeOp;
-            }
-        }
-    } else {
-        desc.fColorAttachment.fTextureInfo = targetInfo;
-        desc.fColorAttachment.fLoadOp = loadOp;
-        desc.fColorAttachment.fStoreOp = storeOp;
-    }
-    desc.fClearColor = clearColor;
-
-    if (depthStencilFlags != DepthStencilFlags::kNone) {
-        desc.fDepthStencilAttachment.fTextureInfo = caps->getDefaultDepthStencilTextureInfo(
-                depthStencilFlags, desc.fSampleCount, targetInfo.isProtected());
-        // Always clear the depth and stencil to 0 at the start of a DrawPass, but discard at the
-        // end since their contents do not affect the next frame.
-        desc.fDepthStencilAttachment.fLoadOp = LoadOp::kClear;
-        desc.fClearDepth = 0.f;
-        desc.fClearStencil = 0;
-        desc.fDepthStencilAttachment.fStoreOp = StoreOp::kDiscard;
-    }
-
-    return desc;
 }
 
 } // namespace skgpu::graphite

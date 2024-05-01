@@ -379,12 +379,15 @@ $pure half4 sk_yuv_image_shader(float2 coords,
         coords = floor(coords) + 0.5;
     }
 
+    int tileModeX_UV = tileModeX == $kTileModeDecal ? $kTileModeClamp : tileModeX;
+    int tileModeY_UV = tileModeY == $kTileModeDecal ? $kTileModeClamp : tileModeY;
+
     half4 sampleColorY, sampleColorU, sampleColorV, sampleColorA;
     sampleColorY = $sample_image_subset(coords, invImgSizeY, subset, tileModeX, tileModeY,
                                         filterModeY, float2($kLinearInset), sY);
-    sampleColorU = $sample_image_subset(coords, invImgSizeUV, subset, tileModeX, tileModeY,
+    sampleColorU = $sample_image_subset(coords, invImgSizeUV, subset, tileModeX_UV, tileModeY_UV,
                                         filterModeUV, linearFilterUVInset, sU);
-    sampleColorV = $sample_image_subset(coords, invImgSizeUV, subset, tileModeX, tileModeY,
+    sampleColorV = $sample_image_subset(coords, invImgSizeUV, subset, tileModeX_UV, tileModeY_UV,
                                         filterModeUV, linearFilterUVInset, sV);
     if (channelSelectA == half4(1)) {
         sampleColorA = half4(0, 0, 0, 1);
@@ -415,12 +418,15 @@ $pure half4 sk_cubic_yuv_image_shader(float2 coords,
                                       sampler2D sU,
                                       sampler2D sV,
                                       sampler2D sA) {
+    int tileModeX_UV = tileModeX == $kTileModeDecal ? $kTileModeClamp : tileModeX;
+    int tileModeY_UV = tileModeY == $kTileModeDecal ? $kTileModeClamp : tileModeY;
+
     half4 sampleColorY, sampleColorU, sampleColorV, sampleColorA;
     sampleColorY = $cubic_filter_image(coords, invImgSizeY, subset, tileModeX, tileModeY,
                                        cubicCoeffs, sY);
-    sampleColorU = $cubic_filter_image(coords, invImgSizeUV, subset, tileModeX, tileModeY,
+    sampleColorU = $cubic_filter_image(coords, invImgSizeUV, subset, tileModeX_UV, tileModeY_UV,
                                        cubicCoeffs, sU);
-    sampleColorV = $cubic_filter_image(coords, invImgSizeUV, subset, tileModeX, tileModeY,
+    sampleColorV = $cubic_filter_image(coords, invImgSizeUV, subset, tileModeX_UV, tileModeY_UV,
                                        cubicCoeffs, sV);
     if (channelSelectA == half4(1)) {
         sampleColorA = half4(0, 0, 0, 1);
@@ -1433,13 +1439,13 @@ $pure half4 per_edge_aa_quad_coverage_fn(float4 coords,
 
 $pure half4 $rect_blur_coverage_fn(float2 coords,
                                    float4 rect,
-                                   int isFast,
+                                   half isFast,
                                    half invSixSigma,
                                    sampler2D integral) {
     half xCoverage;
     half yCoverage;
 
-    if (bool(isFast)) {
+    if (isFast != 0.0) {
         // Get the smaller of the signed distance from the frag coord to the left and right
         // edges and similar for y.
         // The integral texture goes "backwards" (from 3*sigma to -3*sigma), So, the below
@@ -1476,30 +1482,75 @@ $pure half4 $rect_blur_coverage_fn(float2 coords,
 }
 
 $pure half4 $circle_blur_coverage_fn(float2 coords, float4 circle, sampler2D blurProfile) {
-    float solidRadius = circle.z;
-    float invTextureRadius = circle.w;
+    // We just want to compute "(length(vec) - solidRadius + 0.5) / textureRadius" but need to
+    // rearrange to avoid passing large values to length() that would overflow. We've precalculated
+    // "1 / textureRadius" and "(solidRadius - 0.5) / textureRadius" on the CPU as circle.z and
+    // circle.w, respectively.
+    float invTextureRadius = circle.z;
+    float normSolidRadius = circle.w;
 
-    // We just want to compute "(length(vec) - solidRadius + 0.5) / textureRadius" but need
-    // to rearrange to avoid passing large values to length() that would overflow.
     half2 vec = half2((coords - circle.xy) * invTextureRadius);
-    float dist = length(vec) + (0.5 - solidRadius) * invTextureRadius;
+    float dist = length(vec) - normSolidRadius;
     return sample(blurProfile, float2(dist, 0.5)).rrrr;
+}
+
+$pure half4 $rrect_blur_coverage_fn(float2 coords,
+                                    float4 proxyRect,
+                                    half edgeSize,
+                                    sampler2D ninePatch) {
+    // Warp the fragment position to the appropriate part of the 9-patch blur texture by
+    // snipping out the middle section of the proxy rect.
+    float2 translatedFragPosFloat = coords - proxyRect.LT;
+    float2 proxyCenter = (proxyRect.RB - proxyRect.LT) * 0.5;
+
+    // Position the fragment so that (0, 0) marks the center of the proxy rectangle.
+    // Negative coordinates are on the left/top side and positive numbers are on the
+    // right/bottom.
+    translatedFragPosFloat -= proxyCenter;
+
+    // Temporarily strip off the fragment's sign. x/y are now strictly increasing as we
+    // move away from the center.
+    half2 fragDirection = half2(sign(translatedFragPosFloat));
+    translatedFragPosFloat = abs(translatedFragPosFloat);
+
+    // Our goal is to snip out the "middle section" of the proxy rect (everything but the
+    // edge). We've repositioned our fragment position so that (0, 0) is the centerpoint
+    // and x/y are always positive, so we can subtract here and interpret negative results
+    // as being within the middle section.
+    half2 translatedFragPosHalf = half2(translatedFragPosFloat - (proxyCenter - edgeSize));
+
+    // Remove the middle section by clamping to zero.
+    translatedFragPosHalf = max(translatedFragPosHalf, 0);
+
+    // Reapply the fragment's sign, so that negative coordinates once again mean left/top
+    // side and positive means bottom/right side.
+    translatedFragPosHalf *= fragDirection;
+
+    // Offset the fragment so that (0, 0) marks the upper-left again, instead of the center
+    // point.
+    translatedFragPosHalf += half2(edgeSize);
+
+    half2 proxyDims = half2(2.0 * edgeSize);
+    half2 texCoord = translatedFragPosHalf / proxyDims;
+
+    return sample(ninePatch, texCoord).rrrr;
 }
 
 $pure half4 blur_coverage_fn(float2 coords,
                              float4 shapeData,
+                             half2 blurData,
                              int shapeType,
-                             int isFast,
-                             half invSixSigma,
                              sampler2D s) {
     switch (shapeType) {
         case $kShapeTypeRect: {
-            return $rect_blur_coverage_fn(coords, shapeData, isFast, invSixSigma, s);
+            return $rect_blur_coverage_fn(coords, shapeData, blurData.x, blurData.y, s);
         }
         case $kShapeTypeCircle: {
             return $circle_blur_coverage_fn(coords, shapeData, s);
         }
-        // TODO(b/238762890) Handle $kShapeTypeRRect.
+        case $kShapeTypeRRect: {
+            return $rrect_blur_coverage_fn(coords, shapeData, blurData.x, s);
+        }
     }
     return half4(0);
 }

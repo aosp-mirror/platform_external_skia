@@ -718,7 +718,7 @@ Context::PixelTransferResult Context::transferPixels(const TextureProxy* proxy,
     size_t rowBytes = caps->getAlignedTextureDataRowBytes(bpp * srcRect.width());
     size_t size = SkAlignTo(rowBytes * srcRect.height(), caps->requiredTransferBufferAlignment());
     sk_sp<Buffer> buffer = fResourceProvider->findOrCreateBuffer(
-            size, BufferType::kXferGpuToCpu, AccessPattern::kHostVisible);
+            size, BufferType::kXferGpuToCpu, AccessPattern::kHostVisible, "TransferToCpu");
     if (!buffer) {
         return {};
     }
@@ -908,6 +908,7 @@ bool ContextPriv::supportsPathRendererStrategy(PathRendererStrategy strategy) {
             return true;
         case PathRendererStrategy::kComputeAnalyticAA:
         case PathRendererStrategy::kComputeMSAA16:
+        case PathRendererStrategy::kComputeMSAA8:
             return SkToBool(pathAtlasFlags & AtlasProvider::PathAtlasFlags::kCompute);
         case PathRendererStrategy::kRasterAA:
             return SkToBool(pathAtlasFlags & AtlasProvider::PathAtlasFlags::kRaster);
