@@ -77,8 +77,13 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "icu",
         build_file = ws + "//bazel/external/icu:BUILD.bazel",
-        commit = "a0718d4f121727e30b8d52c7a189ebf5ab52421f",
+        commit = "364118a1d9da24bb5b770ac3d762ac144d6da5a4",
         remote = "https://chromium.googlesource.com/chromium/deps/icu.git",
+        patch_cmds = [
+            "rm source/i18n/BUILD.bazel",
+            "rm source/common/BUILD.bazel",
+            "rm source/stubdata/BUILD.bazel",
+        ],
     )
 
     new_git_repository(
@@ -180,7 +185,7 @@ def c_plus_plus_deps(ws = "@skia"):
 
     git_repository(
         name = "spirv_tools",
-        commit = "bfc3a15683d5174840eaf8c5d21065f60fe70a10",
+        commit = "9241a58a8028c49510bc174b6c970e3c2b4b8e51",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
@@ -201,7 +206,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "vulkan_tools",
         build_file = ws + "//bazel/external/vulkan_tools:BUILD.bazel",
-        commit = "e6d5b0a67d1b1179f99e1745a8d9c16f22c85f82",
+        commit = "09f5cc6b0758a05ccd6bcde1342256c15c76670e",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
     )
 
