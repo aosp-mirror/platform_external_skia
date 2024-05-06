@@ -303,7 +303,7 @@ void SkDevice::drawDrawable(SkCanvas* canvas, SkDrawable* drawable, const SkMatr
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 void SkDevice::drawSpecial(SkSpecialImage*, const SkMatrix&, const SkSamplingOptions&,
-                           const SkPaint&) {}
+                           const SkPaint&, SkCanvas::SrcRectConstraint) {}
 void SkDevice::drawCoverageMask(const SkSpecialImage*, const SkMatrix& maskToDevice,
                                 const SkSamplingOptions&, const SkPaint&) {
     // This shouldn't be reached; SkCanvas will only call this if
@@ -332,7 +332,19 @@ void SkDevice::drawDevice(SkDevice* device,
                           const SkPaint& paint) {
     sk_sp<SkSpecialImage> deviceImage = device->snapSpecial();
     if (deviceImage) {
+#if defined(SK_DONT_PAD_LAYER_IMAGES) || defined(SK_RESOLVE_FILTERS_BEFORE_RESTORE)
         this->drawSpecial(deviceImage.get(), device->getRelativeTransform(*this), sampling, paint);
+#else
+        // SkCanvas only calls drawDevice() when there are no filters (so the transform is pixel
+        // aligned), and it will have added transparent padding. Inset the special image by 1px
+        // and draw with a fast constraint.
+        deviceImage = deviceImage->makeSubset(SkIRect::MakeSize(deviceImage->dimensions())
+                                                      .makeInset(1, 1));
+        SkMatrix offsetTransform = device->getRelativeTransform(*this);
+        offsetTransform.preTranslate(1.f, 1.f); // account for the 1px inset
+        this->drawSpecial(deviceImage.get(), offsetTransform, sampling, paint,
+                          SkCanvas::kFast_SrcRectConstraint);
+#endif
     }
 }
 
@@ -351,15 +363,18 @@ void SkDevice::drawFilteredImage(const skif::Mapping& mapping,
         colorType = kRGBA_8888_SkColorType;
     }
 
+    skif::Stats stats;
     skif::Context ctx{this->createImageFilteringBackend(src ? src->props() : this->surfaceProps(),
                                                         colorType),
                       mapping,
                       targetOutput,
                       skif::FilterResult(sk_ref_sp(src)),
-                      this->imageInfo().colorSpace()};
+                      this->imageInfo().colorSpace(),
+                      &stats};
 
     SkIPoint offset;
     sk_sp<SkSpecialImage> result = as_IFB(filter)->filterImage(ctx).imageAndOffset(ctx, &offset);
+    stats.reportStats();
     if (result) {
         SkMatrix deviceMatrixWithOffset = mapping.layerToDevice();
         deviceMatrixWithOffset.preTranslate(offset.fX, offset.fY);

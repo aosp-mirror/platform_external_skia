@@ -43,6 +43,11 @@ public:
                                       const RenderPassDesc&) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override;
 
+    bool extractGraphicsDescs(const UniqueKey&,
+                              GraphicsPipelineDesc*,
+                              RenderPassDesc*,
+                              const RendererProvider*) const override;
+
     // Get a sufficiently unique bit representation for the RenderPassDesc to be embedded in other
     // UniqueKeys (e.g. makeGraphicsPipelineKey).
     uint64_t getRenderPassDescKey(const RenderPassDesc&) const;
@@ -91,12 +96,14 @@ private:
     bool supportsWritePixels(const TextureInfo&) const override;
     bool supportsReadPixels(const TextureInfo&) const override;
 
-    SkColorType supportedWritePixelsColorType(SkColorType dstColorType,
-                                              const TextureInfo& dstTextureInfo,
-                                              SkColorType srcColorType) const override;
-    SkColorType supportedReadPixelsColorType(SkColorType srcColorType,
-                                             const TextureInfo& srcTextureInfo,
-                                             SkColorType dstColorType) const override;
+    std::pair<SkColorType, bool /*isRGBFormat*/> supportedWritePixelsColorType(
+            SkColorType dstColorType,
+            const TextureInfo& dstTextureInfo,
+            SkColorType srcColorType) const override;
+    std::pair<SkColorType, bool /*isRGBFormat*/> supportedReadPixelsColorType(
+            SkColorType srcColorType,
+            const TextureInfo& srcTextureInfo,
+            SkColorType dstColorType) const override;
 
     MTLStorageMode getDefaultMSAAStorageMode(Discardable discardable) const;
 

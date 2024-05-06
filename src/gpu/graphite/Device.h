@@ -62,6 +62,14 @@ public:
                               const SkSurfaceProps&,
                               bool addInitialClear);
 
+    // Creates a device that is not registered on the provided recorder. Meant to be short-lived and
+    // managed by the caller within a single scope.
+    static sk_sp<Device> MakeScratch(Recorder* recorder,
+                                     const SkImageInfo& ii,
+                                     Mipmapped mipmapped,
+                                     const SkSurfaceProps& props,
+                                     bool addInitialClear);
+
     Device* asGraphiteDevice() override { return this; }
 
     Recorder* recorder() const override { return fRecorder; }
@@ -140,7 +148,13 @@ public:
                        SkCanvas::SrcRectConstraint) override;
 
     void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) override;
-
+    bool drawAsTiledImageRect(SkCanvas*,
+                              const SkImage*,
+                              const SkRect* src,
+                              const SkRect& dst,
+                              const SkSamplingOptions&,
+                              const SkPaint&,
+                              SkCanvas::SrcRectConstraint) override;
     // TODO: Implement these using per-edge AA quads and an inlined image shader program.
     void drawImageLattice(const SkImage*, const SkCanvas::Lattice&,
                           const SkRect& dst, SkFilterMode, const SkPaint&) override {}
@@ -159,7 +173,8 @@ public:
     sk_sp<SkSpecialImage> snapSpecial(const SkIRect& subset, bool forceCopy = false) override;
 
     void drawSpecial(SkSpecialImage*, const SkMatrix& localToDevice,
-                     const SkSamplingOptions&, const SkPaint&) override;
+                     const SkSamplingOptions&, const SkPaint&,
+                     SkCanvas::SrcRectConstraint) override;
     void drawCoverageMask(const SkSpecialImage*, const SkMatrix& localToDevice,
                           const SkSamplingOptions&, const SkPaint&) override;
 
@@ -195,9 +210,9 @@ private:
         // - drawShape after it's applied the path effect.
         kIgnorePathEffect = 0b010,
     };
-    SK_DECL_BITMASK_OPS_FRIENDS(DrawFlags);
+    SK_DECL_BITMASK_OPS_FRIENDS(DrawFlags)
 
-    Device(Recorder*, sk_sp<DrawContext>, bool addInitialClear);
+    Device(Recorder*, sk_sp<DrawContext>, bool addInitialClear, bool registerWithRecorder);
 
     // Handles applying path effects, mask filters, stroke-and-fill styles, and hairlines.
     // Ignores geometric style on the paint in favor of explicitly provided SkStrokeRec and flags.

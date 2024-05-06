@@ -50,6 +50,7 @@
 #include "src/sksl/ir/SkSLSwitchCase.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
+#include "src/sksl/ir/SkSLSymbol.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
@@ -371,9 +372,10 @@ bool Analysis::CallsSampleOutsideMain(const Program& program) {
 }
 
 bool Analysis::CallsColorTransformIntrinsics(const Program& program) {
-    for (auto [fn, count] : program.usage()->fCallCounts) {
-        if (count != 0 && (fn->intrinsicKind() == k_toLinearSrgb_IntrinsicKind ||
-                           fn->intrinsicKind() == k_fromLinearSrgb_IntrinsicKind)) {
+    for (auto [symbol, count] : program.usage()->fCallCounts) {
+        const FunctionDeclaration& fn = symbol->as<FunctionDeclaration>();
+        if (count != 0 && (fn.intrinsicKind() == k_toLinearSrgb_IntrinsicKind ||
+                           fn.intrinsicKind() == k_fromLinearSrgb_IntrinsicKind)) {
             return true;
         }
     }
@@ -661,15 +663,7 @@ template <typename T> bool TProgramVisitor<T>::visitStatement(typename T::Statem
         }
         case Statement::Kind::kSwitch: {
             auto& sw = s.template as<SwitchStatement>();
-            if (this->visitExpressionPtr(sw.value())) {
-                return true;
-            }
-            for (auto& c : sw.cases()) {
-                if (this->visitStatementPtr(c)) {
-                    return true;
-                }
-            }
-            return false;
+            return this->visitExpressionPtr(sw.value()) || this->visitStatementPtr(sw.caseBlock());
         }
         case Statement::Kind::kVarDeclaration: {
             auto& v = s.template as<VarDeclaration>();

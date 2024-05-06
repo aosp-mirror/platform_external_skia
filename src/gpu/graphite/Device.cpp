@@ -32,6 +32,7 @@
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/SharedContext.h"
 #include "src/gpu/graphite/SpecialImage_Graphite.h"
+#include "src/gpu/graphite/Surface_Graphite.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/TextureUtils.h"
 #include "src/gpu/graphite/geom/BoundsManager.h"
@@ -59,6 +60,7 @@
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/core/SkVerticesPriv.h"
+#include "src/gpu/TiledTextureUtils.h"
 #include "src/shaders/SkImageShader.h"
 #include "src/text/GlyphRun.h"
 #include "src/text/gpu/GlyphVector.h"
@@ -68,6 +70,7 @@
 #include "src/text/gpu/VertexFiller.h"
 
 #include <functional>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -75,6 +78,15 @@ using RescaleGamma       = SkImage::RescaleGamma;
 using RescaleMode        = SkImage::RescaleMode;
 using ReadPixelsCallback = SkImage::ReadPixelsCallback;
 using ReadPixelsContext  = SkImage::ReadPixelsContext;
+
+#if defined(GRAPHITE_TEST_UTILS)
+int gOverrideMaxTextureSizeGraphite = 0;
+// Allows tests to check how many tiles were drawn on the most recent call to
+// Device::drawAsTiledImageRect. This is an atomic because we can write to it from
+// multiple threads during "normal" operations. However, the tests that actually
+// read from it are done single-threaded.
+std::atomic<int> gNumTilesDrawnGraphite{0};
+#endif
 
 namespace skgpu::graphite {
 
@@ -219,6 +231,39 @@ private:
     SkSTArenaAllocWithReset<4 * sizeof(IntersectionTree)> fTreeStore;
 };
 
+namespace {
+
+sk_sp<TextureProxy> make_draw_target(const Recorder* recorder,
+                                     const SkImageInfo& ii,
+                                     Mipmapped mipmapped,
+                                     Protected isProtected,
+                                     Budgeted budgeted) {
+    if (!recorder) {
+        return nullptr;
+    }
+    return TextureProxy::Make(recorder->priv().caps(),
+                              ii.dimensions(),
+                              ii.colorType(),
+                              mipmapped,
+                              isProtected,
+                              Renderable::kYes,
+                              budgeted);
+}
+
+sk_sp<DrawContext> make_draw_context(sk_sp<TextureProxy> target,
+                                     const SkISize& dimensions,
+                                     const SkColorInfo& colorInfo,
+                                     const SkSurfaceProps& props) {
+    // We don't render to unknown or unpremul alphatypes
+    if (colorInfo.alphaType() == kUnknown_SkAlphaType ||
+        colorInfo.alphaType() == kUnpremul_SkAlphaType) {
+        return nullptr;
+    }
+    return DrawContext::Make(std::move(target), dimensions, colorInfo, props);
+}
+
+}  // anonymous namespace
+
 sk_sp<Device> Device::Make(Recorder* recorder,
                            const SkImageInfo& ii,
                            skgpu::Budgeted budgeted,
@@ -228,18 +273,13 @@ sk_sp<Device> Device::Make(Recorder* recorder,
                            bool addInitialClear) {
     SkASSERT(!(mipmapped == Mipmapped::kYes && backingFit == SkBackingFit::kApprox));
 
-    if (!recorder) {
-        return nullptr;
-    }
-
     Protected isProtected = Protected(recorder->priv().caps()->protectedSupport());
-    sk_sp<TextureProxy> target = TextureProxy::Make(
-            recorder->priv().caps(),
-            backingFit == SkBackingFit::kApprox ? GetApproxSize(ii.dimensions()) : ii.dimensions(),
-            ii.colorType(),
+    sk_sp<TextureProxy> target = make_draw_target(
+            recorder,
+            backingFit == SkBackingFit::kApprox ? ii.makeDimensions(GetApproxSize(ii.dimensions()))
+                                                : ii,
             mipmapped,
             isProtected,
-            Renderable::kYes,
             budgeted);
     if (!target) {
         return nullptr;
@@ -266,18 +306,39 @@ sk_sp<Device> Device::Make(Recorder* recorder,
     if (!recorder) {
         return nullptr;
     }
-    // We don't render to unknown or unpremul alphatypes
-    if (colorInfo.alphaType() == kUnknown_SkAlphaType ||
-        colorInfo.alphaType() == kUnpremul_SkAlphaType) {
-        return nullptr;
-    }
 
-    sk_sp<DrawContext> dc = DrawContext::Make(std::move(target), deviceSize, colorInfo, props);
+    sk_sp<DrawContext> dc = make_draw_context(std::move(target), deviceSize, colorInfo, props);
     if (!dc) {
         return nullptr;
     }
 
-    return sk_sp<Device>(new Device(recorder, std::move(dc), addInitialClear));
+    return sk_sp<Device>(
+            new Device(recorder, std::move(dc), addInitialClear, /*registerWithRecorder=*/true));
+}
+
+sk_sp<Device> Device::MakeScratch(Recorder* recorder,
+                                  const SkImageInfo& ii,
+                                  Mipmapped mipmapped,
+                                  const SkSurfaceProps& props,
+                                  bool addInitialClear) {
+    if (!recorder) {
+        return nullptr;
+    }
+
+    sk_sp<TextureProxy> target =
+            make_draw_target(recorder, ii, mipmapped, Protected::kNo, Budgeted::kYes);
+    if (!target) {
+        return nullptr;
+    }
+
+    sk_sp<DrawContext> dc =
+            make_draw_context(std::move(target), ii.dimensions(), ii.colorInfo(), props);
+    if (!dc) {
+        return nullptr;
+    }
+
+    return sk_sp<Device>(
+            new Device(recorder, std::move(dc), addInitialClear, /*registerWithRecorder=*/false));
 }
 
 // These default tuning numbers for the HybridBoundsManager were chosen from looking at performance
@@ -293,23 +354,24 @@ static constexpr int kGridCellSize = 16;
 static constexpr int kMaxBruteForceN = 64;
 static constexpr int kMaxGridSize = 32;
 
-Device::Device(Recorder* recorder, sk_sp<DrawContext> dc, bool addInitialClear)
+Device::Device(Recorder* recorder,
+               sk_sp<DrawContext> dc,
+               bool addInitialClear,
+               bool registerWithRecorder)
         : SkDevice(dc->imageInfo(), dc->surfaceProps())
         , fRecorder(recorder)
         , fDC(std::move(dc))
         , fClip(this)
-        , fColorDepthBoundsManager(
-                    std::make_unique<HybridBoundsManager>(fDC->imageInfo().dimensions(),
-                                                          kGridCellSize,
-                                                          kMaxBruteForceN,
-                                                          kMaxGridSize))
+        , fColorDepthBoundsManager(std::make_unique<HybridBoundsManager>(
+                  fDC->imageInfo().dimensions(), kGridCellSize, kMaxBruteForceN, kMaxGridSize))
         , fDisjointStencilSet(std::make_unique<IntersectionTreeSet>())
         , fCachedLocalToDevice(SkM44())
         , fCurrentDepth(DrawOrder::kClearDepth)
         , fSDFTControl(recorder->priv().caps()->getSDFTControl(false)) {
     SkASSERT(SkToBool(fDC) && SkToBool(fRecorder));
-    fRecorder->registerDevice(this);
-
+    if (registerWithRecorder) {
+        fRecorder->registerDevice(this);
+    }
     if (addInitialClear) {
         fDC->clear(SkColors::kTransparent);
     }
@@ -340,7 +402,8 @@ SkStrikeDeviceInfo Device::strikeDeviceInfo() const {
 sk_sp<SkDevice> Device::createDevice(const CreateInfo& info, const SkPaint*) {
     // TODO: Inspect the paint and create info to determine if there's anything that has to be
     // modified to support inline subpasses.
-    SkSurfaceProps props(this->surfaceProps().flags(), info.fPixelGeometry);
+    SkSurfaceProps props =
+        this->surfaceProps().cloneWithPixelGeometry(info.fPixelGeometry);
 
     // Skia's convention is to only clear a device if it is non-opaque.
     bool addInitialClear = !info.fInfo.isOpaque();
@@ -370,6 +433,34 @@ TextureProxyView Device::createCopy(const SkIRect* subset,
     TextureProxyView srcView = this->readSurfaceView();
     if (!srcView) {
         return {};
+    }
+
+    if (!fRecorder->priv().caps()->supportsReadPixels(srcView.proxy()->textureInfo())) {
+        if (!fRecorder->priv().caps()->isTexturable(srcView.proxy()->textureInfo())) {
+            return {};
+        }
+        // We ignore backingFit here and always make a tight texture.
+        auto size = subset ? subset->size() : this->size();
+        auto surface = SkSurfaces::RenderTarget(fRecorder,
+                                                this->imageInfo().makeDimensions(size),
+                                                mipmapped);
+
+        auto image = sk_make_sp<Image>(kNeedNewImageUniqueID,
+                                       readSurfaceView(),
+                                       this->imageInfo().colorInfo());
+        SkPaint paint;
+        paint.setBlendMode(SkBlendMode::kSrc);
+        auto pt = subset ? subset->topLeft() : SkIPoint{0, 0};
+        surface->getCanvas()->drawImage(image, -pt.x(), -pt.y(), SkFilterMode::kNearest, &paint);
+
+        auto readView = static_cast<Surface*>(surface.get())->readSurfaceView();
+        if (mipmapped == Mipmapped::kYes) {
+            if (!GenerateMipmaps(fRecorder, readView.refProxy(), this->imageInfo().colorInfo())) {
+                SKGPU_LOG_W("Device::createCopy: Failed to generate mipmaps");
+            }
+        }
+
+        return readView;
     }
 
     SkIRect srcRect = subset ? *subset : SkIRect::MakeSize(this->imageInfo().dimensions());
@@ -464,11 +555,25 @@ bool Device::onWritePixels(const SkPixmap& src, int x, int y) {
         return false;
     }
 
-    // TODO: check for readOnly or framebufferOnly target and return false if so
-
     // TODO: canvas2DFastPath?
-    // TODO: check that surface supports writePixels
-    // TODO: handle writePixels as draw if needed (e.g., canvas2DFastPath || !supportsWritePixels)
+
+    if (!fRecorder->priv().caps()->supportsWritePixels(target->textureInfo())) {
+        auto image = SkImages::RasterFromPixmap(src, nullptr, nullptr);
+        image = SkImages::TextureFromImage(fRecorder, image.get());
+        if (!image) {
+            return false;
+        }
+
+        SkPaint paint;
+        paint.setBlendMode(SkBlendMode::kSrc);
+        this->drawImageRect(image.get(),
+                            /*src=*/nullptr,
+                            SkRect::MakeXYWH(x, y, src.width(), src.height()),
+                            SkFilterMode::kNearest,
+                            paint,
+                            SkCanvas::kFast_SrcRectConstraint);
+        return true;
+    }
 
     // TODO: check for flips and either handle here or pass info to UploadTask
 
@@ -485,8 +590,26 @@ bool Device::onWritePixels(const SkPixmap& src, int x, int y) {
 
     this->flushPendingWorkToRecorder();
 
-    return fDC->recordUpload(fRecorder, sk_ref_sp(target), src.info().colorInfo(),
-                             this->imageInfo().colorInfo(), levels, dstRect, nullptr);
+    if (!fDC->recordUpload(fRecorder, fDC->refTarget(), src.info().colorInfo(),
+                           this->imageInfo().colorInfo(), levels, dstRect, nullptr)) {
+        return false;
+    }
+
+    // TODO(b/297344089): This always regenerates mipmaps on the draw target when it's drawn to.
+    // This could be wasteful if we draw to a target multiple times before reading from it with
+    // downscaling.
+    if (target->mipmapped() == Mipmapped::kYes) {
+        sk_sp<Task> uploadTask = fDC->snapUploadTask(fRecorder);
+        SkASSERT(uploadTask);
+        if (uploadTask) {
+            fRecorder->priv().add(std::move(uploadTask));
+        }
+        if (!GenerateMipmaps(fRecorder, fDC->refTarget(), fDC->colorInfo())) {
+            SKGPU_LOG_W("Device::onWritePixels: Failed to generate mipmaps for draw target");
+        }
+    }
+
+    return true;
 }
 
 
@@ -641,6 +764,50 @@ void Device::drawVertices(const SkVertices* vertices, sk_sp<SkBlender> blender,
                        DrawFlags::kIgnorePathEffect | DrawFlags::kIgnoreMaskFilter,
                        std::move(blender),
                        skipColorXform);
+}
+
+bool Device::drawAsTiledImageRect(SkCanvas* canvas,
+                                  const SkImage* image,
+                                  const SkRect* src,
+                                  const SkRect& dst,
+                                  const SkSamplingOptions& sampling,
+                                  const SkPaint& paint,
+                                  SkCanvas::SrcRectConstraint constraint) {
+    auto recorder = canvas->recorder();
+    if (!recorder) {
+        return false;
+    }
+    SkASSERT(src);
+
+    // For Graphite this is a pretty loose heuristic. The Recorder-local cache size (relative
+    // to the large image's size) is used as a proxy for how conservative we should be when
+    // allocating tiles. Since the tiles will actually be owned by the client (via an
+    // ImageProvider) they won't actually add any memory pressure directly to Graphite.
+    size_t cacheSize = recorder->priv().getResourceCacheLimit();
+    size_t maxTextureSize = recorder->priv().caps()->maxTextureSize();
+
+#if defined(GRAPHITE_TEST_UTILS)
+    if (gOverrideMaxTextureSizeGraphite) {
+        maxTextureSize = gOverrideMaxTextureSizeGraphite;
+    }
+    gNumTilesDrawnGraphite.store(0, std::memory_order_relaxed);
+#endif
+
+    [[maybe_unused]] auto [wasTiled, numTiles] =
+            skgpu::TiledTextureUtils::DrawAsTiledImageRect(canvas,
+                                                           image,
+                                                           *src,
+                                                           dst,
+                                                           SkCanvas::kAll_QuadAAFlags,
+                                                           sampling,
+                                                           &paint,
+                                                           constraint,
+                                                           cacheSize,
+                                                           maxTextureSize);
+#if defined(GRAPHITE_TEST_UTILS)
+    gNumTilesDrawnGraphite.store(numTiles, std::memory_order_relaxed);
+#endif
+    return wasTiled;
 }
 
 void Device::drawOval(const SkRect& oval, const SkPaint& paint) {
@@ -888,10 +1055,20 @@ void Device::drawGeometry(const Transform& localToDevice,
         // TODO: If asADash() returns true and the base path matches the dashing fast path, then
         // that should be detected now as well. Maybe add dashPath to Device so canvas can handle it
         SkStrokeRec newStyle = style;
-        newStyle.setResScale(localToDevice.maxScaleFactor());
+        float maxScaleFactor = localToDevice.maxScaleFactor();
+        if (localToDevice.type() == Transform::Type::kPerspective) {
+            auto bounds = geometry.bounds();
+            float tl = std::get<1>(localToDevice.scaleFactors({bounds.left(), bounds.top()}));
+            float tr = std::get<1>(localToDevice.scaleFactors({bounds.right(), bounds.top()}));
+            float br = std::get<1>(localToDevice.scaleFactors({bounds.right(), bounds.bot()}));
+            float bl = std::get<1>(localToDevice.scaleFactors({bounds.left(), bounds.bot()}));
+            maxScaleFactor = std::max(std::max(tl, tr), std::max(bl, br));
+        }
+        newStyle.setResScale(maxScaleFactor);
         SkPath dst;
         if (paint.getPathEffect()->filterPath(&dst, geometry.shape().asPath(), &newStyle,
                                               nullptr, localToDevice)) {
+            dst.setIsVolatile(true);
             // Recurse using the path and new style, while disabling downstream path effect handling
             this->drawGeometry(localToDevice, Geometry(Shape(dst)), paint, newStyle,
                                flags | DrawFlags::kIgnorePathEffect, std::move(primitiveBlender),
@@ -919,10 +1096,11 @@ void Device::drawGeometry(const Transform& localToDevice,
     // TODO: The tessellating and atlas path renderers haven't implemented perspective yet, so
     // transform to device space so we draw something approximately correct (barring local coord
     // issues).
-    if (geometry.isShape() && localToDevice.type() == Transform::Type::kProjection &&
+    if (geometry.isShape() && localToDevice.type() == Transform::Type::kPerspective &&
         !is_simple_shape(geometry.shape(), style.getStyle())) {
         SkPath devicePath = geometry.shape().asPath();
         devicePath.transform(localToDevice.matrix().asM33());
+        devicePath.setIsVolatile(true);
         this->drawGeometry(Transform::Identity(), Geometry(Shape(devicePath)), paint, style, flags,
                            std::move(primitiveBlender), skipColorXform);
         return;
@@ -940,18 +1118,24 @@ void Device::drawGeometry(const Transform& localToDevice,
 
     // TODO: Some renderer decisions could depend on the clip (see PathAtlas::addShape for
     // one workaround) so we should figure out how to remove this circular dependency.
+
+    // We assume that we will receive a renderer, or a PathAtlas. If it's a PathAtlas,
+    // then we assume that the renderer chosen in PathAtlas::addShape() will have
+    // single-channel coverage, require AA bounds outsetting, and have a single renderStep.
     auto [renderer, pathAtlas] =
             this->chooseRenderer(localToDevice, geometry, style, /*requireMSAA=*/false);
-    if (!renderer) {
-        SKGPU_LOG_W("Skipping draw with no supported renderer.");
+    if (!renderer && !pathAtlas) {
+        SKGPU_LOG_W("Skipping draw with no supported renderer or PathAtlas.");
         return;
     }
 
     // Calculate the clipped bounds of the draw and determine the clip elements that affect the
     // draw without updating the clip stack.
+    const bool outsetBoundsForAA = renderer ? renderer->outsetBoundsForAA() : true;
     ClipStack::ElementList clipElements;
     const Clip clip =
-            fClip.visitClipStackForDraw(localToDevice, geometry, style, *renderer, &clipElements);
+            fClip.visitClipStackForDraw(localToDevice, geometry, style, outsetBoundsForAA,
+                                        &clipElements);
     if (clip.isClippedOut()) {
         // Clipped out, so don't record anything.
         return;
@@ -962,14 +1146,15 @@ void Device::drawGeometry(const Transform& localToDevice,
     const SkBlenderBase* blender = as_BB(paint.getBlender());
     const std::optional<SkBlendMode> blendMode = blender ? blender->asBlendMode()
                                                          : SkBlendMode::kSrcOver;
-    const Coverage rendererCoverage = renderer->coverage();
+    const Coverage rendererCoverage = renderer ? renderer->coverage()
+                                               : Coverage::kSingleChannel;
     dstReadReq = GetDstReadRequirement(recorder()->priv().caps(), blendMode, rendererCoverage);
 
     // When using a tessellating path renderer a stroke-and-fill is rendered using two draws. When
     // drawing from an atlas we issue a single draw as the atlas mask covers both styles.
     SkStrokeRec::Style styleType = style.getStyle();
     const int numNewRenderSteps =
-            renderer->numRenderSteps() +
+            renderer ? renderer->numRenderSteps() : 1 +
             (!pathAtlas && (styleType == SkStrokeRec::kStrokeAndFill_Style)
                      ? fRecorder->priv().rendererProvider()->tessellatedStrokes()->numRenderSteps()
                      : 0);
@@ -992,11 +1177,10 @@ void Device::drawGeometry(const Transform& localToDevice,
     // it to be drawn.
     std::optional<PathAtlas::MaskAndOrigin> atlasMask;  // only used if `pathAtlas != nullptr`
     if (pathAtlas != nullptr) {
-        atlasMask = pathAtlas->addShape(recorder(),
-                                        clip.transformedShapeBounds(),
-                                        geometry.shape(),
-                                        localToDevice,
-                                        style);
+        std::tie(renderer, atlasMask) = pathAtlas->addShape(clip.transformedShapeBounds(),
+                                                            geometry.shape(),
+                                                            localToDevice,
+                                                            style);
 
         // If there was no space in the atlas and we haven't flushed already, then flush pending
         // work to clear up space in the atlas. If we had already flushed once (which would have
@@ -1007,11 +1191,10 @@ void Device::drawGeometry(const Transform& localToDevice,
             fRecorder->priv().flushTrackedDevices();
 
             // Try inserting the shape again.
-            atlasMask = pathAtlas->addShape(recorder(),
-                                            clip.transformedShapeBounds(),
-                                            geometry.shape(),
-                                            localToDevice,
-                                            style);
+            std::tie(renderer, atlasMask) = pathAtlas->addShape(clip.transformedShapeBounds(),
+                                                                geometry.shape(),
+                                                                localToDevice,
+                                                                style);
         }
 
         if (!atlasMask) {
@@ -1022,6 +1205,8 @@ void Device::drawGeometry(const Transform& localToDevice,
             // texture.
             return;
         }
+        // Since addShape() was successful we should have a valid Renderer now.
+        SkASSERT(renderer);
     }
 
     // Update the clip stack after issuing a flush (if it was needed). A draw will be recorded after
@@ -1061,7 +1246,11 @@ void Device::drawGeometry(const Transform& localToDevice,
     // If a draw is not opaque, it must be drawn after the most recent draw it intersects with in
     // order to blend correctly. We always query the most recent draw (even when opaque) because it
     // also lets Device easily track whether or not there are any overlapping draws.
-    PaintParams shading{paint, std::move(primitiveBlender), dstReadReq, skipColorXform};
+    PaintParams shading{paint,
+                        std::move(primitiveBlender),
+                        sk_ref_sp(clip.shader()),
+                        dstReadReq,
+                        skipColorXform};
     const bool dependsOnDst = rendererCoverage != Coverage::kNone || paint_depends_on_dst(shading);
     if (dependsOnDst) {
         CompressedPaintersOrder prevDraw =
@@ -1153,7 +1342,7 @@ void Device::drawClipShape(const Transform& localToDevice,
 
     // Clips draws are depth-only (null PaintParams), and filled (null StrokeStyle).
     // TODO: Remove this CPU-transform once perspective is supported for all path renderers
-    if (localToDevice.type() == Transform::Type::kProjection) {
+    if (localToDevice.type() == Transform::Type::kPerspective) {
         SkPath devicePath = geometry.shape().asPath();
         devicePath.transform(localToDevice.matrix().asM33());
         fDC->recordDraw(renderer, Transform::Identity(), Geometry(Shape(devicePath)), clip, order,
@@ -1232,6 +1421,7 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
     AtlasProvider* atlasProvider = fRecorder->priv().atlasProvider();
     if (atlasProvider->isAvailable(AtlasProvider::PathAtlasFlags::kCompute) &&
         (strategy == PathRendererStrategy::kComputeAnalyticAA ||
+         strategy == PathRendererStrategy::kComputeMSAA16 ||
          strategy == PathRendererStrategy::kDefault)) {
         pathAtlas = fDC->getComputePathAtlas(fRecorder);
     // Only use CPU rendered paths when multisampling is disabled
@@ -1252,7 +1442,7 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
         // paths with atlasing.
         if (!msaaSupported || strategy == PathRendererStrategy::kComputeAnalyticAA ||
             strategy == PathRendererStrategy::kRasterAA) {
-            return {renderers->coverageMask(), pathAtlas};
+            return {nullptr, pathAtlas};
         }
 
         // Use the conservative clip bounds for a rough estimate of the mask size (this avoids
@@ -1261,7 +1451,7 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
         Rect drawBounds = localToDevice.mapRect(shape.bounds());
         drawBounds.intersect(fClip.conservativeBounds());
         if (pathAtlas->isSuitableForAtlasing(drawBounds)) {
-            return {renderers->coverageMask(), pathAtlas};
+            return {nullptr, pathAtlas};
         }
     }
 
@@ -1321,14 +1511,12 @@ void Device::flushPendingWorkToRecorder() {
     // DrawPass stealing will need to share some of the same logic w/o becoming a Task.
 
     // Push any pending uploads from the atlasProvider
-    fRecorder->priv().atlasProvider()->recordUploads(fDC.get(), fRecorder);
+    fRecorder->priv().atlasProvider()->recordUploads(fDC.get());
 
     auto uploadTask = fDC->snapUploadTask(fRecorder);
     if (uploadTask) {
         fRecorder->priv().add(std::move(uploadTask));
     }
-    // Issue next upload flush token
-    fRecorder->priv().tokenTracker()->issueFlushToken();
 
     fClip.recordDeferredClipDraws();
 
@@ -1336,6 +1524,7 @@ void Device::flushPendingWorkToRecorder() {
     // record DispatchGroups that it depends on (e.g. to process geometry or atlas draws).
     auto drawTask = fDC->snapRenderPassTask(fRecorder);
     auto computeTask = fDC->snapComputeTask(fRecorder);
+    const bool addingDrawTask = SkToBool(drawTask);
 
     // Execute the compute task before the draw task.
     if (computeTask) {
@@ -1345,11 +1534,24 @@ void Device::flushPendingWorkToRecorder() {
         fRecorder->priv().add(std::move(drawTask));
     }
 
+    // TODO(b/297344089): This always regenerates mipmaps on the draw target when it's drawn to.
+    // This could be wasteful if we draw to a target multiple times before reading from it with
+    // downscaling.
+    if (addingDrawTask && fDC->target()->mipmapped() == Mipmapped::kYes) {
+        if (!GenerateMipmaps(fRecorder, fDC->refTarget(), fDC->colorInfo())) {
+            SKGPU_LOG_W("Device::flushPendingWorkToRecorder: Failed to generate mipmaps for draw "
+                        "target");
+        }
+    }
+
     // Reset accumulated state tracking since everything that it referred to has been moved into
     // an immutable DrawPass.
     fColorDepthBoundsManager->reset();
     fDisjointStencilSet->reset();
     fCurrentDepth = DrawOrder::kClearDepth;
+
+    // Any cleanup in the AtlasProvider
+    fRecorder->priv().atlasProvider()->postFlush();
 }
 
 bool Device::needsFlushBeforeDraw(int numNewRenderSteps, DstReadRequirement dstReadReq) const {
@@ -1365,7 +1567,8 @@ bool Device::needsFlushBeforeDraw(int numNewRenderSteps, DstReadRequirement dstR
 void Device::drawSpecial(SkSpecialImage* special,
                          const SkMatrix& localToDevice,
                          const SkSamplingOptions& sampling,
-                         const SkPaint& paint) {
+                         const SkPaint& paint,
+                         SkCanvas::SrcRectConstraint constraint) {
     SkASSERT(!paint.getMaskFilter() && !paint.getImageFilter());
 
     sk_sp<SkImage> img = special->asImage();
@@ -1380,7 +1583,7 @@ void Device::drawSpecial(SkSpecialImage* special,
             sampling,
             /*src=*/SkRect::Make(special->subset()),
             /*dst=*/SkRect::MakeIWH(special->width(), special->height()),
-            /*strictSrcSubset=*/true,
+            /*strictSrcSubset=*/constraint == SkCanvas::kStrict_SrcRectConstraint,
             &paintWithShader);
     if (dst.isEmpty()) {
         return;

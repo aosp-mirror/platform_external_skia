@@ -200,6 +200,7 @@ public:
     void drawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
                        const SkSamplingOptions&, const SkPaint&,
                        SkCanvas::SrcRectConstraint) override;
+    bool shouldDrawAsTiledImageRect() const override { return true; }
     bool drawAsTiledImageRect(SkCanvas*,
                               const SkImage*,
                               const SkRect* src,
@@ -214,7 +215,7 @@ public:
 
     void drawDevice(SkDevice*, const SkSamplingOptions&, const SkPaint&) override;
     void drawSpecial(SkSpecialImage*, const SkMatrix& localToDevice, const SkSamplingOptions&,
-                     const SkPaint&) override;
+                     const SkPaint&, SkCanvas::SrcRectConstraint) override;
 
     void drawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4], SkCanvas::QuadAAFlags aaFlags,
                         const SkColor4f& color, SkBlendMode mode) override;

@@ -105,7 +105,7 @@ void SkOverdrawCanvas::onDrawTextBlob(
 void SkOverdrawCanvas::onDrawGlyphRunList(
         const sktext::GlyphRunList& glyphRunList,
         const SkPaint& paint) {
-    SkSurfaceProps props{0, kUnknown_SkPixelGeometry};
+    SkSurfaceProps props;
     this->getProps(&props);
     TextDevice device{this, props};
 
@@ -221,7 +221,6 @@ void SkOverdrawCanvas::onDrawDrawable(SkDrawable* drawable, const SkMatrix* matr
 
 void SkOverdrawCanvas::onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) {
     SkASSERT(false);
-    return;
 }
 
 void SkOverdrawCanvas::onDrawAnnotation(const SkRect&, const char[], SkData*) {}

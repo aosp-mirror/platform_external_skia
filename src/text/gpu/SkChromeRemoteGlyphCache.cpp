@@ -47,7 +47,6 @@
 #include "src/text/gpu/SubRunContainer.h"
 #include "src/text/gpu/TextBlob.h"
 
-#include <atomic>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -457,7 +456,9 @@ public:
     }
 
     sk_sp<SkDevice> createDevice(const CreateInfo& cinfo, const SkPaint*) override {
-        const SkSurfaceProps surfaceProps(this->surfaceProps().flags(), cinfo.fPixelGeometry);
+        const SkSurfaceProps surfaceProps =
+            this->surfaceProps().cloneWithPixelGeometry(cinfo.fPixelGeometry);
+
         return sk_make_sp<GlyphTrackingDevice>(cinfo.fInfo.dimensions(),
                                                surfaceProps,
                                                fStrikeServerImpl,

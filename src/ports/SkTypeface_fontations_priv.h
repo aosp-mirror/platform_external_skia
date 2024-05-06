@@ -20,6 +20,7 @@
 #include <memory>
 
 class SkStreamAsset;
+class SkFontationsScalerContext;
 
 namespace sk_fontations {
 
@@ -61,6 +62,140 @@ private:
     size_t fAxisCount;
 };
 
+class ColorPainter : public fontations_ffi::ColorPainterWrapper {
+public:
+    ColorPainter() = delete;
+    ColorPainter(SkFontationsScalerContext& scaler_context,
+                 SkCanvas& canvas,
+                 SkSpan<SkColor> palette,
+                 SkColor foregroundColor,
+                 uint16_t upem);
+
+    // fontations_ffi::ColorPainter interface.
+    virtual void push_transform(const fontations_ffi::Transform& transform) override;
+    virtual void pop_transform() override;
+    virtual void push_clip_glyph(uint16_t glyph_id) override;
+    virtual void push_clip_rectangle(float x_min, float y_min, float x_max, float y_max) override;
+    virtual void pop_clip() override;
+
+    // Paint*Gradient equivalents:
+    virtual void fill_solid(uint16_t palette_index, float alpha) override;
+    virtual void fill_radial(const fontations_ffi::FillRadialParams& fill_radial_params,
+                             fontations_ffi::BridgeColorStops&,
+                             uint8_t extend_mode) override;
+    virtual void fill_linear(const fontations_ffi::FillLinearParams& fill_linear_params,
+                             fontations_ffi::BridgeColorStops&,
+                             uint8_t extend_mode) override;
+    virtual void fill_sweep(const fontations_ffi::FillSweepParams& fill_sweep_params,
+                            fontations_ffi::BridgeColorStops&,
+                            uint8_t extend_mode) override;
+
+    // Optimized calls that allow a SkCanvas::drawPath() call.
+    virtual void fill_glyph_solid(uint16_t glyph_id, uint16_t palette_index, float alpha) override;
+    virtual void fill_glyph_radial(uint16_t glyph_id,
+                                   const fontations_ffi::Transform& transform,
+                                   const fontations_ffi::FillRadialParams& fill_radial_params,
+                                   fontations_ffi::BridgeColorStops& stops,
+                                   uint8_t) override;
+    virtual void fill_glyph_linear(uint16_t glyph_id,
+                                   const fontations_ffi::Transform& transform,
+                                   const fontations_ffi::FillLinearParams& fill_linear_params,
+                                   fontations_ffi::BridgeColorStops& stops,
+                                   uint8_t) override;
+    virtual void fill_glyph_sweep(uint16_t glyph_id,
+                                  const fontations_ffi::Transform& transform,
+                                  const fontations_ffi::FillSweepParams& fill_sweep_params,
+                                  fontations_ffi::BridgeColorStops& stops,
+                                  uint8_t) override;
+
+    // compositeMode arg matches composite mode values from the OpenType COLR table spec.
+    virtual void push_layer(uint8_t compositeMode) override;
+    virtual void pop_layer() override;
+
+private:
+    void configure_solid_paint(uint16_t palette_index, float alpha, SkPaint& paint);
+    void configure_linear_paint(const fontations_ffi::FillLinearParams& fill_linear_params,
+                                fontations_ffi::BridgeColorStops& bridge_stops,
+                                uint8_t extend_mode,
+                                SkPaint& paint,
+                                SkMatrix* = nullptr);
+    void configure_radial_paint(const fontations_ffi::FillRadialParams& fill_radial_params,
+                                fontations_ffi::BridgeColorStops& bridge_stops,
+                                uint8_t extend_mode,
+                                SkPaint& paint,
+                                SkMatrix* = nullptr);
+    void configure_sweep_paint(const fontations_ffi::FillSweepParams& sweep_params,
+                               fontations_ffi::BridgeColorStops& bridge_stops,
+                               uint8_t extend_mode,
+                               SkPaint& paint,
+                               SkMatrix* = nullptr);
+    SkFontationsScalerContext& fScalerContext;
+    SkCanvas& fCanvas;
+    SkSpan<SkColor> fPalette;
+    SkColor fForegroundColor;
+    uint16_t fUpem;
+};
+
+/** Tracks transforms and clips to compute a bounding box without drawing pixels. */
+class BoundsPainter : public fontations_ffi::ColorPainterWrapper {
+public:
+    BoundsPainter() = delete;
+    BoundsPainter(SkFontationsScalerContext& scaler_context,
+                  SkMatrix initialTransfom,
+                  uint16_t upem);
+
+    SkRect getBoundingBox();
+
+    // fontations_ffi::ColorPainter interface.
+    virtual void push_transform(const fontations_ffi::Transform& transform) override;
+    virtual void pop_transform() override;
+    virtual void push_clip_glyph(uint16_t glyph_id) override;
+    virtual void push_clip_rectangle(float x_min, float y_min, float x_max, float y_max) override;
+    virtual void pop_clip() override {}
+
+    // Paint*Gradient equivalents:
+    virtual void fill_solid(uint16_t palette_index, float alpha) override {}
+    virtual void fill_radial(const fontations_ffi::FillRadialParams& fill_radial_params,
+                             fontations_ffi::BridgeColorStops& stops,
+                             uint8_t) override {}
+    virtual void fill_linear(const fontations_ffi::FillLinearParams& fill_linear_params,
+                             fontations_ffi::BridgeColorStops& stops,
+                             uint8_t) override {}
+    virtual void fill_sweep(const fontations_ffi::FillSweepParams& fill_sweep_params,
+                            fontations_ffi::BridgeColorStops& stops,
+                            uint8_t extend_mode) override {}
+
+    virtual void push_layer(uint8_t) override {}
+    virtual void pop_layer() override {}
+
+    // Stubs for optimized calls. We're only interested in the glyph bounds, so we forward this to
+    // push_clip_glyph()
+    virtual void fill_glyph_solid(uint16_t glyph_id, uint16_t, float) override;
+    virtual void fill_glyph_radial(uint16_t glyph_id,
+                                   const fontations_ffi::Transform&,
+                                   const fontations_ffi::FillRadialParams&,
+                                   fontations_ffi::BridgeColorStops&,
+                                   uint8_t) override;
+    virtual void fill_glyph_linear(uint16_t glyph_id,
+                                   const fontations_ffi::Transform&,
+                                   const fontations_ffi::FillLinearParams&,
+                                   fontations_ffi::BridgeColorStops&,
+                                   uint8_t) override;
+    virtual void fill_glyph_sweep(uint16_t glyph_id,
+                                  const fontations_ffi::Transform&,
+                                  const fontations_ffi::FillSweepParams&,
+                                  fontations_ffi::BridgeColorStops&,
+                                  uint8_t) override;
+
+private:
+    SkFontationsScalerContext& fScalerContext;
+    SkMatrix fCurrentTransform;
+    SkMatrix fStackTopTransformInverse;
+
+    uint16_t fUpem;
+    SkRect fBounds;
+};
+
 }  // namespace sk_fontations
 
 /** SkTypeface implementation based on Google Fonts Fontations Rust libraries. */
@@ -72,6 +207,12 @@ public:
     const fontations_ffi::BridgeFontRef& getBridgeFontRef() { return *fBridgeFontRef; }
     const fontations_ffi::BridgeNormalizedCoords& getBridgeNormalizedCoords() {
         return *fBridgeNormalizedCoords;
+    }
+    const fontations_ffi::BridgeOutlineCollection& getOutlines() {
+        return *fOutlines;
+    }
+    SkSpan<SkColor> getPalette() {
+        return SkSpan<SkColor>(reinterpret_cast<SkColor*>(fPalette.data()), fPalette.size());
     }
 
     static constexpr SkTypeface::FactoryId FactoryId = SkSetFourByteTag('f', 'n', 't', 'a');
@@ -113,6 +254,8 @@ private:
     // lifetime of fBridgeFontRef to safely request parsed data.
     rust::Box<fontations_ffi::BridgeFontRef> fBridgeFontRef;
     rust::Box<fontations_ffi::BridgeNormalizedCoords> fBridgeNormalizedCoords;
+    rust::Box<fontations_ffi::BridgeOutlineCollection> fOutlines;
+    rust::Vec<uint32_t> fPalette;
 
     mutable SkOnce fGlyphMasksMayNeedCurrentColorOnce;
     mutable bool fGlyphMasksMayNeedCurrentColor;

@@ -9,8 +9,10 @@ skia_filegroup(
     srcs = [
         "BentleyOttmann1Test.cpp",
         "BruteForceCrossingsTest.cpp",
+        "ContourTest.cpp",
         "EventQueueTest.cpp",
         "Int96Test.cpp",
+        "MyersTest.cpp",
         "PointTest.cpp",
         "SegmentTest.cpp",
         "SweepLineTest.cpp",

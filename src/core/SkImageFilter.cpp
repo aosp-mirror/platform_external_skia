@@ -66,14 +66,10 @@ SkIRect SkImageFilter::filterBounds(const SkIRect& src, const SkMatrix& ctm,
     skif::Mapping mapping{ctm};
     if (kReverse_MapDirection == direction) {
         skif::LayerSpace<SkIRect> targetOutput(src);
-#if defined(SK_USE_LEGACY_CONTENT_BOUNDS_PROPAGATION)
-        skif::LayerSpace<SkIRect> content(inputRect ? *inputRect : src);
-#else
         std::optional<skif::LayerSpace<SkIRect>> content;
         if (inputRect) {
             content = skif::LayerSpace<SkIRect>(*inputRect);
         }
-#endif
         return SkIRect(as_IFB(this)->onGetInputLayerBounds(mapping, targetOutput, content));
     } else {
         SkASSERT(!inputRect);
@@ -233,12 +229,9 @@ void SkImageFilter_Base::flatten(SkWriteBuffer& buffer) const {
 }
 
 skif::FilterResult SkImageFilter_Base::filterImage(const skif::Context& context) const {
+    context.markVisitedImageFilter();
+
     skif::FilterResult result;
-#if defined(SK_USE_LEGACY_CONTENT_PROPAGATION)
-    if (fUsesSrcInput && !context.source()) {
-        return result;
-    }
-#endif
     if (context.desiredOutput().isEmpty() || !context.mapping().layerMatrix().isFinite()) {
         return result;
     }
@@ -256,6 +249,7 @@ skif::FilterResult SkImageFilter_Base::filterImage(const skif::Context& context)
                               SkIRect(context.desiredOutput()),
                               srcGenID, srcSubset);
     if (context.backend()->cache() && context.backend()->cache()->get(key, &result)) {
+        context.markCacheHit();
         return result;
     }
 
@@ -283,14 +277,18 @@ sk_sp<SkImage> SkImageFilter_Base::makeImageWithFilter(sk_sp<skif::Backend> back
         return nullptr;
     }
 
+    skif::Stats stats;
     const skif::Context context{std::move(backend),
                                 skif::Mapping(SkMatrix::I()),
                                 skif::LayerSpace<SkIRect>(clipBounds),
                                 skif::FilterResult(std::move(srcSpecialImage),
                                                    skif::LayerSpace<SkIPoint>(subset.topLeft())),
-                                src->imageInfo().colorSpace()};
+                                src->imageInfo().colorSpace(),
+                                &stats};
 
     sk_sp<SkSpecialImage> result = this->filterImage(context).imageAndOffset(context, offset);
+    stats.reportStats();
+
     if (!result) {
         return nullptr;
     }
@@ -316,24 +314,7 @@ skif::LayerSpace<SkIRect> SkImageFilter_Base::getInputBounds(
     }
 
     // Process the layer-space desired output with the filter DAG to determine required input
-#if defined(SK_USE_LEGACY_CONTENT_BOUNDS_PROPAGATION)
-    skif::LayerSpace<SkIRect> requiredInput = this->onGetInputLayerBounds(
-            mapping, desiredBounds, contentBounds);
-    // If we know what's actually going to be drawn into the layer, and we don't change transparent
-    // black, then we can further restrict the layer to what the known content is
-    // TODO (michaelludwig) - Once all filters are robust to tiling and transparency-affecting
-    // FilterResults, there's no reason this can't always be applied, or be an expectation from the
-    // leaf filters.
-    if (knownContentBounds && !this->affectsTransparentBlack()) {
-        if (!requiredInput.intersect(*contentBounds)) {
-            // Nothing would be output by the filter, so return empty rect
-            return skif::LayerSpace<SkIRect>(SkIRect::MakeEmpty());
-        }
-    }
-    return requiredInput;
-#else
     return this->onGetInputLayerBounds(mapping, desiredBounds, contentBounds);
-#endif
 }
 
 std::optional<skif::DeviceSpace<SkIRect>> SkImageFilter_Base::getOutputBounds(
@@ -375,9 +356,6 @@ skif::LayerSpace<SkIRect> SkImageFilter_Base::getChildInputLayerBounds(
     if (childFilter) {
         return as_IFB(childFilter)->onGetInputLayerBounds(mapping, desiredOutput, contentBounds);
     } else {
-#if defined(SK_USE_LEGACY_CONTENT_BOUNDS_PROPAGATION)
-        return desiredOutput;
-#else
         // NOTE: We don't calculate the intersection between content and root desired output because
         // the desired output can expand or contract as it propagates through the filter graph to
         // the leaves that would actually sample from the source content.
@@ -388,7 +366,6 @@ skif::LayerSpace<SkIRect> SkImageFilter_Base::getChildInputLayerBounds(
             // This will be equal to 'desiredOutput' if the contentBounds are unknown.
             return visibleContent;
         }
-#endif
     }
 }
 

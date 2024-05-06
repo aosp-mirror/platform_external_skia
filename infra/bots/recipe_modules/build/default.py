@@ -218,7 +218,7 @@ def compile_fn(api, checkout_root, out_dir):
   if configuration != 'Debug':
     args['is_debug'] = 'false'
   if 'Dawn' in extra_tokens:
-    util.set_dawn_args_and_env(args, env, api, skia_dir)
+    util.set_dawn_args_and_env(args, env, api, extra_tokens, skia_dir)
   if 'ANGLE' in extra_tokens:
     args['skia_use_angle'] = 'true'
   if 'SwiftShader' in extra_tokens:
@@ -270,8 +270,7 @@ def compile_fn(api, checkout_root, out_dir):
   elif configuration != 'OptimizeForSize':
     args.update({
       'skia_use_client_icu': 'true',
-      # Enable after fixing MSVC host and xSAN host toolchains.
-      #'skia_use_libgrapheme': 'true',
+      'skia_use_libgrapheme': 'true',
     })
 
   if 'Fontations' in extra_tokens:
@@ -279,7 +278,7 @@ def compile_fn(api, checkout_root, out_dir):
 
   if 'Shared' in extra_tokens:
     args['is_component_build'] = 'true'
-  if 'Vulkan' in extra_tokens and not 'Android' in extra_tokens:
+  if 'Vulkan' in extra_tokens and not 'Android' in extra_tokens and not 'Dawn' in extra_tokens:
     args['skia_use_vulkan'] = 'true'
     args['skia_enable_vulkan_debug_layers'] = 'true'
     # When running TSAN with Vulkan on NVidia, we experienced some timeouts. We found
@@ -288,10 +287,10 @@ def compile_fn(api, checkout_root, out_dir):
       args['skia_use_gl'] = 'true'
     else:
       args['skia_use_gl'] = 'false'
-  if 'Direct3D' in extra_tokens:
+  if 'Direct3D' in extra_tokens and not 'Dawn' in extra_tokens:
     args['skia_use_direct3d'] = 'true'
     args['skia_use_gl'] = 'false'
-  if 'Metal' in extra_tokens:
+  if 'Metal' in extra_tokens and not 'Dawn' in extra_tokens:
     args['skia_use_metal'] = 'true'
     args['skia_use_gl'] = 'false'
   if 'iOS' in extra_tokens:
@@ -344,9 +343,8 @@ def compile_fn(api, checkout_root, out_dir):
   gn = skia_dir.join('bin', 'gn')
 
   with api.context(cwd=skia_dir):
-    api.run(api.python,
-            'fetch-gn',
-            script=skia_dir.join('bin', 'fetch-gn'),
+    api.run(api.step, 'fetch-gn',
+            cmd=['python3', skia_dir.join('bin', 'fetch-gn')],
             infra_step=True)
 
     with api.env(env):
@@ -354,6 +352,9 @@ def compile_fn(api, checkout_root, out_dir):
         api.run(api.step, 'ccache stats-start', cmd=[ccache, '-s'])
       api.run(api.step, 'gn gen',
               cmd=[gn, 'gen', out_dir, '--args=' + gn_args])
+      if 'Fontations' in extra_tokens:
+        api.run(api.step, 'gn clean',
+              cmd=[gn, 'clean', out_dir])
       api.run(api.step, 'ninja', cmd=['ninja', '-C', out_dir])
       if ccache:
         api.run(api.step, 'ccache stats-end', cmd=[ccache, '-s'])

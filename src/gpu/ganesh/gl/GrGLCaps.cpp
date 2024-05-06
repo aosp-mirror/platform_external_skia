@@ -96,6 +96,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fUseSamplerObjects = false;
     fTextureSwizzleSupport = false;
     fTiledRenderingSupport = false;
+    fFenceSyncSupport = false;
     fFBFetchRequiresEnablePerSample = false;
     fSRGBWriteControl = false;
     fSkipErrorChecks = false;
@@ -754,10 +755,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     // We do not support GrBackendSemaphore for GL backends because the clients cannot really make
-    // GrGLSync objects ahead of time without talking to the GPU.
+    // GrGLsync objects ahead of time without talking to the GPU.
     fBackendSemaphoreSupport = false;
     // We prefer GL sync objects but also support NV_fence_sync. The former can be
-    // used to implements GrFence and GrSemaphore. The latter only implements GrFence.
+    // used to implement GrGLsync and GrSemaphore. The latter only implements GrGLsync.
     // TODO: support CHROMIUM_sync_point and maybe KHR_fence_sync
     if (GR_IS_GR_WEBGL(standard)) {
         // Only in WebGL 2.0
@@ -777,6 +778,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fFenceSyncSupport = true;
         fFenceType = FenceType::kNVFence;
     }
+    fFinishedProcAsyncCallbackSupport = fFenceSyncSupport;
 
     // Safely moving textures between contexts requires semaphores.
     fCrossContextTextureSupport = fSemaphoreSupport;
@@ -990,8 +992,13 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
     // Flat interpolation appears to be slow on Qualcomm GPUs (tested Adreno 405 and 530).
     // Avoid on ANGLE too, it inserts a geometry shader into the pipeline to implement flat interp.
     // Is this only true on ANGLE's D3D backends or also on the GL backend?
-    // Flat interpolation is slow with ANGLE's Metal backend.
-    shaderCaps->fPreferFlatInterpolation = shaderCaps->fFlatInterpolationSupport &&
+    // Flat interpolation is slow with ANGLE's Metal backend and uses memory to rewrite index
+    // buffers to support GL's provoking vertex semantics.
+    // Never prefer flat shading on WebGL. GPU detection isn't as robust (e.g.
+    // WEBGL_debug_renderer_info may not be enabled and strings may be masked), the perf benefits
+    // are minimal, and potential cost is high (e.g. on ANGLE Metal backend).
+    shaderCaps->fPreferFlatInterpolation = !GR_IS_GR_WEBGL(standard) &&
+                                           shaderCaps->fFlatInterpolationSupport &&
                                            ctxInfo.vendor() != GrGLVendor::kQualcomm &&
                                            !angle_backend_is_d3d(ctxInfo.angleBackend()) &&
                                            !angle_backend_is_metal(ctxInfo.angleBackend());
@@ -1288,6 +1295,7 @@ void GrGLCaps::onDumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Using sampler objects", fUseSamplerObjects);
     writer->appendBool("Texture swizzle support", fTextureSwizzleSupport);
     writer->appendBool("Tiled rendering support", fTiledRenderingSupport);
+    writer->appendBool("Fence sync support", fFenceSyncSupport);
     writer->appendBool("FB fetch requires enable per sample", fFBFetchRequiresEnablePerSample);
     writer->appendBool("sRGB Write Control", fSRGBWriteControl);
 

@@ -413,6 +413,10 @@ public:
     LayerSpace<SkIPoint> topLeft() const { return LayerSpace<SkIPoint>(fData.topLeft()); }
     LayerSpace<SkISize> size() const { return LayerSpace<SkISize>(fData.size()); }
 
+    static bool Intersects(const LayerSpace<SkIRect>& a, const LayerSpace<SkIRect>& b) {
+        return SkIRect::Intersects(a.fData, b.fData);
+    }
+
     bool intersect(const LayerSpace<SkIRect>& r) { return fData.intersect(r.fData); }
     void join(const LayerSpace<SkIRect>& r) { fData.join(r.fData); }
     void offset(const LayerSpace<IVector>& v) { fData.offset(SkIVector(v)); }
@@ -533,6 +537,16 @@ private:
     SkMatrix fData;
 };
 
+/**
+ * Most ImageFilters can natively handle scaling and translate components in the CTM. Only some of
+ * them can handle affine (or more complex) matrices. Some may only handle translation.
+ */
+enum class MatrixCapability {
+    kTranslate,
+    kScaleTranslate,
+    kComplex,
+};
+
 // Mapping is the primary definition of the shared layer space used when evaluating an image filter
 // DAG. It encapsulates any needed decomposition of the total CTM into the parameter-to-layer matrix
 // (that filters use to map their parameters to the layer space), and the layer-to-device matrix
@@ -561,6 +575,9 @@ public:
     // invalid device matrix. Assumes 'ctm' is invertible.
     [[nodiscard]] bool decomposeCTM(const SkMatrix& ctm,
                                     const SkImageFilter* filter,
+                                    const skif::ParameterSpace<SkPoint>& representativePt);
+    [[nodiscard]] bool decomposeCTM(const SkMatrix& ctm,
+                                    MatrixCapability,
                                     const skif::ParameterSpace<SkPoint>& representativePt);
 
     // Update the mapping's parameter-to-layer matrix to be pre-concatenated with the specified
@@ -607,6 +624,7 @@ public:
 
 private:
     friend class LayerSpace<SkMatrix>; // for map()
+    friend class FilterResult;         // ""
 
     // The image filter process decomposes the total CTM into layerToDev * paramToLayer and uses the
     // param-to-layer matrix to define the layer-space coordinate system. Depending on how it's
@@ -680,18 +698,8 @@ public:
     explicit FilterResult(sk_sp<SkSpecialImage> image)
             : FilterResult(std::move(image), LayerSpace<SkIPoint>({0, 0})) {}
 
-    FilterResult(std::pair<sk_sp<SkSpecialImage>, LayerSpace<SkIPoint>> imageAndOrigin)
-            : FilterResult(std::move(std::get<0>(imageAndOrigin)), std::get<1>(imageAndOrigin)) {}
-
     FilterResult(sk_sp<SkSpecialImage> image, const LayerSpace<SkIPoint>& origin)
-            : fImage(std::move(image))
-            , fSamplingOptions(kDefaultSampling)
-            , fTileMode(SkTileMode::kDecal)
-            , fTransform(SkMatrix::Translate(origin.x(), origin.y()))
-            , fColorFilter(nullptr)
-            , fLayerBounds(
-                    fTransform.mapRect(LayerSpace<SkIRect>(fImage ? fImage->dimensions()
-                                                                  : SkISize{0, 0}))) {}
+            : FilterResult(std::move(image), origin, PixelBoundary::kUnknown) {}
 
     // Renders the 'pic', clipped by 'cullRect', into an optimally sized surface (depending on
     // picture bounds and 'ctx's desired output). The picture is transformed by the context's
@@ -779,6 +787,12 @@ public:
      // If 'blender' is null, it's equivalent to kSrcOver blending.
     void draw(const Context& ctx, SkDevice* target, const SkBlender* blender) const;
 
+    // SkCanvas can prepare layer source images with transparent padding, similarly to AutoSurface.
+    // This adjusts the FilterResult metadata to be aware of that padding. This should only be
+    // called when it's externally known that the FilterResult has a 1px buffer of transparent
+    // black pixels and has had no further modifications.
+    FilterResult insetForSaveLayer() const;
+
     class Builder;
 
     enum class ShaderFlags : int {
@@ -799,42 +813,93 @@ public:
 private:
     friend class ::FilterResultTestAccess; // For testing draw() and asShader()
 
+    class AutoSurface;
+
+    enum class PixelBoundary : int {
+        kUnknown,     // Pixels outside the image subset are of unknown value, possibly unitialized
+        kTransparent, // Pixels bordering the image subset are transparent black
+        kInitialized, // Pixels bordering the image are known to be initialized
+    };
+
+    FilterResult(sk_sp<SkSpecialImage> image,
+                 const LayerSpace<SkIPoint>& origin,
+                 PixelBoundary boundary)
+            : fImage(std::move(image))
+            , fBoundary(boundary)
+            , fSamplingOptions(kDefaultSampling)
+            , fTileMode(SkTileMode::kDecal)
+            , fTransform(SkMatrix::Translate(origin.x(), origin.y()))
+            , fColorFilter(nullptr)
+            , fLayerBounds(
+                    fTransform.mapRect(LayerSpace<SkIRect>(fImage ? fImage->dimensions()
+                                                                  : SkISize{0, 0}))) {}
+
     // Renders this FilterResult into a new, but visually equivalent, image that fills 'dstBounds',
     // has default sampling, no color filter, and a transform that translates by only 'dstBounds's
-    // top-left corner. 'dstBounds' is intersected with 'fLayerBounds' unless 'preserveTransparency'
+    // top-left corner. 'dstBounds' is intersected with 'fLayerBounds' unless 'preserveDstBounds'
     // is true.
-    std::pair<sk_sp<SkSpecialImage>, LayerSpace<SkIPoint>>
-    resolve(const Context& ctx, LayerSpace<SkIRect> dstBounds,
-            bool preserveTransparency=false) const;
+    FilterResult resolve(const Context& ctx, LayerSpace<SkIRect> dstBounds,
+                         bool preserveDstBounds=false) const;
+    // Returns a decal-tiled subset view of this FilterResult, requiring that this has an integer
+    // translation equivalent to 'knownOrigin'. If 'clampSrcIfDisjoint' is true and the image bounds
+    // do not overlap with dstBounds, the closest edge/corner pixels of the image will be extracted,
+    // assuming it will be tiled with kClamp.
+    FilterResult subset(const LayerSpace<SkIPoint>& knownOrigin,
+                        const LayerSpace<SkIRect>& subsetBounds,
+                        bool clampSrcIfDisjoint=false) const;
 
     enum class BoundsAnalysis : int {
         // The image can be drawn directly, without needing to apply tiling, or handling how any
         // color filter might affect transparent black.
         kSimple = 0,
-        // The image's tiling or color filter modify pixels beyond the image and those regions are
-        // visible when rendering to the 'dstBounds'.
-        kEffectsVisible = 1 << 0,
+        // The image does not directly cover the intersection of 'dstBounds' and the layer bounds.
+        // (ignoring tiling or color filters).
+        kDstBoundsNotCovered = 1 << 0,
+        // Added when kDstBoundsNotCovered is true, *and* there are non-decal tiling or transparency
+        // affecting color filters that would fill to the layer bounds, not covered by the image
+        // itself.
+        kHasLayerFillingEffect = 1 << 1,
         // The crop boundary induced by `fLayerBounds` is visible when rendering to the 'dstBounds',
-        // although this could be either because it intersects the image's content or because the
-        // effects modify transparent black and fill out to the layer bounds.
-        kLayerCropVisible = 1 << 1
+        // although this could be either because it intersects the image's content or because
+        // kHasLayerFillingEffect is true.
+        kRequiresLayerCrop = 1 << 2,
+        // The image's sampling would access pixel data outside of its valid subset so shader-based
+        // tiling is necessary. This can be true even if kHasLayerFillingEffect is false due to the
+        // filter sampling radius; it can also be false when kHasLayerFillingEffect is true if the
+        // image can use HW tiling.
+        kRequiresShaderTiling = 1 << 3,
+        // The image's decal tiling/sampling would operate at the wrong resolution (e.g. drawImage
+        // vs. image-shader look different), so it has to be applied with a wrapping shader effect
+        kRequiresDecalInLayerSpace = 1 << 4,
     };
     SK_DECL_BITMASK_OPS_FRIENDS(BoundsAnalysis)
+
+    enum class BoundsScope : int {
+        kDeferred,        // The bounds analysis won't be used for any rendering yet
+        kCanDrawDirectly, // The rendering may draw the image directly if analysis allows it
+        kShaderOnly       // The rendering will always use a filling shader, e.g. drawPaint()
+    };
 
     // Determine what effects are visible based on the target 'dstBounds' and extra transform that
     // will be applied when this FilterResult is drawn. These are not LayerSpace because the
     // 'xtraTransform' may be either a within-layer transform, or a layer-to-device space transform.
     // The 'dstBounds' should be in the same coordinate space that 'xtraTransform' maps to. When
     // that is the identity matrix, 'dstBounds' is in layer space.
-    //
-    // Set 'blendAffectsTransparentBlack' to true when drawing a FilterResult with the non-default
-    // src-over blend and the blend modifies transparent black.
     SkEnumBitMask<BoundsAnalysis> analyzeBounds(const SkMatrix& xtraTransform,
                                                 const SkIRect& dstBounds,
-                                                bool blendAffectsTransparentBlack) const;
-    SkEnumBitMask<BoundsAnalysis> analyzeBounds(const LayerSpace<SkIRect>& dstBounds) const {
-        return this->analyzeBounds(SkMatrix::I(), SkIRect(dstBounds),
-                                   /*blendAffectsTransparentBlack=*/false);
+                                                BoundsScope scope = BoundsScope::kDeferred) const;
+    SkEnumBitMask<BoundsAnalysis> analyzeBounds(const LayerSpace<SkIRect>& dstBounds,
+                                                BoundsScope scope = BoundsScope::kDeferred) const {
+        return this->analyzeBounds(SkMatrix::I(), SkIRect(dstBounds), scope);
+    }
+
+    // If true, the tile mode can be changed to kClamp to sample the transparent black pixels in
+    // the boundary. This will be visually equivalent to the decal tiling or anti-aliasing of a
+    // drawn image.
+    bool canClampToTransparentBoundary(SkEnumBitMask<BoundsAnalysis> analysis) const {
+        return fTileMode == SkTileMode::kDecal &&
+               fBoundary == PixelBoundary::kTransparent &&
+               !(analysis & BoundsAnalysis::kRequiresDecalInLayerSpace);
     }
 
     // Return an equivalent FilterResult such that its backing image dimensions have been reduced
@@ -869,10 +934,21 @@ private:
     // Returns the FilterResult as a shader, ideally without resolving to an axis-aligned image.
     // 'xtraSampling' is the sampling that any parent shader applies to the FilterResult.
     // 'sampleBounds' is the bounding box of coords the shader will be evaluated at by any parent.
+    //
+    // This variant may resolve to an intermediate image if needed. The returned shader encapsulates
+    // all deferred effects of the FilterResult.
     sk_sp<SkShader> asShader(const Context& ctx,
                              const SkSamplingOptions& xtraSampling,
                              SkEnumBitMask<ShaderFlags> flags,
                              const LayerSpace<SkIRect>& sampleBounds) const;
+
+    // This variant should only be called after analysis and final sampling has been determined, and
+    // there's no need to resolve the FilterResult to an intermediate image. This version will
+    // never introduce a new image pass but is unable to handle the layer crop. If (analysis &
+    // kRequiresLayerCrop) is true, it must be accounted for outside of this shader.
+    sk_sp<SkShader> getAnalyzedShaderView(const Context& ctx,
+                                          const SkSamplingOptions& finalSampling,
+                                          SkEnumBitMask<BoundsAnalysis> analysis) const;
 
     // Safely updates fTileMode, doing nothing if the FilterResult is empty. Updates the layer
     // bounds to the context's desired output if the tilemode is not decal.
@@ -882,6 +958,8 @@ private:
     // respecting 'fTileMode' (on the SkSpecialImage's subset), transformed by 'fTransform',
     // filtered by 'fColorFilter', and then clipped to 'fLayerBounds'.
     sk_sp<SkSpecialImage> fImage;
+    PixelBoundary         fBoundary;
+
     SkSamplingOptions     fSamplingOptions;
     SkTileMode            fTileMode;
     // Typically this will be an integer translation that encodes the origin of the top left corner,
@@ -1032,6 +1110,18 @@ private:
 
 sk_sp<Backend> MakeRasterBackend(const SkSurfaceProps& surfaceProps, SkColorType colorType);
 
+// Stats for a single image filter evaluation
+struct Stats {
+    int fNumVisitedImageFilters = 0; // size of the filter dag
+    int fNumCacheHits = 0; // amount of reuse within the dag
+    int fNumOffscreenSurfaces = 0; // difference to the # of visited filters shows deferred steps
+    int fNumShaderClampedDraws = 0; // shader-emulated clamp is fairly cheap but HW tiling is best
+    int fNumShaderBasedTilingDraws = 0; // shader-emulated decal, mirror, repeat are expensive
+
+    void dumpStats() const;   // log to std out
+    void reportStats() const; // trace event counters
+};
+
 // The context contains all necessary information to describe how the image filter should be
 // computed (i.e. the current layer matrix and clip), and the color information of the output of a
 // filter DAG. For now, this is just the color space (of the original requesting device). This is
@@ -1043,12 +1133,14 @@ public:
             const Mapping& mapping,
             const LayerSpace<SkIRect>& desiredOutput,
             const FilterResult& source,
-            const SkColorSpace* colorSpace)
+            const SkColorSpace* colorSpace,
+            Stats* stats)
         : fBackend(std::move(backend))
         , fMapping(mapping)
         , fDesiredOutput(desiredOutput)
         , fSource(source)
-        , fColorSpace(sk_ref_sp(colorSpace)) {}
+        , fColorSpace(sk_ref_sp(colorSpace))
+        , fStats(stats) {}
 
     const Backend* backend() const { return fBackend.get(); }
 
@@ -1107,7 +1199,36 @@ public:
         return c;
     }
 
+
+    // Stats tracking
+    void markVisitedImageFilter() const {
+        if (fStats) {
+            fStats->fNumVisitedImageFilters++;
+        }
+    }
+    void markCacheHit() const {
+        if (fStats) {
+            fStats->fNumCacheHits++;
+        }
+    }
+    void markNewSurface() const {
+        if (fStats) {
+            fStats->fNumOffscreenSurfaces++;
+        }
+    }
+    void markShaderBasedTilingRequired(SkTileMode tileMode) const {
+        if (fStats) {
+            if (tileMode == SkTileMode::kClamp) {
+                fStats->fNumShaderClampedDraws++;
+            } else {
+                fStats->fNumShaderBasedTilingDraws++;
+            }
+        }
+    }
+
 private:
+    friend class ::FilterResultTestAccess; // For controlling Stats
+
     sk_sp<Backend> fBackend;
 
     // Properties controlling the size and coordinate space of image filtering
@@ -1117,6 +1238,8 @@ private:
     FilterResult        fSource;
     // The color space the filters are evaluated in
     sk_sp<SkColorSpace> fColorSpace;
+
+    Stats* fStats;
 };
 
 } // end namespace skif

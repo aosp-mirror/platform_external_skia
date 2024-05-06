@@ -15,7 +15,7 @@
 #include "src/gpu/graphite/dawn/DawnErrorChecker.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
-#include "src/sksl/SkSLCompiler.h"
+#include "src/gpu/graphite/dawn/DawnUtilsPriv.h"
 #include "src/sksl/SkSLProgramSettings.h"
 
 namespace skgpu::graphite {
@@ -52,15 +52,14 @@ static ShaderInfo compile_shader_module(const DawnSharedContext* sharedContext,
         SkSL::Program::Interface interface;
         SkSL::ProgramSettings settings;
 
-        SkSL::Compiler compiler(caps->shaderCaps());
         std::string sksl = BuildComputeSkSL(caps, step);
-        if (SkSLToWGSL(&compiler,
-                       sksl,
-                       SkSL::ProgramKind::kCompute,
-                       settings,
-                       &wgsl,
-                       &interface,
-                       errorHandler)) {
+        if (skgpu::SkSLToWGSL(caps->shaderCaps(),
+                              sksl,
+                              SkSL::ProgramKind::kCompute,
+                              settings,
+                              &wgsl,
+                              &interface,
+                              errorHandler)) {
             if (!DawnCompileWGSLShaderModule(sharedContext, wgsl, &info.fModule, errorHandler)) {
                 return {};
             }
@@ -115,7 +114,11 @@ sk_sp<DawnComputePipeline> DawnComputePipeline::Make(const DawnSharedContext* sh
                 entry.buffer.type = wgpu::BufferBindingType::Uniform;
                 break;
             case ComputeStep::ResourceType::kStorageBuffer:
+            case ComputeStep::ResourceType::kIndirectBuffer:
                 entry.buffer.type = wgpu::BufferBindingType::Storage;
+                break;
+            case ComputeStep::ResourceType::kReadOnlyStorageBuffer:
+                entry.buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
                 break;
             case ComputeStep::ResourceType::kReadOnlyTexture:
                 entry.texture.sampleType = wgpu::TextureSampleType::Float;

@@ -140,7 +140,7 @@ std::string get_uniforms(Layout layout,
         }
 
         SkSL::String::appendf(&result,
-                              "    layout(offset=%zu) %s %s",
+                              "    layout(offset=%d) %s %s",
                               offsetter.advanceOffset(u.type(), u.count()),
                               SkSLTypeString(u.type()),
                               uniformName.c_str());
@@ -597,7 +597,12 @@ std::string BuildComputeSkSL(const Caps* caps, const ComputeStep* step) {
                 sksl += r.fSkSL;
                 break;
             case Type::kStorageBuffer:
+            case Type::kIndirectBuffer:
                 SkSL::String::appendf(&sksl, "layout(binding=%d) buffer ", index++);
+                sksl += r.fSkSL;
+                break;
+            case Type::kReadOnlyStorageBuffer:
+                SkSL::String::appendf(&sksl, "layout(binding=%d) readonly buffer ", index++);
                 sksl += r.fSkSL;
                 break;
             case Type::kWriteOnlyStorageTexture:

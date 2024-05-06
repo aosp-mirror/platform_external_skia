@@ -39,6 +39,7 @@ struct ContextOptions;
 class ComputePipelineDesc;
 class GraphicsPipelineDesc;
 class GraphiteResourceKey;
+class RendererProvider;
 struct RenderPassDesc;
 class TextureInfo;
 class TextureProxy;
@@ -103,6 +104,11 @@ public:
                                               const RenderPassDesc&) const = 0;
     virtual UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const = 0;
 
+    virtual bool extractGraphicsDescs(const UniqueKey&,
+                                      GraphicsPipelineDesc*,
+                                      RenderPassDesc*,
+                                      const RendererProvider*) const { return false; }
+
     bool areColorTypeAndTextureInfoCompatible(SkColorType, const TextureInfo&) const;
     virtual uint32_t channelMask(const TextureInfo&) const = 0;
 
@@ -157,10 +163,16 @@ public:
     /**
      * Given a dst pixel config and a src color type what color type must the caller coax the
      * the data into in order to use writePixels.
+     *
+     * We currently don't have an SkColorType for a 3 channel RGB format. Additionally the current
+     * implementation of raster pipeline requires power of 2 channels, so it is not easy to add such
+     * an SkColorType. Thus we need to check for data that is 3 channels using the isRGBFormat
+     * return value and handle it manually
      */
-    virtual SkColorType supportedWritePixelsColorType(SkColorType dstColorType,
-                                                      const TextureInfo& dstTextureInfo,
-                                                      SkColorType srcColorType) const = 0;
+    virtual std::pair<SkColorType, bool /*isRGB888Format*/> supportedWritePixelsColorType(
+            SkColorType dstColorType,
+            const TextureInfo& dstTextureInfo,
+            SkColorType srcColorType) const = 0;
 
     /**
      * Given a src surface's color type and its texture info as well as a color type the caller
@@ -169,10 +181,16 @@ public:
      * which case the caller must convert the read pixel data (see GrConvertPixels). When converting
      * to dstColorType the swizzle in the returned struct should be applied. The caller must check
      * the returned color type for kUnknown.
+     *
+     * We currently don't have an SkColorType for a 3 channel RGB format. Additionally the current
+     * implementation of raster pipeline requires power of 2 channels, so it is not easy to add such
+     * an SkColorType. Thus we need to check for data that is 3 channels using the isRGBFormat
+     * return value and handle it manually
      */
-    virtual SkColorType supportedReadPixelsColorType(SkColorType srcColorType,
-                                                     const TextureInfo& srcTextureInfo,
-                                                     SkColorType dstColorType) const = 0;
+    virtual std::pair<SkColorType, bool /*isRGBFormat*/> supportedReadPixelsColorType(
+            SkColorType srcColorType,
+            const TextureInfo& srcTextureInfo,
+            SkColorType dstColorType) const = 0;
 
     /**
      * Checks whether the passed color type is renderable. If so, the same color type is passed
@@ -200,6 +218,10 @@ public:
 
     // Returns whether a draw buffer can be mapped.
     bool drawBufferCanBeMapped() const { return fDrawBufferCanBeMapped; }
+
+#if defined(GRAPHITE_TEST_UTILS)
+    bool drawBufferCanBeMappedForReadback() const { return fDrawBufferCanBeMappedForReadback; }
+#endif
 
     // Returns whether using Buffer::asyncMap() must be used to map buffers. map() may only be
     // called after asyncMap() is called and will fail if the asynchronous map is not complete. This
@@ -238,8 +260,6 @@ public:
 
     bool allowMultipleGlyphCacheTextures() const { return fAllowMultipleGlyphCacheTextures; }
     bool supportBilerpFromGlyphAtlas() const { return fSupportBilerpFromGlyphAtlas; }
-
-    bool disableCachedGlyphUploads() const { return fDisableCachedGlyphUploads; }
 
     bool requireOrderedRecordings() const { return fRequireOrderedRecordings; }
 
@@ -316,6 +336,10 @@ protected:
     bool fComputeSupport = false;
     bool fSupportsAHardwareBufferImages = false;
 
+#if defined(GRAPHITE_TEST_UTILS)
+    bool fDrawBufferCanBeMappedForReadback = true;
+#endif
+
     ResourceBindingRequirements fResourceBindingReqs;
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -339,7 +363,6 @@ protected:
 
     bool fAllowMultipleGlyphCacheTextures = true;
     bool fSupportBilerpFromGlyphAtlas = false;
-    bool fDisableCachedGlyphUploads = false;
 
     // Set based on client options
     bool fRequireOrderedRecordings = false;

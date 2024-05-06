@@ -47,13 +47,14 @@ sk_sp<DawnBuffer> DawnBuffer::Make(const DawnSharedContext* sharedContext,
 sk_sp<DawnBuffer> DawnBuffer::Make(const DawnSharedContext* sharedContext,
                                    size_t size,
                                    BufferType type,
-                                   AccessPattern,
+                                   AccessPattern accessPattern,
                                    const char* label) {
     if (size <= 0) {
         return nullptr;
     }
 
     wgpu::BufferUsage usage = wgpu::BufferUsage::None;
+
     switch (type) {
     case BufferType::kVertex:
         usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
@@ -75,7 +76,8 @@ sk_sp<DawnBuffer> DawnBuffer::Make(const DawnSharedContext* sharedContext,
                 wgpu::BufferUsage::CopySrc;
         break;
     case BufferType::kIndirect:
-        usage = wgpu::BufferUsage::Indirect | wgpu::BufferUsage::Storage;
+        usage = wgpu::BufferUsage::Indirect | wgpu::BufferUsage::Storage |
+                wgpu::BufferUsage::CopyDst;
         break;
     case BufferType::kVertexStorage:
         usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Storage;
@@ -83,6 +85,12 @@ sk_sp<DawnBuffer> DawnBuffer::Make(const DawnSharedContext* sharedContext,
     case BufferType::kIndexStorage:
         usage = wgpu::BufferUsage::Index | wgpu::BufferUsage::Storage;
         break;
+    }
+
+    if (sharedContext->caps()->drawBufferCanBeMapped() &&
+        accessPattern == AccessPattern::kHostVisible &&
+        type != BufferType::kXferGpuToCpu) {
+        usage |= wgpu::BufferUsage::MapWrite;
     }
 
     wgpu::BufferDescriptor desc;

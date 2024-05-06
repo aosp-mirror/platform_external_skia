@@ -11,6 +11,7 @@
 #include "include/gpu/GrTypes.h"
 #include "include/gpu/vk/GrVkTypes.h"
 #include "include/private/base/SkMacros.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrColor.h"
 #include "src/gpu/ganesh/GrDataUtils.h"
 #include "src/gpu/vk/VulkanInterface.h"
@@ -62,6 +63,8 @@ static constexpr GrColorFormatDesc GrVkFormatDesc(VkFormat vkFormat) {
         case VK_FORMAT_B8G8R8A8_UNORM:
             return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
         case VK_FORMAT_R5G6B5_UNORM_PACK16:
+            return GrColorFormatDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:
             return GrColorFormatDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
         case VK_FORMAT_R16G16B16A16_SFLOAT:
             return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);

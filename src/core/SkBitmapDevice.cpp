@@ -290,7 +290,8 @@ void SkBitmapDevice::replaceBitmapBackendForRasterSurface(const SkBitmap& bm) {
 }
 
 sk_sp<SkDevice> SkBitmapDevice::createDevice(const CreateInfo& cinfo, const SkPaint* layerPaint) {
-    const SkSurfaceProps surfaceProps(this->surfaceProps().flags(), cinfo.fPixelGeometry);
+    const SkSurfaceProps surfaceProps =
+        this->surfaceProps().cloneWithPixelGeometry(cinfo.fPixelGeometry);
 
     // Need to force L32 for now if we have an image filter.
     // If filters ever support other colortypes, e.g. F16, we can modify this check.
@@ -571,7 +572,8 @@ void SkBitmapDevice::drawAtlas(const SkRSXform xform[],
 void SkBitmapDevice::drawSpecial(SkSpecialImage* src,
                                  const SkMatrix& localToDevice,
                                  const SkSamplingOptions& sampling,
-                                 const SkPaint& paint) {
+                                 const SkPaint& paint,
+                                 SkCanvas::SrcRectConstraint) {
     SkASSERT(!paint.getImageFilter());
     SkASSERT(!paint.getMaskFilter());
     SkASSERT(!src->isGaneshBacked());

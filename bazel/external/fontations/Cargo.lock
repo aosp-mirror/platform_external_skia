@@ -47,7 +47,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bd7f3ea17572640b606b35df42cfb6ecdf003704b062580e59918692190b73d"
 
 [[package]]
-name = "fontations_bridge"
+name = "fontations"
 version = "0.1.0"
 dependencies = [
  "cxx",
@@ -58,9 +58,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.148"
+version = "0.2.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cdc71e17332e86d2e1d38c1f99edcb6288ee11b815fb1a4b049eaa2114d369b"
+checksum = "89d92a4743f9a61002fae18374ed11e7973f530cb3a3255fb354818118b2203c"
 
 [[package]]
 name = "link-cplusplus"
@@ -73,9 +73,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.67"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d433d9f1a3e8c1263d9456598b16fec66f4acc9a74dacffd35c7bb09b3a1328"
+checksum = "134c189feb4956b20f6f547d2cf727d4c0fe06722b20a0eec87ed445a97f92da"
 dependencies = [
  "unicode-ident",
 ]
@@ -91,27 +91,27 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.15.0"
+version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be8b75ea775f573fad01d71eb8c266730f1e0760571fcf63aac3506b53cbec68"
+checksum = "7555e052e772f964a1c99f1434f6a2c3a47a5f8e4292236921f121a7753cb2b5"
 dependencies = [
  "font-types",
 ]
 
 [[package]]
 name = "skrifa"
-version = "0.15.0"
+version = "0.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16693462e908d7e35ba7644d4a176468eb393b5554643bf3f1aabcbfbcfa4b15"
+checksum = "ed2a68d7915f596ffbf03d30a497a91e951d16b1cb340662ab441c4b58c84e05"
 dependencies = [
  "read-fonts",
 ]
 
 [[package]]
 name = "syn"
-version = "2.0.37"
+version = "2.0.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7303ef2c05cd654186cb250d29049a24840ca25d2747c25c0381c8d9e2f582e8"
+checksum = "23e78b90f2fcf45d3e842032ce32e3f2d1545ba6636271dcbf24fa306d87be7a"
 dependencies = [
  "proc-macro2",
  "quote",

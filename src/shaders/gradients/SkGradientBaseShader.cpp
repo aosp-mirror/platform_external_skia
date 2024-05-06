@@ -423,11 +423,13 @@ void SkGradientBaseShader::AppendInterpolatedToDstStages(SkRasterPipeline* p,
         switch (interpolation.fColorSpace) {
             case ColorSpace::kLab:
             case ColorSpace::kOKLab:
+            case ColorSpace::kOKLabGamutMap:
                 p->append(SkRasterPipelineOp::unpremul);
                 colorIsPremul = false;
                 break;
             case ColorSpace::kLCH:
             case ColorSpace::kOKLCH:
+            case ColorSpace::kOKLCHGamutMap:
             case ColorSpace::kHSL:
             case ColorSpace::kHWB:
                 p->append(SkRasterPipelineOp::unpremul_polar);
@@ -442,10 +444,17 @@ void SkGradientBaseShader::AppendInterpolatedToDstStages(SkRasterPipeline* p,
     switch (interpolation.fColorSpace) {
         case ColorSpace::kLab:   p->append(SkRasterPipelineOp::css_lab_to_xyz);           break;
         case ColorSpace::kOKLab: p->append(SkRasterPipelineOp::css_oklab_to_linear_srgb); break;
+        case ColorSpace::kOKLabGamutMap:
+            p->append(SkRasterPipelineOp::css_oklab_gamut_map_to_linear_srgb);
+            break;
         case ColorSpace::kLCH:   p->append(SkRasterPipelineOp::css_hcl_to_lab);
                                  p->append(SkRasterPipelineOp::css_lab_to_xyz);           break;
         case ColorSpace::kOKLCH: p->append(SkRasterPipelineOp::css_hcl_to_lab);
                                  p->append(SkRasterPipelineOp::css_oklab_to_linear_srgb); break;
+        case ColorSpace::kOKLCHGamutMap:
+            p->append(SkRasterPipelineOp::css_hcl_to_lab);
+            p->append(SkRasterPipelineOp::css_oklab_gamut_map_to_linear_srgb);
+            break;
         case ColorSpace::kHSL:   p->append(SkRasterPipelineOp::css_hsl_to_srgb);          break;
         case ColorSpace::kHWB:   p->append(SkRasterPipelineOp::css_hwb_to_srgb);          break;
         default: break;
@@ -531,26 +540,23 @@ bool SkGradientBaseShader::isOpaque() const {
     return fColorsAreOpaque && (this->getTileMode() != SkTileMode::kDecal);
 }
 
-static unsigned rounded_divide(unsigned numer, unsigned denom) {
-    return (numer + (denom >> 1)) / denom;
-}
-
-bool SkGradientBaseShader::onAsLuminanceColor(SkColor* lum) const {
-    // we just compute an average color.
-    // possibly we could weight this based on the proportional width for each color
-    //   assuming they are not evenly distributed in the fPos array.
-    int r = 0;
-    int g = 0;
-    int b = 0;
-    const int n = fColorCount;
-    // TODO: use linear colors?
-    for (int i = 0; i < n; ++i) {
-        SkColor c = this->getLegacyColor(i);
-        r += SkColorGetR(c);
-        g += SkColorGetG(c);
-        b += SkColorGetB(c);
+bool SkGradientBaseShader::onAsLuminanceColor(SkColor4f* lum) const {
+    // We just compute an average color. There are several things we could do better:
+    // 1) We already have a different average_gradient_color helper later in this file, that weights
+    //    contribution by the relative size of each band.
+    // 2) Colors should be converted to some standard color space! These could be in any space.
+    // 3) Do we want to average in the source space, sRGB, or some linear space?
+    SkColor4f color{0, 0, 0, 1};
+    for (int i = 0; i < fColorCount; ++i) {
+        color.fR += fColors[i].fR;
+        color.fG += fColors[i].fG;
+        color.fB += fColors[i].fB;
     }
-    *lum = SkColorSetRGB(rounded_divide(r, n), rounded_divide(g, n), rounded_divide(b, n));
+    const float scale = 1.0f / fColorCount;
+    color.fR *= scale;
+    color.fG *= scale;
+    color.fB *= scale;
+    *lum = color;
     return true;
 }
 
@@ -577,7 +583,9 @@ static sk_sp<SkColorSpace> intermediate_color_space(SkGradientShader::Interpolat
             return SkColorSpace::MakeRGB(SkNamedTransferFn::kLinear, SkNamedGamut::kXYZ);
 
         case ColorSpace::kOKLab:
+        case ColorSpace::kOKLabGamutMap:
         case ColorSpace::kOKLCH:
+        case ColorSpace::kOKLCHGamutMap:
             // The "standard" conversion to these spaces starts with XYZD65. That requires extra
             // effort to conjure. The author also has reference code for going directly from linear
             // sRGB, so we use that.
@@ -757,12 +765,14 @@ SkColor4fXformer::SkColor4fXformer(const SkGradientBaseShader* shader,
     // 3) Transform to the interpolation color space (if it's special)
     ConvertColorProc convertFn = nullptr;
     switch (interpolation.fColorSpace) {
-        case ColorSpace::kHSL:   convertFn = srgb_to_hsl;       break;
-        case ColorSpace::kHWB:   convertFn = srgb_to_hwb;       break;
-        case ColorSpace::kLab:   convertFn = xyzd50_to_lab;     break;
-        case ColorSpace::kLCH:   convertFn = xyzd50_to_hcl;     break;
-        case ColorSpace::kOKLab: convertFn = lin_srgb_to_oklab; break;
-        case ColorSpace::kOKLCH: convertFn = lin_srgb_to_okhcl; break;
+        case ColorSpace::kHSL:           convertFn = srgb_to_hsl;       break;
+        case ColorSpace::kHWB:           convertFn = srgb_to_hwb;       break;
+        case ColorSpace::kLab:           convertFn = xyzd50_to_lab;     break;
+        case ColorSpace::kLCH:           convertFn = xyzd50_to_hcl;     break;
+        case ColorSpace::kOKLab:         convertFn = lin_srgb_to_oklab; break;
+        case ColorSpace::kOKLabGamutMap: convertFn = lin_srgb_to_oklab; break;
+        case ColorSpace::kOKLCH:         convertFn = lin_srgb_to_okhcl; break;
+        case ColorSpace::kOKLCHGamutMap: convertFn = lin_srgb_to_okhcl; break;
         default: break;
     }
 

@@ -59,12 +59,14 @@ private:
     bool onIsTexturable(const TextureInfo&) const override;
     bool supportsWritePixels(const TextureInfo& textureInfo) const override;
     bool supportsReadPixels(const TextureInfo& textureInfo) const override;
-    SkColorType supportedWritePixelsColorType(SkColorType dstColorType,
-                                              const TextureInfo& dstTextureInfo,
-                                              SkColorType srcColorType) const override;
-    SkColorType supportedReadPixelsColorType(SkColorType srcColorType,
-                                             const TextureInfo& srcTextureInfo,
-                                             SkColorType dstColorType) const override;
+    std::pair<SkColorType, bool /*isRGBFormat*/> supportedWritePixelsColorType(
+            SkColorType dstColorType,
+            const TextureInfo& dstTextureInfo,
+            SkColorType srcColorType) const override;
+    std::pair<SkColorType, bool /*isRGBFormat*/> supportedReadPixelsColorType(
+            SkColorType srcColorType,
+            const TextureInfo& srcTextureInfo,
+            SkColorType dstColorType) const override;
 
     void initCaps(const DawnBackendContext& backendContext, const ContextOptions& options);
     void initShaderCaps(const wgpu::Device& device);
@@ -116,7 +118,10 @@ private:
     wgpu::TextureFormat fColorTypeToFormatTable[kSkColorTypeCnt];
     void setColorType(SkColorType, std::initializer_list<wgpu::TextureFormat> formats);
 
+#if !defined(__EMSCRIPTEN__)
     bool fTransientAttachmentSupport = false;
+#endif
+
     bool fUseAsyncPipelineCreation = true;
     bool fAllowScopedErrorChecks = true;
 };

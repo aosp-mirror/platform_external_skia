@@ -1,5 +1,5 @@
 load("//bazel:flags.bzl", "selects")
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
 
 licenses(["notice"])
 
@@ -20,7 +20,6 @@ split_srcs_and_hdrs(
 )
 
 UTIL_FILES = [
-    "SkAnimCodecPlayer.cpp",
     "SkBitSet.h",
     "SkCallableTraits.h",
     "SkCamera.cpp",
@@ -186,6 +185,7 @@ skia_filegroup(
         "SkShadowTessellator.cpp",
         "SkShadowTessellator.h",
         "SkShadowUtils.cpp",
+        "SkTextUtils.cpp",
     ],
     visibility = ["//src/core:__pkg__"],
 )
@@ -197,4 +197,40 @@ skia_filegroup(
         "SkCharToGlyphCache.h",
     ],
     visibility = ["//src/ports:__pkg__"],
+)
+
+skia_filegroup(
+    name = "shader_utils_hdrs",
+    srcs = [
+        "SkShaderUtils.h",
+    ],
+    visibility = ["//src/gpu:__subpackages__"],
+)
+
+skia_filegroup(
+    name = "shader_utils_srcs",
+    srcs = [
+        "SkShaderUtils.cpp",
+    ],
+    visibility = ["//src/gpu:__subpackages__"],
+)
+
+skia_cc_library(
+    name = "json",
+    srcs = [
+        "SkJSON.cpp",
+        "SkJSONWriter.cpp",
+    ],
+    hdrs = [
+        "SkJSON.h",
+        "SkJSONWriter.h",
+    ],
+    visibility = [
+        "//bench:__pkg__",
+        "//gm:__pkg__",
+    ],
+    deps = [
+        "//:core",
+        "//src/base",
+    ],
 )

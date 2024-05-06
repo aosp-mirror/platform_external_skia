@@ -21,7 +21,6 @@
 #include "include/private/base/SkMutex.h"
 #include "include/utils/SkCustomTypeface.h"
 #include "src/base/SkUTF.h"
-#include "src/core/SkFontMgrPriv.h"
 #include "src/core/SkOSFile.h"
 #include "tools/Resources.h"
 #include "tools/flags/CommandLineFlags.h"
@@ -34,6 +33,7 @@
 
 #if defined(SK_BUILD_FOR_ANDROID) && defined(SK_FONTMGR_ANDROID_AVAILABLE)
 #include "include/ports/SkFontMgr_android.h"
+#include "src/ports/SkTypeface_FreeType.h"
 #endif
 
 #if defined(SK_FONTMGR_CORETEXT_AVAILABLE) && (defined(SK_BUILD_FOR_IOS) || \
@@ -213,7 +213,7 @@ sk_sp<SkFontMgr> TestFontMgr() {
 #endif
         else {
 #if defined(SK_BUILD_FOR_ANDROID) && defined(SK_FONTMGR_ANDROID_AVAILABLE)
-            mgr = SkFontMgr_New_Android(nullptr);
+            mgr = SkFontMgr_New_Android(nullptr, std::make_unique<SkFontScanner_FreeType>());
 #elif defined(SK_BUILD_FOR_WIN) && defined(SK_FONTMGR_DIRECTWRITE_AVAILABLE)
             mgr = SkFontMgr_New_DirectWrite();
 #elif defined(SK_FONTMGR_CORETEXT_AVAILABLE) && (defined(SK_BUILD_FOR_IOS) || \
@@ -273,18 +273,5 @@ sk_sp<SkTypeface> CreateTypefaceFromResource(const char* resource, int ttcIndex)
 SkFont DefaultFont() {
     return SkFont(DefaultTypeface(), 12);
 }
-
-#if !defined(SK_DISABLE_LEGACY_FONTMGR_FACTORY)
-void SetDefaultFontMgr() {
-    if (!FLAGS_nativeFonts) {
-        gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
-    }
-#if defined(SK_BUILD_FOR_WIN) && defined(SK_FONTMGR_GDI_AVAILABLE)
-    if (FLAGS_gdi) {
-        gSkFontMgr_DefaultFactory = &SkFontMgr_New_GDI;
-    }
-#endif
-}
-#endif
 
 }  // namespace ToolUtils

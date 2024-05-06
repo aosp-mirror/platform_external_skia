@@ -42,9 +42,11 @@ VulkanResourceProvider::VulkanResourceProvider(SharedContext* sharedContext,
                                                SingleOwner* singleOwner,
                                                uint32_t recorderID,
                                                size_t resourceBudget,
-                                               sk_sp<Buffer> intrinsicConstantUniformBuffer)
+                                               sk_sp<Buffer> intrinsicConstantUniformBuffer,
+                                               sk_sp<Buffer> loadMSAAVertexBuffer)
         : ResourceProvider(sharedContext, singleOwner, recorderID, resourceBudget)
-        , fIntrinsicUniformBuffer(std::move(intrinsicConstantUniformBuffer)) {
+        , fIntrinsicUniformBuffer(std::move(intrinsicConstantUniformBuffer))
+        , fLoadMSAAVertexBuffer(std::move(loadMSAAVertexBuffer)) {
 }
 
 VulkanResourceProvider::~VulkanResourceProvider() {
@@ -53,6 +55,24 @@ VulkanResourceProvider::~VulkanResourceProvider() {
                     DestroyPipelineCache(this->vulkanSharedContext()->device(),
                                          fPipelineCache,
                                          nullptr));
+    }
+    if (fMSAALoadVertShaderModule != VK_NULL_HANDLE) {
+        VULKAN_CALL(this->vulkanSharedContext()->interface(),
+                    DestroyShaderModule(this->vulkanSharedContext()->device(),
+                                        fMSAALoadVertShaderModule,
+                                        nullptr));
+    }
+    if (fMSAALoadFragShaderModule != VK_NULL_HANDLE) {
+        VULKAN_CALL(this->vulkanSharedContext()->interface(),
+                    DestroyShaderModule(this->vulkanSharedContext()->device(),
+                                        fMSAALoadFragShaderModule,
+                                        nullptr));
+    }
+    if (fMSAALoadPipelineLayout != VK_NULL_HANDLE) {
+        VULKAN_CALL(this->vulkanSharedContext()->interface(),
+                    DestroyPipelineLayout(this->vulkanSharedContext()->device(),
+                                          fMSAALoadPipelineLayout,
+                                          nullptr));
     }
 }
 
@@ -74,16 +94,17 @@ sk_sp<Buffer> VulkanResourceProvider::refIntrinsicConstantBuffer() const {
     return fIntrinsicUniformBuffer;
 }
 
+const Buffer* VulkanResourceProvider::loadMSAAVertexBuffer() const {
+    return fLoadMSAAVertexBuffer.get();
+}
 
 sk_sp<GraphicsPipeline> VulkanResourceProvider::createGraphicsPipeline(
         const RuntimeEffectDictionary* runtimeDict,
         const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc) {
-    SkSL::Compiler skslCompiler(fSharedContext->caps()->shaderCaps());
     auto compatibleRenderPass =
             this->findOrCreateRenderPass(renderPassDesc, /*compatibleOnly=*/true);
     return VulkanGraphicsPipeline::Make(this->vulkanSharedContext(),
-                                        &skslCompiler,
                                         runtimeDict,
                                         pipelineDesc,
                                         renderPassDesc,
@@ -246,24 +267,34 @@ sk_sp<VulkanDescriptorSet> VulkanResourceProvider::findOrCreateDescriptorSet(
     return firstDescSet;
 }
 
-sk_sp<VulkanRenderPass> VulkanResourceProvider::findOrCreateRenderPass(
-        const RenderPassDesc& renderPassDesc, bool compatibleOnly) {
-    auto renderPassKey = VulkanRenderPass::MakeRenderPassKey(renderPassDesc, compatibleOnly);
+sk_sp<VulkanRenderPass> VulkanResourceProvider::findOrCreateRenderPassWithKnownKey(
+            const RenderPassDesc& renderPassDesc,
+            bool compatibleOnly,
+            const GraphiteResourceKey& rpKey) {
     if (Resource* resource =
-            fResourceCache->findAndRefResource(renderPassKey, skgpu::Budgeted::kYes)) {
+            fResourceCache->findAndRefResource(rpKey, skgpu::Budgeted::kYes)) {
         return sk_sp<VulkanRenderPass>(static_cast<VulkanRenderPass*>(resource));
     }
 
-    auto renderPass = VulkanRenderPass::MakeRenderPass(this->vulkanSharedContext(), renderPassDesc,
-                                                       compatibleOnly);
+    sk_sp<VulkanRenderPass> renderPass =
+                VulkanRenderPass::MakeRenderPass(this->vulkanSharedContext(),
+                                                 renderPassDesc,
+                                                 compatibleOnly);
     if (!renderPass) {
         return nullptr;
     }
 
-    renderPass->setKey(renderPassKey);
+    renderPass->setKey(rpKey);
     fResourceCache->insertResource(renderPass.get());
 
     return renderPass;
+}
+
+sk_sp<VulkanRenderPass> VulkanResourceProvider::findOrCreateRenderPass(
+        const RenderPassDesc& renderPassDesc, bool compatibleOnly) {
+    GraphiteResourceKey rpKey = VulkanRenderPass::MakeRenderPassKey(renderPassDesc, compatibleOnly);
+
+    return this->findOrCreateRenderPassWithKnownKey(renderPassDesc, compatibleOnly, rpKey);
 }
 
 VkPipelineCache VulkanResourceProvider::pipelineCache() {
@@ -362,6 +393,68 @@ sk_sp<VulkanSamplerYcbcrConversion>
     fResourceCache->insertResource(ycbcrConversion.get());
 
     return ycbcrConversion;
+}
+
+sk_sp<VulkanGraphicsPipeline> VulkanResourceProvider::findOrCreateLoadMSAAPipeline(
+        const RenderPassDesc& renderPassDesc) {
+
+    if (!renderPassDesc.fColorResolveAttachment.fTextureInfo.isValid() ||
+        !renderPassDesc.fColorAttachment.fTextureInfo.isValid()) {
+        SKGPU_LOG_E("Loading MSAA from resolve texture requires valid color & resolve attachment");
+        return nullptr;
+    }
+
+    // Check to see if we already have a suitable pipeline that we can use.
+    GraphiteResourceKey renderPassKey =
+            VulkanRenderPass::MakeRenderPassKey(renderPassDesc, /*compatibleOnly=*/true);
+    for (int i = 0; i < fLoadMSAAPipelines.size(); i++) {
+        if (renderPassKey == fLoadMSAAPipelines.at(i).first) {
+            return fLoadMSAAPipelines.at(i).second;
+        }
+    }
+
+    // If any of the load MSAA pipeline creation structures are null then we need to initialize
+    // those before proceeding. If the creation of one of them fails, all are assigned to null, so
+    // we only need to check one of the structures.
+    if (fMSAALoadVertShaderModule   == VK_NULL_HANDLE) {
+        SkASSERT(fMSAALoadFragShaderModule  == VK_NULL_HANDLE &&
+                 fMSAALoadPipelineLayout == VK_NULL_HANDLE);
+        if (!VulkanGraphicsPipeline::InitializeMSAALoadPipelineStructs(
+                    this->vulkanSharedContext(),
+                    &fMSAALoadVertShaderModule,
+                    &fMSAALoadFragShaderModule,
+                    &fMSAALoadShaderStageInfo[0],
+                    &fMSAALoadPipelineLayout)) {
+            SKGPU_LOG_E("Failed to initialize MSAA load pipeline creation structure(s)");
+            return nullptr;
+        }
+    }
+
+    sk_sp<VulkanRenderPass> compatibleRenderPass =
+            this->findOrCreateRenderPassWithKnownKey(renderPassDesc,
+                                                     /*compatibleOnly=*/true,
+                                                     renderPassKey);
+    if (!compatibleRenderPass) {
+        SKGPU_LOG_E("Failed to make compatible render pass for loading MSAA");
+    }
+
+    sk_sp<VulkanGraphicsPipeline> pipeline = VulkanGraphicsPipeline::MakeLoadMSAAPipeline(
+            this->vulkanSharedContext(),
+            fMSAALoadVertShaderModule,
+            fMSAALoadFragShaderModule,
+            &fMSAALoadShaderStageInfo[0],
+            fMSAALoadPipelineLayout,
+            compatibleRenderPass,
+            this->pipelineCache(),
+            renderPassDesc.fColorAttachment.fTextureInfo);
+
+    if (!pipeline) {
+        SKGPU_LOG_E("Failed to create MSAA load pipeline");
+        return nullptr;
+    }
+
+    fLoadMSAAPipelines.push_back(std::make_pair(renderPassKey, pipeline));
+    return pipeline;
 }
 
 #ifdef SK_BUILD_FOR_ANDROID
