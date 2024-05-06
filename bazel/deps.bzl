@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "b94ef82a4b1e7e16bc6f863bb4d0cb8c92cefeac",
+        commit = "a87c5333bf91c8c1eec2518c01235f311d7ccb0c",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -199,7 +199,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "vulkan_headers",
         build_file = ws + "//bazel/external/vulkan_headers:BUILD.bazel",
-        commit = "eaa319dade959cb61ed2229c8ea42e307cc8f8b3",
+        commit = "4bc77c26ff9ce89cf4a4f79e1c24a44604132d53",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers",
     )
 
