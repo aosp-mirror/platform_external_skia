@@ -241,6 +241,7 @@ sk_sp<Device> Device::Make(Recorder* recorder,
                            SkBackingFit backingFit,
                            const SkSurfaceProps& props,
                            LoadOp initialLoadOp,
+                           std::string_view label,
                            bool registerWithRecorder) {
     SkASSERT(!(mipmapped == Mipmapped::kYes && backingFit == SkBackingFit::kApprox));
     if (!recorder) {
@@ -257,7 +258,7 @@ sk_sp<Device> Device::Make(Recorder* recorder,
 
     return Make(recorder,
                 TextureProxy::Make(caps, recorder->priv().resourceProvider(),
-                                   backingDimensions, textureInfo, budgeted),
+                                   backingDimensions, textureInfo, std::move(label), budgeted),
                 ii.dimensions(),
                 ii.colorInfo(),
                 props,
@@ -401,7 +402,8 @@ sk_sp<SkDevice> Device::createDevice(const CreateInfo& info, const SkPaint*) {
                 SkBackingFit::kExact,
 #endif
                 props,
-                initialLoadOp);
+                initialLoadOp,
+                "ChildDevice");
 }
 
 sk_sp<SkSurface> Device::makeSurface(const SkImageInfo& ii, const SkSurfaceProps& props) {
@@ -424,7 +426,8 @@ sk_sp<Image> Device::makeImageCopy(const SkIRect& subset,
                 colorInfo.colorType(), this->target()->textureInfo());
         srcView = {sk_ref_sp(this->target()), readSwizzle};
     }
-    return Image::Copy(fRecorder, srcView, colorInfo, subset, budgeted, mipmapped, backingFit);
+    return Image::Copy(fRecorder, srcView, colorInfo, subset, budgeted, mipmapped, backingFit,
+                       "CopyDeviceTexture");
 }
 
 bool Device::onReadPixels(const SkPixmap& pm, int srcX, int srcY) {
@@ -1563,6 +1566,13 @@ void Device::drawCoverageMask(const SkSpecialImage* mask,
         SKGPU_LOG_W("Couldn't get Graphite-backed special image as texture proxy view");
         return;
     }
+
+    // Every other "Image" draw reaches the underlying texture via AddToKey/NotifyInUse, which
+    // handles notifying the image and either flushing the linked surface or attaching draw tasks
+    // from a scratch device to the current draw context. In this case, 'mask' is very likely to
+    // be linked to a scratch device, but we must perform the same notifyInUse manually here because
+    // the texture is consumed by the RenderStep and not part of the PaintParams.
+    static_cast<Image_Base*>(mask->asImage().get())->notifyInUse(fRecorder);
 
     // 'mask' logically has 0 coverage outside of its pixels, which is equivalent to kDecal tiling.
     // However, since we draw geometry tightly fitting 'mask', we can use the better-supported
