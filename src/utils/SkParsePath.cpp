@@ -228,12 +228,6 @@ bool SkParsePath::FromSVGString(const char data[], SkPath* result) {
                 path.close();
                 c = first;
                 break;
-            case '~': {
-                SkPoint args[2];
-                data = find_points(data, args, 2, false, nullptr);
-                path.moveTo(args[0].fX, args[0].fY);
-                path.lineTo(args[1].fX, args[1].fY);
-            } break;
             default:
                 return false;
         }
@@ -248,13 +242,6 @@ bool SkParsePath::FromSVGString(const char data[], SkPath* result) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-static void write_scalar(SkWStream* stream, SkScalar value) {
-    char buffer[64];
-    int len = snprintf(buffer, sizeof(buffer), "%g", value);
-    char* stop = buffer + len;
-    stream->write(buffer, stop - buffer);
-}
 
 SkString SkParsePath::ToSVGString(const SkPath& path, PathEncoding encoding) {
     SkDynamicMemoryWStream  stream;
@@ -272,9 +259,9 @@ SkString SkParsePath::ToSVGString(const SkPath& path, PathEncoding encoding) {
             if (i > 0) {
                 stream.write(" ", 1);
             }
-            write_scalar(&stream, pt.fX);
+            stream.writeScalarAsText(pt.fX);
             stream.write(" ", 1);
-            write_scalar(&stream, pt.fY);
+            stream.writeScalarAsText(pt.fY);
         }
 
         SkASSERT(count > 0);

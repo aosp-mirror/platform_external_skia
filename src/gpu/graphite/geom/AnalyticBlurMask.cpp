@@ -73,10 +73,12 @@ std::optional<AnalyticBlurMask> AnalyticBlurMask::Make(Recorder* recorder,
         return MakeCircle(recorder, localToDevice, deviceSigma, srcRect, devRect);
     }
 
-    if (devRRectIsValid && SkRRectPriv::IsSimpleCircular(devRRect) &&
-        localToDevice.isScaleTranslate()) {
-        return MakeRRect(recorder, localToDevice, deviceSigma, srcRRect, devRRect);
-    }
+    // TODO(b/338032240) When this is enabled on Chrome we see regressions in some cases (see
+    // b/337908722). Profiling shows that most of the time is spent creating a blur mask on the CPU.
+    // if (devRRectIsValid && SkRRectPriv::IsSimpleCircular(devRRect) &&
+    //     localToDevice.isScaleTranslate()) {
+    //     return MakeRRect(recorder, localToDevice, deviceSigma, srcRRect, devRRect);
+    // }
 
     return std::nullopt;
 }
@@ -130,7 +132,8 @@ std::optional<AnalyticBlurMask> AnalyticBlurMask::MakeRect(Recorder* recorder,
         return std::nullopt;
     }
 
-    sk_sp<TextureProxy> integral = RecorderPriv::CreateCachedProxy(recorder, integralBitmap);
+    sk_sp<TextureProxy> integral = RecorderPriv::CreateCachedProxy(recorder, integralBitmap,
+                                                                   "BlurredRectIntegralTable");
     if (!integral) {
         return std::nullopt;
     }
@@ -211,7 +214,8 @@ std::optional<AnalyticBlurMask> AnalyticBlurMask::MakeCircle(Recorder* recorder,
         return std::nullopt;
     }
 
-    sk_sp<TextureProxy> profile = RecorderPriv::CreateCachedProxy(recorder, profileBitmap);
+    sk_sp<TextureProxy> profile = RecorderPriv::CreateCachedProxy(recorder, profileBitmap,
+                                                                  "BlurredCircleIntegralTable");
     if (!profile) {
         return std::nullopt;
     }
@@ -288,7 +292,8 @@ std::optional<AnalyticBlurMask> AnalyticBlurMask::MakeRRect(Recorder* recorder,
         return std::nullopt;
     }
 
-    sk_sp<TextureProxy> ninePatch = RecorderPriv::CreateCachedProxy(recorder, ninePatchBitmap);
+    sk_sp<TextureProxy> ninePatch = RecorderPriv::CreateCachedProxy(recorder, ninePatchBitmap,
+                                                                    "BlurredRRectNinePatch");
     if (!ninePatch) {
         return std::nullopt;
     }

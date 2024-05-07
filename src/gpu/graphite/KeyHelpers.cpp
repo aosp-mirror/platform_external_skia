@@ -35,6 +35,7 @@
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/DrawContext.h"
+#include "src/gpu/graphite/Image_Base_Graphite.h"
 #include "src/gpu/graphite/Image_Graphite.h"
 #include "src/gpu/graphite/Image_YUVA_Graphite.h"
 #include "src/gpu/graphite/KeyContext.h"
@@ -48,6 +49,7 @@
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/ShaderCodeDictionary.h"
+#include "src/gpu/graphite/Surface_Graphite.h"
 #include "src/gpu/graphite/Texture.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/TextureProxyView.h"
@@ -1247,7 +1249,8 @@ static void add_to_key(const KeyContext& keyContext,
     SkASSERT(filter);
 
     sk_sp<TextureProxy> proxy = RecorderPriv::CreateCachedProxy(keyContext.recorder(),
-                                                                filter->bitmap());
+                                                                filter->bitmap(),
+                                                                "TableColorFilterTexture");
     if (!proxy) {
         SKGPU_LOG_W("Couldn't create TableColorFilter's table");
 
@@ -1643,6 +1646,21 @@ static void add_to_key(const KeyContext& keyContext,
         builder->addBlock(BuiltInCodeSnippetID::kError);
         return;
     }
+    if (!as_IB(shader->image())->isGraphiteBacked()) {
+        // GetGraphiteBacked() created a new image (or fetched a cached image) from the client
+        // image provider. This image was not available when NotifyInUse() visited the shader tree,
+        // so call notify again. These images shouldn't really be producing new tasks since it's
+        // unlikely that a client will be fulfilling with a dynamic image that wraps a long-lived
+        // SkSurface. However, the images can be linked to a surface that rendered the initial
+        // content and not calling notifyInUse() prevents unlinking the image from the Device.
+        // If the client image provider then holds on to many of these images, the leaked Device and
+        // DrawContext memory can be surprisingly high. b/338453542.
+        // TODO (b/330864257): Once paint keys are extracted at draw time, AddToKey() will be
+        // fully responsible for notifyInUse() calls and then we can simply always call this on
+        // `imageToDraw`.
+        SkASSERT(as_IB(imageToDraw)->isGraphiteBacked());
+        static_cast<Image_Base*>(imageToDraw.get())->notifyInUse(keyContext.recorder());
+    }
     if (as_IB(imageToDraw)->isYUVA()) {
         return add_yuv_image_to_key(keyContext,
                                       builder,
@@ -1769,11 +1787,14 @@ static void add_to_key(const KeyContext& keyContext,
     std::unique_ptr<SkPerlinNoiseShader::PaintingData> paintingData = shader->getPaintingData();
     paintingData->generateBitmaps();
 
-    sk_sp<TextureProxy> perm = RecorderPriv::CreateCachedProxy(
-            keyContext.recorder(), paintingData->getPermutationsBitmap());
+    sk_sp<TextureProxy> perm =
+            RecorderPriv::CreateCachedProxy(keyContext.recorder(),
+                                            paintingData->getPermutationsBitmap(),
+                                            "PerlinNoisePermTable");
 
     sk_sp<TextureProxy> noise =
-            RecorderPriv::CreateCachedProxy(keyContext.recorder(), paintingData->getNoiseBitmap());
+            RecorderPriv::CreateCachedProxy(keyContext.recorder(), paintingData->getNoiseBitmap(),
+                                            "PerlinNoiseNoiseTable");
 
     if (!perm || !noise) {
         SKGPU_LOG_W("Couldn't create tables for PerlinNoiseShader");
@@ -1825,12 +1846,39 @@ static void add_to_key(const KeyContext& keyContext,
         return;
     }
 
+    // NOTE: While this is intended to be a "scratch" surface, we don't use MakeScratch() because
+    // the SkPicture could contain arbitrary operations that rely on the Recorder's atlases, which
+    // means the Surface's device has to participate in flushing when the atlas fills up.
+    // TODO: Can this be an approx-fit image that's generated?
     // TODO: right now we're explicitly not caching here. We could expand the ImageProvider
     // API to include already Graphite-backed images, add a Recorder-local cache or add
     // rendered-picture images to the global cache.
-    sk_sp<SkImage> img = info.makeImage(
-            SkSurfaces::RenderTarget(recorder, info.imageInfo, skgpu::Mipmapped::kNo, &info.props),
-            shader->picture().get());
+    sk_sp<Surface> surface = Surface::Make(recorder,
+                                           info.imageInfo,
+                                           "PictureShaderTexture",
+                                           Budgeted::kYes,
+                                           Mipmapped::kNo,
+                                           SkBackingFit::kExact,
+                                           &info.props);
+    if (!surface) {
+        SKGPU_LOG_W("Could not create surface to render PictureShader");
+        builder->addBlock(BuiltInCodeSnippetID::kError);
+        return;
+    }
+
+    // NOTE: Don't call CachedImageInfo::makeImage() since that uses the legacy makeImageSnapshot()
+    // API, which results in an extra texture copy on a Graphite Surface.
+    surface->getCanvas()->concat(info.matrixForDraw);
+    surface->getCanvas()->drawPicture(shader->picture().get());
+    sk_sp<SkImage> img = SkSurfaces::AsImage(std::move(surface));
+    if (!img) {
+        SKGPU_LOG_W("Couldn't create SkImage for PictureShader");
+        builder->addBlock(BuiltInCodeSnippetID::kError);
+        return;
+    }
+    // TODO: 'img' did not exist when notify_in_use() was called, but ideally the DrawTask to render
+    // into 'surface' would be a child of the current device. While we push all tasks to the root
+    // list this works out okay, but will need to be addressed before we move off that system.
     if (!img) {
         SKGPU_LOG_W("Couldn't create SkImage for PictureShader");
         builder->addBlock(BuiltInCodeSnippetID::kError);
@@ -2056,7 +2104,8 @@ static void add_gradient_to_key(const KeyContext& keyContext,
             shader->setCachedBitmap(colorsAndOffsetsBitmap);
         }
 
-        proxy = RecorderPriv::CreateCachedProxy(keyContext.recorder(), shader->cachedBitmap());
+        proxy = RecorderPriv::CreateCachedProxy(keyContext.recorder(), shader->cachedBitmap(),
+                                                "GradientTexture");
         if (!proxy) {
             SKGPU_LOG_W("Couldn't create GradientShader's color and offset bitmap proxy");
             builder->addBlock(BuiltInCodeSnippetID::kError);
