@@ -57,14 +57,14 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "freetype",
         build_file = ws + "//bazel/external/freetype:BUILD.bazel",
-        commit = "f42ce25563b73fed0123d18a2556b9ba01d2c76b",
+        commit = "a46424228f0998a72c715f32e18dca8a7a764c1f",
         remote = "https://chromium.googlesource.com/chromium/src/third_party/freetype2.git",
     )
 
     new_git_repository(
         name = "harfbuzz",
         build_file = ws + "//bazel/external/harfbuzz:BUILD.bazel",
-        commit = "c053e8f29257814e11ad61493dbbe29f27656de4",
+        commit = "b74a7ecc93e283d059df51ee4f46961a782bcdb8",
         remote = "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git",
     )
 
