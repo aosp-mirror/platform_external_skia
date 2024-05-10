@@ -7,18 +7,25 @@
 
 #include "tools/viewer/ImGuiLayer.h"
 
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkSwizzle.h"
-#include "include/core/SkTime.h"
 #include "include/core/SkVertices.h"
+#include "include/private/base/SkTDArray.h"
+#include "src/base/SkTime.h"
+#include "tools/skui/InputState.h"
+#include "tools/skui/Key.h"
 
-#include "imgui.h"
-
-#include <stdlib.h>
-#include <map>
+#include <cstdint>
 
 using namespace sk_app;
 
@@ -29,7 +36,7 @@ static void build_ImFontAtlas(ImFontAtlas& atlas, SkPaint& fontPaint) {
     SkImageInfo info = SkImageInfo::MakeA8(w, h);
     SkPixmap pmap(info, pixels, info.minRowBytes());
     SkMatrix localMatrix = SkMatrix::Scale(1.0f / w, 1.0f / h);
-    auto fontImage = SkImage::MakeFromRaster(pmap, nullptr, nullptr);
+    auto fontImage = SkImages::RasterFromPixmap(pmap, nullptr, nullptr);
     auto fontShader = fontImage->makeShader(SkSamplingOptions(SkFilterMode::kLinear), localMatrix);
     fontPaint.setShader(fontShader);
     fontPaint.setColor(SK_ColorWHITE);
@@ -115,14 +122,14 @@ bool ImGuiLayer::onMouse(int x, int y, skui::InputState state, skui::ModifierKey
     return io.WantCaptureMouse;
 }
 
-bool ImGuiLayer::onMouseWheel(float delta, skui::ModifierKey modifiers) {
+bool ImGuiLayer::onMouseWheel(float delta, int, int, skui::ModifierKey modifiers) {
     ImGuiIO& io = ImGui::GetIO();
     io.MouseWheel += delta;
-    return true;
+    return io.WantCaptureMouse;
 }
 
 void ImGuiLayer::skiaWidget(const ImVec2& size, SkiaWidgetFunc func) {
-    intptr_t funcIndex = fSkiaWidgetFuncs.count();
+    intptr_t funcIndex = fSkiaWidgetFuncs.size();
     fSkiaWidgetFuncs.push_back(func);
     ImGui::Image((ImTextureID)funcIndex, size);
 }
@@ -164,7 +171,7 @@ void ImGuiLayer::onPaint(SkSurface* surface) {
         const ImDrawList* drawList = drawData->CmdLists[i];
 
         // De-interleave all vertex data (sigh), convert to Skia types
-        pos.rewind(); uv.rewind(); color.rewind();
+        pos.clear(); uv.clear(); color.clear();
         for (int j = 0; j < drawList->VtxBuffer.size(); ++j) {
             const ImDrawVert& vert = drawList->VtxBuffer[j];
             pos.push_back(SkPoint::Make(vert.pos.x, vert.pos.y));
@@ -172,7 +179,7 @@ void ImGuiLayer::onPaint(SkSurface* surface) {
             color.push_back(vert.col);
         }
         // ImGui colors are RGBA
-        SkSwapRB(color.begin(), color.begin(), color.count());
+        SkSwapRB(color.begin(), color.begin(), color.size());
 
         int indexOffset = 0;
 
@@ -187,7 +194,7 @@ void ImGuiLayer::onPaint(SkSurface* surface) {
                 drawCmd->UserCallback(drawList, drawCmd);
             } else {
                 intptr_t idIndex = (intptr_t)drawCmd->TextureId;
-                if (idIndex < fSkiaWidgetFuncs.count()) {
+                if (idIndex < fSkiaWidgetFuncs.size()) {
                     // Small image IDs are actually indices into a list of callbacks. We directly
                     // examing the vertex data to deduce the image rectangle, then reconfigure the
                     // canvas to be clipped and translated so that the callback code gets to use
@@ -215,7 +222,7 @@ void ImGuiLayer::onPaint(SkSurface* surface) {
         }
     }
 
-    fSkiaWidgetFuncs.reset();
+    fSkiaWidgetFuncs.clear();
 }
 
 bool ImGuiLayer::onKey(skui::Key key, skui::InputState state, skui::ModifierKey modifiers) {

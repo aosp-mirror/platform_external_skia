@@ -12,7 +12,8 @@
 #include "src/core/SkMask.h"
 #include "tests/Test.h"
 
-#include <string.h>
+#include <cstdint>
+#include <cstring>
 
 class TestBlitter : public SkBlitter {
 public:
@@ -49,13 +50,7 @@ DEF_TEST(BlitAndClip, reporter) {
         memset(bits, 0xAA, rowBytes * height);
 
         SkIRect b = {originX, originY, originX + width, originY + height};
-
-        SkMask mask;
-        mask.fFormat = SkMask::kBW_Format;
-        mask.fBounds = b;
-        mask.fImage = (uint8_t*)bits;
-        mask.fRowBytes = rowBytes;
-
+        SkMask mask(bits, b, rowBytes, SkMask::kBW_Format);
         TestBlitter tb(mask.fBounds, reporter);
 
         for (int top = b.fTop; top < b.fBottom; top++) {

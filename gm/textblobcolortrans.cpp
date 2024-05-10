@@ -20,6 +20,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -37,7 +38,7 @@ protected:
 
         // make textblob
         // Large text is used to trigger atlas eviction
-        SkFont font(ToolUtils::create_portable_typeface(), 256);
+        SkFont font(ToolUtils::DefaultPortableTypeface(), 256);
         font.setEdging(SkFont::Edging::kAlias);
         const char* text = "AB";
 
@@ -57,13 +58,9 @@ protected:
         fBlob = builder.make();
     }
 
-    SkString onShortName() override {
-        return SkString("textblobcolortrans");
-    }
+    SkString getName() const override { return SkString("textblobcolortrans"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(kWidth, kHeight);
-    }
+    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -79,7 +76,7 @@ protected:
         // create masks.  For A8 there are 8 of them.
         SkColor colors[] = {SK_ColorCYAN, SK_ColorLTGRAY, SK_ColorYELLOW, SK_ColorWHITE};
 
-        size_t count = SK_ARRAY_COUNT(colors);
+        size_t count = std::size(colors);
         size_t colorIndex = 0;
         for (int y = 0; y + SkScalarFloorToInt(bounds.height()) < kHeight;
              y += SkScalarFloorToInt(bounds.height())) {

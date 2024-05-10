@@ -5,36 +5,50 @@
  * found in the LICENSE file.
  */
 
+#include "tools/ToolUtils.h"
+
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorPriv.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontTypes.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkPathBuilder.h"
+#include "include/core/SkPathTypes.h"
 #include "include/core/SkPicture.h"
-#include "include/core/SkPixelRef.h"
+#include "include/core/SkPixelRef.h"  // IWYU pragma: keep
 #include "include/core/SkPixmap.h"
 #include "include/core/SkPoint3.h"
-#include "include/core/SkRRect.h"
-#include "include/core/SkShader.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
-#include "include/ports/SkTypeface_win.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypeface.h"
+#include "include/effects/SkGradientShader.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkFloatingPoint.h"
+#include "include/private/base/SkCPUTypes.h"
+#include "include/private/base/SkTemplates.h"
 #include "src/core/SkFontPriv.h"
-#include "tools/ToolUtils.h"
+#include "tools/SkMetaData.h"
 
 #include <cmath>
 #include <cstring>
 
-#if defined(SK_ENABLE_SVG)
-#include "modules/svg/include/SkSVGDOM.h"
-#include "modules/svg/include/SkSVGNode.h"
-#include "src/xml/SkDOM.h"
+#ifdef SK_BUILD_FOR_WIN
+#include "include/ports/SkTypeface_win.h"
 #endif
+
+using namespace skia_private;
 
 namespace ToolUtils {
 
@@ -45,8 +59,7 @@ const char* alphatype_name(SkAlphaType at) {
         case kPremul_SkAlphaType:   return "Premul";
         case kUnpremul_SkAlphaType: return "Unpremul";
     }
-    SkASSERT(false);
-    return "unexpected alphatype";
+    SkUNREACHABLE;
 }
 
 const char* colortype_name(SkColorType ct) {
@@ -65,6 +78,8 @@ const char* colortype_name(SkColorType ct) {
         case kBGRA_1010102_SkColorType:       return "BGRA_1010102";
         case kRGB_101010x_SkColorType:        return "RGB_101010x";
         case kBGR_101010x_SkColorType:        return "BGR_101010x";
+        case kBGR_101010x_XR_SkColorType:     return "BGR_101010x_XR";
+        case kRGBA_10x6_SkColorType:          return "RGBA_10x6";
         case kGray_8_SkColorType:             return "Gray_8";
         case kRGBA_F16Norm_SkColorType:       return "RGBA_F16Norm";
         case kRGBA_F16_SkColorType:           return "RGBA_F16";
@@ -75,8 +90,7 @@ const char* colortype_name(SkColorType ct) {
         case kR16G16B16A16_unorm_SkColorType: return "R16G16B16A16_unorm";
         case kR8_unorm_SkColorType:           return "R8_unorm";
     }
-    SkASSERT(false);
-    return "unexpected colortype";
+    SkUNREACHABLE;
 }
 
 const char* colortype_depth(SkColorType ct) {
@@ -95,18 +109,19 @@ const char* colortype_depth(SkColorType ct) {
         case kBGRA_1010102_SkColorType:       return "1010102";
         case kRGB_101010x_SkColorType:        return "101010";
         case kBGR_101010x_SkColorType:        return "101010";
+        case kBGR_101010x_XR_SkColorType:     return "101010";
+        case kRGBA_10x6_SkColorType:          return "10101010";
         case kGray_8_SkColorType:             return "G8";
-        case kRGBA_F16Norm_SkColorType:       return "F16Norm";  // TODO: "F16"?
+        case kRGBA_F16Norm_SkColorType:       return "F16Norm";
         case kRGBA_F16_SkColorType:           return "F16";
         case kRGBA_F32_SkColorType:           return "F32";
         case kR8G8_unorm_SkColorType:         return "88";
         case kR16G16_unorm_SkColorType:       return "1616";
         case kR16G16_float_SkColorType:       return "F16F16";
         case kR16G16B16A16_unorm_SkColorType: return "16161616";
-        case kR8_unorm_SkColorType:           return "8";
+        case kR8_unorm_SkColorType:           return "R8";
     }
-    SkASSERT(false);
-    return "unexpected colortype";
+    SkUNREACHABLE;
 }
 
 const char* tilemode_name(SkTileMode mode) {
@@ -116,8 +131,7 @@ const char* tilemode_name(SkTileMode mode) {
         case SkTileMode::kMirror: return "mirror";
         case SkTileMode::kDecal:  return "decal";
     }
-    SkASSERT(false);
-    return "unexpected tilemode";
+    SkUNREACHABLE;
 }
 
 SkColor color_to_565(SkColor color) {
@@ -150,7 +164,7 @@ SkBitmap create_checkerboard_bitmap(int w, int h, SkColor c1, SkColor c2, int ch
 }
 
 sk_sp<SkImage> create_checkerboard_image(int w, int h, SkColor c1, SkColor c2, int checkSize) {
-    auto surf = SkSurface::MakeRasterN32Premul(w, h);
+    auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(w, h));
     ToolUtils::draw_checkerboard(surf->getCanvas(), c1, c2, checkSize);
     return surf->makeImageSnapshot();
 }
@@ -162,37 +176,36 @@ void draw_checkerboard(SkCanvas* canvas, SkColor c1, SkColor c2, int size) {
     canvas->drawPaint(paint);
 }
 
-SkBitmap
-create_string_bitmap(int w, int h, SkColor c, int x, int y, int textSize, const char* str) {
-    SkBitmap bitmap;
-    bitmap.allocN32Pixels(w, h);
-    SkCanvas canvas(bitmap);
+int make_pixmaps(SkColorType ct,
+                 SkAlphaType at,
+                 bool withMips,
+                 const SkColor4f colors[6],
+                 SkPixmap pixmaps[6],
+                 std::unique_ptr<char[]>* mem) {
 
-    SkPaint paint;
-    paint.setColor(c);
-
-    SkFont font(ToolUtils::create_portable_typeface(), textSize);
-
-    canvas.clear(0x00000000);
-    canvas.drawSimpleText(str,
-                          strlen(str),
-                          SkTextEncoding::kUTF8,
-                          SkIntToScalar(x),
-                          SkIntToScalar(y),
-                          font,
-                          paint);
-
-    // Tag data as sRGB (without doing any color space conversion). Color-space aware configs
-    // will process this correctly but legacy configs will render as if this returned N32.
-    SkBitmap result;
-    result.setInfo(SkImageInfo::MakeS32(w, h, kPremul_SkAlphaType));
-    result.setPixelRef(sk_ref_sp(bitmap.pixelRef()), 0, 0);
-    return result;
-}
-
-sk_sp<SkImage> create_string_image(int w, int h, SkColor c, int x, int y, int textSize,
-                                   const char* str) {
-    return create_string_bitmap(w, h, c, x, y, textSize, str).asImage();
+    int levelSize = 32;
+    int numMipLevels = withMips ? 6 : 1;
+    size_t size = 0;
+    SkImageInfo ii[6];
+    size_t rowBytes[6];
+    for (int level = 0; level < numMipLevels; ++level) {
+        ii[level] = SkImageInfo::Make(levelSize, levelSize, ct, at);
+        rowBytes[level] = ii[level].minRowBytes();
+        // Make sure we test row bytes that aren't tight.
+        if (!(level % 2)) {
+            rowBytes[level] += (level + 1)*SkColorTypeBytesPerPixel(ii[level].colorType());
+        }
+        size += rowBytes[level]*ii[level].height();
+        levelSize /= 2;
+    }
+    mem->reset(new char[size]);
+    char* addr = mem->get();
+    for (int level = 0; level < numMipLevels; ++level) {
+        pixmaps[level].reset(ii[level], addr, rowBytes[level]);
+        addr += rowBytes[level]*ii[level].height();
+        pixmaps[level].erase(colors[level]);
+    }
+    return numMipLevels;
 }
 
 void add_to_text_blob_w_len(SkTextBlobBuilder* builder,
@@ -226,7 +239,7 @@ void get_text_path(const SkFont&  font,
                    const SkPoint  pos[]) {
     SkAutoToGlyphs        atg(font, text, length, encoding);
     const int             count = atg.count();
-    SkAutoTArray<SkPoint> computedPos;
+    AutoTArray<SkPoint> computedPos;
     if (pos == nullptr) {
         computedPos.reset(count);
         font.getPos(atg.glyphs(), count, &computedPos[0]);
@@ -472,15 +485,250 @@ sk_sp<SkSurface> makeSurface(SkCanvas*             canvas,
                              const SkSurfaceProps* props) {
     auto surf = canvas->makeSurface(info, props);
     if (!surf) {
-        surf = SkSurface::MakeRaster(info, props);
+        surf = SkSurfaces::Raster(info, props);
     }
     return surf;
 }
 
-void sniff_paths(const char filepath[], std::function<PathSniffCallback> callback) {
+VariationSliders::VariationSliders(SkTypeface* typeface,
+                                   SkFontArguments::VariationPosition variationPosition) {
+    if (!typeface) {
+        return;
+    }
+
+    int numAxes = typeface->getVariationDesignParameters(nullptr, 0);
+    if (numAxes < 0) {
+        return;
+    }
+
+    std::unique_ptr<SkFontParameters::Variation::Axis[]> copiedAxes =
+            std::make_unique<SkFontParameters::Variation::Axis[]>(numAxes);
+
+    numAxes = typeface->getVariationDesignParameters(copiedAxes.get(), numAxes);
+    if (numAxes < 0) {
+        return;
+    }
+
+    auto argVariationPositionOrDefault = [&variationPosition](SkFourByteTag tag,
+                                                              SkScalar defaultValue) -> SkScalar {
+        for (int i = 0; i < variationPosition.coordinateCount; ++i) {
+            if (variationPosition.coordinates[i].axis == tag) {
+                return variationPosition.coordinates[i].value;
+            }
+        }
+        return defaultValue;
+    };
+
+    fAxisSliders.resize(numAxes);
+    fCoords = std::make_unique<SkFontArguments::VariationPosition::Coordinate[]>(numAxes);
+    for (int i = 0; i < numAxes; ++i) {
+        fAxisSliders[i].axis = copiedAxes[i];
+        fAxisSliders[i].current =
+                argVariationPositionOrDefault(copiedAxes[i].tag, copiedAxes[i].def);
+        fAxisSliders[i].name = tagToString(fAxisSliders[i].axis.tag);
+        fCoords[i] = { fAxisSliders[i].axis.tag, fAxisSliders[i].current };
+    }
+}
+
+/* static */
+SkString VariationSliders::tagToString(SkFourByteTag tag) {
+    char tagAsString[5];
+    tagAsString[4] = 0;
+    tagAsString[0] = (char)(uint8_t)(tag >> 24);
+    tagAsString[1] = (char)(uint8_t)(tag >> 16);
+    tagAsString[2] = (char)(uint8_t)(tag >> 8);
+    tagAsString[3] = (char)(uint8_t)(tag >> 0);
+    return SkString(tagAsString);
+}
+
+bool VariationSliders::writeControls(SkMetaData* controls) {
+    for (size_t i = 0; i < fAxisSliders.size(); ++i) {
+        SkScalar axisVars[kAxisVarsSize];
+
+        axisVars[0] = fAxisSliders[i].current;
+        axisVars[1] = fAxisSliders[i].axis.min;
+        axisVars[2] = fAxisSliders[i].axis.max;
+        controls->setScalars(fAxisSliders[i].name.c_str(), kAxisVarsSize, axisVars);
+    }
+    return true;
+}
+
+void VariationSliders::readControls(const SkMetaData& controls, bool* changed) {
+    for (size_t i = 0; i < fAxisSliders.size(); ++i) {
+        SkScalar axisVars[kAxisVarsSize] = {0};
+        int resultAxisVarsSize = 0;
+        SkASSERT_RELEASE(controls.findScalars(
+                tagToString(fAxisSliders[i].axis.tag).c_str(), &resultAxisVarsSize, axisVars));
+        SkASSERT_RELEASE(resultAxisVarsSize == kAxisVarsSize);
+        if (changed) {
+            *changed |= fAxisSliders[i].current != axisVars[0];
+        }
+        fAxisSliders[i].current = axisVars[0];
+        fCoords[i] = { fAxisSliders[i].axis.tag, fAxisSliders[i].current };
+    }
+}
+
+SkSpan<const SkFontArguments::VariationPosition::Coordinate> VariationSliders::getCoordinates() {
+    return SkSpan<const SkFontArguments::VariationPosition::Coordinate>{fCoords.get(),
+                                                                        fAxisSliders.size()};
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+HilbertGenerator::HilbertGenerator(float desiredSize, float desiredLineWidth, int desiredDepth)
+        : fDesiredSize(desiredSize)
+        , fDesiredDepth(desiredDepth)
+        , fSegmentLength(fDesiredSize / ((0x1 << fDesiredDepth) - 1.0f))
+        , fDesiredLineWidth(desiredLineWidth)
+        , fActualBounds(SkRect::MakeEmpty())
+        , fCurPos(SkPoint::Make(0.0f, 0.0f))
+        , fCurDir(0)
+        , fExpectedLen(fSegmentLength * ((0x1 << (2*fDesiredDepth)) - 1.0f))
+        , fCurLen(0.0f) {
+}
+
+void HilbertGenerator::draw(SkCanvas* canvas) {
+    this->recursiveDraw(canvas, /* curDepth= */ 0, /* turnLeft= */ true);
+
+    SkScalarNearlyEqual(fExpectedLen, fCurLen, 0.01f);
+    SkScalarNearlyEqual(fDesiredSize, fActualBounds.width(), 0.01f);
+    SkScalarNearlyEqual(fDesiredSize, fActualBounds.height(), 0.01f);
+}
+
+void HilbertGenerator::turn90(bool turnLeft) {
+    fCurDir += turnLeft ? 90 : -90;
+    if (fCurDir >= 360) {
+        fCurDir = 0;
+    } else if (fCurDir < 0) {
+        fCurDir = 270;
+    }
+
+    SkASSERT(fCurDir == 0 || fCurDir == 90 || fCurDir == 180 || fCurDir == 270);
+}
+
+void HilbertGenerator::line(SkCanvas* canvas) {
+
+    SkPoint before = fCurPos;
+
+    SkRect r;
+    switch (fCurDir) {
+        case 0:
+            r.fLeft = fCurPos.fX;
+            r.fTop = fCurPos.fY - fDesiredLineWidth / 2.0f;
+            r.fRight = fCurPos.fX + fSegmentLength;
+            r.fBottom = fCurPos.fY + fDesiredLineWidth / 2.0f;
+            fCurPos.fX += fSegmentLength;
+            break;
+        case 90:
+            r.fLeft = fCurPos.fX - fDesiredLineWidth / 2.0f;
+            r.fTop = fCurPos.fY - fSegmentLength;
+            r.fRight = fCurPos.fX + fDesiredLineWidth / 2.0f;
+            r.fBottom = fCurPos.fY;
+            fCurPos.fY -= fSegmentLength;
+            break;
+        case 180:
+            r.fLeft = fCurPos.fX - fSegmentLength;
+            r.fTop = fCurPos.fY - fDesiredLineWidth / 2.0f;
+            r.fRight = fCurPos.fX;
+            r.fBottom = fCurPos.fY + fDesiredLineWidth / 2.0f;
+            fCurPos.fX -= fSegmentLength;
+            break;
+        case 270:
+            r.fLeft = fCurPos.fX - fDesiredLineWidth / 2.0f;
+            r.fTop = fCurPos.fY;
+            r.fRight = fCurPos.fX + fDesiredLineWidth / 2.0f;
+            r.fBottom = fCurPos.fY + fSegmentLength;
+            fCurPos.fY += fSegmentLength;
+            break;
+        default:
+            return;
+    }
+
+    SkPoint pts[2] = { before, fCurPos };
+
+    SkColor4f colors[2] = {
+            this->getColor(fCurLen),
+            this->getColor(fCurLen + fSegmentLength),
+    };
+
+    fCurLen += fSegmentLength;
+    if (fActualBounds.isEmpty()) {
+        fActualBounds = r;
+    } else {
+        fActualBounds.join(r);
+    }
+
+    SkPaint paint;
+    paint.setShader(SkGradientShader::MakeLinear(pts, colors, /* colorSpace= */ nullptr,
+                                                 /* pos= */ nullptr, 2, SkTileMode::kClamp));
+    canvas->drawRect(r, paint);
+}
+
+void HilbertGenerator::recursiveDraw(SkCanvas* canvas, int curDepth, bool turnLeft) {
+    if (curDepth >= fDesiredDepth) {
+        return;
+    }
+
+    this->turn90(turnLeft);
+    this->recursiveDraw(canvas, curDepth + 1, !turnLeft);
+    this->line(canvas);
+    this->turn90(!turnLeft);
+    this->recursiveDraw(canvas, curDepth + 1, turnLeft);
+    this->line(canvas);
+    this->recursiveDraw(canvas, curDepth + 1, turnLeft);
+    this->turn90(!turnLeft);
+    this->line(canvas);
+    this->recursiveDraw(canvas, curDepth + 1, !turnLeft);
+    this->turn90(turnLeft);
+}
+
+SkColor4f HilbertGenerator::getColor(float curLen) {
+    static const SkColor4f kColors[] = {
+            SkColors::kBlack,
+            SkColors::kBlue,
+            SkColors::kCyan,
+            SkColors::kGreen,
+            SkColors::kYellow,
+            SkColors::kRed,
+            SkColors::kWhite,
+    };
+
+    static const float kStops[] = {
+            0.0f,
+            1.0f/6.0f,
+            2.0f/6.0f,
+            0.5f,
+            4.0f/6.0f,
+            5.0f/6.0f,
+            1.0f,
+    };
+    static_assert(std::size(kColors) == std::size(kStops));
+
+    float t = curLen / fExpectedLen;
+    if (t <= 0.0f) {
+        return kColors[0];
+    } else if (t >= 1.0f) {
+        return kColors[std::size(kColors)-1];
+    }
+
+    for (unsigned int i = 0; i < std::size(kColors)-1; ++i) {
+        if (kStops[i] <= t && t <= kStops[i+1]) {
+            t = (t - kStops[i]) / (kStops[i+1] - kStops[i]);
+            SkASSERT(0.0f <= t && t <= 1.0f);
+            return { kColors[i].fR * (1 - t) + kColors[i+1].fR * t,
+                     kColors[i].fG * (1 - t) + kColors[i+1].fG * t,
+                     kColors[i].fB * (1 - t) + kColors[i+1].fB * t,
+                     kColors[i].fA * (1 - t) + kColors[i+1].fA * t };
+
+        }
+    }
+
+    return SkColors::kBlack;
+}
+
+void ExtractPathsFromSKP(const char filepath[], std::function<PathSniffCallback> callback) {
     SkFILEStream stream(filepath);
     if (!stream.isValid()) {
-        SkDebugf("sniff_paths: invalid input file at \"%s\"\n", filepath);
+        SkDebugf("ExtractPaths: invalid input file at \"%s\"\n", filepath);
         return;
     }
 
@@ -496,25 +744,13 @@ void sniff_paths(const char filepath[], std::function<PathSniffCallback> callbac
         std::function<PathSniffCallback> fPathSniffCallback;
     };
 
-    PathSniffer pathSniffer(callback);
-    if (const char* ext = strrchr(filepath, '.'); ext && !strcmp(ext, ".svg")) {
-#if defined(SK_ENABLE_SVG)
-        sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromStream(stream);
-        if (!svg) {
-            SkDebugf("sniff_paths: couldn't load svg at \"%s\"\n", filepath);
-            return;
-        }
-        svg->setContainerSize(SkSize::Make(pathSniffer.getBaseLayerSize()));
-        svg->render(&pathSniffer);
-#endif
-    } else {
-        sk_sp<SkPicture> skp = SkPicture::MakeFromStream(&stream);
-        if (!skp) {
-            SkDebugf("sniff_paths: couldn't load skp at \"%s\"\n", filepath);
-            return;
-        }
-        skp->playback(&pathSniffer);
+    sk_sp<SkPicture> skp = SkPicture::MakeFromStream(&stream);
+    if (!skp) {
+        SkDebugf("ExtractPaths: couldn't load skp at \"%s\"\n", filepath);
+        return;
     }
+    PathSniffer pathSniffer(callback);
+    skp->playback(&pathSniffer);
 }
 
 }  // namespace ToolUtils

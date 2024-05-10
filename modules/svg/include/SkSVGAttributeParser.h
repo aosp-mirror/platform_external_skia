@@ -10,9 +10,9 @@
 
 #include <vector>
 
-#include "include/private/SkNoncopyable.h"
+#include "include/private/base/SkNoncopyable.h"
 #include "modules/svg/include/SkSVGTypes.h"
-#include "src/core/SkTLazy.h"
+#include "src/base/SkTLazy.h"
 
 class SkSVGAttributeParser : public SkNoncopyable {
 public:
@@ -71,6 +71,26 @@ public:
     }
 
 private:
+    class RestoreCurPos {
+    public:
+        explicit RestoreCurPos(SkSVGAttributeParser* self)
+            : fSelf(self), fCurPos(self->fCurPos) {}
+
+        ~RestoreCurPos() {
+            if (fSelf) {
+                fSelf->fCurPos = this->fCurPos;
+            }
+        }
+
+        void clear() { fSelf = nullptr; }
+    private:
+        SkSVGAttributeParser* fSelf;
+        const char* fCurPos;
+
+        RestoreCurPos(           const RestoreCurPos&) = delete;
+        RestoreCurPos& operator=(const RestoreCurPos&) = delete;
+    };
+
     // Stack-only
     void* operator new(size_t) = delete;
     void* operator new(size_t, void*) = delete;
@@ -82,6 +102,7 @@ private:
     bool advanceWhile(F func);
 
     bool matchStringToken(const char* token, const char** newPos = nullptr) const;
+    bool matchHexToken(const char** newPos) const;
 
     bool parseWSToken();
     bool parseEOSToken();
@@ -90,12 +111,20 @@ private:
     bool parseExpectedStringToken(const char*);
     bool parseScalarToken(SkScalar*);
     bool parseInt32Token(int32_t*);
-    bool parseHexToken(uint32_t*);
+    bool parseEscape(SkUnichar*);
+    bool parseIdentToken(SkString*);
     bool parseLengthUnitToken(SkSVGLength::Unit*);
     bool parseNamedColorToken(SkColor*);
     bool parseHexColorToken(SkColor*);
+    bool parseColorComponentScalarToken(int32_t*);
+    bool parseColorComponentIntegralToken(int32_t*);
+    bool parseColorComponentFractionalToken(int32_t*);
     bool parseColorComponentToken(int32_t*);
+    bool parseColorToken(SkColor*);
     bool parseRGBColorToken(SkColor*);
+    bool parseRGBAColorToken(SkColor*);
+    bool parseSVGColor(SkSVGColor*, SkSVGColor::Vars&&);
+    bool parseSVGColorType(SkSVGColorType*);
     bool parseFuncIRI(SkSVGFuncIRI*);
 
     // Transform helpers
@@ -116,7 +145,7 @@ private:
 
     template <typename T, typename TArray>
     bool parseEnumMap(const TArray& arr, T* result) {
-        for (size_t i = 0; i < SK_ARRAY_COUNT(arr); ++i) {
+        for (size_t i = 0; i < std::size(arr); ++i) {
             if (this->parseExpectedStringToken(std::get<0>(arr[i]))) {
                 *result = std::get<1>(arr[i]);
                 return true;
@@ -127,6 +156,7 @@ private:
 
     // The current position in the input string.
     const char* fCurPos;
+    const char* fEndPos;
 
     using INHERITED = SkNoncopyable;
 };

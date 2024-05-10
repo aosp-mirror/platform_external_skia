@@ -7,12 +7,14 @@
 
 #include "gm/gm.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkStream.h"
 #include "include/utils/SkAnimCodecPlayer.h"
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/utils/SkottieUtils.h"
 #include "modules/skresources/include/SkResources.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <cmath>
 #include <vector>
@@ -25,8 +27,7 @@ static constexpr char kSkottieResource[] = "skottie/skottie_sample_webfont.json"
 // Mock web font loader which serves a single local font (checked in under resources/).
 class FakeWebFontProvider final : public skresources::ResourceProvider {
 public:
-    FakeWebFontProvider()
-        : fTypeface(SkTypeface::MakeFromData(GetResourceAsData(kWebFontResource))) {}
+    FakeWebFontProvider() : fTypeface(ToolUtils::CreateTypefaceFromResource(kWebFontResource)) {}
 
     sk_sp<SkTypeface> loadTypeface(const char[], const char[]) const override {
         return fTypeface;
@@ -43,18 +44,15 @@ private:
 class SkottieExternalPropsGM : public skiagm::GM {
 public:
 protected:
-    SkString onShortName() override {
-        return SkString("skottie_external_props");
-    }
+    SkString getName() const override { return SkString("skottie_external_props"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(kSize, kSize);
-    }
+    SkISize getISize() override { return SkISize::Make(kSize, kSize); }
 
     void onOnceBeforeDraw() override {
         if (auto stream = GetResourceAsStream(kSkottieResource)) {
             fPropManager = std::make_unique<skottie_utils::CustomPropertyManager>();
             fAnimation = skottie::Animation::Builder()
+                            .setFontManager(ToolUtils::TestFontMgr())
                             .setResourceProvider(sk_make_sp<FakeWebFontProvider>())
                             .setPropertyObserver(fPropManager->getPropertyObserver())
                             .make(stream.get());
@@ -105,7 +103,7 @@ private:
             { "update #3", SK_ColorMAGENTA, SK_ColorCYAN  , 150.f },
         };
 
-        SkASSERT(i - 1 < SK_ARRAY_COUNT(gTests));
+        SkASSERT(i - 1 < std::size(gTests));
         const auto& tst = gTests[i - 1];
 
         for (const auto& prop : fPropManager->getColorProps()) {

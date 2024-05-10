@@ -6,8 +6,8 @@
  */
 
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/mtl/GrMtlCaps.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/mtl/GrMtlCaps.h"
 #include "tests/Test.h"
 #include "tools/gpu/ManagedBackendTexture.h"
 
@@ -18,25 +18,35 @@ using sk_gpu_test::ManagedBackendTexture;
 // In BackendAllocationTest.cpp
 void test_wrapping(GrDirectContext*,
                    skiatest::Reporter*,
-                   std::function<sk_sp<ManagedBackendTexture>(GrDirectContext*,
-                                                              GrMipmapped,
-                                                              GrRenderable)> create,
+                   const std::function<sk_sp<ManagedBackendTexture>(
+                           GrDirectContext*, skgpu::Mipmapped, GrRenderable)>& create,
                    GrColorType,
-                   GrMipmapped,
+                   skgpu::Mipmapped,
                    GrRenderable);
 
-void test_color_init(GrDirectContext*,
-                     skiatest::Reporter*,
-                     std::function<sk_sp<ManagedBackendTexture>(GrDirectContext*,
-                                                                const SkColor4f&,
-                                                                GrMipmapped,
-                                                                GrRenderable)> create,
-                     GrColorType,
-                     const SkColor4f&,
-                     GrMipmapped,
-                     GrRenderable);
+void test_color_init(
+        GrDirectContext*,
+        skiatest::Reporter*,
+        const std::function<sk_sp<ManagedBackendTexture>(
+                GrDirectContext*, const SkColor4f&, skgpu::Mipmapped, GrRenderable)>& create,
+        GrColorType,
+        const SkColor4f&,
+        skgpu::Mipmapped,
+        GrRenderable);
 
-DEF_GPUTEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
+void test_pixmap_init(GrDirectContext*,
+                      skiatest::Reporter*,
+                      const std::function<sk_sp<ManagedBackendTexture>(GrDirectContext*,
+                                                                       const SkPixmap srcData[],
+                                                                       int numLevels,
+                                                                       GrSurfaceOrigin,
+                                                                       GrRenderable)>& create,
+                      SkColorType,
+                      GrSurfaceOrigin,
+                      skgpu::Mipmapped,
+                      GrRenderable);
+
+DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
     auto dContext = ctxInfo.directContext();
     const GrMtlCaps* mtlCaps = static_cast<const GrMtlCaps*>(dContext->priv().caps());
 
@@ -98,8 +108,8 @@ DEF_GPUTEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
             continue;
         }
 
-        for (auto mipMapped : { GrMipmapped::kNo, GrMipmapped::kYes }) {
-            if (GrMipmapped::kYes == mipMapped && !mtlCaps->mipmapSupport()) {
+        for (auto mipmapped : {skgpu::Mipmapped::kNo, skgpu::Mipmapped::kYes}) {
+            if (skgpu::Mipmapped::kYes == mipmapped && !mtlCaps->mipmapSupport()) {
                 continue;
             }
 
@@ -116,17 +126,17 @@ DEF_GPUTEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
 
                 {
                     auto uninitCreateMtd = [format](GrDirectContext* dContext,
-                                                    GrMipmapped mipMapped,
+                                                    skgpu::Mipmapped mipmapped,
                                                     GrRenderable renderable) {
                         return ManagedBackendTexture::MakeWithoutData(dContext,
                                                                       32, 32,
                                                                       format,
-                                                                      mipMapped,
+                                                                      mipmapped,
                                                                       renderable,
                                                                       GrProtected::kNo);
                     };
 
-                    test_wrapping(dContext, reporter, uninitCreateMtd, combo.fColorType, mipMapped,
+                    test_wrapping(dContext, reporter, uninitCreateMtd, combo.fColorType, mipmapped,
                                   renderable);
                 }
 
@@ -156,19 +166,49 @@ DEF_GPUTEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
 
                     auto createWithColorMtd = [format, swizzle](GrDirectContext* dContext,
                                                                 const SkColor4f& color,
-                                                                GrMipmapped mipMapped,
+                                                                skgpu::Mipmapped mipmapped,
                                                                 GrRenderable renderable) {
                         auto swizzledColor = swizzle.applyTo(color);
                         return ManagedBackendTexture::MakeWithData(dContext,
                                                                    32, 32,
                                                                    format,
                                                                    swizzledColor,
-                                                                   mipMapped,
+                                                                   mipmapped,
                                                                    renderable,
                                                                    GrProtected::kNo);
                     };
                     test_color_init(dContext, reporter, createWithColorMtd, combo.fColorType,
-                                    combo.fColor, mipMapped, renderable);
+                                    combo.fColor, mipmapped, renderable);
+                }
+
+                for (auto origin : {kTopLeft_GrSurfaceOrigin, kBottomLeft_GrSurfaceOrigin}) {
+                    SkColorType skColorType = GrColorTypeToSkColorType(combo.fColorType);
+                    if (skColorType == kUnknown_SkColorType) {
+                        break;
+                    }
+
+                    auto createWithSrcDataMtd = [](GrDirectContext* dContext,
+                                                   const SkPixmap srcData[],
+                                                   int numLevels,
+                                                   GrSurfaceOrigin origin,
+                                                   GrRenderable renderable) {
+                        SkASSERT(srcData && numLevels);
+                        return ManagedBackendTexture::MakeWithData(dContext,
+                                                                   srcData,
+                                                                   numLevels,
+                                                                   origin,
+                                                                   renderable,
+                                                                   GrProtected::kNo);
+                    };
+
+                    test_pixmap_init(dContext,
+                                     reporter,
+                                     createWithSrcDataMtd,
+                                     skColorType,
+                                     origin,
+                                     mipmapped,
+                                     renderable);
+
                 }
             }
         }

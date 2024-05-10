@@ -5,13 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "include/utils/SkRandom.h"
-#include "src/gpu/GrTTopoSort.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSpan.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkTArray.h"
+#include "src/base/SkRandom.h"
+#include "src/gpu/ganesh/GrTTopoSort.h"
 #include "tests/Test.h"
-
 #include "tools/ToolUtils.h"
 
-typedef void (*CreateGraphPF)(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph);
+#include <cstddef>
+#include <vector>
+
+using namespace skia_private;
+
+typedef void (*CreateGraphPF)(TArray<sk_sp<ToolUtils::TopoTestNode>>* graph);
 
 /* Simple diamond
  *       3
@@ -22,7 +30,7 @@ typedef void (*CreateGraphPF)(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph);
  *     \   /
  *       0
  */
-static void create_graph0(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
+static void create_graph0(TArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
     ToolUtils::TopoTestNode::AllocNodes(graph, 4);
 
     (*graph)[0]->dependsOn((*graph)[1].get());
@@ -31,24 +39,28 @@ static void create_graph0(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
     (*graph)[2]->dependsOn((*graph)[3].get());
 }
 
+static void create_simple_chain(TArray<sk_sp<ToolUtils::TopoTestNode>>* graph, int n) {
+    ToolUtils::TopoTestNode::AllocNodes(graph, n);
+
+    for (int i = 0; i < n - 1; ++i) {
+        (*graph)[i+1]->dependsOn((*graph)[i].get());
+    }
+}
+
 /* Simple chain
- *     3
- *     ^
- *     |
- *     2
+ *     0
  *     ^
  *     |
  *     1
  *     ^
  *     |
- *     0
+ *     2
+ *     ^
+ *     |
+ *     3
  */
-static void create_graph1(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
-    ToolUtils::TopoTestNode::AllocNodes(graph, 4);
-
-    (*graph)[0]->dependsOn((*graph)[1].get());
-    (*graph)[1]->dependsOn((*graph)[2].get());
-    (*graph)[2]->dependsOn((*graph)[3].get());
+static void create_graph1(TArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
+    create_simple_chain(graph, 4);
 }
 
 /* Simple Loop
@@ -58,7 +70,7 @@ static void create_graph1(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
  *    .     \
  *    0 ---> 1
  */
-static void create_graph2(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
+static void create_graph2(TArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
     ToolUtils::TopoTestNode::AllocNodes(graph, 3);
 
     (*graph)[0]->dependsOn((*graph)[1].get());
@@ -81,7 +93,7 @@ static void create_graph2(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
  *     \   /
  *       0
  */
-static void create_graph3(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
+static void create_graph3(TArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
     ToolUtils::TopoTestNode::AllocNodes(graph, 7);
 
     (*graph)[0]->dependsOn((*graph)[1].get());
@@ -104,7 +116,7 @@ static void create_graph3(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
  *     \   /       \   /
  *       0           4
  */
-static void create_graph4(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
+static void create_graph4(TArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
     ToolUtils::TopoTestNode::AllocNodes(graph, 8);
 
     (*graph)[0]->dependsOn((*graph)[1].get());
@@ -127,7 +139,7 @@ static void create_graph4(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
  *      .  / \  .
  *       0     1
  */
-static void create_graph5(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
+static void create_graph5(TArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
     ToolUtils::TopoTestNode::AllocNodes(graph, 7);
 
     (*graph)[0]->dependsOn((*graph)[3].get());
@@ -147,7 +159,7 @@ static void create_graph5(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
  *    .     \    .     \
  *    0 ---> 1   3 ---> 4
  */
-static void create_graph6(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
+static void create_graph6(TArray<sk_sp<ToolUtils::TopoTestNode>>* graph) {
     ToolUtils::TopoTestNode::AllocNodes(graph, 6);
 
     (*graph)[0]->dependsOn((*graph)[1].get());
@@ -175,18 +187,18 @@ DEF_TEST(TopoSort, reporter) {
         { create_graph6, false },
     };
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(tests); ++i) {
-        SkTArray<sk_sp<ToolUtils::TopoTestNode>> graph;
+    for (size_t i = 0; i < std::size(tests); ++i) {
+        TArray<sk_sp<ToolUtils::TopoTestNode>> graph;
 
         (tests[i].fCreate)(&graph);
 
-        const int numNodes = graph.count();
+        const int numNodes = graph.size();
 
-        ToolUtils::TopoTestNode::Shuffle(&graph, &rand);
+        ToolUtils::TopoTestNode::Shuffle(graph, &rand);
 
-        bool actualResult = GrTTopoSort<ToolUtils::TopoTestNode>(&graph);
+        bool actualResult = GrTTopoSort<ToolUtils::TopoTestNode>(graph);
         REPORTER_ASSERT(reporter, actualResult == tests[i].fExpectedResult);
-        REPORTER_ASSERT(reporter, numNodes == graph.count());
+        REPORTER_ASSERT(reporter, numNodes == graph.size());
 
         if (tests[i].fExpectedResult) {
             for (const auto& node : graph) {
@@ -205,5 +217,35 @@ DEF_TEST(TopoSort, reporter) {
         }
 
         //SkDEBUGCODE(print(graph);)
+    }
+
+    // Some additional tests that do multiple partial sorts of graphs where we know nothing in an
+    // earlier partion depends on anything in a later partition.
+    for (int n = 2; n < 6; ++n) {
+        for (int split = 1; split < n; ++split) {
+            TArray<sk_sp<ToolUtils::TopoTestNode>> graph;
+            create_simple_chain(&graph, n);
+            SkSpan spanA = SkSpan(graph.begin(), split);
+            SkSpan spanB = SkSpan(graph.begin() + split, n - split);
+            ToolUtils::TopoTestNode::Shuffle(spanA, &rand);
+            ToolUtils::TopoTestNode::Shuffle(spanB, &rand);
+            bool result = GrTTopoSort(spanA);
+            if (!result) {
+                ERRORF(reporter, "Topo sort on partial chain failed.");
+                return;
+            }
+            // Nothing outside of the processed span should have been output.
+            for (const auto& node : spanB) {
+                REPORTER_ASSERT(reporter, !ToolUtils::TopoTestNode::WasOutput(node.get()));
+            }
+            result = GrTTopoSort(spanB, split);
+            if (!result) {
+                ERRORF(reporter, "Topo sort on partial chain failed.");
+                return;
+            }
+            for (const auto& node : graph) {
+                REPORTER_ASSERT(reporter, node->check());
+            }
+        }
     }
 }

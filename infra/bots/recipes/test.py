@@ -63,39 +63,42 @@ def test_steps(api):
         api.python.inline,
         'get uninteresting hashes',
         program="""
-        import contextlib
-        import math
-        import socket
-        import sys
-        import time
-        import urllib2
+import contextlib
+import math
+import socket
+import sys
+import time
 
-        HASHES_URL = sys.argv[1]
-        RETRIES = 5
-        TIMEOUT = 60
-        WAIT_BASE = 15
+from urllib.request import urlopen
 
-        socket.setdefaulttimeout(TIMEOUT)
-        for retry in range(RETRIES):
-          try:
-            with contextlib.closing(
-                urllib2.urlopen(HASHES_URL, timeout=TIMEOUT)) as w:
-              hashes = w.read()
-              with open(sys.argv[2], 'w') as f:
-                f.write(hashes)
-                break
-          except Exception as e:
-            print('Failed to get uninteresting hashes from %s:' % HASHES_URL)
-            print(e)
-            if retry == RETRIES:
-              raise
-            waittime = WAIT_BASE * math.pow(2, retry)
-            print('Retry in %d seconds.' % waittime)
-            time.sleep(waittime)
+HASHES_URL = sys.argv[1]
+RETRIES = 5
+TIMEOUT = 60
+WAIT_BASE = 15
+
+socket.setdefaulttimeout(TIMEOUT)
+for retry in range(RETRIES):
+  try:
+    with contextlib.closing(
+        urlopen(HASHES_URL, timeout=TIMEOUT)) as w:
+      hashes = w.read().decode('utf-8')
+      with open(sys.argv[2], 'w') as f:
+        f.write(hashes)
+        break
+  except Exception as e:
+    print('Failed to get uninteresting hashes from %s:' % HASHES_URL)
+    print(e)
+    if retry == RETRIES:
+      raise
+    waittime = WAIT_BASE * math.pow(2, retry)
+    print('Retry in %d seconds.' % waittime)
+    time.sleep(waittime)
         """,
         args=[api.properties['gold_hashes_url'], host_hashes_file],
-        abort_on_failure=False,
-        fail_build_on_failure=False,
+        # If this fails, we want to know about it because it means Gold is down
+        # and proceeding onwards would take a very long time, but be hard to notice.
+        abort_on_failure=True,
+        fail_build_on_failure=True,
         infra_step=True)
 
     if api.path.exists(host_hashes_file):
@@ -141,6 +144,8 @@ def test_steps(api):
           api.flavor.device_dirs.resource_dir, 'skottie'),
       api.flavor.device_dirs.lotties_dir,
     ])
+  if 'Fontations' in api.vars.builder_cfg.get('extra_config', []):
+    args.extend(['--fontTestDataPath', api.flavor.device_dirs.fonts_dir])
 
   if use_hash_file:
     args.extend(['--uninterestingHashesFile', hashes_file])
@@ -176,6 +181,7 @@ TEST_BUILDERS = [
   'Test-Android-Clang-Pixel2XL-GPU-Adreno540-arm64-Debug-All-Android',
   'Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Release-All-Lottie',
   'Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE',
+  'Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-Fontations',
 ]
 
 

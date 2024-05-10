@@ -9,7 +9,14 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkScalar.h"
 #include "src/core/SkStringUtils.h"
+#include "tools/fonts/FontToolUtils.h"
+#include "tools/sk_app/Window.h"
+
+#include <algorithm>
 
 namespace sk_app {
 
@@ -96,7 +103,7 @@ void CommandSet::drawHelp(SkCanvas* canvas) {
     std::stable_sort(fCommands.begin(), fCommands.end(),
                      kAlphabetical_HelpMode == fHelpMode ? compareCommandKey : compareCommandGroup);
 
-    SkFont font;
+    SkFont font = ToolUtils::DefaultPortableFont();
     font.setSize(16);
 
     SkFont groupFont;

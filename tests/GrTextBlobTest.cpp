@@ -5,14 +5,52 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTextBlob.h"
-#include "src/core/SkSurfacePriv.h"
-#include "src/gpu/text/GrTextBlob.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "src/core/SkDevice.h"
+#include "src/core/SkScalerContext.h"
+#include "src/text/GlyphRun.h"
+#include "src/text/gpu/SDFTControl.h"
+#include "src/text/gpu/SubRunAllocator.h"
+#include "src/text/gpu/TextBlob.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
+
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <memory>
+#include <tuple>
+#include <utility>
+
+class GrRecordingContext;
+struct GrContextOptions;
+
+using BagOfBytes = sktext::gpu::BagOfBytes;
+using SubRunAllocator = sktext::gpu::SubRunAllocator;
 
 SkBitmap rasterize_blob(SkTextBlob* blob,
                         const SkPaint& paint,
@@ -20,7 +58,7 @@ SkBitmap rasterize_blob(SkTextBlob* blob,
                         const SkMatrix& matrix) {
     const SkImageInfo info =
             SkImageInfo::Make(500, 500, kN32_SkColorType, kPremul_SkAlphaType);
-    auto surface = SkSurface::MakeRenderTarget(rContext, SkBudgeted::kNo, info);
+    auto surface = SkSurfaces::RenderTarget(rContext, skgpu::Budgeted::kNo, info);
     auto canvas = surface->getCanvas();
     canvas->drawColor(SK_ColorWHITE);
     canvas->concat(matrix);
@@ -42,8 +80,11 @@ bool check_for_black(const SkBitmap& bm) {
     return false;
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrTextBlobScaleAnimation, reporter, ctxInfo) {
-    auto tf = ToolUtils::create_portable_typeface("Mono", SkFontStyle());
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrTextBlobScaleAnimation,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
+    auto tf = ToolUtils::CreatePortableTypeface("Mono", SkFontStyle());
     SkFont font{tf};
     font.setHinting(SkFontHinting::kNormal);
     font.setSize(12);
@@ -70,8 +111,11 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrTextBlobScaleAnimation, reporter, ctxInfo) 
 }
 
 // Test extreme positions for all combinations of positions, origins, and translation matrices.
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrTextBlobMoveAround, reporter, ctxInfo) {
-    auto tf = ToolUtils::create_portable_typeface("Mono", SkFontStyle());
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrTextBlobMoveAround,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
+    auto tf = ToolUtils::CreatePortableTypeface("Mono", SkFontStyle());
     SkFont font{tf};
     font.setHinting(SkFontHinting::kNormal);
     font.setSize(12);
@@ -94,7 +138,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrTextBlobMoveAround, reporter, ctxInfo) {
         SkPaint paint;
         const SkImageInfo info =
                 SkImageInfo::Make(350, 80, kN32_SkColorType, kPremul_SkAlphaType);
-        auto surface = SkSurface::MakeRenderTarget(dContext, SkBudgeted::kNo, info);
+        auto surface = SkSurfaces::RenderTarget(dContext, skgpu::Budgeted::kNo, info);
         auto canvas = surface->getCanvas();
         canvas->drawColor(SK_ColorWHITE);
         canvas->concat(matrix);
@@ -143,34 +187,34 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrTextBlobMoveAround, reporter, ctxInfo) {
     }
 }
 
-DEF_TEST(GrBagOfBytesBasic, r) {
+DEF_TEST(BagOfBytesBasic, r) {
     const int k4K = 1 << 12;
     {
         // GrBagOfBytes::MinimumSizeWithOverhead(-1); // This should fail
-        GrBagOfBytes::PlatformMinimumSizeWithOverhead(0, 16);
-        GrBagOfBytes::PlatformMinimumSizeWithOverhead(
+        BagOfBytes::PlatformMinimumSizeWithOverhead(0, 16);
+        BagOfBytes::PlatformMinimumSizeWithOverhead(
                 std::numeric_limits<int>::max() - k4K - 1, 16);
         // GrBagOfBytes::MinimumSizeWithOverhead(std::numeric_limits<int>::max() - k4K);  // Fail
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(0, 1, 16, 16) == 31);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(1, 1, 16, 16) == 32);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(63, 1, 16, 16) == 94);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(0, 8, 16, 16) == 24);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(1, 8, 16, 16) == 32);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(63, 8, 16, 16) == 88);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(0, 16, 16, 16) == 16);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(1, 16, 16, 16) == 32);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(63, 16, 16, 16) == 80);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(0, 1, 16, 16) == 31);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(1, 1, 16, 16) == 32);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(63, 1, 16, 16) == 94);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(0, 8, 16, 16) == 24);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(1, 8, 16, 16) == 32);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(63, 8, 16, 16) == 88);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(0, 16, 16, 16) == 16);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(1, 16, 16, 16) == 32);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(63, 16, 16, 16) == 80);
 
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(0, 1, 8, 16) == 23);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(1, 1, 8, 16) == 24);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(63, 1, 8, 16) == 86);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(0, 8, 8, 16) == 16);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(1, 8, 8, 16) == 24);
-        REPORTER_ASSERT(r, GrBagOfBytes::MinimumSizeWithOverhead(63, 8, 8, 16) == 80);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(0, 1, 8, 16) == 23);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(1, 1, 8, 16) == 24);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(63, 1, 8, 16) == 86);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(0, 8, 8, 16) == 16);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(1, 8, 8, 16) == 24);
+        REPORTER_ASSERT(r, BagOfBytes::MinimumSizeWithOverhead(63, 8, 8, 16) == 80);
     }
 
     {
-        GrBagOfBytes bob;
+        BagOfBytes bob;
         // bob.alignedBytes(0, 1);  // This should fail
         // bob.alignedBytes(1, 0);  // This should fail
         // bob.alignedBytes(1, 3);  // This should fail
@@ -189,7 +233,7 @@ DEF_TEST(GrBagOfBytesBasic, r) {
 
     // Force multiple block allocation
     {
-        GrBagOfBytes bob;
+        BagOfBytes bob;
         const int k64K = 1 << 16;
         // By default allocation block sizes start at 1K and go up with fib. This should allocate
         // 10 individual blocks.
@@ -199,21 +243,7 @@ DEF_TEST(GrBagOfBytesBasic, r) {
     }
 }
 
-// Helper for defining allocators with inline/reserved storage.
-// For argument declarations, stick to the base type (GrSubRunAllocator).
-// Note: Inheriting from the storage first means the storage will outlive the
-// GrSubRunAllocator, letting ~GrSubRunAllocator read it as it calls destructors.
-// (This is mostly only relevant for strict tools like MSAN.)
-
-template <size_t inlineSize>
-class GrSTSubRunAllocator : private GrBagOfBytes::Storage<inlineSize>, public GrSubRunAllocator {
-public:
-    explicit GrSTSubRunAllocator(int firstHeapAllocation =
-                                    GrBagOfBytes::PlatformMinimumSizeWithOverhead(inlineSize, 1))
-            : GrSubRunAllocator{this->data(), SkTo<int>(this->size()), firstHeapAllocation} {}
-};
-
-DEF_TEST(GrSubRunAllocator, r) {
+DEF_TEST(SubRunAllocator, r) {
     static int created = 0;
     static int destroyed = 0;
     struct Foo {
@@ -228,7 +258,7 @@ DEF_TEST(GrSubRunAllocator, r) {
         char buf[10];
     };
 
-    auto exercise = [&](GrSubRunAllocator* alloc) {
+    auto exercise = [&](SubRunAllocator* alloc) {
         created = 0;
         destroyed = 0;
         {
@@ -260,20 +290,20 @@ DEF_TEST(GrSubRunAllocator, r) {
 
     // Exercise default arena
     {
-        GrSubRunAllocator arena{0};
+        SubRunAllocator arena{0};
         exercise(&arena);
     }
 
     // Exercise on stack arena
     {
-        GrSTSubRunAllocator<64> arena;
+        sktext::gpu::STSubRunAllocator<64, 16> arena;
         exercise(&arena);
     }
 
     // Exercise arena with a heap allocated starting block
     {
         std::unique_ptr<char[]> block{new char[1024]};
-        GrSubRunAllocator arena{block.get(), 1024, 0};
+        SubRunAllocator arena{block.get(), 1024, 0};
         exercise(&arena);
     }
 
@@ -281,16 +311,16 @@ DEF_TEST(GrSubRunAllocator, r) {
     {
         created = 0;
         destroyed = 0;
-        GrSubRunAllocator arena;
+        SubRunAllocator arena;
 
         struct Node {
-            Node(std::unique_ptr<Node, GrSubRunAllocator::Destroyer> next)
+            Node(std::unique_ptr<Node, SubRunAllocator::Destroyer> next)
                     : fNext{std::move(next)} { created++; }
             ~Node() { destroyed++; }
-            std::unique_ptr<Node, GrSubRunAllocator::Destroyer> fNext;
+            std::unique_ptr<Node, SubRunAllocator::Destroyer> fNext;
         };
 
-        std::unique_ptr<Node, GrSubRunAllocator::Destroyer> current = nullptr;
+        std::unique_ptr<Node, SubRunAllocator::Destroyer> current = nullptr;
         for (int i = 0; i < 128; i++) {
             current = arena.makeUnique<Node>(std::move(current));
         }
@@ -307,7 +337,7 @@ DEF_TEST(GrSubRunAllocator, r) {
             ~I() {}
             int i;
         };
-        GrSTSubRunAllocator<64> arena;
+        sktext::gpu::STSubRunAllocator<64, 16> arena;
         auto a = arena.makeUniqueArray<I>(8, [](size_t i) { return i; });
         for (size_t i = 0; i < 8; i++) {
             REPORTER_ASSERT(r, a[i].i == (int)i);
@@ -315,8 +345,42 @@ DEF_TEST(GrSubRunAllocator, r) {
     }
 
     {
-        GrSubRunAllocator arena(4096);
+        SubRunAllocator arena(4096);
         void* ptr = arena.alignedBytes(4081, 8);
         REPORTER_ASSERT(r, ((intptr_t)ptr & 7) == 0);
     }
+}
+
+using TextBlob = sktext::gpu::TextBlob;
+
+DEF_TEST(KeyEqualityOnPerspective, r) {
+    SkTextBlobBuilder builder;
+    SkFont font(ToolUtils::DefaultTypeface(), 16);
+    auto runBuffer = builder.allocRun(font, 1, 0.0f, 0.0f);
+    runBuffer.glyphs[0] = 3;
+    auto blob = builder.make();
+    sktext::GlyphRunBuilder grBuilder;
+    auto glyphRunList = grBuilder.blobToGlyphRunList(*blob, {100, 100});
+    SkPaint paint;
+
+    // Build the strike device.
+    SkSurfaceProps props;
+#if !defined(SK_DISABLE_SDF_TEXT)
+    sktext::gpu::SDFTControl control(false, false, false, 1, 100);
+#else
+    sktext::gpu::SDFTControl control{};
+#endif
+    SkStrikeDeviceInfo strikeDevice{props, SkScalerContextFlags::kBoostContrast, &control};
+    SkMatrix matrix1;
+    matrix1.setAll(1, 0, 0, 0, 1, 0, 1, 1, 1);
+    SkMatrix matrix2;
+    matrix2.setAll(1, 0, 0, 0, 1, 0, 2, 2, 1);
+    auto key1 = std::get<1>(
+            TextBlob::Key::Make(glyphRunList, paint, matrix1, strikeDevice));
+    auto key2 = std::get<1>(
+            TextBlob::Key::Make(glyphRunList, paint, matrix1, strikeDevice));
+    auto key3 = std::get<1>(
+            TextBlob::Key::Make(glyphRunList, paint, matrix2, strikeDevice));
+    REPORTER_ASSERT(r, key1 == key2);
+    REPORTER_ASSERT(r, key1 == key3);
 }

@@ -15,16 +15,18 @@ void draw(SkCanvas* canvas) {
         }
         SkPaint paint;
         paint.setAntiAlias(true);
-        SkFont font;
+        SkFont font = SkFont(fontMgr->matchFamilyStyle(nullptr, {}));
         sk_sp<SkImage> raster(image->makeRasterImage());
         canvas->drawImage(raster, 0, 0);
         canvas->drawString(label, 20, raster->height() / 4, font, paint);
     };
     sk_sp<SkImage> bitmapImage(source.asImage());
-    sk_sp<SkImage> textureImage(SkImage::MakeFromTexture(dContext, backEndTexture,
-                                                         kTopLeft_GrSurfaceOrigin,
-                                                         kRGBA_8888_SkColorType,
-                                                         kOpaque_SkAlphaType, nullptr));
+    sk_sp<SkImage> textureImage(SkImages::BorrowTextureFrom(dContext,
+                                                            backEndTexture,
+                                                            kTopLeft_GrSurfaceOrigin,
+                                                            kRGBA_8888_SkColorType,
+                                                            kOpaque_SkAlphaType,
+                                                            nullptr));
     drawImage(image, "image");
     canvas->translate(image->width(), 0);
     drawImage(bitmapImage, "source");

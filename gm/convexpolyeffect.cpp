@@ -18,13 +18,14 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/private/GrTypesPriv.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/GrPaint.h"
-#include "src/gpu/effects/GrConvexPolyEffect.h"
-#include "src/gpu/effects/GrPorterDuffXferProcessor.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ganesh/GrCanvas.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrPaint.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/effects/GrConvexPolyEffect.h"
+#include "src/gpu/ganesh/effects/GrPorterDuffXferProcessor.h"
 #include "tools/gpu/TestOps.h"
 
 #include <memory>
@@ -44,11 +45,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("convex_poly_effect");
-    }
+    SkString getName() const override { return SkString("convex_poly_effect"); }
 
-    SkISize onISize() override { return SkISize::Make(720, 550); }
+    SkISize getISize() override { return SkISize::Make(720, 550); }
 
     void onOnceBeforeDraw() override {
         SkPath tri;
@@ -91,7 +90,7 @@ protected:
     }
 
     DrawResult onDraw(GrRecordingContext* rContext, SkCanvas* canvas, SkString* errorMsg) override {
-        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+        auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
         if (!sdc) {
             *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
             return DrawResult::kSkip;

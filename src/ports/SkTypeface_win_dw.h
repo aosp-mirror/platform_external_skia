@@ -8,9 +8,11 @@
 #ifndef SkTypeface_win_dw_DEFINED
 #define SkTypeface_win_dw_DEFINED
 
+#include "include/core/SkFontArguments.h"
 #include "include/core/SkTypeface.h"
+#include "include/private/base/SkAPI.h"
+#include "src/base/SkLeanWindows.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
-#include "src/core/SkLeanWindows.h"
 #include "src/core/SkTypefaceCache.h"
 #include "src/utils/win/SkDWrite.h"
 #include "src/utils/win/SkHRESULT.h"
@@ -23,6 +25,15 @@
 
 class SkFontDescriptor;
 struct SkScalerContextRec;
+
+/* dwrite_3.h incorrectly uses NTDDI_VERSION to hide immutible interfaces (it should only be used to
+   gate changes to public ABI). The implementation files can (and must) get away with including
+   SkDWriteNTDDI_VERSION.h which simply unsets NTDDI_VERSION, but this doesn't work well for this
+   header which can be included in SkTypeface.cpp. Instead, ensure that any declarations hidden
+   behind the NTDDI_VERSION are forward (backward?) declared here in case dwrite_3.h did not declare
+   them. */
+interface IDWriteFontFace4;
+interface IDWriteFontFace7;
 
 static SkFontStyle get_style(IDWriteFont* font) {
     int weight = font->GetWeight();
@@ -37,7 +48,7 @@ static SkFontStyle get_style(IDWriteFont* font) {
     return SkFontStyle(weight, width, slant);
 }
 
-class DWriteFontTypeface : public SkTypeface {
+class SK_SPI DWriteFontTypeface : public SkTypeface {
 public:
     struct Loaders : public SkNVRefCnt<Loaders> {
         Loaders(IDWriteFactory* factory,
@@ -58,41 +69,19 @@ public:
         SkTScopedComPtr<IDWriteFontCollectionLoader> fDWriteFontCollectionLoader;
     };
 
+    static constexpr SkTypeface::FactoryId FactoryId = SkSetFourByteTag('d','w','r','t');
+    static sk_sp<SkTypeface> MakeFromStream(std::unique_ptr<SkStreamAsset>, const SkFontArguments&);
+
+    ~DWriteFontTypeface() override;
 private:
     DWriteFontTypeface(const SkFontStyle& style,
                        IDWriteFactory* factory,
                        IDWriteFontFace* fontFace,
                        IDWriteFont* font,
                        IDWriteFontFamily* fontFamily,
-                       sk_sp<Loaders> loaders)
-        : SkTypeface(style, false)
-        , fFactory(SkRefComPtr(factory))
-        , fDWriteFontFamily(SkRefComPtr(fontFamily))
-        , fDWriteFont(SkRefComPtr(font))
-        , fDWriteFontFace(SkRefComPtr(fontFace))
-        , fLoaders(std::move(loaders))
-    {
-        if (!SUCCEEDED(fDWriteFontFace->QueryInterface(&fDWriteFontFace1))) {
-            // IUnknown::QueryInterface states that if it fails, punk will be set to nullptr.
-            // http://blogs.msdn.com/b/oldnewthing/archive/2004/03/26/96777.aspx
-            SkASSERT_RELEASE(nullptr == fDWriteFontFace1.get());
-        }
-        if (!SUCCEEDED(fDWriteFontFace->QueryInterface(&fDWriteFontFace2))) {
-            SkASSERT_RELEASE(nullptr == fDWriteFontFace2.get());
-        }
-        if (!SUCCEEDED(fDWriteFontFace->QueryInterface(&fDWriteFontFace4))) {
-            SkASSERT_RELEASE(nullptr == fDWriteFontFace4.get());
-        }
-        if (!SUCCEEDED(fFactory->QueryInterface(&fFactory2))) {
-            SkASSERT_RELEASE(nullptr == fFactory2.get());
-        }
-
-        if (fDWriteFontFace1 && fDWriteFontFace1->IsMonospacedFont()) {
-            this->setIsFixedPitch(true);
-        }
-
-        fIsColorFont = fFactory2 && fDWriteFontFace2 && fDWriteFontFace2->IsColorFont();
-    }
+                       sk_sp<Loaders> loaders,
+                       const SkFontArguments::Palette&);
+    HRESULT initializePalette();
 
 public:
     SkTScopedComPtr<IDWriteFactory> fFactory;
@@ -103,17 +92,34 @@ public:
     SkTScopedComPtr<IDWriteFontFace1> fDWriteFontFace1;
     SkTScopedComPtr<IDWriteFontFace2> fDWriteFontFace2;
     SkTScopedComPtr<IDWriteFontFace4> fDWriteFontFace4;
+    // Once WDK 10.0.25357.0 or newer is required to build, fDWriteFontFace7 can be a smart pointer.
+    // If a smart pointer is used then ~DWriteFontTypeface must call the smart pointer's destructor,
+    // which must include code to Release the IDWriteFontFace7, but there may be no IDWriteFontFace7
+    // other than the forward declaration. Skia should never declare an IDWriteFontFace7 (other than
+    // copying the entire interface) for ODR reasons. This header cannot detect if there will be a
+    // full declaration of IDWriteFontFace7 at the ~DWriteFontTypeface implementation because of
+    // NTDDI_VERSION shenanigains, otherwise this defintition could just be ifdef'ed.
+    //SkTScopedComPtr<IDWriteFontFace7> fDWriteFontFace7;
+    IDWriteFontFace7* fDWriteFontFace7 = nullptr;
     bool fIsColorFont;
+
+    std::unique_ptr<SkFontArguments::Palette::Override> fRequestedPaletteEntryOverrides;
+    SkFontArguments::Palette fRequestedPalette;
+
+    size_t fPaletteEntryCount;
+    std::unique_ptr<SkColor[]> fPalette;
+    std::unique_ptr<DWRITE_COLOR_F[]> fDWPalette;
 
     static sk_sp<DWriteFontTypeface> Make(
         IDWriteFactory* factory,
         IDWriteFontFace* fontFace,
         IDWriteFont* font,
         IDWriteFontFamily* fontFamily,
-        sk_sp<Loaders> loaders)
+        sk_sp<Loaders> loaders,
+        const SkFontArguments::Palette& palette)
     {
         return sk_sp<DWriteFontTypeface>(new DWriteFontTypeface(
-            get_style(font), factory, fontFace, font, fontFamily, std::move(loaders)));
+            get_style(font), factory, fontFace, font, fontFamily, std::move(loaders), palette));
     }
 
 protected:

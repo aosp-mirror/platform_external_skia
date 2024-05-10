@@ -9,6 +9,7 @@
 #include <tchar.h>
 
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkMalloc.h"
 #include "tools/sk_app/Application.h"
 #include "tools/sk_app/win/Window_win.h"
 #include "tools/timer/Timer.h"
@@ -38,7 +39,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
     char* argv[4096];
     int argc = 0;
     TCHAR exename[1024], *next;
-    int exenameLen = GetModuleFileName(nullptr, exename, SK_ARRAY_COUNT(exename));
+    int exenameLen = GetModuleFileName(nullptr, exename, std::size(exename));
     // we're ignoring the possibility that the exe name exceeds the exename buffer
     (void)exenameLen;
     argv[argc++] = tchar_to_utf8(exename);

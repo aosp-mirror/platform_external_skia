@@ -7,10 +7,17 @@
 
 #include "src/effects/SkEmbossMask.h"
 
-#include "include/core/SkMath.h"
-#include "include/private/SkFixed.h"
-#include "include/private/SkTo.h"
-#include "src/core/SkMathPriv.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkFixed.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkMathPriv.h"
+#include "src/core/SkMask.h"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 
 static inline int nonzero_to_one(int x) {
 #if 0
@@ -45,7 +52,7 @@ static inline unsigned div255(unsigned x) {
 
 #define kDelta  32  // small enough to show off angle differences
 
-void SkEmbossMask::Emboss(SkMask* mask, const SkEmbossMaskFilter::Light& light) {
+void SkEmbossMask::Emboss(SkMaskBuilder* mask, const SkEmbossMaskFilter::Light& light) {
     SkASSERT(mask->fFormat == SkMask::k3D_Format);
 
     int     specular = light.fSpecular;
@@ -57,7 +64,7 @@ void SkEmbossMask::Emboss(SkMask* mask, const SkEmbossMaskFilter::Light& light) 
     int     lz_dot8 = lz >> 8;
 
     size_t      planeSize = mask->computeImageSize();
-    uint8_t*    alpha = mask->fImage;
+    uint8_t*    alpha = mask->image();
     uint8_t*    multiply = (uint8_t*)alpha + planeSize;
     uint8_t*    additive = multiply + planeSize;
 

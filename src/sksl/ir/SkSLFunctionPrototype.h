@@ -8,9 +8,9 @@
 #ifndef SKSL_FUNCTIONPROTOTYPE
 #define SKSL_FUNCTIONPROTOTYPE
 
-#include "include/private/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
 
 namespace SkSL {
 
@@ -19,10 +19,10 @@ namespace SkSL {
  */
 class FunctionPrototype final : public ProgramElement {
 public:
-    inline static constexpr Kind kProgramElementKind = Kind::kFunctionPrototype;
+    inline static constexpr Kind kIRNodeKind = Kind::kFunctionPrototype;
 
-    FunctionPrototype(int line, const FunctionDeclaration* declaration, bool builtin)
-            : INHERITED(line, kProgramElementKind)
+    FunctionPrototype(Position pos, const FunctionDeclaration* declaration, bool builtin)
+            : INHERITED(pos, kIRNodeKind)
             , fDeclaration(declaration)
             , fBuiltin(builtin) {}
 
@@ -35,7 +35,8 @@ public:
     }
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::make_unique<FunctionPrototype>(fLine, &this->declaration(), /*builtin=*/false);
+        return std::make_unique<FunctionPrototype>(fPosition, &this->declaration(),
+                /*builtin=*/false);
     }
 
     std::string description() const override {

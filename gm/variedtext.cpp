@@ -20,8 +20,9 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 /**
  * Draws text with random parameters. The text draws each get their own clip rect. It is also
@@ -36,7 +37,7 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString name("varied_text");
         if (fEffectiveClip) {
             name.append("_clipped");
@@ -51,9 +52,7 @@ protected:
         return name;
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     void onOnceBeforeDraw() override {
         fPaint.setAntiAlias(true);
@@ -63,11 +62,11 @@ protected:
         SkScalar w = SkIntToScalar(size.fWidth);
         SkScalar h = SkIntToScalar(size.fHeight);
 
-        static_assert(4 == SK_ARRAY_COUNT(fTypefaces), "typeface_cnt");
-        fTypefaces[0] = ToolUtils::create_portable_typeface("sans-serif", SkFontStyle());
-        fTypefaces[1] = ToolUtils::create_portable_typeface("sans-serif", SkFontStyle::Bold());
-        fTypefaces[2] = ToolUtils::create_portable_typeface("serif", SkFontStyle());
-        fTypefaces[3] = ToolUtils::create_portable_typeface("serif", SkFontStyle::Bold());
+        SkASSERTF(4 == std::size(fTypefaces), "typeface_cnt");
+        fTypefaces[0] = ToolUtils::CreatePortableTypeface("sans-serif", SkFontStyle());
+        fTypefaces[1] = ToolUtils::CreatePortableTypeface("sans-serif", SkFontStyle::Bold());
+        fTypefaces[2] = ToolUtils::CreatePortableTypeface("serif", SkFontStyle());
+        fTypefaces[3] = ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Bold());
 
         SkRandom random;
         for (int i = 0; i < kCnt; ++i) {
@@ -87,7 +86,7 @@ protected:
 
             fPtSizes[i] = random.nextRangeScalar(kMinPtSize, kMaxPtSize);
 
-            fTypefaceIndices[i] = random.nextULessThan(SK_ARRAY_COUNT(fTypefaces));
+            fTypefaceIndices[i] = random.nextULessThan(std::size(fTypefaces));
 
             SkRect r;
             fPaint.setColor(fColors[i]);

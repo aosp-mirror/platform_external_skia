@@ -8,14 +8,24 @@
 #ifndef TestSurface_DEFINED
 #define TestSurface_DEFINED
 
-#include "include/core/SkImageInfo.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkColorData.h"
 
 class GrDirectContext;
 class SkSurface;
 class SkSurfaceProps;
+enum SkColorType : int;
+struct SkImageInfo;
+
+#ifdef SK_GRAPHITE
+namespace skgpu::graphite {
+    class Recorder;
+}
+#endif
 
 namespace sk_gpu_test {
 
@@ -23,7 +33,7 @@ sk_sp<SkSurface> MakeBackendTextureSurface(GrDirectContext*,
                                            const SkImageInfo&,
                                            GrSurfaceOrigin,
                                            int sampleCnt,
-                                           GrMipmapped = GrMipmapped::kNo,
+                                           skgpu::Mipmapped = skgpu::Mipmapped::kNo,
                                            GrProtected = GrProtected::kNo,
                                            const SkSurfaceProps* = nullptr);
 
@@ -33,7 +43,7 @@ sk_sp<SkSurface> MakeBackendTextureSurface(GrDirectContext*,
                                            int sampleCnt,
                                            SkColorType,
                                            sk_sp<SkColorSpace> = nullptr,
-                                           GrMipmapped = GrMipmapped::kNo,
+                                           skgpu::Mipmapped = skgpu::Mipmapped::kNo,
                                            GrProtected = GrProtected::kNo,
                                            const SkSurfaceProps* = nullptr);
 
@@ -53,6 +63,19 @@ sk_sp<SkSurface> MakeBackendRenderTargetSurface(GrDirectContext*,
                                                 sk_sp<SkColorSpace> = nullptr,
                                                 GrProtected = GrProtected::kNo,
                                                 const SkSurfaceProps* = nullptr);
+
+#ifdef SK_GRAPHITE
+/*
+ * Graphite version of MakeBackendTextureSurface
+ */
+sk_sp<SkSurface> MakeBackendTextureSurface(skgpu::graphite::Recorder*,
+                                           const SkImageInfo&,
+                                           skgpu::Origin,
+                                           skgpu::Mipmapped = skgpu::Mipmapped::kNo,
+                                           skgpu::Protected = skgpu::Protected::kNo,
+                                           const SkSurfaceProps* = nullptr);
+#endif  // SK_GRAPHITE
+
 }  // namespace sk_gpu_test
 
 #endif

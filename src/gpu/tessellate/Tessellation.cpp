@@ -8,17 +8,22 @@
 #include "src/gpu/tessellate/Tessellation.h"
 
 #include "include/core/SkPath.h"
+#include "src/base/SkUtils.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPathPriv.h"
-#include "src/core/SkUtils.h"
 #include "src/gpu/BufferWriter.h"
 #include "src/gpu/tessellate/CullTest.h"
 #include "src/gpu/tessellate/MiddleOutPolygonTriangulator.h"
 #include "src/gpu/tessellate/WangsFormula.h"
 
-namespace skgpu {
+using namespace skia_private;
+
+namespace skgpu::tess {
 
 namespace {
+
+using float2 = skvx::float2;
+using float4 = skvx::float4;
 
 // This value only protects us against getting stuck in infinite recursion due to fp32 precision
 // issues. Mathematically, every curve should reduce to manageable visible sections in O(log N)
@@ -61,8 +66,8 @@ public:
             if (!fCullTest.areVisible3(p)) {
                 fPath.lineTo(p[2]);
             } else {
-                float n4 = wangs_formula::quadratic_pow4(fTessellationPrecision, p, fVectorXform);
-                if (n4 > pow4(kMaxTessellationSegmentsPerCurve) && numChops < kMaxChopsPerCurve) {
+                float n4 = wangs_formula::quadratic_p4(fTessellationPrecision, p, fVectorXform);
+                if (n4 > kMaxSegmentsPerCurve_p4 && numChops < kMaxChopsPerCurve) {
                     SkPoint chops[5];
                     SkChopQuadAtHalf(p, chops);
                     fPointStack.pop_back_n(3);
@@ -90,8 +95,8 @@ public:
             if (!fCullTest.areVisible3(p)) {
                 fPath.lineTo(p[2]);
             } else {
-                float n2 = wangs_formula::conic_pow2(fTessellationPrecision, p, w, fVectorXform);
-                if (n2 > pow2(kMaxTessellationSegmentsPerCurve) && numChops < kMaxChopsPerCurve) {
+                float n2 = wangs_formula::conic_p2(fTessellationPrecision, p, w, fVectorXform);
+                if (n2 > kMaxSegmentsPerCurve_p2 && numChops < kMaxChopsPerCurve) {
                     SkConic chops[2];
                     if (!SkConic(p,w).chopAt(.5, chops)) {
                         SkPoint line[2] = {p[0], p[2]};
@@ -125,8 +130,8 @@ public:
             if (!fCullTest.areVisible4(p)) {
                 fPath.lineTo(p[3]);
             } else {
-                float n4 = wangs_formula::cubic_pow4(fTessellationPrecision, p, fVectorXform);
-                if (n4 > pow4(kMaxTessellationSegmentsPerCurve) && numChops < kMaxChopsPerCurve) {
+                float n4 = wangs_formula::cubic_p4(fTessellationPrecision, p, fVectorXform);
+                if (n4 > kMaxSegmentsPerCurve_p4 && numChops < kMaxChopsPerCurve) {
                     SkPoint chops[7];
                     SkChopCubicAtHalf(p, chops);
                     fPointStack.pop_back_n(4);
@@ -148,8 +153,8 @@ private:
     SkPath fPath;
 
     // Used for stack-based recursion (instead of using the runtime stack).
-    SkSTArray<8, SkPoint> fPointStack;
-    SkSTArray<2, float> fWeightStack;
+    STArray<8, SkPoint> fPointStack;
+    STArray<2, float> fWeightStack;
 };
 
 }  // namespace
@@ -165,7 +170,7 @@ SkPath PreChopPathCurves(float tessellationPrecision,
     SkASSERT(wangs_formula::worst_case_cubic(
                      tessellationPrecision,
                      viewport.width(),
-                     viewport.height()) <= kMaxTessellationSegmentsPerCurve);
+                     viewport.height()) <= kMaxSegmentsPerCurve);
     PathChopper chopper(tessellationPrecision, matrix, viewport);
     for (auto [verb, p, w] : SkPathPriv::Iterate(path)) {
         switch (verb) {
@@ -189,7 +194,10 @@ SkPath PreChopPathCurves(float tessellationPrecision,
                 break;
         }
     }
-    return chopper.path();
+    // Must preserve the input path's fill type (see crbug.com/1472747)
+    SkPath chopped = chopper.path();
+    chopped.setFillType(path.getFillType());
+    return chopped;
 }
 
 int FindCubicConvex180Chops(const SkPoint pts[], float T[2], bool* areCusps) {
@@ -209,10 +217,10 @@ int FindCubicConvex180Chops(const SkPoint pts[], float T[2], bool* areCusps) {
     // kIEEE_one_minus_2_epsilon bits are correct.
     SkASSERT(sk_bit_cast<float>(kIEEE_one_minus_2_epsilon) == 1 - 2*kEpsilon);
 
-    float2 p0 = skvx::bit_pun<float2>(pts[0]);
-    float2 p1 = skvx::bit_pun<float2>(pts[1]);
-    float2 p2 = skvx::bit_pun<float2>(pts[2]);
-    float2 p3 = skvx::bit_pun<float2>(pts[3]);
+    float2 p0 = sk_bit_cast<float2>(pts[0]);
+    float2 p1 = sk_bit_cast<float2>(pts[1]);
+    float2 p2 = sk_bit_cast<float2>(pts[2]);
+    float2 p3 = sk_bit_cast<float2>(pts[3]);
 
     // Find the cubic's power basis coefficients. These define the bezier curve as:
     //
@@ -327,4 +335,5 @@ int FindCubicConvex180Chops(const SkPoint pts[], float T[2], bool* areCusps) {
     }
     return 0;
 }
-}  // namespace skgpu
+
+}  // namespace skgpu::tess

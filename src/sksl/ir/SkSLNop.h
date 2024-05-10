@@ -8,7 +8,7 @@
 #ifndef SKSL_NOP
 #define SKSL_NOP
 
-#include "include/private/SkSLStatement.h"
+#include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 
 namespace SkSL {
@@ -18,10 +18,10 @@ namespace SkSL {
  */
 class Nop final : public Statement {
 public:
-    inline static constexpr Kind kStatementKind = Kind::kNop;
+    inline static constexpr Kind kIRNodeKind = Kind::kNop;
 
     Nop()
-    : INHERITED(/*line=*/-1, kStatementKind) {}
+    : INHERITED(Position(), kIRNodeKind) {}
 
     static std::unique_ptr<Statement> Make() {
         return std::make_unique<Nop>();

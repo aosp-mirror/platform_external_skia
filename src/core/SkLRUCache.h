@@ -8,15 +8,15 @@
 #ifndef SkLRUCache_DEFINED
 #define SkLRUCache_DEFINED
 
-#include "include/private/SkChecksum.h"
-#include "include/private/SkTHash.h"
-#include "src/core/SkTInternalLList.h"
+#include "src/base/SkTInternalLList.h"
+#include "src/core/SkChecksum.h"
+#include "src/core/SkTHash.h"
 
 /**
  * A generic LRU cache.
  */
 template <typename K, typename V, typename HashK = SkGoodHash>
-class SkLRUCache : public SkNoncopyable {
+class SkLRUCache {
 private:
     struct Entry {
         Entry(const K& key, V&& value)
@@ -30,8 +30,8 @@ private:
     };
 
 public:
-    explicit SkLRUCache(int maxCount)
-    : fMaxCount(maxCount) {}
+    explicit SkLRUCache(int maxCount) : fMaxCount(maxCount) {}
+    SkLRUCache() = delete;
 
     ~SkLRUCache() {
         Entry* node = fLRU.head();
@@ -41,6 +41,10 @@ public:
             node = fLRU.head();
         }
     }
+
+    // Make noncopyable
+    SkLRUCache(const SkLRUCache&) = delete;
+    SkLRUCache& operator=(const SkLRUCache&) = delete;
 
     V* find(const K& key) {
         Entry** value = fMap.find(key);
@@ -76,7 +80,7 @@ public:
         }
     }
 
-    int count() {
+    int count() const {
         return fMap.count();
     }
 
@@ -118,9 +122,9 @@ private:
         delete entry;
     }
 
-    int                             fMaxCount;
-    SkTHashTable<Entry*, K, Traits> fMap;
-    SkTInternalLList<Entry>         fLRU;
+    int                                         fMaxCount;
+    skia_private::THashTable<Entry*, K, Traits> fMap;
+    SkTInternalLList<Entry>                     fLRU;
 };
 
 #endif

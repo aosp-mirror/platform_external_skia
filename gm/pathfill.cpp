@@ -10,6 +10,8 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPathBuilder.h"
+#include "include/core/SkPathUtils.h"
+#include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
@@ -32,7 +34,7 @@ static PathDY make_frame() {
     SkPaint paint;
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(SkIntToScalar(5));
-    paint.getFillPath(path, &path);
+    skpathutils::FillPathWithPaint(path, paint, &path);
     return {path, 15};
 }
 
@@ -294,7 +296,7 @@ constexpr MakePathProc gProcs[] = {
     make_sawtooth_3,
 };
 
-#define N   SK_ARRAY_COUNT(gProcs)
+#define N   std::size(gProcs)
 
 class PathFillGM : public skiagm::GM {
     SkPath  fPath[N];
@@ -315,14 +317,9 @@ protected:
         fVisualizerPath = make_visualizer();
     }
 
+    SkString getName() const override { return SkString("pathfill"); }
 
-    SkString onShortName() override {
-        return SkString("pathfill");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
@@ -365,13 +362,9 @@ protected:
         }
     }
 
-    SkString onShortName() override {
-        return SkString("pathinvfill");
-    }
+    SkString getName() const override { return SkString("pathinvfill"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(450, 220);
-    }
+    SkISize getISize() override { return SkISize::Make(450, 220); }
 
     static void show(SkCanvas* canvas, const SkPath& path, const SkPaint& paint,
                      const SkRect* clip, SkScalar top, const SkScalar bottom) {
@@ -628,7 +621,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
 
 DEF_SIMPLE_GM(path_stroke_clip_crbug1070835, canvas, 25, 50) {
     SkCanvas* orig = canvas;
-    auto surf = SkSurface::MakeRasterN32Premul(25, 25);
+    auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(25, 25));
     canvas = surf->getCanvas();
 
     SkPaint p;

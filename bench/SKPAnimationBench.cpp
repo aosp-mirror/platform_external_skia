@@ -5,9 +5,11 @@
  * found in the LICENSE file.
  */
 
+#include "bench/GpuTools.h"
 #include "bench/SKPAnimationBench.h"
 #include "include/core/SkSurface.h"
 #include "tools/flags/CommandLineFlags.h"
+
 
 SKPAnimationBench::SKPAnimationBench(const char* name, const SkPicture* pic, const SkIRect& clip,
                                      sk_sp<Animation> animation, bool doLooping)
@@ -27,15 +29,15 @@ void SKPAnimationBench::onPerCanvasPreDraw(SkCanvas* canvas) {
 }
 
 void SKPAnimationBench::drawPicture() {
-    for (int j = 0; j < this->tileRects().count(); ++j) {
+    for (int j = 0; j < this->tileRects().size(); ++j) {
         SkMatrix trans = SkMatrix::Translate(-1.f * this->tileRects()[j].fLeft,
                                              -1.f * this->tileRects()[j].fTop);
         fAnimation->preConcatFrameMatrix(fAnimationTime.nextRangeF(0, 1000), fDevBounds, &trans);
         this->surfaces()[j]->getCanvas()->drawPicture(this->picture(), &trans, nullptr);
     }
 
-    for (int j = 0; j < this->tileRects().count(); ++j) {
-       this->surfaces()[j]->flush();
+    for (int j = 0; j < this->tileRects().size(); ++j) {
+        skgpu::Flush(this->surfaces()[j].get());
     }
 }
 

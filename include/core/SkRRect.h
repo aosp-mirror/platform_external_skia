@@ -10,8 +10,12 @@
 
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
 
-class SkPath;
+#include <cstdint>
+#include <cstring>
+
 class SkMatrix;
 class SkString;
 
@@ -390,7 +394,7 @@ public:
         @param dy  offset added to rect().fTop and rect().fBottom
         @return    SkRRect bounds offset by (dx, dy), with unchanged corner radii
     */
-    SkRRect SK_WARN_UNUSED_RESULT makeOffset(SkScalar dx, SkScalar dy) const {
+    [[nodiscard]] SkRRect makeOffset(SkScalar dx, SkScalar dy) const {
         return SkRRect(fRect.makeOffset(dx, dy), fRadii, fType);
     }
 

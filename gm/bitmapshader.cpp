@@ -19,8 +19,8 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrRecordingContext.h"
-#include "src/gpu/GrCaps.h"
-#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
 
 namespace skiagm {
 
@@ -55,13 +55,9 @@ protected:
         fMask = draw_mask();
     }
 
-    SkString onShortName() override {
-        return SkString("bitmapshaders");
-    }
+    SkString getName() const override { return SkString("bitmapshaders"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(150, 100);
-    }
+    SkISize getISize() override { return SkISize::Make(150, 100); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;

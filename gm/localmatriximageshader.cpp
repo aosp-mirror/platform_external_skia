@@ -17,6 +17,7 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTileMode.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -36,8 +37,8 @@ DEF_SIMPLE_GM(localmatriximageshader, canvas, 250, 250) {
     SkMatrix translate = SkMatrix::Translate(100.0f, 0.0f);
     SkMatrix rotate;
     rotate.setRotate(45.0f);
-    sk_sp<SkShader> redImageShader = redImage->makeShader(SkSamplingOptions(), &translate);
-    sk_sp<SkShader> redLocalMatrixShader = redImageShader->makeWithLocalMatrix(rotate);
+    sk_sp<SkShader> redImageShader = redImage->makeShader(SkSamplingOptions(), &rotate);
+    sk_sp<SkShader> redLocalMatrixShader = redImageShader->makeWithLocalMatrix(translate);
 
     // Rotate about the origin will happen first.
     SkPaint paint;
@@ -45,8 +46,8 @@ DEF_SIMPLE_GM(localmatriximageshader, canvas, 250, 250) {
     canvas->drawIRect(SkIRect::MakeWH(250, 250), paint);
 
     sk_sp<SkImage> blueImage = make_image(canvas, SK_ColorBLUE);
-    sk_sp<SkShader> blueImageShader = blueImage->makeShader(SkSamplingOptions(), &rotate);
-    sk_sp<SkShader> blueLocalMatrixShader = blueImageShader->makeWithLocalMatrix(translate);
+    sk_sp<SkShader> blueImageShader = blueImage->makeShader(SkSamplingOptions(), &translate);
+    sk_sp<SkShader> blueLocalMatrixShader = blueImageShader->makeWithLocalMatrix(rotate);
 
     // Translate will happen first.
     paint.setShader(blueLocalMatrixShader);
@@ -68,7 +69,7 @@ DEF_SIMPLE_GM(localmatriximageshader, canvas, 250, 250) {
 DEF_SIMPLE_GM(localmatriximageshader_filtering, canvas, 256, 256) {
     // Test that filtering decisions (eg bicubic for upscale) are made correctly when the scale
     // comes from a local matrix shader.
-    auto image = GetResourceAsImage("images/mandrill_256.png");
+    auto image = ToolUtils::GetResourceAsImage("images/mandrill_256.png");
     SkPaint p;
     SkMatrix m = SkMatrix::Scale(2, 2);
     p.setShader(image->makeShader(SkSamplingOptions(SkCubicResampler::Mitchell()))

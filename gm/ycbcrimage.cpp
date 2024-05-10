@@ -11,11 +11,13 @@
 #ifdef SK_VULKAN
 
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
 #include "tools/gpu/vk/VkYcbcrSamplerHelper.h"
 
 static void release_ycbcrhelper(void* releaseContext) {
@@ -33,12 +35,9 @@ public:
     }
 
 protected:
+    SkString getName() const override { return SkString("ycbcrimage"); }
 
-    SkString onShortName() override {
-        return SkString("ycbcrimage");
-    }
-
-    SkISize onISize() override {
+    SkISize getISize() override {
         return SkISize::Make(2*kPad+kImageSize, 2*kPad+kImageSize);
     }
 
@@ -56,10 +55,14 @@ protected:
         }
 
         SkASSERT(!fYCbCrImage);
-        fYCbCrImage = SkImage::MakeFromTexture(dContext, ycbcrHelper->backendTexture(),
-                                               kTopLeft_GrSurfaceOrigin, kRGB_888x_SkColorType,
-                                               kPremul_SkAlphaType, nullptr,
-                                               release_ycbcrhelper, ycbcrHelper.get());
+        fYCbCrImage = SkImages::BorrowTextureFrom(dContext,
+                                                  ycbcrHelper->backendTexture(),
+                                                  kTopLeft_GrSurfaceOrigin,
+                                                  kRGB_888x_SkColorType,
+                                                  kPremul_SkAlphaType,
+                                                  nullptr,
+                                                  release_ycbcrhelper,
+                                                  ycbcrHelper.get());
         ycbcrHelper.release();
         if (!fYCbCrImage) {
             *errorMsg = "Failed to create I420 image.";
@@ -69,7 +72,8 @@ protected:
         return DrawResult::kOk;
     }
 
-    DrawResult onGpuSetup(GrDirectContext* dContext, SkString* errorMsg) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg, GraphiteTestContext*) override {
+        GrDirectContext* dContext = GrAsDirectContext(canvas->recordingContext());
         if (!dContext || dContext->abandoned()) {
             return DrawResult::kSkip;
         }

@@ -8,8 +8,8 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTemplates.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
 #include "src/xml/SkXMLParser.h"
 
 #include <expat.h>
@@ -41,7 +41,7 @@ void SkXMLParserError::getErrorString(SkString* str) const
     SkASSERT(str);
     SkString temp;
     if (fCode != kNoError) {
-        if ((unsigned)fCode < SK_ARRAY_COUNT(gErrorStrings))
+        if ((unsigned)fCode < std::size(gErrorStrings))
             temp.set(gErrorStrings[fCode - 1]);
         temp.append(fNoun);
     } else
@@ -58,6 +58,8 @@ void SkXMLParserError::reset() {
 ////////////////
 
 namespace {
+
+constexpr const void* kHashSeed = &kHashSeed;
 
 const XML_Memory_Handling_Suite sk_XML_alloc = {
     sk_malloc_throw,
@@ -125,7 +127,7 @@ void XMLCALL entity_decl_handler(void *data,
                                  const XML_Char *notationName) {
     HANDLER_CONTEXT(data, ctx);
 
-    SkDebugf("'%s' entity declaration found, stopping processing", entityName);
+    SkDEBUGF("'%s' entity declaration found, stopping processing", entityName);
     XML_StopParser(ctx->fXMLParser, XML_FALSE);
 }
 
@@ -143,9 +145,16 @@ bool SkXMLParser::parse(SkStream& docStream)
 {
     ParsingContext ctx(this);
     if (!ctx.fXMLParser) {
-        SkDebugf("could not create XML parser\n");
+        SkDEBUGF("could not create XML parser\n");
         return false;
     }
+
+    // Avoid calls to rand_s if this is not set. This seed helps prevent DOS
+    // with a known hash sequence so an address is sufficient. The provided
+    // seed should not be zero as that results in a call to rand_s.
+    unsigned long seed = static_cast<unsigned long>(
+        reinterpret_cast<size_t>(kHashSeed) & 0xFFFFFFFF);
+    XML_SetHashSalt(ctx.fXMLParser, seed ? seed : 1);
 
     XML_SetUserData(ctx.fXMLParser, &ctx);
     XML_SetElementHandler(ctx.fXMLParser, start_element_handler, end_element_handler);
@@ -154,27 +163,41 @@ bool SkXMLParser::parse(SkStream& docStream)
     // Disable entity processing, to inhibit internal entity expansion. See expat CVE-2013-0340.
     XML_SetEntityDeclHandler(ctx.fXMLParser, entity_decl_handler);
 
-    static constexpr int kBufferSize = 4096;
-    bool done = false;
-    do {
-        void* buffer = XML_GetBuffer(ctx.fXMLParser, kBufferSize);
-        if (!buffer) {
-            SkDebugf("could not buffer enough to continue\n");
-            return false;
-        }
+    XML_Status status = XML_STATUS_OK;
+    if (docStream.getMemoryBase() && docStream.hasLength()) {
+        const char* base = reinterpret_cast<const char*>(docStream.getMemoryBase());
+        status = XML_Parse(ctx.fXMLParser,
+                           base + docStream.getPosition(),
+                           docStream.getLength() - docStream.getPosition(),
+                           true);
+    } else {
+        static constexpr int kBufferSize = 4096;
+        bool done = false;
+        do {
+            void* buffer = XML_GetBuffer(ctx.fXMLParser, kBufferSize);
+            if (!buffer) {
+                SkDEBUGF("could not buffer enough to continue\n");
+                return false;
+            }
 
-        size_t len = docStream.read(buffer, kBufferSize);
-        done = docStream.isAtEnd();
-        XML_Status status = XML_ParseBuffer(ctx.fXMLParser, SkToS32(len), done);
-        if (XML_STATUS_ERROR == status) {
-            XML_Error error = XML_GetErrorCode(ctx.fXMLParser);
-            int line = XML_GetCurrentLineNumber(ctx.fXMLParser);
-            int column = XML_GetCurrentColumnNumber(ctx.fXMLParser);
-            const XML_LChar* errorString = XML_ErrorString(error);
-            SkDebugf("parse error @%d:%d: %d (%s).\n", line, column, error, errorString);
-            return false;
-        }
-    } while (!done);
+            size_t len = docStream.read(buffer, kBufferSize);
+            done = docStream.isAtEnd();
+            status = XML_ParseBuffer(ctx.fXMLParser, SkToS32(len), done);
+            if (XML_STATUS_ERROR == status) {
+                break;
+            }
+        } while (!done);
+    }
+    if (XML_STATUS_ERROR == status) {
+#if defined(SK_DEBUG)
+        XML_Error error = XML_GetErrorCode(ctx.fXMLParser);
+        int line = XML_GetCurrentLineNumber(ctx.fXMLParser);
+        int column = XML_GetCurrentColumnNumber(ctx.fXMLParser);
+        const XML_LChar* errorString = XML_ErrorString(error);
+        SkDEBUGF("parse error @%d:%d: %d (%s).\n", line, column, error, errorString);
+#endif
+        return false;
+    }
 
     return true;
 }

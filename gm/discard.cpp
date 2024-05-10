@@ -18,8 +18,13 @@
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
-#include "include/utils/SkRandom.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
+
+#if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/Surface.h"
+#endif
 
 namespace skiagm {
 
@@ -33,28 +38,35 @@ public:
     DiscardGM() {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("discard");
-    }
+    SkString getName() const override { return SkString("discard"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(100, 100);
-    }
+    SkISize getISize() override { return SkISize::Make(100, 100); }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        auto dContext = GrAsDirectContext(canvas->recordingContext());
-        if (!dContext || dContext->abandoned()) {
-            *errorMsg = "GM relies on having access to a live direct context.";
-            return DrawResult::kSkip;
-        }
 
         SkISize size = this->getISize();
         size.fWidth /= 10;
         size.fHeight /= 10;
         SkImageInfo info = SkImageInfo::MakeN32Premul(size);
-        sk_sp<SkSurface> surface = SkSurface::MakeRenderTarget(dContext, SkBudgeted::kNo, info);
-        if (nullptr == surface) {
-            *errorMsg = "Could not create render target.";
+        sk_sp<SkSurface> surface;
+
+        auto dContext = GrAsDirectContext(canvas->recordingContext());
+        if (dContext && !dContext->abandoned()) {
+            surface = SkSurfaces::RenderTarget(dContext, skgpu::Budgeted::kNo, info);
+        }
+
+#if defined(SK_GRAPHITE)
+        auto recorder = canvas->recorder();
+        if (recorder) {
+            surface = SkSurfaces::RenderTarget(recorder, info);
+        }
+#endif
+
+        if (!surface) {
+            surface = SkSurfaces::Raster(info);
+        }
+        if (!surface) {
+            *errorMsg = "Could not create surface.";
             return DrawResult::kFail;
         }
 
@@ -86,9 +98,6 @@ protected:
         surface->getCanvas()->discard();
         return DrawResult::kOk;
     }
-
-private:
-    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////

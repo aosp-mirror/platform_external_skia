@@ -8,64 +8,76 @@
 #ifndef SKSL_FUNCTIONDECLARATION
 #define SKSL_FUNCTIONDECLARATION
 
-#include "include/private/SkSLModifiers.h"
-#include "include/private/SkSLProgramKind.h"
-#include "include/private/SkSLSymbol.h"
-#include "include/private/SkTArray.h"
+#include "include/core/SkSpan.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkTArray.h"
 #include "src/sksl/SkSLIntrinsicList.h"
-#include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLSymbolTable.h"
-#include "src/sksl/ir/SkSLType.h"
-#include "src/sksl/ir/SkSLVariable.h"
+#include "src/sksl/ir/SkSLIRNode.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
+#include "src/sksl/ir/SkSLSymbol.h"
+
+#include <memory>
+#include <string>
+#include <string_view>
 
 namespace SkSL {
 
+class Context;
+class ExpressionArray;
 class FunctionDefinition;
-
-// This enum holds every intrinsic supported by SkSL.
-#define SKSL_INTRINSIC(name) k_##name##_IntrinsicKind,
-enum IntrinsicKind : int8_t {
-    kNotIntrinsic = -1,
-    SKSL_INTRINSIC_LIST
-};
-#undef SKSL_INTRINSIC
+struct Modifiers;
+class Position;
+class Type;
+class Variable;
 
 /**
  * A function declaration (not a definition -- does not contain a body).
  */
 class FunctionDeclaration final : public Symbol {
 public:
-    inline static constexpr Kind kSymbolKind = Kind::kFunctionDeclaration;
+    inline static constexpr Kind kIRNodeKind = Kind::kFunctionDeclaration;
 
-    FunctionDeclaration(int line,
-                        const Modifiers* modifiers,
+    FunctionDeclaration(const Context& context,
+                        Position pos,
+                        ModifierFlags modifierFlags,
                         std::string_view name,
-                        std::vector<const Variable*> parameters,
+                        skia_private::TArray<Variable*> parameters,
                         const Type* returnType,
-                        bool builtin);
+                        IntrinsicKind intrinsicKind);
 
-    static const FunctionDeclaration* Convert(const Context& context,
-                                              SymbolTable& symbols,
-                                              int line,
-                                              const Modifiers* modifiers,
-                                              std::string_view name,
-                                              std::vector<std::unique_ptr<Variable>> parameters,
-                                              const Type* returnType);
+    static FunctionDeclaration* Convert(const Context& context,
+                                        Position pos,
+                                        const Modifiers& modifiers,
+                                        std::string_view name,
+                                        skia_private::TArray<std::unique_ptr<Variable>> parameters,
+                                        Position returnTypePos,
+                                        const Type* returnType);
 
-    const Modifiers& modifiers() const {
-        return *fModifiers;
+    void addParametersToSymbolTable(const Context& context);
+
+    ModifierFlags modifierFlags() const {
+        return fModifierFlags;
+    }
+
+    void setModifierFlags(ModifierFlags m) {
+        fModifierFlags = m;
     }
 
     const FunctionDefinition* definition() const {
         return fDefinition;
     }
 
-    void setDefinition(const FunctionDefinition* definition) const {
+    void setDefinition(const FunctionDefinition* definition) {
         fDefinition = definition;
         fIntrinsicKind = kNotIntrinsic;
     }
 
-    const std::vector<const Variable*>& parameters() const {
+    void setNextOverload(FunctionDeclaration* overload) {
+        SkASSERT(!overload || overload->name() == this->name());
+        fNextOverload = overload;
+    }
+
+    SkSpan<Variable* const> parameters() const {
         return fParameters;
     }
 
@@ -89,11 +101,35 @@ public:
         return this->intrinsicKind() != kNotIntrinsic;
     }
 
+    const FunctionDeclaration* nextOverload() const {
+        return fNextOverload;
+    }
+
+    FunctionDeclaration* mutableNextOverload() const {
+        return fNextOverload;
+    }
+
     std::string mangledName() const;
 
     std::string description() const override;
 
     bool matches(const FunctionDeclaration& f) const;
+
+    /**
+     * If this function is main(), and it has the requested parameter, returns that parameter.
+     * For instance, only a runtime-blend program will have a dest-color parameter, in parameter 1;
+     * `getMainDestColorParameter` will return that parameter if this is a runtime-blend main()
+     * function. Otherwise, null is returned.
+     */
+    const Variable* getMainCoordsParameter() const {
+        return fHasMainCoordsParameter ? fParameters[0] : nullptr;
+    }
+    const Variable* getMainInputColorParameter() const {
+        return fHasMainInputColorParameter ? fParameters[0] : nullptr;
+    }
+    const Variable* getMainDestColorParameter() const {
+        return fHasMainDestColorParameter ? fParameters[1] : nullptr;
+    }
 
     /**
      * Determine the effective types of this function's parameters and return value when called with
@@ -110,19 +146,23 @@ public:
      * that each argument can actually be coerced to the final parameter type, respecting the
      * narrowing-conversions flag. This is handled in callCost(), or in convertCall() (via coerce).
      */
-    using ParamTypes = SkSTArray<8, const Type*>;
+    using ParamTypes = skia_private::STArray<8, const Type*>;
     bool determineFinalTypes(const ExpressionArray& arguments,
                              ParamTypes* outParameterTypes,
                              const Type** outReturnType) const;
 
 private:
-    mutable const FunctionDefinition* fDefinition;
-    const Modifiers* fModifiers;
-    std::vector<const Variable*> fParameters;
-    const Type* fReturnType;
-    bool fBuiltin;
-    bool fIsMain;
+    const FunctionDefinition* fDefinition;
+    FunctionDeclaration* fNextOverload = nullptr;
+    skia_private::TArray<Variable*> fParameters;
+    const Type* fReturnType = nullptr;
+    ModifierFlags fModifierFlags;
     mutable IntrinsicKind fIntrinsicKind = kNotIntrinsic;
+    bool fBuiltin = false;
+    bool fIsMain = false;
+    bool fHasMainCoordsParameter = false;
+    bool fHasMainInputColorParameter = false;
+    bool fHasMainDestColorParameter = false;
 
     using INHERITED = Symbol;
 };

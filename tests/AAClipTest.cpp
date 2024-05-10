@@ -5,9 +5,12 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkClipOp.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
@@ -16,14 +19,18 @@
 #include "include/core/SkRegion.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkMalloc.h"
-#include "include/utils/SkRandom.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkAAClip.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkRasterClip.h"
 #include "tests/Test.h"
 
-#include <string.h>
+#include <cstdint>
+#include <cstring>
+#include <initializer_list>
+#include <string>
 
 static bool operator==(const SkMask& a, const SkMask& b) {
     if (a.fFormat != b.fFormat || a.fBounds != b.fBounds) {
@@ -68,27 +75,27 @@ static bool operator==(const SkMask& a, const SkMask& b) {
     return true;
 }
 
-static void copyToMask(const SkRegion& rgn, SkMask* mask) {
-    mask->fFormat = SkMask::kA8_Format;
+static void copyToMask(const SkRegion& rgn, SkMaskBuilder* mask) {
+    mask->format() = SkMask::kA8_Format;
 
     if (rgn.isEmpty()) {
-        mask->fBounds.setEmpty();
-        mask->fRowBytes = 0;
-        mask->fImage = nullptr;
+        mask->bounds().setEmpty();
+        mask->rowBytes() = 0;
+        mask->image() = nullptr;
         return;
     }
 
-    mask->fBounds = rgn.getBounds();
-    mask->fRowBytes = mask->fBounds.width();
-    mask->fImage = SkMask::AllocImage(mask->computeImageSize());
-    sk_bzero(mask->fImage, mask->computeImageSize());
+    mask->bounds() = rgn.getBounds();
+    mask->rowBytes() = mask->fBounds.width();
+    mask->image() = SkMaskBuilder::AllocImage(mask->computeImageSize());
+    sk_bzero(mask->image(), mask->computeImageSize());
 
     SkImageInfo info = SkImageInfo::Make(mask->fBounds.width(),
                                          mask->fBounds.height(),
                                          kAlpha_8_SkColorType,
                                          kPremul_SkAlphaType);
     SkBitmap bitmap;
-    bitmap.installPixels(info, mask->fImage, mask->fRowBytes);
+    bitmap.installPixels(info, mask->image(), mask->fRowBytes);
 
     // canvas expects its coordinate system to always be 0,0 in the top/left
     // so we translate the rgn to match that before drawing into the mask.
@@ -101,7 +108,7 @@ static void copyToMask(const SkRegion& rgn, SkMask* mask) {
     canvas.drawColor(SK_ColorBLACK);
 }
 
-static void copyToMask(const SkRasterClip& rc, SkMask* mask) {
+static void copyToMask(const SkRasterClip& rc, SkMaskBuilder* mask) {
     if (rc.isBW()) {
         copyToMask(rc.bwRgn(), mask);
     } else {
@@ -116,9 +123,11 @@ static bool operator==(const SkRasterClip& a, const SkRasterClip& b) {
         return false;
     }
 
-    SkMask mask0, mask1;
+    SkMaskBuilder mask0, mask1;
     copyToMask(a, &mask0);
     copyToMask(b, &mask1);
+    SkAutoMaskFreeImage free0(mask0.image());
+    SkAutoMaskFreeImage free1(mask1.image());
     return mask0 == mask1;
 }
 
@@ -138,15 +147,13 @@ static void make_rand_rgn(SkRegion* rgn, SkRandom& rand) {
 }
 
 static bool operator==(const SkRegion& rgn, const SkAAClip& aaclip) {
-    SkMask mask0, mask1;
+    SkMaskBuilder mask0, mask1;
 
     copyToMask(rgn, &mask0);
     aaclip.copyToMask(&mask1);
-    bool eq = (mask0 == mask1);
-
-    SkMask::FreeImage(mask0.fImage);
-    SkMask::FreeImage(mask1.fImage);
-    return eq;
+    SkAutoMaskFreeImage free0(mask0.image());
+    SkAutoMaskFreeImage free1(mask1.image());
+    return mask0 == mask1;
 }
 
 static bool equalsAAClip(const SkRegion& rgn) {
@@ -243,7 +250,7 @@ static void test_empty(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, clip.isEmpty());
     REPORTER_ASSERT(reporter, clip.getBounds().isEmpty());
 
-    SkMask mask;
+    SkMaskBuilder mask;
     clip.copyToMask(&mask);
     REPORTER_ASSERT(reporter, nullptr == mask.fImage);
     REPORTER_ASSERT(reporter, mask.fBounds.isEmpty());
@@ -290,11 +297,11 @@ static void test_irect(skiatest::Reporter* reporter) {
                        clip2.getBounds().right(), clip2.getBounds().bottom());
             }
 
-            SkMask maskBW, maskAA;
+            SkMaskBuilder maskBW, maskAA;
             copyToMask(rgn2, &maskBW);
             clip2.copyToMask(&maskAA);
-            SkAutoMaskFreeImage freeBW(maskBW.fImage);
-            SkAutoMaskFreeImage freeAA(maskAA.fImage);
+            SkAutoMaskFreeImage freeBW(maskBW.image());
+            SkAutoMaskFreeImage freeAA(maskAA.image());
             REPORTER_ASSERT(reporter, maskBW == maskAA);
         }
     }
@@ -309,11 +316,7 @@ static void test_path_with_hole(skiatest::Reporter* reporter) {
         0xFF, 0xFF, 0xFF, 0xFF,
         0xFF, 0xFF, 0xFF, 0xFF,
     };
-    SkMask expected;
-    expected.fBounds.setWH(4, 6);
-    expected.fRowBytes = 4;
-    expected.fFormat = SkMask::kA8_Format;
-    expected.fImage = (uint8_t*)gExpectedImage;
+    SkMask expected(gExpectedImage, SkIRect::MakeWH(4, 6), 4, SkMask::kA8_Format);
 
     SkPath path;
     path.addRect(SkRect::MakeXYWH(0, 0,
@@ -325,9 +328,9 @@ static void test_path_with_hole(skiatest::Reporter* reporter) {
         SkAAClip clip;
         clip.setPath(path, path.getBounds().roundOut(), 1 == i);
 
-        SkMask mask;
+        SkMaskBuilder mask;
         clip.copyToMask(&mask);
-        SkAutoMaskFreeImage freeM(mask.fImage);
+        SkAutoMaskFreeImage freeM(mask.image());
 
         REPORTER_ASSERT(reporter, expected == mask);
     }
@@ -386,12 +389,12 @@ static void test_nearly_integral(skiatest::Reporter* reporter) {
     static const SkScalar gSafeX[] = {
         0, SK_Scalar1/1000, SK_Scalar1/100, SK_Scalar1/10,
     };
-    did_dx_affect(reporter, gSafeX, SK_ARRAY_COUNT(gSafeX), false);
+    did_dx_affect(reporter, gSafeX, std::size(gSafeX), false);
 
     static const SkScalar gUnsafeX[] = {
         SK_Scalar1/4, SK_Scalar1/3,
     };
-    did_dx_affect(reporter, gUnsafeX, SK_ARRAY_COUNT(gUnsafeX), true);
+    did_dx_affect(reporter, gUnsafeX, std::size(gUnsafeX), true);
 }
 
 static void test_regressions() {

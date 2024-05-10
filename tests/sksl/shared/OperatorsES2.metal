@@ -1,5 +1,8 @@
 #include <metal_stdlib>
 #include <simd/simd.h>
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wall"
+#endif
 using namespace metal;
 struct Uniforms {
     half4 colorGreen;
@@ -27,7 +30,7 @@ fragment Outputs fragmentMain(Inputs _in [[stage_in]], constant Uniforms& _unifo
     bool f = b || c;
     x += 12.0;
     x -= 12.0;
-    x *= (y /= 10.0);
+    x *= (y *= 0.1);
     x = 6.0;
     y = (((float(b) * float(c)) * float(d)) * float(e)) * float(f);
     y = 6.0;

@@ -11,8 +11,6 @@ DEFAULT_BUILD_PRODUCTS = [
   'dm',
   'dm.exe',
   'dm.app',
-  'fm',
-  'fm.exe',
   'nanobench.app',
   'get_images_from_skps',
   'get_images_from_skps.exe',
@@ -77,3 +75,12 @@ for pattern in build_products:
 ''' % str(product_list),
       args=[src, dst],
       infra_step=True)
+
+
+def set_dawn_args_and_env(args, env, api, skia_dir):
+    """Add to ``args`` and ``env`` the gn args and environment vars needed to
+    make a build targeting Dawn."""
+    args['skia_use_dawn'] = 'true'
+    args['skia_use_gl'] = 'false'
+    env['PYTHONPATH'] = api.path.pathsep.join([
+        str(skia_dir.join('third_party', 'externals')), '%%(PYTHONPATH)s'])

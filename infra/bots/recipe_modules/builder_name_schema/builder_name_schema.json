@@ -1,5 +1,23 @@
 {
   "builder_name_schema": {
+    "BazelBuild": {
+      "keys": [
+        "label",
+        "config",
+        "host"
+      ]
+    },
+    "BazelTest": {
+      "keys": [
+        "task_driver",
+        "label",
+        "build_config",
+        "host"
+      ],
+      "optional_keys": [
+        "test_config"
+      ]
+    },
     "Build": {
       "keys": [
         "os",
@@ -71,21 +89,6 @@
       ]
     },
     "Test": {
-      "keys": [
-        "os",
-        "compiler",
-        "model",
-        "cpu_or_gpu",
-        "cpu_or_gpu_value",
-        "arch",
-        "configuration",
-        "test_filter"
-      ],
-      "optional_keys": [
-        "extra_config"
-      ]
-    },
-    "FM": {
       "keys": [
         "os",
         "compiler",

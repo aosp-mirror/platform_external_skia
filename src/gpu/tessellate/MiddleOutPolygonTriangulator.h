@@ -10,12 +10,12 @@
 
 #include "include/core/SkPath.h"
 #include "include/core/SkPoint.h"
-#include "include/private/SkTemplates.h"
-#include "src/core/SkMathPriv.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkMathPriv.h"
 #include "src/core/SkPathPriv.h"
 #include <tuple>
 
-namespace skgpu {
+namespace skgpu::tess {
 
 // This class generates a middle-out triangulation of a polygon. Conceptually, middle-out emits one
 // large triangle with vertices on both endpoints and a middle point, then recurses on both sides of
@@ -134,7 +134,7 @@ public:
 
     // Returns an RAII object that first allows the caller to iterate the triangles we will pop,
     // pops those triangles, and finally pushes 'pt' onto the vertex stack.
-    SK_WARN_UNUSED_RESULT PoppedTriangleStack pushVertex(SkPoint pt) {
+    [[nodiscard]] PoppedTriangleStack pushVertex(SkPoint pt) {
         // Our topology wants triangles that have the same vertexIdxDelta on both sides:
         // e.g., a run of 9 points should be triangulated as:
         //
@@ -161,7 +161,7 @@ public:
 
     // Returns an RAII object that first allows the caller to iterate the remaining triangles, then
     // resets the vertex stack with newStartPoint.
-    SK_WARN_UNUSED_RESULT PoppedTriangleStack closeAndMove(SkPoint newStartPoint) {
+    [[nodiscard]] PoppedTriangleStack closeAndMove(SkPoint newStartPoint) {
         // Add an implicit line back to the starting point.
         SkPoint startPt = fVertexStack[0].fPoint;
 
@@ -178,13 +178,13 @@ public:
 
     // Returns an RAII object that first allows the caller to iterate the remaining triangles, then
     // resets the vertex stack with the same starting point as it had before.
-    SK_WARN_UNUSED_RESULT PoppedTriangleStack close() {
+    [[nodiscard]] PoppedTriangleStack close() {
         return this->closeAndMove(fVertexStack[0].fPoint);
     }
 
 private:
     constexpr static int kStackPreallocCount = 32;
-    SkAutoSTMalloc<kStackPreallocCount, StackVertex> fVertexStack;
+    skia_private::AutoSTMalloc<kStackPreallocCount, StackVertex> fVertexStack;
     SkDEBUGCODE(int fStackAllocCount;)
     StackVertex* fTop;
 };
@@ -237,6 +237,6 @@ private:
     bool fDone = false;
 };
 
-}  // namespace skgpu
+}  // namespace skgpu::tess
 
 #endif  // skgpu_tessellate_MiddleOutPolygonTriangulator_DEFINED

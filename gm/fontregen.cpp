@@ -31,15 +31,23 @@
 #include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
-#include "include/private/GrTypesPriv.h"
-#include "include/private/SkTemplates.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
+
+#if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/ContextOptions.h"
+#endif
+
+using namespace skia_private;
+using MaskFormat = skgpu::MaskFormat;
 
 static sk_sp<SkTextBlob> make_blob(const SkString& text, const SkFont& font) {
     size_t len = text.size();
-    SkAutoTArray<SkScalar>  pos(len);
-    SkAutoTArray<SkGlyphID> glyphs(len);
+    AutoTArray<SkScalar>  pos(len);
+    AutoTArray<SkGlyphID> glyphs(len);
 
     font.textToGlyphs(text.c_str(), len, SkTextEncoding::kUTF8, glyphs.get(), len);
     font.getXPos(glyphs.get(), len, pos.get());
@@ -53,14 +61,21 @@ class FontRegenGM : public skiagm::GM {
         options->fAllowMultipleGlyphCacheTextures = GrContextOptions::Enable::kNo;
     }
 
-    SkString onShortName() override { return SkString("fontregen"); }
+#if defined(SK_GRAPHITE)
+    void modifyGraphiteContextOptions(skgpu::graphite::ContextOptions* options) const override {
+        options->fGlyphCacheTextureMaximumBytes = 0;
+        options->fAllowMultipleGlyphCacheTextures = false;
+    }
+#endif
 
-    SkISize onISize() override { return {kSize, kSize}; }
+    SkString getName() const override { return SkString("fontregen"); }
+
+    SkISize getISize() override { return {kSize, kSize}; }
 
     void onOnceBeforeDraw() override {
         this->setBGColor(SK_ColorLTGRAY);
 
-        auto tf = ToolUtils::create_portable_typeface("sans-serif", SkFontStyle::Normal());
+        auto tf = ToolUtils::CreatePortableTypeface("sans-serif", SkFontStyle::Normal());
 
         static const SkString kTexts[] = {
             SkString("abcdefghijklmnopqrstuvwxyz"),
@@ -81,17 +96,17 @@ class FontRegenGM : public skiagm::GM {
     }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        auto dContext = GrAsDirectContext(canvas->recordingContext());
-        if (!dContext) {
-            *errorMsg = "GPU-specific";
-            return DrawResult::kSkip;
-        }
+
 
         SkPaint paint;
         paint.setColor(SK_ColorBLACK);
         canvas->drawTextBlob(fBlobs[0], 10, 80, paint);
         canvas->drawTextBlob(fBlobs[1], 10, 225, paint);
-        dContext->flushAndSubmit();
+
+        auto dContext = GrAsDirectContext(canvas->recordingContext());
+        if (dContext) {
+            dContext->flushAndSubmit();
+        }
 
         paint.setColor(0xFF010101);
         canvas->drawTextBlob(fBlobs[0], 10, 305, paint);
@@ -99,8 +114,8 @@ class FontRegenGM : public skiagm::GM {
 
         //  Debugging tool for GPU.
         static const bool kShowAtlas = false;
-        if (kShowAtlas) {
-            auto img = dContext->priv().testingOnly_getFontAtlasImage(kA8_GrMaskFormat);
+        if (kShowAtlas && dContext) {
+            auto img = dContext->priv().testingOnly_getFontAtlasImage(MaskFormat::kA8);
             canvas->drawImage(img, 200, 0);
         }
 
@@ -121,21 +136,20 @@ DEF_GM(return new FontRegenGM())
 ///////////////////////////////////////////////////////////////////////////////
 
 class BadAppleGM : public skiagm::GM {
+    SkString getName() const override { return SkString("badapple"); }
 
-    SkString onShortName() override { return SkString("badapple"); }
-
-    SkISize onISize() override { return {kSize, kSize}; }
+    SkISize getISize() override { return {kSize, kSize}; }
 
     void onOnceBeforeDraw() override {
         this->setBGColor(SK_ColorWHITE);
-        auto fm = SkFontMgr::RefDefault();
+        auto fm = ToolUtils::TestFontMgr();
 
         static const SkString kTexts[] = {
                 SkString("Meet"),
                 SkString("iPad Pro"),
         };
 
-        SkFont font;
+        SkFont font = ToolUtils::DefaultPortableFont();
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
         font.setSubpixel(true);
         font.setSize(256);

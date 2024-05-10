@@ -29,8 +29,10 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/utils/SkTextUtils.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/gpu/BackendSurfaceFactory.h"
 
 #define W 200
@@ -49,9 +51,9 @@ static sk_sp<SkSurface> make_surface(GrRecordingContext* ctx,
                                      SkPixelGeometry geo) {
     SkSurfaceProps props(0, geo);
     if (ctx) {
-        return SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info, 0, &props);
+        return SkSurfaces::RenderTarget(ctx, skgpu::Budgeted::kNo, info, 0, &props);
     } else {
-        return SkSurface::MakeRaster(info, &props);
+        return SkSurfaces::Raster(info, &props);
     }
 }
 
@@ -66,7 +68,7 @@ static void test_draw(SkCanvas* canvas, const char label[]) {
     paint.setShader(nullptr);
 
     paint.setColor(SK_ColorWHITE);
-    SkFont font(ToolUtils::create_portable_typeface(), 32);
+    SkFont font(ToolUtils::DefaultPortableTypeface(), 32);
     font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
     SkTextUtils::DrawString(canvas, label, W / 2, H * 3 / 4, font, paint,
                             SkTextUtils::kCenter_Align);
@@ -77,13 +79,9 @@ public:
     SurfacePropsGM() {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("surfaceprops");
-    }
+    SkString getName() const override { return SkString("surfaceprops"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(W, H * 5);
-    }
+    SkISize getISize() override { return SkISize::Make(W, H * 5); }
 
     void onDraw(SkCanvas* canvas) override {
         auto ctx = canvas->recordingContext();
@@ -132,13 +130,9 @@ public:
     NewSurfaceGM() {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("surfacenew");
-    }
+    SkString getName() const override { return SkString("surfacenew"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(300, 140);
-    }
+    SkISize getISize() override { return SkISize::Make(300, 140); }
 
     static void drawInto(SkCanvas* canvas) {
         canvas->drawColor(SK_ColorRED);
@@ -296,6 +290,47 @@ DEF_SURFACE_TESTS(simple_snap_image2, canvas, 256, 256) {
     surf.reset();
     // expect to see just red
     canvas->drawImage(std::move(image), 0, 0);
+}
+
+DEF_SIMPLE_GM(snap_with_mips, canvas, 80, 75) {
+    auto ct = canvas->imageInfo().colorType() == kUnknown_SkColorType
+                      ? kRGBA_8888_SkColorType
+                      : canvas->imageInfo().colorType();
+    auto ii = SkImageInfo::Make({32, 32},
+                                ct,
+                                kPremul_SkAlphaType,
+                                canvas->imageInfo().refColorSpace());
+    auto surface = SkSurfaces::Raster(ii);
+
+    auto nextImage = [&](SkColor color) {
+        surface->getCanvas()->clear(color);
+        SkPaint paint;
+        paint.setColor(~color | 0xFF000000);
+        surface->getCanvas()->drawRect(SkRect::MakeLTRB(surface->width() *2/5.f,
+                                                        surface->height()*2/5.f,
+                                                        surface->width() *3/5.f,
+                                                        surface->height()*3/5.f),
+                                    paint);
+        return surface->makeImageSnapshot()->withDefaultMipmaps();
+    };
+
+    static constexpr int kPad = 8;
+    static const SkSamplingOptions kSampling{SkFilterMode::kLinear, SkMipmapMode::kLinear};
+
+    canvas->save();
+    for (int y = 0; y < 3; ++y) {
+        canvas->save();
+        SkColor kColors[] = {0xFFF0F0F0, SK_ColorBLUE};
+        for (int x = 0; x < 2; ++x) {
+            auto image = nextImage(kColors[x]);
+            canvas->drawImage(image, 0, 0, kSampling);
+            canvas->translate(ii.width() + kPad, 0);
+        }
+        canvas->restore();
+        canvas->translate(0, ii.width() + kPad);
+        canvas->scale(.4f, .4f);
+    }
+    canvas->restore();
 }
 
 DEF_SURFACE_TESTS(copy_on_write_savelayer, canvas, 256, 256) {

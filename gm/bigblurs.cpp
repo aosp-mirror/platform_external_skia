@@ -33,13 +33,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("bigblurs");
-    }
+    SkString getName() const override { return SkString("bigblurs"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(kWidth, kHeight);
-    }
+    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
 
     void onDraw(SkCanvas* canvas) override {
         constexpr int kBig = 65536;
@@ -81,7 +77,7 @@ protected:
             for (int j = 0; j <= kLastEnum_SkBlurStyle; ++j) {
                 blurPaint.setMaskFilter(SkMaskFilter::MakeBlur((SkBlurStyle)j, kSigma));
 
-                for (int k = 0; k < (int)SK_ARRAY_COUNT(origins); ++k) {
+                for (int k = 0; k < (int)std::size(origins); ++k) {
                     canvas->save();
 
                     SkRect clipRect = SkRect::MakeXYWH(SkIntToScalar(desiredX),

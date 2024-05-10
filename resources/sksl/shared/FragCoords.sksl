@@ -1,1 +1,3 @@
-void main() { sk_FragColor.xy = half2(sk_FragCoord.xy); }
+void main() {
+    sk_FragColor.xy = half2(sk_FragCoord.yx);
+}

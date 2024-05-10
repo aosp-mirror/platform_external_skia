@@ -9,6 +9,7 @@
 #define SkSurfaceProps_DEFINED
 
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkTo.h"
 
 /**
  *  Description of how the LCD strips are arranged for each pixel. If this is unknown, or the
@@ -53,17 +54,18 @@ public:
     enum Flags {
         kUseDeviceIndependentFonts_Flag = 1 << 0,
         // Use internal MSAA to render to non-MSAA GPU surfaces.
-        kDynamicMSAA_Flag               = 1 << 1
+        kDynamicMSAA_Flag               = 1 << 1,
+        // If set, all rendering will have dithering enabled
+        // Currently this only impacts GPU backends
+        kAlwaysDither_Flag              = 1 << 2,
     };
-    /** Deprecated alias used by Chromium. Will be removed. */
-    static const Flags kUseDistanceFieldFonts_Flag = kUseDeviceIndependentFonts_Flag;
 
     /** No flags, unknown pixel geometry. */
     SkSurfaceProps();
     SkSurfaceProps(uint32_t flags, SkPixelGeometry);
 
-    SkSurfaceProps(const SkSurfaceProps&);
-    SkSurfaceProps& operator=(const SkSurfaceProps&);
+    SkSurfaceProps(const SkSurfaceProps&) = default;
+    SkSurfaceProps& operator=(const SkSurfaceProps&) = default;
 
     SkSurfaceProps cloneWithPixelGeometry(SkPixelGeometry newPixelGeometry) const {
         return SkSurfaceProps(fFlags, newPixelGeometry);
@@ -74,6 +76,10 @@ public:
 
     bool isUseDeviceIndependentFonts() const {
         return SkToBool(fFlags & kUseDeviceIndependentFonts_Flag);
+    }
+
+    bool isAlwaysDither() const {
+        return SkToBool(fFlags & kAlwaysDither_Flag);
     }
 
     bool operator==(const SkSurfaceProps& that) const {

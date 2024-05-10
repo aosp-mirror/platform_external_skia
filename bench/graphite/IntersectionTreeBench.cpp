@@ -5,18 +5,24 @@
  * found in the LICENSE file.
  */
 #include "bench/Benchmark.h"
-#include "experimental/graphite/src/geom/IntersectionTree.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
-#include "include/utils/SkRandom.h"
-#include "src/core/SkMathPriv.h"
+#include "src/base/SkMathPriv.h"
+#include "src/base/SkRandom.h"
+#include "src/gpu/graphite/geom/IntersectionTree.h"
 #include "tools/ToolUtils.h"
 #include "tools/flags/CommandLineFlags.h"
+
+#if defined(SK_ENABLE_SVG)
+#include "tools/SvgPathExtractor.h"
+#endif
+
+using namespace skia_private;
 
 static DEFINE_string(intersectionTreeFile, "",
                      "svg or skp for the IntersectionTree bench to sniff paths from.");
 
-namespace skgpu {
+namespace skgpu::graphite {
 
 class IntersectionTreeBench : public Benchmark {
 protected:
@@ -27,9 +33,9 @@ protected:
     }
 
     void onDelayedSetup() final {
-        SkTArray<SkRect> rects;
+        TArray<SkRect> rects;
         this->gatherRects(&rects);
-        fRectCount = rects.count();
+        fRectCount = rects.size();
         fRects = fAlignedAllocator.makeArray<Rect>(fRectCount);
         for (int i = 0; i < fRectCount; ++i) {
             fRects[i] = rects[i];
@@ -38,7 +44,7 @@ protected:
         fRectBufferB = fAlignedAllocator.makeArray<Rect>(fRectCount);
     }
 
-    virtual void gatherRects(SkTArray<SkRect>* rects) = 0;
+    virtual void gatherRects(TArray<SkRect>* rects) = 0;
 
     void onDraw(int loops, SkCanvas*) final {
         for (int i = 0; i < loops; ++i) {
@@ -84,7 +90,7 @@ public:
     }
 
 private:
-    void gatherRects(SkTArray<SkRect>* rects) override {
+    void gatherRects(TArray<SkRect>* rects) override {
         SkRandom rand;
         for (int i = 0; i < fNumRandomRects; ++i) {
             rects->push_back(SkRect::MakeXYWH(rand.nextRangeF(0, 2000),
@@ -120,13 +126,13 @@ private:
         return IntersectionTreeBench::isSuitableFor(backend);
     }
 
-    void gatherRects(SkTArray<SkRect>* rects) override {
+    void gatherRects(TArray<SkRect>* rects) override {
         if (FLAGS_intersectionTreeFile.isEmpty()) {
             return;
         }
-        ToolUtils::sniff_paths(FLAGS_intersectionTreeFile[0], [&](const SkMatrix& matrix,
-                                                                  const SkPath& path,
-                                                                  const SkPaint& paint) {
+        auto callback = [&](const SkMatrix& matrix,
+                            const SkPath& path,
+                            const SkPaint& paint) {
             if (paint.getStyle() == SkPaint::kStroke_Style) {
                 return;  // Goes to stroker.
             }
@@ -143,9 +149,19 @@ private:
                 return;  // Goes to inner triangulator.
             }
             rects->push_back(drawBounds);
-        });
+        };
+        const char* path = FLAGS_intersectionTreeFile[0];
+        if (const char* ext = strrchr(path, '.'); ext && !strcmp(ext, ".svg")) {
+#if defined(SK_ENABLE_SVG)
+            ToolUtils::ExtractPathsFromSVG(path, callback);
+#else
+            SK_ABORT("must compile with svg backend to process svgs");
+#endif
+        } else {
+            ToolUtils::ExtractPathsFromSKP(path, callback);
+        }
         SkDebugf(">> Found %i stencil/cover paths in %s <<\n",
-                 rects->count(), FLAGS_intersectionTreeFile[0]);
+                 rects->size(), FLAGS_intersectionTreeFile[0]);
     }
 
     void onPerCanvasPostDraw(SkCanvas*) override {
@@ -157,11 +173,11 @@ private:
     }
 };
 
-}  // namespace skgpu
+}  // namespace skgpu::graphite
 
-DEF_BENCH( return new skgpu::RandomIntersectionBench(100); )
-DEF_BENCH( return new skgpu::RandomIntersectionBench(500); )
-DEF_BENCH( return new skgpu::RandomIntersectionBench(1000); )
-DEF_BENCH( return new skgpu::RandomIntersectionBench(5000); )
-DEF_BENCH( return new skgpu::RandomIntersectionBench(10000); )
-DEF_BENCH( return new skgpu::FileIntersectionBench(); )  // Sniffs --intersectionTreeFile
+DEF_BENCH( return new skgpu::graphite::RandomIntersectionBench(100); )
+DEF_BENCH( return new skgpu::graphite::RandomIntersectionBench(500); )
+DEF_BENCH( return new skgpu::graphite::RandomIntersectionBench(1000); )
+DEF_BENCH( return new skgpu::graphite::RandomIntersectionBench(5000); )
+DEF_BENCH( return new skgpu::graphite::RandomIntersectionBench(10000); )
+DEF_BENCH( return new skgpu::graphite::FileIntersectionBench(); )  // Sniffs --intersectionTreeFile

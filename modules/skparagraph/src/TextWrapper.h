@@ -210,9 +210,10 @@ private:
         fClip.clean();
         fTooLongCluster = false;
         fTooLongWord = false;
+        fHardLineBreak = false;
     }
 
-    void lookAhead(SkScalar maxWidth, Cluster* endOfClusters);
+    void lookAhead(SkScalar maxWidth, Cluster* endOfClusters, bool applyRoundingHack);
     void moveForward(bool hasEllipsis);
     void trimEndSpaces(TextAlign align);
     std::tuple<Cluster*, size_t, SkScalar> trimStartSpaces(Cluster* endOfClusters);

@@ -31,14 +31,9 @@ public:
     }
 
 protected:
+    SkString getName() const override { return SkString("imagefiltersstroked"); }
 
-    SkString onShortName() override {
-        return SkString("imagefiltersstroked");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(860, 500);
-    }
+    SkISize getISize() override { return SkISize::Make(860, 500); }
 
     static void draw_circle(SkCanvas* canvas, const SkRect& r, const SkPaint& paint) {
         canvas->drawCircle(r.centerX(), r.centerY(),
@@ -78,10 +73,10 @@ protected:
         paint.setStrokeWidth(10);
         paint.setStyle(SkPaint::kStroke_Style);
 
-        for (size_t i = 0; i < SK_ARRAY_COUNT(drawProc); ++i) {
+        for (size_t i = 0; i < std::size(drawProc); ++i) {
             canvas->translate(0, margin);
             canvas->save();
-            for (size_t j = 0; j < SK_ARRAY_COUNT(filters); ++j) {
+            for (size_t j = 0; j < std::size(filters); ++j) {
                 canvas->translate(margin, 0);
                 canvas->save();
                 if (2 == j) {

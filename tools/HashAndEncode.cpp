@@ -1,9 +1,13 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 
-#include "include/core/SkICC.h"
-#include "include/core/SkString.h"
 #include "tools/HashAndEncode.h"
+
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkString.h"
+#include "include/encode/SkICC.h"
+#include "modules/skcms/skcms.h"
 
 #include <png.h>
 
@@ -33,6 +37,7 @@ HashAndEncode::HashAndEncode(const SkBitmap& bitmap) : fSize(bitmap.info().dimen
         case kSRGBA_8888_SkColorType:         srcFmt = skcms_PixelFormat_RGBA_8888_sRGB;  break;
         case kRGBA_1010102_SkColorType:       srcFmt = skcms_PixelFormat_RGBA_1010102;    break;
         case kBGRA_1010102_SkColorType:       srcFmt = skcms_PixelFormat_BGRA_1010102;    break;
+        case kBGR_101010x_XR_SkColorType:     srcFmt = skcms_PixelFormat_BGR_101010x_XR;  break;
         case kGray_8_SkColorType:             srcFmt = skcms_PixelFormat_G_8;             break;
         // skcms doesn't have R_8. Pretend it's G_8, but see below for color space trickery:
         case kR8_unorm_SkColorType:           srcFmt = skcms_PixelFormat_G_8;             break;
@@ -53,6 +58,7 @@ HashAndEncode::HashAndEncode(const SkBitmap& bitmap) : fSize(bitmap.info().dimen
         case kR16G16_float_SkColorType:       return;
         case kA16_unorm_SkColorType:          return;
         case kA16_float_SkColorType:          return;
+        case kRGBA_10x6_SkColorType:          return;
     }
 
     skcms_ICCProfile srcProfile = *skcms_sRGB_profile();
@@ -90,8 +96,8 @@ HashAndEncode::HashAndEncode(const SkBitmap& bitmap) : fSize(bitmap.info().dimen
             fPixels.reset(nullptr);
             break;
         }
-        src = (char*)src + todo*SkColorTypeBytesPerPixel(bitmap.colorType());
-        dst = (char*)dst + todo*sizeof(uint64_t);
+        src = (const char*)src + todo*SkColorTypeBytesPerPixel(bitmap.colorType());
+        dst = (      char*)dst + todo*sizeof(uint64_t);
         N -= todo;
     }
 }
@@ -140,23 +146,23 @@ bool HashAndEncode::encodePNG(SkWStream* st,
 
     SkString description;
     description.append("Key: ");
-    for (int i = 0; i < key.count(); i++) {
+    for (int i = 0; i < key.size(); i++) {
         description.appendf("%s ", key[i]);
     }
     description.append("Properties: ");
-    for (int i = 0; i < properties.count(); i++) {
+    for (int i = 0; i < properties.size(); i++) {
         description.appendf("%s ", properties[i]);
     }
     description.appendf("MD5: %s", md5);
 
     png_text text[2];
-    text[0].key  = (png_charp)"Author";
-    text[0].text = (png_charp)"DM unified Rec.2020";
+    text[0].key  = const_cast<png_charp>("Author");
+    text[0].text = const_cast<png_charp>("DM unified Rec.2020");
     text[0].compression = PNG_TEXT_COMPRESSION_NONE;
-    text[1].key  = (png_charp)"Description";
-    text[1].text = (png_charp)description.c_str();
+    text[1].key  = const_cast<png_charp>("Description");
+    text[1].text = const_cast<png_charp>(description.c_str());
     text[1].compression = PNG_TEXT_COMPRESSION_NONE;
-    png_set_text(png, info, text, SK_ARRAY_COUNT(text));
+    png_set_text(png, info, text, std::size(text));
 
     png_set_IHDR(png, info, (png_uint_32)fSize.width()
                           , (png_uint_32)fSize.height()

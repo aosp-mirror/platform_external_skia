@@ -5,17 +5,34 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
-#include "include/core/SkGraphics.h"
-#include "include/core/SkPicture.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPicture.h"  // IWYU pragma: keep
 #include "include/core/SkPictureRecorder.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/private/chromium/SkDiscardableMemory.h"
 #include "src/core/SkBitmapCache.h"
+#include "src/core/SkCachedData.h"
 #include "src/core/SkMipmap.h"
 #include "src/core/SkResourceCache.h"
 #include "src/image/SkImage_Base.h"
 #include "src/lazy/SkDiscardableMemoryPool.h"
 #include "tests/Test.h"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <initializer_list>
+#include <memory>
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -107,8 +124,6 @@ static void test_mipmap_notify(skiatest::Reporter* reporter, SkResourceCache* ca
     }
 }
 
-#include "src/lazy/SkDiscardableMemoryPool.h"
-
 static SkDiscardableMemoryPool* gPool = nullptr;
 static int gFactoryCalls = 0;
 
@@ -142,7 +157,7 @@ DEF_TEST(BitmapCache_discarded_bitmap, reporter) {
 
 static void test_discarded_image(skiatest::Reporter* reporter, const SkMatrix& transform,
                                  sk_sp<SkImage> (*buildImage)()) {
-    auto surface(SkSurface::MakeRasterN32Premul(10, 10));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(10, 10)));
     SkCanvas* canvas = surface->getCanvas();
 
     // SkBitmapCache is global, so other threads could be evicting our bitmaps.  Loop a few times
@@ -186,9 +201,9 @@ DEF_TEST(BitmapCache_discarded_image, reporter) {
         SkMatrix::Scale(1.7f, 0.5f),
     };
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(xforms); ++i) {
+    for (size_t i = 0; i < std::size(xforms); ++i) {
         test_discarded_image(reporter, xforms[i], []() {
-            auto surface(SkSurface::MakeRasterN32Premul(10, 10));
+            auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(10, 10)));
             surface->getCanvas()->clear(SK_ColorCYAN);
             return surface->makeImageSnapshot();
         });
@@ -197,10 +212,12 @@ DEF_TEST(BitmapCache_discarded_image, reporter) {
             SkPictureRecorder recorder;
             SkCanvas* canvas = recorder.beginRecording(10, 10);
             canvas->clear(SK_ColorCYAN);
-            return SkImage::MakeFromPicture(recorder.finishRecordingAsPicture(),
-                                            SkISize::Make(10, 10), nullptr, nullptr,
-                                            SkImage::BitDepth::kU8,
-                                            SkColorSpace::MakeSRGB());
+            return SkImages::DeferredFromPicture(recorder.finishRecordingAsPicture(),
+                                                 SkISize::Make(10, 10),
+                                                 nullptr,
+                                                 nullptr,
+                                                 SkImages::BitDepth::kU8,
+                                                 SkColorSpace::MakeSRGB());
         });
     }
 }

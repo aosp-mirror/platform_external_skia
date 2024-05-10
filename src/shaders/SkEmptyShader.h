@@ -1,16 +1,17 @@
 /*
- * Copyright 2011 Google Inc.
+ * Copyright 2023 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
-#ifndef SkEmptyShader_DEFINED
-#define SkEmptyShader_DEFINED
-
 #include "src/shaders/SkShaderBase.h"
 
-// TODO: move this to private, as there is a public factory on SkShader
+#include "include/core/SkFlattenable.h"
+
+class SkReadBuffer;
+class SkWriteBuffer;
+struct SkStageRec;
 
 /**
  *  \class SkEmptyShader
@@ -21,30 +22,19 @@ public:
     SkEmptyShader() {}
 
 protected:
-#ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
-    Context* onMakeContext(const ContextRec&, SkArenaAlloc*) const override {
-        return nullptr;
-    }
-#endif
-
     void flatten(SkWriteBuffer& buffer) const override {
         // Do nothing.
         // We just don't want to fall through to SkShader::flatten(),
         // which will write data we don't care to serialize or decode.
     }
 
-    bool onAppendStages(const SkStageRec&) const override {
+    bool appendStages(const SkStageRec&, const SkShaders::MatrixRec&) const override {
         return false;
     }
 
-    skvm::Color onProgram(skvm::Builder*, skvm::Coord, skvm::Coord, skvm::Color,
-                          const SkMatrixProvider&, const SkMatrix*, const SkColorInfo&,
-                          skvm::Uniforms*, SkArenaAlloc*) const override;
+    ShaderType type() const override { return ShaderType::kEmpty; }
 
 private:
+    friend void ::SkRegisterEmptyShaderFlattenable();
     SK_FLATTENABLE_HOOKS(SkEmptyShader)
-
-    using INHERITED = SkShaderBase;
 };
-
-#endif

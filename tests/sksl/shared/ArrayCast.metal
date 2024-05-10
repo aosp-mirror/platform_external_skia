@@ -1,5 +1,8 @@
 #include <metal_stdlib>
 #include <simd/simd.h>
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wall"
+#endif
 using namespace metal;
 struct Uniforms {
     half4 colorGreen;
@@ -11,10 +14,10 @@ struct Outputs {
     half4 sk_FragColor [[color(0)]];
 };
 
-template <typename T1, typename T2, size_t N>
-bool operator==(thread const array<T1, N>& left, thread const array<T2, N>& right);
-template <typename T1, typename T2, size_t N>
-bool operator!=(thread const array<T1, N>& left, thread const array<T2, N>& right);
+template <typename T1, typename T2>
+bool operator==(const array_ref<T1> left, const array_ref<T2> right);
+template <typename T1, typename T2>
+bool operator!=(const array_ref<T1> left, const array_ref<T2> right);
 
 thread bool operator==(const float2x2 left, const float2x2 right);
 thread bool operator!=(const float2x2 left, const float2x2 right);
@@ -73,9 +76,12 @@ array<half2x2, N> array_of_half2x2_from_float2x2(thread const array<float2x2, N>
     return result;
 }
 
-template <typename T1, typename T2, size_t N>
-bool operator==(thread const array<T1, N>& left, thread const array<T2, N>& right) {
-    for (size_t index = 0; index < N; ++index) {
+template <typename T1, typename T2>
+bool operator==(const array_ref<T1> left, const array_ref<T2> right) {
+    if (left.size() != right.size()) {
+        return false;
+    }
+    for (size_t index = 0; index < left.size(); ++index) {
         if (!all(left[index] == right[index])) {
             return false;
         }
@@ -83,8 +89,8 @@ bool operator==(thread const array<T1, N>& left, thread const array<T2, N>& righ
     return true;
 }
 
-template <typename T1, typename T2, size_t N>
-bool operator!=(thread const array<T1, N>& left, thread const array<T2, N>& right) {
+template <typename T1, typename T2>
+bool operator!=(const array_ref<T1> left, const array_ref<T2> right) {
     return !(left == right);
 }
 thread bool operator==(const float2x2 left, const float2x2 right) {
@@ -109,6 +115,6 @@ fragment Outputs fragmentMain(Inputs _in [[stage_in]], constant Uniforms& _unifo
     array<float2x2, 2> f2x2 = array_of_float2x2_from_half2x2(h2x2);
     f2x2 = array_of_float2x2_from_half2x2(h2x2);
     h2x2 = array_of_half2x2_from_float2x2(f2x2);
-    _out.sk_FragColor = (f == array_of_float_from_half(h) && i3 == array_of_int3_from_short3(s3)) && f2x2 == array_of_float2x2_from_half2x2(h2x2) ? _uniforms.colorGreen : _uniforms.colorRed;
+    _out.sk_FragColor = (make_array_ref(f) == make_array_ref(array_of_float_from_half(h)) && make_array_ref(i3) == make_array_ref(array_of_int3_from_short3(s3))) && make_array_ref(f2x2) == make_array_ref(array_of_float2x2_from_half2x2(h2x2)) ? _uniforms.colorGreen : _uniforms.colorRed;
     return _out;
 }

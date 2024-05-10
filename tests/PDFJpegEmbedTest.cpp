@@ -5,14 +5,26 @@
  * found in the LICENSE file.
  */
 
+#include "include/codec/SkEncodedOrigin.h"
+#include "include/codec/SkJpegDecoder.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkData.h"
-#include "include/core/SkImageGenerator.h"
+#include "include/core/SkDocument.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
 #include "include/docs/SkPDFDocument.h"
-
+#include "include/private/SkEncodedInfo.h"
+#include "src/pdf/SkPDFBitmap.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
+
+#include <array>
+#include <cstdint>
+#include <cstring>
 
 static bool is_subset_of(SkData* smaller, SkData* larger) {
     SkASSERT(smaller && larger);
@@ -50,20 +62,34 @@ DEF_TEST(SkPDF_JpegEmbedTest, r) {
     const char test[] = "SkPDF_JpegEmbedTest";
     sk_sp<SkData> mandrillData(load_resource(r, test, "images/mandrill_512_q075.jpg"));
     sk_sp<SkData> cmykData(load_resource(r, test, "images/CMYK.jpg"));
-    if (!mandrillData || !cmykData) {
+    sk_sp<SkData> yuvICCData(load_resource(r, test, "images/crbug999986.jpeg"));
+    sk_sp<SkData> cmykICCData(load_resource(r, test, "images/crbug1465627.jpeg"));
+
+    if (!mandrillData || !cmykData || !yuvICCData || !cmykICCData) {
+        REPORTER_ASSERT(r, false, "Could not load all images");
         return;
     }
     ////////////////////////////////////////////////////////////////////////////
     SkDynamicMemoryWStream pdf;
     auto document = SkPDF::MakeDocument(&pdf);
-    SkCanvas* canvas = document->beginPage(642, 1028);
+    SkCanvas* canvas = document->beginPage(642, 2048);
 
     canvas->clear(SK_ColorLTGRAY);
 
-    sk_sp<SkImage> im1(SkImage::MakeFromEncoded(mandrillData));
-    canvas->drawImage(im1.get(), 65.0, 0.0);
-    sk_sp<SkImage> im2(SkImage::MakeFromEncoded(cmykData));
-    canvas->drawImage(im2.get(), 0.0, 512.0);
+    sk_sp<SkImage> im1(SkImages::DeferredFromEncodedData(mandrillData));
+    canvas->drawImage(im1, 65.0, 0.0);
+    sk_sp<SkImage> im2(SkImages::DeferredFromEncodedData(cmykData));
+    canvas->drawImage(im2, 0.0, 512.0);
+
+    // This should be the same blue as the dark spot seen in the image.
+    SkPaint bluePaint;
+    bluePaint.setColor(SkColorSetARGB(255, 0, 59, 103));
+    canvas->drawRect(SkRect::MakeXYWH(0, 1000, 642, 24), bluePaint);
+    sk_sp<SkImage> im3(SkImages::DeferredFromEncodedData(yuvICCData));
+    canvas->drawImage(im3, 0.0, 1024.0);
+
+    sk_sp<SkImage> im4(SkImages::DeferredFromEncodedData(cmykICCData));
+    canvas->drawImage(im4, 0.0, 1536.0);
 
     document->endPage();
     document->close();
@@ -77,11 +103,16 @@ DEF_TEST(SkPDF_JpegEmbedTest, r) {
     // This JPEG uses a nonstandard colorspace - it can not be
     // embedded into the PDF directly.
     REPORTER_ASSERT(r, !is_subset_of(cmykData.get(), pdfData.get()));
+
+    if ((false)) {
+        SkFILEWStream s("/tmp/jpegembed.pdf");
+        REPORTER_ASSERT(r, s.write(pdfData->data(), pdfData->size()));
+        s.flush();
+        s.fsync();
+    }
 }
 
 #ifdef SK_SUPPORT_PDF
-
-#include "src/pdf/SkJpegInfo.h"
 
 struct SkJFIFInfo {
     SkISize fSize;
@@ -91,19 +122,29 @@ struct SkJFIFInfo {
     } fType;
 };
 bool SkIsJFIF(const SkData* data, SkJFIFInfo* info) {
-    SkISize jpegSize;
-    SkEncodedInfo::Color jpegColorType;
-    SkEncodedOrigin exifOrientation;
-    if (data && SkGetJpegInfo(data->data(), data->size(), &jpegSize,
-                              &jpegColorType, &exifOrientation)) {
-        bool yuv = jpegColorType == SkEncodedInfo::kYUV_Color;
-        bool goodColorType = yuv || jpegColorType == SkEncodedInfo::kGray_Color;
-        if (goodColorType && kTopLeft_SkEncodedOrigin == exifOrientation) {
-            if (info) {
-                *info = {jpegSize, yuv ? SkJFIFInfo::kYCbCr : SkJFIFInfo::kGrayscale};
-            }
-            return true;
+    static constexpr const SkCodecs::Decoder decoders[] = {
+        SkJpegDecoder::Decoder(),
+    };
+
+    if (!data) {
+        return false;
+    }
+    std::unique_ptr<SkCodec> codec = SkCodec::MakeFromData(sk_ref_sp(data), decoders);
+    if (!codec) {
+        return false;
+    }
+
+    SkISize jpegSize = codec->dimensions();
+    SkEncodedInfo::Color jpegColorType = SkPDFBitmap::GetEncodedInfo(*codec).color();
+    SkEncodedOrigin exifOrientation = codec->getOrigin();
+
+    bool yuv = jpegColorType == SkEncodedInfo::kYUV_Color;
+    bool goodColorType = yuv || jpegColorType == SkEncodedInfo::kGray_Color;
+    if (goodColorType && kTopLeft_SkEncodedOrigin == exifOrientation) {
+        if (info) {
+            *info = {jpegSize, yuv ? SkJFIFInfo::kYCbCr : SkJFIFInfo::kGrayscale};
         }
+        return true;
     }
     return false;
 }
@@ -118,7 +159,7 @@ DEF_TEST(SkPDF_JpegIdentification, r) {
                   {"images/grayscale.jpg", true, SkJFIFInfo::kGrayscale},
                   {"images/mandrill_512_q075.jpg", true, SkJFIFInfo::kYCbCr},
                   {"images/randPixels.jpg", true, SkJFIFInfo::kYCbCr}};
-    for (size_t i = 0; i < SK_ARRAY_COUNT(kTests); ++i) {
+    for (size_t i = 0; i < std::size(kTests); ++i) {
         sk_sp<SkData> data(load_resource(r, "JpegIdentification", kTests[i].path));
         if (!data) {
             continue;

@@ -16,7 +16,7 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 
 namespace skiagm {
 
@@ -28,8 +28,7 @@ public:
     }
 
 protected:
-
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString name("nested");
         if (fFlipped) {
             name.append("_flipY");
@@ -42,9 +41,7 @@ protected:
         return name;
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(kImageWidth, kImageHeight);
-    }
+    SkISize getISize() override { return SkISize::Make(kImageWidth, kImageHeight); }
 
     enum Shapes {
         kRect_Shape = 0,
@@ -102,7 +99,7 @@ protected:
         SkScalar xOff = 2, yOff = 2;
         for (int outerShape = 0; outerShape < kShapeCount; ++outerShape) {
             for (int innerShape = 0; innerShape < kShapeCount; ++innerShape) {
-                for (size_t innerRect = 0; innerRect < SK_ARRAY_COUNT(innerRects); ++innerRect) {
+                for (size_t innerRect = 0; innerRect < std::size(innerRects); ++innerRect) {
                     SkPathBuilder builder;
 
                     AddShape(&builder, outerRect, (Shapes) outerShape, SkPathDirection::kCW);

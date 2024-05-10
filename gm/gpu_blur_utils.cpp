@@ -7,16 +7,21 @@
 
 #include "gm/gm.h"
 
+#include "include/core/SkColorSpace.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/core/SkGpuBlurUtils.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrStyle.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/effects/GrBlendFragmentProcessor.h"
-#include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/BlurUtils.h"
+#include "src/gpu/ganesh/GrBlurUtils.h"
+#include "src/gpu/ganesh/GrCanvas.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrStyle.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/effects/GrBlendFragmentProcessor.h"
+#include "src/gpu/ganesh/effects/GrTextureEffect.h"
+#include "src/gpu/ganesh/image/GrImageUtils.h"
 #include "src/image/SkImage_Base.h"
 
 namespace {
@@ -28,7 +33,7 @@ static GrSurfaceProxyView blur(GrRecordingContext* ctx,
                                float sigmaX,
                                float sigmaY,
                                SkTileMode mode) {
-    auto resultSDC = SkGpuBlurUtils::GaussianBlur(ctx,
+    auto resultSDC = GrBlurUtils::GaussianBlur(ctx,
                                                   src,
                                                   GrColorType::kRGBA_8888,
                                                   kPremul_SkAlphaType,
@@ -59,7 +64,7 @@ static GrSurfaceProxyView slow_blur(GrRecordingContext* rContext,
                                SkIPoint offset,
                                SkTileMode mode) {
         GrImageInfo info(GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr, resultSize);
-        auto sfc = rContext->priv().makeSFC(info);
+        auto sfc = rContext->priv().makeSFC(info, /*label=*/{});
         if (!sfc) {
             return GrSurfaceProxyView{};
         }
@@ -74,7 +79,7 @@ static GrSurfaceProxyView slow_blur(GrRecordingContext* rContext,
         return sfc->readSurfaceView();
     };
 
-    SkIPoint outset = {SkGpuBlurUtils::SigmaRadius(sigmaX), SkGpuBlurUtils::SigmaRadius(sigmaY)};
+    SkIPoint outset = {skgpu::BlurSigmaRadius(sigmaX), skgpu::BlurSigmaRadius(sigmaY)};
     SkISize size = {dstB.width() + 2*outset.x(), dstB.height() + 2*outset.y()};
     src = tileInto(std::move(src), srcB, size, outset - dstB.topLeft(), mode);
     if (!src) {
@@ -84,23 +89,23 @@ static GrSurfaceProxyView slow_blur(GrRecordingContext* rContext,
 
     while (sigmaX || sigmaY) {
         float stepX = sigmaX;
-        if (stepX > SkGpuBlurUtils::kMaxSigma) {
-            stepX = SkGpuBlurUtils::kMaxSigma;
+        if (stepX > skgpu::kMaxLinearBlurSigma) {
+            stepX = skgpu::kMaxLinearBlurSigma;
             // A blur of sigma1 followed by a blur of sigma2 is equiv. to a single blur of
             // sqrt(sigma1^2 + sigma2^2).
-            sigmaX = sqrt(sigmaX*sigmaX - SkGpuBlurUtils::kMaxSigma*SkGpuBlurUtils::kMaxSigma);
+            sigmaX = sqrt(sigmaX*sigmaX - skgpu::kMaxLinearBlurSigma*skgpu::kMaxLinearBlurSigma);
         } else {
             sigmaX = 0.f;
         }
         float stepY = sigmaY;
-        if (stepY > SkGpuBlurUtils::kMaxSigma) {
-            stepY = SkGpuBlurUtils::kMaxSigma;
-            sigmaY = sqrt(sigmaY*sigmaY- SkGpuBlurUtils::kMaxSigma*SkGpuBlurUtils::kMaxSigma);
+        if (stepY > skgpu::kMaxLinearBlurSigma) {
+            stepY = skgpu::kMaxLinearBlurSigma;
+            sigmaY = sqrt(sigmaY*sigmaY- skgpu::kMaxLinearBlurSigma*skgpu::kMaxLinearBlurSigma);
         } else {
             sigmaY = 0.f;
         }
         auto bounds = SkIRect::MakeSize(src.dimensions());
-        auto sdc = SkGpuBlurUtils::GaussianBlur(rContext,
+        auto sdc = GrBlurUtils::GaussianBlur(rContext,
                                                 std::move(src),
                                                 GrColorType::kRGBA_8888,
                                                 kPremul_SkAlphaType,
@@ -128,7 +133,7 @@ GrSurfaceProxyView make_src_image(GrRecordingContext* rContext,
                                   SkISize dimensions,
                                   const SkIRect* contentArea = nullptr) {
     auto srcII = SkImageInfo::Make(dimensions, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    auto surf = SkSurface::MakeRenderTarget(rContext, SkBudgeted::kYes, srcII);
+    auto surf = SkSurfaces::RenderTarget(rContext, skgpu::Budgeted::kYes, srcII);
     if (!surf) {
         return {};
     }
@@ -174,7 +179,7 @@ GrSurfaceProxyView make_src_image(GrRecordingContext* rContext,
     surf->getCanvas()->drawLine({7.f*w/8.f, 0.f}, {7.f*h/8.f, h}, paint);
 
     auto img = surf->makeImageSnapshot();
-    auto [src, ct] = as_IB(img)->asView(rContext, GrMipmapped::kNo);
+    auto [src, ct] = skgpu::ganesh::AsView(rContext, img, skgpu::Mipmapped::kNo);
     return src;
 }
 
@@ -190,7 +195,7 @@ static GM::DrawResult run(GrRecordingContext* rContext, SkCanvas* canvas,  SkStr
         return DrawResult::kSkip;
     }
 
-    auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+    auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
     if (!sdc) {
         *errorMsg = GM::kErrorMsg_DrawSkippedGpuOnly;
         return DrawResult::kSkip;
@@ -297,15 +302,13 @@ static GM::DrawResult run(GrRecordingContext* rContext, SkCanvas* canvas,  SkStr
                                                     sampler,
                                                     caps);
                     // Compose against white (default paint color)
-                    fp = GrBlendFragmentProcessor::Make(std::move(fp),
-                                                        /*dst=*/nullptr,
-                                                        SkBlendMode::kSrcOver);
+                    fp = GrBlendFragmentProcessor::Make<SkBlendMode::kSrcOver>(std::move(fp),
+                                                                               /*dst=*/nullptr);
                     GrPaint paint;
                     // Compose against white (default paint color) and then replace the dst
                     // (SkBlendMode::kSrc).
-                    fp = GrBlendFragmentProcessor::Make(std::move(fp),
-                                                        /*dst=*/nullptr,
-                                                        SkBlendMode::kSrcOver);
+                    fp = GrBlendFragmentProcessor::Make<SkBlendMode::kSrcOver>(std::move(fp),
+                                                                               /*dst=*/nullptr);
                     paint.setColorFragmentProcessor(std::move(fp));
                     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
                     sdc->fillRectToRect(nullptr,
@@ -376,7 +379,7 @@ static DrawResult do_very_large_blur_gm(GrRecordingContext* rContext,
                                         SkString* errorMsg,
                                         GrSurfaceProxyView src,
                                         SkIRect srcB) {
-    auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+    auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
     if (!sdc) {
         *errorMsg = GM::kErrorMsg_DrawSkippedGpuOnly;
         return DrawResult::kSkip;
@@ -415,9 +418,8 @@ static DrawResult do_very_large_blur_gm(GrRecordingContext* rContext,
                     if (result) {
                         std::unique_ptr<GrFragmentProcessor> fp =
                                 GrTextureEffect::Make(std::move(result), kPremul_SkAlphaType);
-                        fp = GrBlendFragmentProcessor::Make(std::move(fp),
-                                                            /*dst=*/nullptr,
-                                                            SkBlendMode::kSrcOver);
+                        fp = GrBlendFragmentProcessor::Make<SkBlendMode::kSrcOver>(std::move(fp),
+                                                                                   /*dst=*/nullptr);
                         sdc->fillRectToRectWithFP(SkIRect::MakeSize(dstB.size()),
                                                   dstRect,
                                                   std::move(fp));

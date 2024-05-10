@@ -6,15 +6,28 @@
  */
 
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkData.h"
 #include "include/core/SkDrawable.h"
+#include "include/core/SkFlattenable.h"
 #include "include/core/SkFont.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkRect.h"
-#include "include/core/SkStream.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
 #include "src/core/SkPathEffectBase.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/effects/colorfilters/SkColorFilterBase.h"
+#include "src/shaders/SkShaderBase.h"
 #include "tests/Test.h"
+#include "tools/fonts/FontToolUtils.h"
+
+#include <cstdint>
+#include <cstring>
 
 class IntDrawable : public SkDrawable {
 public:
@@ -212,7 +225,7 @@ DEF_TEST(FlattenDrawable, r) {
     SkPaint paint;
     paint.setColor(SK_ColorBLUE);
     sk_sp<RootDrawable> root(new RootDrawable(5, 6, 7, 8, paint, 9, 10, 11, 12, drawable.get()));
-    SkBinaryWriteBuffer writeBuffer;
+    SkBinaryWriteBuffer writeBuffer({});
     writeBuffer.writeFlattenable(root.get());
 
     // Copy the contents of the write buffer into a read buffer
@@ -258,7 +271,7 @@ DEF_TEST(FlattenRecordedDrawable, r) {
     canvas->drawPaint(paint);
     SkPaint textPaint;
     textPaint.setColor(SK_ColorBLUE);
-    canvas->drawString("TEXT", 467.0f, 100.0f, SkFont(), textPaint);
+    canvas->drawString("TEXT", 467.0f, 100.0f, ToolUtils::DefaultFont(), textPaint);
 
     // Draw some drawables as well
     sk_sp<SkDrawable> drawable(new IntDrawable(1, 2, 3, 4));
@@ -271,7 +284,7 @@ DEF_TEST(FlattenRecordedDrawable, r) {
 
     // Serialize the recorded drawable
     sk_sp<SkDrawable> recordedDrawable = recorder.finishRecordingAsDrawable();
-    SkBinaryWriteBuffer writeBuffer;
+    SkBinaryWriteBuffer writeBuffer({});
     writeBuffer.writeFlattenable(recordedDrawable.get());
 
     // Copy the contents of the write buffer into a read buffer

@@ -1,47 +1,73 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
-generated_cc_atom(
-    name = "SkUnicode_icu_builtin_src",
+licenses(["notice"])
+
+exports_files_legacy()
+
+# In own group for export to //modules/skunicode/skunicode.gni:skia_unicode_builtin_icu_sources.
+skia_filegroup(
+    name = "builtin_srcs",
     srcs = ["SkUnicode_icu_builtin.cpp"],
-    visibility = ["//:__subpackages__"],
-    deps = [":SkUnicode_icu_hdr"],
 )
 
-generated_cc_atom(
-    name = "SkUnicode_icu_hdr",
-    hdrs = ["SkUnicode_icu.h"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        "//include/private:SkTemplates_hdr",
-        "//third_party:icu",
-    ],
-)
-
-generated_cc_atom(
-    name = "SkUnicode_icu_runtime_src",
+# In own group for export to //modules/skunicode/skunicode.gni:skia_unicode_runtime_icu_sources.
+skia_filegroup(
+    name = "runtime_srcs",
     srcs = ["SkUnicode_icu_runtime.cpp"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        ":SkUnicode_icu_hdr",
-        "//include/core:SkString_hdr",
-        "//include/core:SkTypes_hdr",
-    ],
 )
 
-generated_cc_atom(
-    name = "SkUnicode_icu_src",
-    srcs = ["SkUnicode_icu.cpp"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        ":SkUnicode_icu_hdr",
-        "//include/core:SkString_hdr",
-        "//include/private:SkMutex_hdr",
-        "//include/private:SkOnce_hdr",
-        "//include/private:SkTFitsIn_hdr",
-        "//include/private:SkTHash_hdr",
-        "//include/private:SkTemplates_hdr",
-        "//modules/skunicode/include:SkUnicode_hdr",
-        "//src/utils:SkUTF_hdr",
-        "//third_party:icu",
+# In own group for export to //modules/skunicode/skunicode.gni:skia_unicode_common_icu_sources.
+skia_filegroup(
+    name = "srcs",
+    srcs = [
+        "SkUnicode.cpp",
+        "SkUnicode_hardcoded.cpp",
+        "SkUnicode_hardcoded.h",
     ],
+    visibility = ["//modules/skunicode:__pkg__"],
+)
+
+skia_filegroup(
+    name = "icu_bidi_srcs",
+    srcs = [
+        "SkUnicode_icu_bidi.cpp",
+        "SkUnicode_icu_bidi.h",
+    ],
+    visibility = ["//modules/skunicode:__pkg__"],
+)
+
+skia_filegroup(
+    name = "icu_srcs",
+    srcs = [
+        "SkUnicode_icu.cpp",
+        "SkUnicode_icu.h",
+        ":builtin_srcs",
+        # TODO(kjlubick, bungeman): add support for SkUnicode_icu_runtime.cpp
+    ],
+    visibility = ["//modules/skunicode:__pkg__"],
+)
+
+skia_filegroup(
+    name = "client_srcs",
+    srcs = [
+        "SkUnicode_client.cpp",
+        "SkUnicode_client.h",
+    ],
+    visibility = ["//modules/skunicode:__pkg__"],
+)
+
+skia_filegroup(
+    name = "libgrapheme_srcs",
+    srcs = [
+        "SkUnicode_libgrapheme.cpp",
+    ],
+    visibility = ["//modules/skunicode:__pkg__"],
+)
+
+skia_filegroup(
+    name = "icu4x_srcs",
+    srcs = [
+        "SkUnicode_icu4x.cpp",
+    ],
+    visibility = ["//modules/skunicode:__pkg__"],
 )

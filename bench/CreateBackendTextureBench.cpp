@@ -7,17 +7,21 @@
 
 #include "bench/Benchmark.h"
 #include "include/core/SkCanvas.h"
+#include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
+
+using namespace skia_private;
 
 class CreateBackendTextureBench : public Benchmark {
 private:
     SkString fName;
-    SkTArray<GrBackendTexture> fBackendTextures;
-    GrMipmapped fMipmapped;
+    TArray<GrBackendTexture> fBackendTextures;
+    skgpu::Mipmapped fMipmapped;
 
 public:
-    CreateBackendTextureBench(GrMipmapped mipMapped) : fMipmapped(mipMapped) {
-        fName.printf("create_backend_texture%s", mipMapped == GrMipmapped::kYes ? "_mipped" : "");
+    CreateBackendTextureBench(skgpu::Mipmapped mipmapped) : fMipmapped(mipmapped) {
+        fName.printf("create_backend_texture%s",
+                     mipmapped == skgpu::Mipmapped::kYes ? "_mipped" : "");
     }
 
 private:
@@ -28,13 +32,21 @@ private:
     void onDraw(int loops, SkCanvas* canvas) override {
         auto context = canvas->recordingContext()->asDirectContext();
 
-        fBackendTextures.reserve_back(loops);
+        fBackendTextures.reserve_exact(fBackendTextures.size() + loops);
 
         static const int kSize = 16;
         for (int i = 0; i < loops; ++i) {
-            fBackendTextures.push_back(context->createBackendTexture(
-                    kSize, kSize, kRGBA_8888_SkColorType, SkColors::kRed, fMipmapped,
-                    GrRenderable::kNo, GrProtected::kNo));
+            fBackendTextures.push_back(
+                    context->createBackendTexture(kSize,
+                                                  kSize,
+                                                  kRGBA_8888_SkColorType,
+                                                  SkColors::kRed,
+                                                  fMipmapped,
+                                                  GrRenderable::kNo,
+                                                  GrProtected::kNo,
+                                                  nullptr,
+                                                  nullptr,
+                                                  /*label=*/"DrawBackendTextureBench"));
         }
     }
 
@@ -42,16 +54,16 @@ private:
         auto context = canvas->recordingContext()->asDirectContext();
 
         context->flush();
-        context->submit(true);
+        context->submit(GrSyncCpu::kYes);
 
-        for (int i = 0; i < fBackendTextures.count(); ++i) {
+        for (int i = 0; i < fBackendTextures.size(); ++i) {
             if (fBackendTextures[i].isValid()) {
                 context->deleteBackendTexture(fBackendTextures[i]);
             }
         }
-        fBackendTextures.reset();
+        fBackendTextures.clear();
     }
 };
 
-DEF_BENCH(return new CreateBackendTextureBench(GrMipmapped::kNo);)
-DEF_BENCH(return new CreateBackendTextureBench(GrMipmapped::kYes);)
+DEF_BENCH(return new CreateBackendTextureBench(skgpu::Mipmapped::kNo);)
+DEF_BENCH(return new CreateBackendTextureBench(skgpu::Mipmapped::kYes);)

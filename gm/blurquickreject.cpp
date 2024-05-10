@@ -30,13 +30,9 @@ public:
     BlurQuickRejectGM() {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("blurquickreject");
-    }
+    SkString getName() const override { return SkString("blurquickreject"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(kWidth, kHeight);
-    }
+    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
 
     void onDraw(SkCanvas* canvas) override {
         constexpr SkScalar kBlurRadius = SkIntToScalar(20);
@@ -55,7 +51,7 @@ protected:
             SK_ColorBLUE,
             SK_ColorYELLOW,
         };
-        SkASSERT(SK_ARRAY_COUNT(colors) == SK_ARRAY_COUNT(blurRects));
+        SkASSERT(std::size(colors) == std::size(blurRects));
 
         SkPaint hairlinePaint;
         hairlinePaint.setStyle(SkPaint::kStroke_Style);
@@ -71,7 +67,7 @@ protected:
         canvas->translate(kBoxSize, kBoxSize);
         canvas->drawRect(clipRect, hairlinePaint);
         canvas->clipRect(clipRect);
-        for (size_t i = 0; i < SK_ARRAY_COUNT(blurRects); ++i) {
+        for (size_t i = 0; i < std::size(blurRects); ++i) {
             blurPaint.setColor(colors[i]);
             canvas->drawRect(blurRects[i], blurPaint);
             canvas->drawRect(blurRects[i], hairlinePaint);

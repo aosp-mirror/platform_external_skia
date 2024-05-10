@@ -18,6 +18,7 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #define WIDTH 640
 #define HEIGHT 480
@@ -31,13 +32,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("imageblurtiled");
-    }
+    SkString getName() const override { return SkString("imageblurtiled"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(WIDTH, HEIGHT);
-    }
+    SkISize getISize() override { return SkISize::Make(WIDTH, HEIGHT); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
@@ -55,9 +52,9 @@ protected:
                     "jumped over",
                     "the lazy dog.",
                 };
-                SkFont font(ToolUtils::create_portable_typeface(), 100);
+                SkFont font(ToolUtils::DefaultPortableTypeface(), 100);
                 int posY = 0;
-                for (unsigned i = 0; i < SK_ARRAY_COUNT(str); i++) {
+                for (unsigned i = 0; i < std::size(str); i++) {
                     posY += 100;
                     canvas->drawString(str[i], 0, SkIntToScalar(posY), font, SkPaint());
                 }

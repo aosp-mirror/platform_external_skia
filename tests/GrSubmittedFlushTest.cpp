@@ -5,11 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "tests/Test.h"
-
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "tests/CtsEnforcement.h"
+#include "tests/Test.h"
+#include "tools/gpu/FenceSync.h"
+
+struct GrContextOptions;
 
 using namespace sk_gpu_test;
 
@@ -26,11 +38,14 @@ static void testing_submitted_proc(void* ctx, bool success) {
     *info->fSuccess = success;
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(FlushSubmittedProcTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(FlushSubmittedProcTest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     auto ctx = ctxInfo.directContext();
 
     SkImageInfo info = SkImageInfo::Make(8, 8, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    sk_sp<SkSurface> surface = SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info);
+    sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(ctx, skgpu::Budgeted::kNo, info);
     SkCanvas* canvas = surface->getCanvas();
 
     canvas->clear(SK_ColorGREEN);
@@ -51,7 +66,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(FlushSubmittedProcTest, reporter, ctxInfo) {
     REPORTER_ASSERT(reporter, submittedSuccess);
 
     // There should be no work so if we flush again the submittedProc should be called immediately
-    surface->flush(SkSurface::BackendSurfaceAccess::kNoAccess, flushInfo);
+    ctx->flush(surface.get(), SkSurfaces::BackendSurfaceAccess::kNoAccess, flushInfo);
     REPORTER_ASSERT(reporter, submittedCount == 2);
     REPORTER_ASSERT(reporter, submittedSuccess);
 
@@ -66,10 +81,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(FlushSubmittedProcTest, reporter, ctxInfo) {
 
     // Testing that doing multiple flushes before a submit triggers both submittedProcs to be called
     canvas->clear(SK_ColorBLUE);
-    surface->flush(SkSurface::BackendSurfaceAccess::kNoAccess, flushInfo);
+    ctx->flush(surface.get(), SkSurfaces::BackendSurfaceAccess::kNoAccess, flushInfo);
     REPORTER_ASSERT(reporter, submittedCount == 3);
     canvas->clear(SK_ColorRED);
-    surface->flush(SkSurface::BackendSurfaceAccess::kNoAccess, flushInfo);
+    ctx->flush(surface.get(), SkSurfaces::BackendSurfaceAccess::kNoAccess, flushInfo);
     REPORTER_ASSERT(reporter, submittedCount == 3);
     ctx->submit();
 
@@ -79,7 +94,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(FlushSubmittedProcTest, reporter, ctxInfo) {
     // Test an abandoned context to get a failed submit immediately when flush is called
     canvas->clear(SK_ColorCYAN);
     ctx->abandonContext();
-    surface->flush(SkSurface::BackendSurfaceAccess::kNoAccess, flushInfo);
+    ctx->flush(surface.get(), SkSurfaces::BackendSurfaceAccess::kNoAccess, flushInfo);
     REPORTER_ASSERT(reporter, submittedCount == 6);
     REPORTER_ASSERT(reporter, !submittedSuccess);
     ctx->flush(flushInfo);

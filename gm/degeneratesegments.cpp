@@ -18,8 +18,9 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 namespace skiagm {
 
@@ -30,9 +31,9 @@ class DegenerateSegmentsGM : public GM {
         const char* fName2;
     };
 
-    SkString onShortName() override { return SkString("degeneratesegments"); }
+    SkString getName() const override { return SkString("degeneratesegments"); }
 
-    SkISize onISize() override { return {896, 930}; }
+    SkISize getISize() override { return {896, 930}; }
 
     typedef SkPoint (*AddSegmentFunc)(SkPathBuilder&, SkPoint&);
 
@@ -293,7 +294,7 @@ class DegenerateSegmentsGM : public GM {
         SkPaint titlePaint;
         titlePaint.setColor(SK_ColorBLACK);
         titlePaint.setAntiAlias(true);
-        SkFont     font(ToolUtils::create_portable_typeface(), 15);
+        SkFont     font(ToolUtils::DefaultPortableTypeface(), 15);
         const char title[] = "Random Paths Drawn Into Rectangle Clips With "
                              "Indicated Style, Fill and Linecaps, "
                              "with Stroke width 6";
@@ -304,10 +305,10 @@ class DegenerateSegmentsGM : public GM {
         canvas->save();
         canvas->translate(2*SK_Scalar1, 30 * SK_Scalar1); // The title
         canvas->save();
-        unsigned numSegments = SK_ARRAY_COUNT(gSegmentFunctions);
-        unsigned numCaps = SK_ARRAY_COUNT(gCaps);
-        unsigned numStyles = SK_ARRAY_COUNT(gStyles);
-        unsigned numFills = SK_ARRAY_COUNT(gFills);
+        unsigned numSegments = std::size(gSegmentFunctions);
+        unsigned numCaps = std::size(gCaps);
+        unsigned numStyles = std::size(gStyles);
+        unsigned numFills = std::size(gFills);
         for (size_t row = 0; row < 6; ++row) {
             if (0 < row) {
                 canvas->translate(0, rect.height() + 100*SK_Scalar1);

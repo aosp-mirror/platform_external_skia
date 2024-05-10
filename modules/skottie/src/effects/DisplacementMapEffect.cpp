@@ -7,6 +7,7 @@
 
 #include "modules/skottie/src/effects/Effects.h"
 
+#include "include/core/SkCanvas.h"
 #include "include/core/SkPictureRecorder.h"
 #include "include/effects/SkColorMatrix.h"
 #include "include/effects/SkImageFilters.h"
@@ -22,10 +23,7 @@
 #include <tuple>
 
 namespace skottie::internal {
-
-#ifdef SK_ENABLE_SKSL
-
-namespace  {
+namespace {
 
 // AE's displacement map effect [1] is somewhat similar to SVG's feDisplacementMap [2].  Main
 // differences:
@@ -40,21 +38,21 @@ namespace  {
 
 // |selector_matrix| and |selector_offset| are set up to select and scale the x/y displacement
 // in R/G, and the x/y coverage modulation in B/A.
-static constexpr char gDisplacementSkSL[] = R"(
-    uniform shader child;
-    uniform shader displ;
+static constexpr char gDisplacementSkSL[] =
+    "uniform shader child;"
+    "uniform shader displ;"
 
-    uniform half4x4 selector_matrix;
-    uniform half4   selector_offset;
+    "uniform half4x4 selector_matrix;"
+    "uniform half4   selector_offset;"
 
-    half4 main(float2 xy) {
-        half4 d = displ.eval(xy);
+    "half4 main(float2 xy) {"
+        "half4 d = displ.eval(xy);"
 
-        d = selector_matrix*unpremul(d) + selector_offset;
+        "d = selector_matrix*unpremul(d) + selector_offset;"
 
-        return child.eval(xy + d.xy*d.zw);
-    }
-)";
+        "return child.eval(xy + d.xy*d.zw);"
+   "}"
+;
 
 static sk_sp<SkRuntimeEffect> displacement_effect_singleton() {
     static const SkRuntimeEffect* effect =
@@ -152,7 +150,7 @@ private:
         };
 
         const auto i = static_cast<size_t>(sel);
-        SkASSERT(i < SK_ARRAY_COUNT(gCoeffs));
+        SkASSERT(i < std::size(gCoeffs));
 
         return gCoeffs[i];
     }
@@ -279,13 +277,10 @@ private:
             case Pos::kCenter:  return SkMatrix::Translate(
                                     (fChildSize.fWidth  - fDisplSize.fWidth ) / 2,
                                     (fChildSize.fHeight - fDisplSize.fHeight) / 2);
-                break;
             case Pos::kStretch: return SkMatrix::Scale(
                                     fChildSize.fWidth  / fDisplSize.fWidth,
                                     fChildSize.fHeight / fDisplSize.fHeight);
-                break;
             case Pos::kTile:    return SkMatrix::I();
-                break;
         }
         SkUNREACHABLE;
     }
@@ -389,11 +384,8 @@ private:
 
 } // namespace
 
-#endif  // SK_ENABLE_SKSL
-
 sk_sp<sksg::RenderNode> EffectBuilder::attachDisplacementMapEffect(
         const skjson::ArrayValue& jprops, sk_sp<sksg::RenderNode> layer) const {
-#ifdef SK_ENABLE_SKSL
     auto [ displ, displ_size ] = DisplacementMapAdapter::GetDisplacementSource(jprops, this);
 
     auto displ_node = DisplacementNode::Make(layer, fLayerSize, std::move(displ), displ_size);
@@ -405,10 +397,6 @@ sk_sp<sksg::RenderNode> EffectBuilder::attachDisplacementMapEffect(
     return fBuilder->attachDiscardableAdapter<DisplacementMapAdapter>(jprops,
                                                                       fBuilder,
                                                                       std::move(displ_node));
-#else
-    // TODO(skia:12197)
-    return layer;
-#endif
 }
 
 } // namespace skottie::internal

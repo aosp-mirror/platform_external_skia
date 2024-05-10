@@ -13,6 +13,9 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
 #include "tools/gpu/GrContextFactory.h"
+#if defined(SK_GRAPHITE)
+#include "tools/graphite/ContextFactory.h"
+#endif
 
 class SkBitmap;
 class SkCanvas;
@@ -52,7 +55,7 @@ struct Target {
     /** Called between benchmarks (or between calibration and measured
         runs) to make sure all pending work in drivers / threads is
         complete. */
-    virtual void fence() { }
+    virtual void syncCPU() { }
 
     /** CPU-like targets can just be timed, but GPU-like
         targets need to pay attention to frame boundaries

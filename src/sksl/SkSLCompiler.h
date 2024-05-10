@@ -8,50 +8,54 @@
 #ifndef SKSL_COMPILER
 #define SKSL_COMPILER
 
-#include <set>
-#include <unordered_set>
-#include <vector>
 #include "include/core/SkSize.h"
-#include "src/sksl/SkSLAnalysis.h"
-#include "src/sksl/SkSLContext.h"
-#include "src/sksl/SkSLInliner.h"
-#include "src/sksl/SkSLParsedModule.h"
-#include "src/sksl/ir/SkSLProgram.h"
-#include "src/sksl/ir/SkSLSymbolTable.h"
+#include "include/core/SkTypes.h"
+#include "src/sksl/SkSLContext.h"  // IWYU pragma: keep
+#include "src/sksl/SkSLErrorReporter.h"
+#include "src/sksl/SkSLPosition.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
 
-#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-#include "src/gpu/GrShaderVar.h"
-#endif
+#include <array>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <vector>
 
-#define SK_FRAGCOLOR_BUILTIN           10001
-#define SK_LASTFRAGCOLOR_BUILTIN       10008
-#define SK_MAIN_COORDS_BUILTIN         10009
-#define SK_INPUT_COLOR_BUILTIN         10010
-#define SK_DEST_COLOR_BUILTIN          10011
-#define SK_SECONDARYFRAGCOLOR_BUILTIN  10012
-#define SK_FRAGCOORD_BUILTIN              15
-#define SK_CLOCKWISE_BUILTIN              17
-#define SK_VERTEXID_BUILTIN               42
-#define SK_INSTANCEID_BUILTIN             43
-#define SK_POSITION_BUILTIN                0
+constexpr int SK_FRAGCOLOR_BUILTIN =           10001;
+constexpr int SK_LASTFRAGCOLOR_BUILTIN =       10008;
+constexpr int SK_SECONDARYFRAGCOLOR_BUILTIN =  10012;
+constexpr int SK_FRAGCOORD_BUILTIN =              15;
+constexpr int SK_CLOCKWISE_BUILTIN =              17;
+constexpr int SK_SAMPLEMASKIN_BUILTIN =           20;
+constexpr int SK_SAMPLEMASK_BUILTIN =          10020;
 
-class SkBitSet;
-class SkSLCompileBench;
+constexpr int SK_VERTEXID_BUILTIN =               42;
+constexpr int SK_INSTANCEID_BUILTIN =             43;
+constexpr int SK_POSITION_BUILTIN =                0;
+constexpr int SK_POINTSIZE_BUILTIN =               1;
+
+constexpr int SK_NUMWORKGROUPS_BUILTIN =          24;
+constexpr int SK_WORKGROUPID_BUILTIN =            26;
+constexpr int SK_LOCALINVOCATIONID_BUILTIN =      27;
+constexpr int SK_GLOBALINVOCATIONID_BUILTIN =     28;
+constexpr int SK_LOCALINVOCATIONINDEX_BUILTIN =   29;
 
 namespace SkSL {
 
-namespace dsl {
-    class DSLCore;
-    class DSLWriter;
-}
-
-class ExternalFunction;
-class FunctionDeclaration;
+class Expression;
+class Inliner;
+class OutputStream;
 class ProgramUsage;
+class SymbolTable;
+enum class ProgramKind : int8_t;
+struct Program;
+struct ProgramSettings;
 struct ShaderCaps;
 
-struct LoadedModule {
-    ProgramKind                                  fKind;
+struct Module {
+    const Module*                                fParent = nullptr;
     std::shared_ptr<SymbolTable>                 fSymbols;
     std::vector<std::unique_ptr<ProgramElement>> fElements;
 };
@@ -67,7 +71,7 @@ class SK_API Compiler {
 public:
     inline static constexpr const char FRAGCOLOR_NAME[] = "sk_FragColor";
     inline static constexpr const char RTADJUST_NAME[]  = "sk_RTAdjust";
-    inline static constexpr const char PERVERTEX_NAME[] = "sk_PerVertex";
+    inline static constexpr const char POSITION_NAME[]  = "sk_Position";
     inline static constexpr const char POISON_TAG[]     = "<POISON>";
 
     /**
@@ -90,7 +94,7 @@ public:
     }
 
     /**
-     * Uniform values  by the compiler to implement origin-neutral dFdy, sk_Clockwise, and
+     * Uniform values used by the compiler to implement origin-neutral dFdy, sk_Clockwise, and
      * sk_FragCoord.
      */
     static std::array<float, 2> GetRTFlipVector(int rtHeight, bool flipY) {
@@ -99,19 +103,6 @@ public:
         result[1] = flipY ?     -1.f : 1.f;
         return result;
     }
-
-    struct OptimizationContext {
-        // nodes we have already reported errors for and should not error on again
-        std::unordered_set<const IRNode*> fSilences;
-        // true if we have updated the CFG during this pass
-        bool fUpdated = false;
-        // true if we need to completely regenerate the CFG
-        bool fNeedsRescan = false;
-        // Metadata about function and variable usage within the program
-        ProgramUsage* fUsage = nullptr;
-        // Nodes which we can't throw away until the end of optimization
-        StatementArray fOwnedStatements;
-    };
 
     Compiler(const ShaderCaps* caps);
 
@@ -132,17 +123,11 @@ public:
     static void EnableOptimizer(OverrideFlag flag) { sOptimizer = flag; }
     static void EnableInliner(OverrideFlag flag) { sInliner = flag; }
 
-    /**
-     * If fExternalFunctions is supplied in the settings, those values are registered in the symbol
-     * table of the Program, but ownership is *not* transferred. It is up to the caller to keep them
-     * alive.
-     */
-    std::unique_ptr<Program> convertProgram(
-            ProgramKind kind,
-            std::string text,
-            Program::Settings settings);
+    std::unique_ptr<Program> convertProgram(ProgramKind kind,
+                                            std::string text,
+                                            ProgramSettings settings);
 
-    std::unique_ptr<Expression> convertIdentifier(int line, std::string_view name);
+    std::unique_ptr<Expression> convertIdentifier(Position pos, std::string_view name);
 
     bool toSPIRV(Program& program, OutputStream& out);
 
@@ -160,7 +145,11 @@ public:
 
     bool toMetal(Program& program, std::string* out);
 
-    void handleError(std::string_view msg, PositionInfo pos);
+    bool toWGSL(Program& program, OutputStream& out);
+
+    bool toWGSL(Program& program, std::string* out);
+
+    void handleError(std::string_view msg, Position pos);
 
     std::string errorText(bool showCount = true);
 
@@ -179,31 +168,23 @@ public:
         return *fContext;
     }
 
-    std::shared_ptr<SymbolTable> symbolTable() const {
-        return fSymbolTable;
+    std::shared_ptr<SymbolTable>& symbolTable() {
+        return fContext->fSymbolTable;
     }
 
-    // When  SKSL_STANDALONE, fPath is used. (fData, fSize) will be (nullptr, 0)
-    // When !SKSL_STANDALONE, fData and fSize are used. fPath will be nullptr.
-    struct ModuleData {
-        const char*    fPath;
+    std::unique_ptr<Module> compileModule(ProgramKind kind,
+                                          const char* moduleName,
+                                          std::string moduleSource,
+                                          const Module* parent,
+                                          bool shouldInline);
 
-        const uint8_t* fData;
-        size_t         fSize;
-    };
+    /** Optimize a module at minification time, before writing it out. */
+    bool optimizeModuleBeforeMinifying(ProgramKind kind, Module& module, bool shrinkSymbols);
 
-    static ModuleData MakeModulePath(const char* path) {
-        return ModuleData{path, /*fData=*/nullptr, /*fSize=*/0};
-    }
-    static ModuleData MakeModuleData(const uint8_t* data, size_t size) {
-        return ModuleData{/*fPath=*/nullptr, data, size};
-    }
+    const Module* moduleForProgramKind(ProgramKind kind);
 
-    LoadedModule loadModule(ProgramKind kind, ModuleData data, std::shared_ptr<SymbolTable> base,
-                            bool dehydrate);
-    ParsedModule parseModule(ProgramKind kind, ModuleData data, const ParsedModule& base);
-
-    const ParsedModule& moduleForProgramKind(ProgramKind kind);
+    /** Run the inliner on a program which was compiled earlier (with inlining turned off). */
+    void runInliner(Program& program);
 
 private:
     class CompilerErrorReporter : public ErrorReporter {
@@ -211,7 +192,7 @@ private:
         CompilerErrorReporter(Compiler* compiler)
             : fCompiler(*compiler) {}
 
-        void handleError(std::string_view msg, PositionInfo pos) override {
+        void handleError(std::string_view msg, Position pos) override {
             fCompiler.handleError(msg, pos);
         }
 
@@ -219,15 +200,14 @@ private:
         Compiler& fCompiler;
     };
 
-    const ParsedModule& loadGPUModule();
-    const ParsedModule& loadFragmentModule();
-    const ParsedModule& loadVertexModule();
-    const ParsedModule& loadPublicModule();
-    const ParsedModule& loadRuntimeShaderModule();
+    /** Updates ProgramSettings to eliminate contradictions and to honor the ProgramKind. */
+    static void FinalizeSettings(ProgramSettings* settings, ProgramKind kind);
 
-    std::shared_ptr<SymbolTable> makeRootSymbolTable() const;
-    std::shared_ptr<SymbolTable> makeGLSLRootSymbolTable() const;
-    std::shared_ptr<SymbolTable> makePrivateSymbolTable(std::shared_ptr<SymbolTable> parent);
+    /**
+     * Returns all global elements (functions and global variables) as a self-contained Program. The
+     * optional source string is retained as the program's source.
+     */
+    std::unique_ptr<SkSL::Program> releaseProgram(std::unique_ptr<std::string> source);
 
     /** Optimize every function in the program. */
     bool optimize(Program& program);
@@ -235,47 +215,26 @@ private:
     /** Performs final checks to confirm that a fully-assembled/optimized is valid. */
     bool finalize(Program& program);
 
-    /** Optimize the module. */
-    bool optimize(LoadedModule& module);
+    /** Optimize a module at Skia runtime, after loading it. */
+    bool optimizeModuleAfterLoading(ProgramKind kind, Module& module);
 
     /** Flattens out function calls when it is safe to do so. */
-    bool runInliner(const std::vector<std::unique_ptr<ProgramElement>>& elements,
+    bool runInliner(Inliner* inliner,
+                    const std::vector<std::unique_ptr<ProgramElement>>& elements,
                     std::shared_ptr<SymbolTable> symbols,
                     ProgramUsage* usage);
 
     CompilerErrorReporter fErrorReporter;
     std::shared_ptr<Context> fContext;
-
-    ParsedModule fRootModule;                // Core types
-
-    ParsedModule fPrivateModule;             // [Root] + Internal types
-    ParsedModule fGPUModule;                 // [Private] + GPU intrinsics, helper functions
-    ParsedModule fVertexModule;              // [GPU] + Vertex stage decls
-    ParsedModule fFragmentModule;            // [GPU] + Fragment stage decls
-
-    ParsedModule fPublicModule;              // [Root] + Public features
-    ParsedModule fRuntimeShaderModule;       // [Public] + Runtime shader decls
-
-    // holds ModifiersPools belonging to the core includes for lifetime purposes
-    ModifiersPool fCoreModifiers;
-
-    Mangler fMangler;
-    Inliner fInliner;
-    // This is the current symbol table of the code we are processing, and therefore changes during
-    // compilation
-    std::shared_ptr<SymbolTable> fSymbolTable;
+    const ShaderCaps* fCaps;
 
     std::string fErrorText;
 
     static OverrideFlag sOptimizer;
     static OverrideFlag sInliner;
 
-    friend class AutoSource;
-    friend class ::SkSLCompileBench;
-    friend class DSLParser;
-    friend class Rehydrator;
+    friend class Parser;
     friend class ThreadContext;
-    friend class dsl::DSLCore;
 };
 
 }  // namespace SkSL

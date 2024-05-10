@@ -26,9 +26,10 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 static sk_sp<SkImage> make_img(int w, int h) {
-    auto surf = SkSurface::MakeRaster(SkImageInfo::MakeN32(w, h, kOpaque_SkAlphaType));
+    auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32(w, h, kOpaque_SkAlphaType));
     auto canvas = surf->getCanvas();
 
     SkScalar wScalar = SkIntToScalar(w);
@@ -61,7 +62,7 @@ static sk_sp<SkImage> make_img(int w, int h) {
         paint.setShader(SkGradientShader::MakeRadial(
                         pt, radius,
                         colors, pos,
-                        SK_ARRAY_COUNT(colors),
+                        std::size(colors),
                         SkTileMode::kRepeat,
                         0, &mat));
         canvas->drawRect(rect, paint);
@@ -70,18 +71,18 @@ static sk_sp<SkImage> make_img(int w, int h) {
         mat.postScale(SK_Scalar1 / 3, SK_Scalar1 / 3);
     }
 
-    SkFont font(ToolUtils::create_portable_typeface(), wScalar / 2.2f);
+    SkFont font(ToolUtils::DefaultPortableTypeface(), wScalar / 2.2f);
 
     paint.setShader(nullptr);
     paint.setColor(SK_ColorLTGRAY);
     constexpr char kTxt[] = "Skia";
     SkPoint texPos = { wScalar / 17, hScalar / 2 + font.getSize() / 2.5f };
-    canvas->drawSimpleText(kTxt, SK_ARRAY_COUNT(kTxt)-1, SkTextEncoding::kUTF8,
+    canvas->drawSimpleText(kTxt, std::size(kTxt)-1, SkTextEncoding::kUTF8,
                            texPos.fX, texPos.fY, font, paint);
     paint.setColor(SK_ColorBLACK);
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(SK_Scalar1);
-    canvas->drawSimpleText(kTxt, SK_ARRAY_COUNT(kTxt)-1, SkTextEncoding::kUTF8,
+    canvas->drawSimpleText(kTxt, std::size(kTxt)-1, SkTextEncoding::kUTF8,
                            texPos.fX, texPos.fY, font, paint);
     return surf->makeImageSnapshot();
 }
@@ -97,11 +98,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("convex_poly_clip");
-    }
+    SkString getName() const override { return SkString("convex_poly_clip"); }
 
-    SkISize onISize() override {
+    SkISize getISize() override {
         // When benchmarking the saveLayer set of draws is skipped.
         int w = 435;
         if (kBench_Mode != this->getMode()) {
@@ -164,8 +163,8 @@ protected:
                               SkSamplingOptions(), &bgPaint);
 
         constexpr char kTxt[] = "Clip Me!";
-        SkFont         font(ToolUtils::create_portable_typeface(), 23);
-        SkScalar textW = font.measureText(kTxt, SK_ARRAY_COUNT(kTxt)-1, SkTextEncoding::kUTF8);
+        SkFont         font(ToolUtils::DefaultPortableTypeface(), 23);
+        SkScalar textW = font.measureText(kTxt, std::size(kTxt)-1, SkTextEncoding::kUTF8);
         SkPaint txtPaint;
         txtPaint.setColor(SK_ColorDKGRAY);
 
@@ -212,7 +211,7 @@ protected:
                     canvas->drawPath(closedClipPath, clipOutlinePaint);
                     clip.setOnCanvas(canvas, SkClipOp::kIntersect, SkToBool(aa));
                     canvas->scale(1.f, 1.8f);
-                    canvas->drawSimpleText(kTxt, SK_ARRAY_COUNT(kTxt)-1, SkTextEncoding::kUTF8,
+                    canvas->drawSimpleText(kTxt, std::size(kTxt)-1, SkTextEncoding::kUTF8,
                                      0, 1.5f * font.getSize(), font, txtPaint);
                     canvas->restore();
                     x += textW + 2 * kMargin;
@@ -255,7 +254,6 @@ private:
             switch (fClipType) {
                 case kPath_ClipType:
                     return SkPathBuilder(fPathBuilder).close().detach();
-                    break;
                 case kRect_ClipType:
                     return SkPath::Rect(fRect);
                 case kNone_ClipType:

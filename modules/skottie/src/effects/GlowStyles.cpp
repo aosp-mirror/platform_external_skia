@@ -10,7 +10,7 @@
 #include "include/core/SkColorFilter.h"
 #include "include/effects/SkColorMatrix.h"
 #include "include/effects/SkImageFilters.h"
-#include "include/private/SkTPin.h"
+#include "include/private/base/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottieValue.h"
@@ -130,7 +130,7 @@ private:
 
     const Type fType;
 
-    VectorValue fColor;
+    ColorValue  fColor;
     ScalarValue fOpacity  = 100, // percentage
                 fSize     =   0,
                 fChoke    =   0,

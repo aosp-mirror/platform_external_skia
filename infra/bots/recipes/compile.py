@@ -3,7 +3,8 @@
 # found in the LICENSE file.
 
 
-# Recipe module for Skia Swarming compile.
+# Recipe module for compiling Skia when the checkout has already been done
+# (e.g. repo brought in via CAS)
 
 PYTHON_VERSION_COMPATIBILITY = "PY3"
 
@@ -75,10 +76,7 @@ def GenTests(api):
                      repository='https://skia.googlesource.com/skia.git',
                      revision='abc123',
                      path_config='kitchen',
-                     swarm_out_dir='[SWARM_OUT_DIR]') +
-      api.path.exists(
-          api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-      )
+                     swarm_out_dir='[SWARM_OUT_DIR]')
     )
     if 'Win' in builder:
       test += api.platform('win', 64)

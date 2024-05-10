@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/private/SkOnce.h"
+#include "include/private/base/SkOnce.h"
 #include "tools/gpu/gl/GLTestContext.h"
 
 #include <X11/Xlib.h>
@@ -305,7 +305,7 @@ void GLXGLTestContext::destroyGLContext() {
 GLXContext GLXGLTestContext::CreateBestContext(bool isES, Display* display, GLXFBConfig bestFbc,
                                                GLXContext glxShareContext) {
     auto glXCreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC)
-        glXGetProcAddressARB((GrGLubyte*)"glXCreateContextAttribsARB");
+        glXGetProcAddressARB((const GrGLubyte*)"glXCreateContextAttribsARB");
     if (!glXCreateContextAttribsARB) {
         SkDebugf("Failed to get address of glXCreateContextAttribsARB");
         return nullptr;

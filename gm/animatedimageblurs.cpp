@@ -17,8 +17,8 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
-#include "include/private/SkTPin.h"
-#include "include/utils/SkRandom.h"
+#include "include/private/base/SkTPin.h"
+#include "src/base/SkRandom.h"
 #include "tools/timer/TimeUtils.h"
 
 static const SkScalar kBlurMax = 7.0f;
@@ -37,9 +37,9 @@ public:
 protected:
     bool runAsBench() const override { return true; }
 
-    SkString onShortName() override { return SkString("animated-image-blurs"); }
+    SkString getName() const override { return SkString("animated-image-blurs"); }
 
-    SkISize onISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
 
     void onOnceBeforeDraw() override {
         for (int i = 0; i < kNumNodes; ++i) {

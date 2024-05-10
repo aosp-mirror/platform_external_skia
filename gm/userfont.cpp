@@ -8,17 +8,38 @@
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
+#include "include/core/SkFontMgr.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPictureRecorder.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/utils/SkCustomTypeface.h"
+#include "src/core/SkFontPriv.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
+
+static sk_sp<SkDrawable> make_drawable(const SkPath& path) {
+    const auto bounds = path.computeTightBounds();
+
+    SkPictureRecorder recorder;
+    auto* canvas = recorder.beginRecording(bounds);
+
+    SkPaint paint;
+    paint.setColor(0xff008000);
+    paint.setAntiAlias(true);
+
+    canvas->drawPath(path, paint);
+
+    return recorder.finishRecordingAsDrawable();
+}
 
 static sk_sp<SkTypeface> make_tf() {
     SkCustomTypefaceBuilder builder;
-    SkFont font;
-    const float upem = font.getTypefaceOrDefault()->getUnitsPerEm();
+    SkFont font = ToolUtils::DefaultFont();
+    SkASSERT(font.getTypeface());
+    const float upem = font.getTypeface()->getUnitsPerEm();
 
     // request a big size, to improve precision at the fontscaler level
     font.setSize(upem);
@@ -32,7 +53,7 @@ static sk_sp<SkTypeface> make_tf() {
         font.getMetrics(&metrics);
         builder.setMetrics(metrics, 1.0f/upem);
     }
-    builder.setFontStyle(font.getTypefaceOrDefault()->fontStyle());
+    builder.setFontStyle(font.getTypeface()->fontStyle());
 
     // Steal the first 128 chars from the default font
     for (SkGlyphID index = 0; index <= 127; ++index) {
@@ -42,9 +63,14 @@ static sk_sp<SkTypeface> make_tf() {
         font.getWidths(&glyph, 1, &width);
         SkPath path;
         font.getPath(glyph, &path);
+        path.transform(scale);
 
         // we use the charcode to be our glyph index, since we have no cmap table
-        builder.setGlyph(index, width/upem, path.makeTransform(scale));
+        if (index % 2) {
+            builder.setGlyph(index, width/upem, make_drawable(path), path.computeTightBounds());
+        } else {
+            builder.setGlyph(index, width/upem, path);
+        }
     }
 
     return builder.detach();
@@ -55,7 +81,9 @@ static sk_sp<SkTypeface> make_tf() {
 static sk_sp<SkTypeface> round_trip(sk_sp<SkTypeface> tf) {
     auto data = tf->serialize();
     SkMemoryStream stream(data->data(), data->size());
-    return SkTypeface::MakeDeserialize(&stream);
+    sk_sp<SkTypeface> face = SkTypeface::MakeDeserialize(&stream, nullptr);
+    SkASSERT(face);
+    return face;
 }
 
 class UserFontGM : public skiagm::GM {
@@ -80,12 +108,12 @@ public:
 
     bool runAsBench() const override { return true; }
 
-    SkString onShortName() override { return SkString("user_typeface"); }
+    SkString getName() const override { return SkString("user_typeface"); }
 
-    SkISize onISize() override { return {810, 452}; }
+    SkISize getISize() override { return {810, 452}; }
 
     void onDraw(SkCanvas* canvas) override {
-        auto waterfall = [&](sk_sp<SkTypeface> tf) {
+        auto waterfall = [&](sk_sp<SkTypeface> tf, bool defaultFace) {
             SkPaint paint;
             paint.setAntiAlias(true);
 
@@ -96,7 +124,7 @@ public:
                 auto blob = make_blob(tf, size, &spacing);
 
                 // shared baseline
-                if (tf == nullptr) {
+                if (defaultFace) {
                     paint.setColor(0xFFDDDDDD);
                     canvas->drawRect({0, y, 810, y+1}, paint);
                 }
@@ -113,9 +141,9 @@ public:
             }
         };
 
-        waterfall(nullptr);
+        waterfall(ToolUtils::DefaultTypeface(), true);
         canvas->translate(400, 0);
-        waterfall(fTF);
+        waterfall(fTF, false);
     }
 };
 DEF_GM(return new UserFontGM;)

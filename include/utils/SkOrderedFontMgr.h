@@ -9,7 +9,19 @@
 #define SkOrderedFontMgr_DEFINED
 
 #include "include/core/SkFontMgr.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
+
+#include <memory>
 #include <vector>
+
+class SkData;
+class SkFontStyle;
+class SkStreamAsset;
+class SkString;
+class SkTypeface;
+struct SkFontArguments;
+
 /**
  *  Collects an order list of other font managers, and visits them in order
  *  when a request to find or match is issued.
@@ -27,14 +39,15 @@ public:
 protected:
     int onCountFamilies() const override;
     void onGetFamilyName(int index, SkString* familyName) const override;
-    SkFontStyleSet* onCreateStyleSet(int index)const override;
+    sk_sp<SkFontStyleSet> onCreateStyleSet(int index)const override;
 
-    SkFontStyleSet* onMatchFamily(const char familyName[]) const override;
+    sk_sp<SkFontStyleSet> onMatchFamily(const char familyName[]) const override;
 
-    SkTypeface* onMatchFamilyStyle(const char familyName[], const SkFontStyle&) const override;
-    SkTypeface* onMatchFamilyStyleCharacter(const char familyName[], const SkFontStyle&,
-                                            const char* bcp47[], int bcp47Count,
-                                            SkUnichar character) const override;
+    sk_sp<SkTypeface> onMatchFamilyStyle(const char familyName[],
+                                         const SkFontStyle&) const override;
+    sk_sp<SkTypeface> onMatchFamilyStyleCharacter(const char familyName[], const SkFontStyle&,
+                                                  const char* bcp47[], int bcp47Count,
+                                                  SkUnichar character) const override;
 
     // Note: all of these always return null
     sk_sp<SkTypeface> onMakeFromData(sk_sp<SkData>, int ttcIndex) const override;

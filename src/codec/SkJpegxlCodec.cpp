@@ -7,24 +7,33 @@
 
 #include "src/codec/SkJpegxlCodec.h"
 
-#include <limits>
-#include <vector>
-
-#include "include/codec/SkEncodedOrigin.h"
+#include "include/codec/SkCodec.h"
+#include "include/codec/SkJpegxlDecoder.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
-#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
 #include "include/private/SkEncodedInfo.h"
-#include "include/private/SkTFitsIn.h"
-#include "include/private/SkTo.h"
-#include "jxl/decode.h"
-#include "jxl/decode_cxx.h"
+#include "include/private/base/SkTFitsIn.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "modules/skcms/skcms.h"
 #include "src/codec/SkFrameHolder.h"
-#include "src/codec/SkSampler.h"
-#include "src/core/SkOpts.h"
 #include "src/core/SkStreamPriv.h"
+#include "src/core/SkSwizzlePriv.h"
+
+#include "jxl/codestream_header.h"  // NO_G3_REWRITE
+#include "jxl/decode.h"  // NO_G3_REWRITE
+#include "jxl/decode_cxx.h"  // NO_G3_REWRITE
+#include "jxl/types.h"  // NO_G3_REWRITE
+
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -76,6 +85,11 @@ SkJpegxlCodec::SkJpegxlCodec(std::unique_ptr<SkJpegxlCodecPriv> codec,
 
 std::unique_ptr<SkCodec> SkJpegxlCodec::MakeFromStream(std::unique_ptr<SkStream> stream,
                                                        Result* result) {
+    SkASSERT(result);
+    if (!stream) {
+        *result = SkCodec::kInvalidInput;
+        return nullptr;
+    }
     *result = kInternalError;
     // Either wrap or copy stream data.
     sk_sp<SkData> data = nullptr;
@@ -451,3 +465,31 @@ const SkFrameHolder* SkJpegxlCodec::getFrameHolder() const {
 
 // TODO(eustas): implement
 // SkSampler* SkJpegxlCodec::getSampler(bool /*createIfNecessary*/) { return nullptr; }
+
+namespace SkJpegxlDecoder {
+bool IsJpegxl(const void* data, size_t len) {
+    return SkJpegxlCodec::IsJpegxl(data, len);
+}
+
+std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
+                                SkCodec::Result* outResult,
+                                SkCodecs::DecodeContext) {
+    SkCodec::Result resultStorage;
+    if (!outResult) {
+        outResult = &resultStorage;
+    }
+    return SkJpegxlCodec::MakeFromStream(std::move(stream), outResult);
+}
+
+std::unique_ptr<SkCodec> Decode(sk_sp<SkData> data,
+                                SkCodec::Result* outResult,
+                                SkCodecs::DecodeContext) {
+    if (!data) {
+        if (outResult) {
+            *outResult = SkCodec::kInvalidInput;
+        }
+        return nullptr;
+    }
+    return Decode(SkMemoryStream::Make(std::move(data)), outResult, nullptr);
+}
+}  // namespace SkJpegDecoder

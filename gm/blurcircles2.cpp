@@ -17,7 +17,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkBlurMask.h"
 #include "tools/timer/TimeUtils.h"
 
@@ -46,11 +46,9 @@ public:
 protected:
     bool runAsBench() const override { return true; }
 
-    SkString onShortName() override { return SkString("blurcircles2"); }
+    SkString getName() const override { return SkString("blurcircles2"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(730, 1350);
-    }
+    SkISize getISize() override { return SkISize::Make(730, 1350); }
 
     void onDraw(SkCanvas* canvas) override {
         constexpr SkScalar kMaxR = kMaxRadius + kMaxBlurRadius;

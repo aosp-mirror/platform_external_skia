@@ -8,21 +8,20 @@
 #include "include/core/SkVertices.h"
 
 #include "include/core/SkData.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkSafeMath.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/core/SkOpts.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkSafeMath.h"
 #include "src/core/SkSafeRange.h"
 #include "src/core/SkVerticesPriv.h"
 #include "src/core/SkWriteBuffer.h"
 #include <atomic>
 #include <new>
 
-static int32_t next_id() {
-    static std::atomic<int32_t> nextID{1};
+static uint32_t next_id() {
+    static std::atomic<uint32_t> nextID{1};
 
-    int32_t id;
+    uint32_t id;
     do {
         id = nextID.fetch_add(1, std::memory_order_relaxed);
     } while (id == SK_InvalidGenID);
@@ -279,13 +278,16 @@ sk_sp<SkVertices> SkVerticesPriv::Decode(SkReadBuffer& buffer) {
 
         // Check that the header fields and buffer are valid. If this is data with the experimental
         // custom attributes feature - we don't support that any more.
-        if (!safe || !buffer.isValid() || attrCount) {
+        // We also don't support serialized triangle-fan data. We stopped writing that long ago,
+        // so it should never appear in valid encoded data.
+        if (!safe || !buffer.isValid() || attrCount ||
+            mode == SkVertices::kTriangleFan_VertexMode) {
             return nullptr;
         }
 
         const SkVertices::Desc desc{mode, vertexCount, indexCount, hasTexs, hasColors};
         SkVertices::Sizes sizes(desc);
-        if (!sizes.isValid()) {
+        if (!sizes.isValid() || sizes.fArrays > buffer.available()) {
             return nullptr;
         }
 
@@ -304,9 +306,7 @@ sk_sp<SkVertices> SkVerticesPriv::Decode(SkReadBuffer& buffer) {
         }
         buffer.readByteArray(builder.texCoords(), sizes.fTSize);
         buffer.readByteArray(builder.colors(), sizes.fCSize);
-        size_t isize = (mode == SkVertices::kTriangleFan_VertexMode) ? sizes.fBuilderTriFanISize
-                                                                     : sizes.fISize;
-        buffer.readByteArray(builder.indices(), isize);
+        buffer.readByteArray(builder.indices(), sizes.fISize);
 
         if (!buffer.isValid()) {
             return nullptr;

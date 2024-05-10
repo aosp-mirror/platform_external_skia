@@ -5,12 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
 #include "tests/Test.h"
 #include "tools/SkMetaData.h"
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
 DEF_TEST(MetaData, reporter) {
-    SkMetaData  m1;
+    SkMetaData m1;
 
     REPORTER_ASSERT(reporter, !m1.findS32("int"));
     REPORTER_ASSERT(reporter, !m1.findScalar("scalar"));
@@ -23,8 +28,8 @@ DEF_TEST(MetaData, reporter) {
     m1.setBool("true", true);
     m1.setBool("false", false);
 
-    int32_t     n;
-    SkScalar    s;
+    int32_t n;
+    SkScalar s;
 
     m1.setScalar("scalar", SK_Scalar1/2);
 
@@ -48,13 +53,13 @@ DEF_TEST(MetaData, reporter) {
         { "false",  SkMetaData::kBool_Type,     1 }
     };
 
-    int                 loop = 0;
+    size_t loop = 0;
     int count;
-    SkMetaData::Type    t;
+    SkMetaData::Type t;
     while ((name = iter.next(&t, &count)) != nullptr)
     {
         int match = 0;
-        for (unsigned i = 0; i < SK_ARRAY_COUNT(gElems); i++)
+        for (unsigned i = 0; i < std::size(gElems); i++)
         {
             if (!strcmp(name, gElems[i].fName))
             {
@@ -66,7 +71,7 @@ DEF_TEST(MetaData, reporter) {
         REPORTER_ASSERT(reporter, match == 1);
         loop += 1;
     }
-    REPORTER_ASSERT(reporter, loop == SK_ARRAY_COUNT(gElems));
+    REPORTER_ASSERT(reporter, loop == std::size(gElems));
 
     REPORTER_ASSERT(reporter, m1.removeS32("int"));
     REPORTER_ASSERT(reporter, m1.removeScalar("scalar"));

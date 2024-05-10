@@ -19,12 +19,14 @@
 #include "include/core/SkYUVAInfo.h"
 #include "include/core/SkYUVAPixmaps.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/GrSamplerState.h"
-#include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/GrYUVATextureProxies.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/effects/GrYUVtoRGBEffect.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ganesh/GrCanvas.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrSamplerState.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+#include "src/gpu/ganesh/GrYUVATextureProxies.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/effects/GrYUVtoRGBEffect.h"
 
 #include <memory>
 #include <utility>
@@ -45,11 +47,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("yuv_to_rgb_subset_effect");
-    }
+    SkString getName() const override { return SkString("yuv_to_rgb_subset_effect"); }
 
-    SkISize onISize() override { return {1310, 540}; }
+    SkISize getISize() override { return {1310, 540}; }
 
     void makePixmaps() {
         SkYUVAInfo yuvaInfo = SkYUVAInfo({8, 8},
@@ -82,7 +82,8 @@ protected:
         bitmaps[2].writePixels(innerVPM, 1, 1);
     }
 
-    DrawResult onGpuSetup(GrDirectContext* context, SkString* errorMsg) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg, GraphiteTestContext*) override {
+        auto context = GrAsDirectContext(canvas->recordingContext());
         if (!context) {
             return DrawResult::kSkip;
         }
@@ -95,7 +96,8 @@ protected:
             SkBitmap bitmap;
             bitmap.installPixels(fPixmaps.plane(i));
             bitmap.setImmutable();
-            views[i] = std::get<0>(GrMakeCachedBitmapProxyView(context, bitmap, GrMipmapped::kNo));
+            views[i] = std::get<0>(GrMakeCachedBitmapProxyView(
+                    context, bitmap, /*label=*/"DrawResult_GpuSetup", skgpu::Mipmapped::kNo));
             if (!views[i]) {
                 *errorMsg = "Failed to create proxy";
                 return context->abandoned() ? DrawResult::kSkip : DrawResult::kFail;
@@ -115,7 +117,7 @@ protected:
     DrawResult onDraw(GrRecordingContext* rContext,
                       SkCanvas* canvas,
                       SkString* errorMsg) override {
-        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+        auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
         if (!sdc) {
             *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
             return DrawResult::kSkip;
@@ -131,7 +133,7 @@ protected:
 
         SkScalar y = kTestPad;
         // Rows are filter modes.
-        for (uint32_t i = 0; i < SK_ARRAY_COUNT(kFilters); ++i) {
+        for (uint32_t i = 0; i < std::size(kFilters); ++i) {
             SkScalar x = kTestPad;
             // Columns are non-subsetted followed by subsetted with each WrapMode in a row
             for (uint32_t j = 0; j < GrSamplerState::kWrapModeCount + 1; ++j) {
@@ -140,13 +142,12 @@ protected:
 
                 const SkRect* subset = j > 0 ? &kColorRect : nullptr;
 
-                GrSamplerState samplerState;
-                samplerState.setFilterMode(kFilters[i]);
+                auto wm = GrSamplerState::WrapMode::kClamp;
                 if (j > 0) {
-                    auto wm = static_cast<GrSamplerState::WrapMode>(j - 1);
-                    samplerState.setWrapModeX(wm);
-                    samplerState.setWrapModeY(wm);
+                    wm = static_cast<GrSamplerState::WrapMode>(j - 1);
                 }
+                GrSamplerState samplerState(wm, kFilters[i]);
+
                 const auto& caps = *rContext->priv().caps();
                 std::unique_ptr<GrFragmentProcessor> fp =
                         GrYUVtoRGBEffect::Make(fProxies, samplerState, caps, SkMatrix::I(), subset);

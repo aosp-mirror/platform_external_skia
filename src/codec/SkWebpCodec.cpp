@@ -7,16 +7,33 @@
 
 #include "src/codec/SkWebpCodec.h"
 
+#include "include/codec/SkCodec.h"
 #include "include/codec/SkCodecAnimation.h"
+#include "include/codec/SkWebpDecoder.h"
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
-#include "include/core/SkCanvas.h"
-#include "include/private/SkTemplates.h"
-#include "include/private/SkTo.h"
-#include "src/codec/SkCodecPriv.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkStream.h"
+#include "include/private/base/SkAlign.h"
+#include "include/private/base/SkMath.h"
+#include "include/private/base/SkTFitsIn.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "modules/skcms/skcms.h"
 #include "src/codec/SkParseEncodedOrigin.h"
 #include "src/codec/SkSampler.h"
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineOpContexts.h"
+#include "src/core/SkRasterPipelineOpList.h"
 #include "src/core/SkStreamPriv.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <utility>
 
 // A WebP decoder on top of (subset of) libwebp
 // For more information on WebP image format, and libwebp library, see:
@@ -26,9 +43,9 @@
 
 // If moving libwebp out of skia source tree, path for webp headers must be
 // updated accordingly. Here, we enforce using local copy in webp sub-directory.
-#include "webp/decode.h"
-#include "webp/demux.h"
-#include "webp/encode.h"
+#include "webp/decode.h"  // NO_G3_REWRITE
+#include "webp/demux.h"  // NO_G3_REWRITE
+#include "webp/mux_types.h"  // NO_G3_REWRITE
 
 bool SkWebpCodec::IsWebp(const void* buf, size_t bytesRead) {
     // WEBP starts with the following:
@@ -42,6 +59,11 @@ bool SkWebpCodec::IsWebp(const void* buf, size_t bytesRead) {
 // Returns an SkWebpCodec on success
 std::unique_ptr<SkCodec> SkWebpCodec::MakeFromStream(std::unique_ptr<SkStream> stream,
                                                      Result* result) {
+    SkASSERT(result);
+    if (!stream) {
+        *result = SkCodec::kInvalidInput;
+        return nullptr;
+    }
     // Webp demux needs a contiguous data buffer.
     sk_sp<SkData> data = nullptr;
     if (stream->getMemoryBase()) {
@@ -318,27 +340,27 @@ static void blend_line(SkColorType dstCT, void* dst,
                        SkAlphaType dstAt,
                        bool srcHasAlpha,
                        int width) {
-    SkRasterPipeline_MemoryCtx dst_ctx = { (void*)dst, 0 },
-                               src_ctx = { (void*)src, 0 };
+    SkRasterPipeline_MemoryCtx dst_ctx = {                   dst,  0 },
+                               src_ctx = { const_cast<void*>(src), 0 };
 
     SkRasterPipeline_<256> p;
 
-    p.append_load_dst(dstCT, &dst_ctx);
+    p.appendLoadDst(dstCT, &dst_ctx);
     if (kUnpremul_SkAlphaType == dstAt) {
-        p.append(SkRasterPipeline::premul_dst);
+        p.append(SkRasterPipelineOp::premul_dst);
     }
 
-    p.append_load(srcCT, &src_ctx);
+    p.appendLoad(srcCT, &src_ctx);
     if (srcHasAlpha) {
-        p.append(SkRasterPipeline::premul);
+        p.append(SkRasterPipelineOp::premul);
     }
 
-    p.append(SkRasterPipeline::srcover);
+    p.append(SkRasterPipelineOp::srcover);
 
     if (kUnpremul_SkAlphaType == dstAt) {
-        p.append(SkRasterPipeline::unpremul);
+        p.append(SkRasterPipelineOp::unpremul);
     }
-    p.append_store(dstCT, &dst_ctx);
+    p.appendStore(dstCT, &dst_ctx);
 
     p.run(0,0, width,1);
 }
@@ -558,3 +580,31 @@ SkWebpCodec::SkWebpCodec(SkEncodedInfo&& info, std::unique_ptr<SkStream> stream,
     const auto& eInfo = this->getEncodedInfo();
     fFrameHolder.setScreenSize(eInfo.width(), eInfo.height());
 }
+
+namespace SkWebpDecoder {
+bool IsWebp(const void* data, size_t len) {
+    return SkWebpCodec::IsWebp(data, len);
+}
+
+std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
+                                SkCodec::Result* outResult,
+                                SkCodecs::DecodeContext) {
+    SkCodec::Result resultStorage;
+    if (!outResult) {
+        outResult = &resultStorage;
+    }
+    return SkWebpCodec::MakeFromStream(std::move(stream), outResult);
+}
+
+std::unique_ptr<SkCodec> Decode(sk_sp<SkData> data,
+                                SkCodec::Result* outResult,
+                                SkCodecs::DecodeContext) {
+    if (!data) {
+        if (outResult) {
+            *outResult = SkCodec::kInvalidInput;
+        }
+        return nullptr;
+    }
+    return Decode(SkMemoryStream::Make(std::move(data)), outResult, nullptr);
+}
+}  // namespace SkWebpDecoder

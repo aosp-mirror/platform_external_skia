@@ -71,11 +71,9 @@ public:
         , fTileCount(tileCount) {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("mixerCF");
-    }
+    SkString getName() const override { return SkString("mixerCF"); }
 
-    SkISize onISize() override {
+    SkISize getISize() override {
         return SkISize::Make(fTileSize.width()  * 1.2f * fTileCount,
                              fTileSize.height() * 1.2f * 3);         // 3 rows
     }
@@ -87,7 +85,7 @@ protected:
         paint.setShader(SkGradientShader::MakeSweep(fTileSize.width()  / 2,
                                                     fTileSize.height() / 2,
                                                     gradient_colors, nullptr,
-                                                    SK_ARRAY_COUNT(gradient_colors)));
+                                                    std::size(gradient_colors)));
 
         auto cf0 = MakeTintColorFilter(0xff300000, 0xffa00000);  // red tint
         auto cf1 = MakeTintColorFilter(0xff003000, 0xff00a000);  // green tint
@@ -116,7 +114,7 @@ private:
         {
             SkAutoCanvasRestore arc(canvas, true);
             for (size_t i = 0; i < fTileCount; ++i) {
-                paint.setColor4f(paintColors[i % SK_ARRAY_COUNT(paintColors)]);
+                paint.setColor4f(paintColors[i % std::size(paintColors)]);
                 float t = static_cast<float>(i) / (fTileCount - 1);
                 paint.setColorFilter(SkColorFilters::Lerp(t, cf0, cf1));
                 canvas->translate(fTileSize.width() * 0.1f, 0);

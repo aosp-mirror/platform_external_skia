@@ -14,21 +14,58 @@
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkString.h"
-#include "include/private/SkTDArray.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTDArray.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkUtils.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
 #include "src/core/SkFontDescriptor.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkScalerContext.h"
-#include "src/core/SkUtils.h"
 #include "src/sfnt/SkOTUtils.h"
 #include "tools/fonts/TestTypeface.h"
 
 #include <utility>
 
+namespace {
+
+#include "tools/fonts/test_font_monospace.inc"
+#include "tools/fonts/test_font_sans_serif.inc"
+#include "tools/fonts/test_font_serif.inc"
+
+#include "tools/fonts/test_font_index.inc"
+
+}  // namespace
+
 class SkDescriptor;
+
+const TestTypeface::List& TestTypeface::Typefaces() {
+    static List list = []() -> List {
+        TestTypeface::List list;
+        for (const auto& sub : gSubFonts) {
+            List::Family* existingFamily = nullptr;
+            for (auto& family : list.families) {
+                if (strcmp(family.name, sub.fFamilyName) == 0) {
+                    existingFamily = &family;
+                    break;
+                }
+            }
+            if (!existingFamily) {
+                existingFamily = &list.families.emplace_back();
+                existingFamily->name = sub.fFamilyName;
+            }
+
+            auto font = sk_make_sp<SkTestFont>(sub.fFont);
+            sk_sp<SkTypeface> typeface(new TestTypeface(std::move(font), sub.fStyle));
+            bool isDefault = (&sub - gSubFonts == gDefaultFontIndex);
+            existingFamily->faces.emplace_back(
+                List::Family::Face{std::move(typeface), sub.fStyleName, isDefault});
+        }
+        return list;
+    }();
+    return list;
+}
 
 SkTestFont::SkTestFont(const SkTestFontData& fontData)
         : INHERITED()
@@ -80,7 +117,8 @@ void SkTestFont::init(const SkScalar* pts, const unsigned char* verbs) {
                 case SkPath::kClose_Verb:
                     b.close();
                     break;
-                default: SkDEBUGFAIL("bad verb"); return;
+                default:
+                    SK_ABORT("bad verb");
             }
         }
         fPaths[index] = b.detach();
@@ -90,13 +128,11 @@ void SkTestFont::init(const SkScalar* pts, const unsigned char* verbs) {
 TestTypeface::TestTypeface(sk_sp<SkTestFont> testFont, const SkFontStyle& style)
         : SkTypeface(style, false), fTestFont(std::move(testFont)) {}
 
-void TestTypeface::getAdvance(SkGlyph* glyph) {
-    SkGlyphID glyphID = glyph->getGlyphID();
-    glyphID           = glyphID < fTestFont->fCharCodesCount ? glyphID : 0;
+SkVector TestTypeface::getAdvance(SkGlyphID glyphID) const {
+    glyphID = glyphID < fTestFont->fCharCodesCount ? glyphID : 0;
 
     // TODO(benjaminwagner): Update users to use floats.
-    glyph->fAdvanceX = SkFixedToFloat(fTestFont->fWidths[glyphID]);
-    glyph->fAdvanceY = 0;
+    return {SkFixedToFloat(fTestFont->fWidths[glyphID]), 0};
 }
 
 void TestTypeface::getFontMetrics(SkFontMetrics* metrics) { *metrics = fTestFont->fMetrics; }
@@ -123,11 +159,74 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> TestTypeface::onGetAdvancedMetrics() 
     return info;
 }
 
-void TestTypeface::onGetFontDescriptor(SkFontDescriptor* desc, bool* isLocal) const {
+static constexpr const char gHeaderString[] = "SkTestTypeface01";
+static constexpr const size_t kHeaderSize = sizeof(gHeaderString);
+
+std::unique_ptr<SkStreamAsset> TestTypeface::onOpenStream(int* ttcIndex) const {
+    SkDynamicMemoryWStream wstream;
+    wstream.write(gHeaderString, kHeaderSize);
+
+    SkString name;
+    this->getFamilyName(&name);
+    SkFontStyle style = this->fontStyle();
+
+    wstream.writePackedUInt(name.size());
+    wstream.write(name.c_str(), name.size());
+    wstream.writeScalar(style.weight());
+    wstream.writeScalar(style.width());
+    wstream.writePackedUInt(style.slant());
+
+    *ttcIndex = 0;
+    return wstream.detachAsStream();
+}
+
+sk_sp<SkTypeface> TestTypeface::MakeFromStream(std::unique_ptr<SkStreamAsset> stream,
+                                               const SkFontArguments&) {
+    char header[kHeaderSize];
+    if (stream->read(header, kHeaderSize) != kHeaderSize ||
+        0 != memcmp(header, gHeaderString, kHeaderSize))
+    {
+        return nullptr;
+    }
+
+    size_t familyNameSize;
+    SkString familyName;
+    if (!stream->readPackedUInt(&familyNameSize)) { return nullptr; }
+    familyName.resize(familyNameSize);
+    if (!stream->read(familyName.data(), familyNameSize)) { return nullptr; }
+
+    SkScalar weight;
+    SkScalar width;
+    size_t slant;
+    if (!stream->readScalar(&weight)) { return nullptr; }
+    if (!stream->readScalar(&width)) { return nullptr; }
+    if (!stream->readPackedUInt(&slant)) { return nullptr; }
+    SkFontStyle style(weight, width, (SkFontStyle::Slant)slant);
+
+    auto&& list = TestTypeface::Typefaces();
+    for (auto&& family : list.families) {
+        if (familyName.equals(family.name)) {
+            for (auto&& face : family.faces) {
+                if (face.typeface->fontStyle() == style) {
+                    return face.typeface;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
+void TestTypeface::onGetFontDescriptor(SkFontDescriptor* desc, bool* serialize) const {
     desc->setFamilyName(fTestFont->fName);
     desc->setStyle(this->fontStyle());
-    *isLocal = false;
+    desc->setFactoryId(FactoryId);
+    *serialize = true;
 }
+
+TestTypeface::Register::Register() {
+    SkTypeface::Register(TestTypeface::FactoryId, &TestTypeface::MakeFromStream);
+}
+static TestTypeface::Register registerer;
 
 void TestTypeface::onCharsToGlyphs(const SkUnichar* uni, int count, SkGlyphID glyphs[]) const {
     for (int i = 0; i < count; ++i) {
@@ -160,23 +259,20 @@ protected:
         return static_cast<TestTypeface*>(this->getTypeface());
     }
 
-    bool generateAdvance(SkGlyph* glyph) override {
-        this->getTestTypeface()->getAdvance(glyph);
+    GlyphMetrics generateMetrics(const SkGlyph& glyph, SkArenaAlloc*) override {
+        GlyphMetrics mx(glyph.maskFormat());
 
-        const SkVector advance =
-                fMatrix.mapXY(SkFloatToScalar(glyph->fAdvanceX), SkFloatToScalar(glyph->fAdvanceY));
-        glyph->fAdvanceX = SkScalarToFloat(advance.fX);
-        glyph->fAdvanceY = SkScalarToFloat(advance.fY);
-        return true;
-    }
+        auto advance = this->getTestTypeface()->getAdvance(glyph.getGlyphID());
 
-    void generateMetrics(SkGlyph* glyph, SkArenaAlloc*) override {
-        glyph->zeroMetrics();
-        this->generateAdvance(glyph);
+        mx.advance = fMatrix.mapXY(advance.fX, advance.fY);
+        return mx;
+
         // Always generates from paths, so SkScalerContext::makeGlyph will figure the bounds.
     }
 
-    void generateImage(const SkGlyph&) override { SK_ABORT("Should have generated from path."); }
+    void generateImage(const SkGlyph&, void*) override {
+        SK_ABORT("Should have generated from path.");
+    }
 
     bool generatePath(const SkGlyph& glyph, SkPath* path) override {
         *path = this->getTestTypeface()->getPath(glyph.getGlyphID()).makeTransform(fMatrix);

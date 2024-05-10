@@ -134,14 +134,9 @@ public:
     RRectGM() {}
 
 protected:
+    SkString getName() const override { return SkString("rrect"); }
 
-    SkString onShortName() override {
-        return SkString("rrect");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(820, 710);
-    }
+    SkISize getISize() override { return SkISize::Make(820, 710); }
 
     void onDraw(SkCanvas* canvas) override {
         constexpr InsetProc insetProcs[] = {
@@ -160,9 +155,9 @@ protected:
         rrect[3].setRectRadii(r, radii);
 
         canvas->translate(50.5f, 50.5f);
-        for (size_t j = 0; j < SK_ARRAY_COUNT(insetProcs); ++j) {
+        for (size_t j = 0; j < std::size(insetProcs); ++j) {
             canvas->save();
-            for (size_t i = 0; i < SK_ARRAY_COUNT(rrect); ++i) {
+            for (size_t i = 0; i < std::size(rrect); ++i) {
                 drawrr(canvas, rrect[i], insetProcs[j]);
                 canvas->translate(200, 0);
             }

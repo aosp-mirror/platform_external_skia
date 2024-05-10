@@ -13,11 +13,14 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTDArray.h"
-#include "src/core/SkTLazy.h"
+
+#include <optional>
+#include <vector>
 
 using SkSVGColorType     = SkColor;
 using SkSVGIntegerType   = int;
@@ -25,7 +28,7 @@ using SkSVGNumberType    = SkScalar;
 using SkSVGStringType    = SkString;
 using SkSVGViewBoxType   = SkRect;
 using SkSVGTransformType = SkMatrix;
-using SkSVGPointsType    = SkTDArray<SkPoint>;
+using SkSVGPointsType    = std::vector<SkPoint>;
 
 enum class SkSVGPropertyState {
     kUnspecified,
@@ -43,17 +46,17 @@ public:
     explicit SkSVGProperty(SkSVGPropertyState state) : fState(state) {}
 
     explicit SkSVGProperty(const T& value) : fState(SkSVGPropertyState::kValue) {
-        fValue.set(value);
+        fValue = value;
     }
 
     explicit SkSVGProperty(T&& value) : fState(SkSVGPropertyState::kValue) {
-        fValue.set(std::move(value));
+        fValue = std::move(value);
     }
 
     template <typename... Args>
     void init(Args&&... args) {
         fState = SkSVGPropertyState::kValue;
-        fValue.init(std::forward<Args>(args)...);
+        fValue.emplace(std::forward<Args>(args)...);
     }
 
     constexpr bool isInheritable() const { return kInheritable; }
@@ -61,7 +64,7 @@ public:
     bool isValue() const { return fState == SkSVGPropertyState::kValue; }
 
     T* getMaybeNull() const {
-        return fValue.getMaybeNull();
+        return fValue.has_value() ? &fValue.value() : nullptr;
     }
 
     void set(SkSVGPropertyState state) {
@@ -73,44 +76,44 @@ public:
 
     void set(const T& value) {
         fState = SkSVGPropertyState::kValue;
-        fValue.set(value);
+        fValue = value;
     }
 
     void set(T&& value) {
         fState = SkSVGPropertyState::kValue;
-        fValue.set(std::move(value));
+        fValue = std::move(value);
     }
 
     T* operator->() {
         SkASSERT(fState == SkSVGPropertyState::kValue);
-        SkASSERT(fValue.isValid());
-        return fValue.get();
+        SkASSERT(fValue.has_value());
+        return &fValue.value();
     }
 
     const T* operator->() const {
         SkASSERT(fState == SkSVGPropertyState::kValue);
-        SkASSERT(fValue.isValid());
-        return fValue.get();
+        SkASSERT(fValue.has_value());
+        return &fValue.value();
     }
 
     T& operator*() {
         SkASSERT(fState == SkSVGPropertyState::kValue);
-        SkASSERT(fValue.isValid());
+        SkASSERT(fValue.has_value());
         return *fValue;
     }
 
     const T& operator*() const {
         SkASSERT(fState == SkSVGPropertyState::kValue);
-        SkASSERT(fValue.isValid());
+        SkASSERT(fValue.has_value());
         return *fValue;
     }
 
 private:
     SkSVGPropertyState fState;
-    SkTLazy<T> fValue;
+    std::optional<T>   fValue;
 };
 
-class SkSVGLength {
+class SK_API SkSVGLength {
 public:
     enum class Unit {
         kUnknown,
@@ -146,7 +149,7 @@ private:
 };
 
 // https://www.w3.org/TR/SVG11/linking.html#IRIReference
-class SkSVGIRI {
+class SK_API SkSVGIRI {
 public:
     enum class Type {
         kLocal,
@@ -171,31 +174,54 @@ private:
 };
 
 // https://www.w3.org/TR/SVG11/types.html#InterfaceSVGColor
-class SkSVGColor {
+class SK_API SkSVGColor {
 public:
     enum class Type {
         kCurrentColor,
         kColor,
         kICCColor,
     };
+    using Vars = std::vector<SkString>;
 
-    SkSVGColor() : fType(Type::kColor), fColor(SK_ColorBLACK) {}
-    explicit SkSVGColor(Type t) : fType(t), fColor(SK_ColorBLACK) {}
-    explicit SkSVGColor(const SkSVGColorType& c) : fType(Type::kColor), fColor(c) {}
+    SkSVGColor() : SkSVGColor(SK_ColorBLACK) {}
+    explicit SkSVGColor(const SkSVGColorType& c) : fType(Type::kColor), fColor(c), fVars(nullptr) {}
+    explicit SkSVGColor(Type t, Vars&& vars)
+        : fType(t), fColor(SK_ColorBLACK)
+        , fVars(vars.empty() ? nullptr : new RefCntVars(std::move(vars))) {}
+    explicit SkSVGColor(const SkSVGColorType& c, Vars&& vars)
+        : fType(Type::kColor), fColor(c)
+        , fVars(vars.empty() ? nullptr : new RefCntVars(std::move(vars))) {}
+
+    SkSVGColor(const SkSVGColor&)            = default;
+    SkSVGColor& operator=(const SkSVGColor&) = default;
+    SkSVGColor(SkSVGColor&&)                 = default;
+    SkSVGColor& operator=(SkSVGColor&&)      = default;
+
     bool operator==(const SkSVGColor& other) const {
-        return fType == other.fType && fColor == other.fColor;
+        return fType == other.fType && fColor == other.fColor && fVars == other.fVars;
     }
     bool operator!=(const SkSVGColor& other) const { return !(*this == other); }
 
     Type type() const { return fType; }
     const SkSVGColorType& color() const { SkASSERT(fType == Type::kColor); return fColor; }
+    SkSpan<const SkString> vars() const {
+        return fVars ? SkSpan<const SkString>(fVars->fData) : SkSpan<const SkString>();
+    }
+    SkSpan<SkString> vars()       {
+        return fVars ? SkSpan<SkString>(fVars->fData) : SkSpan<SkString>();
+    }
 
 private:
     Type fType;
     SkSVGColorType fColor;
+    struct RefCntVars : public SkNVRefCnt<RefCntVars> {
+        RefCntVars(Vars&& vars) : fData(std::move(vars)) {}
+        Vars fData;
+    };
+    sk_sp<RefCntVars> fVars;
 };
 
-class SkSVGPaint {
+class SK_API SkSVGPaint {
 public:
     enum class Type {
         kNone,
@@ -205,12 +231,14 @@ public:
 
     SkSVGPaint() : fType(Type::kNone), fColor(SK_ColorBLACK) {}
     explicit SkSVGPaint(Type t) : fType(t), fColor(SK_ColorBLACK) {}
-    explicit SkSVGPaint(const SkSVGColor& c) : fType(Type::kColor), fColor(c) {}
-    SkSVGPaint(const SkSVGIRI& iri, const SkSVGColor& fallback_color)
-        : fType(Type::kIRI), fColor(fallback_color), fIRI(iri) {}
+    explicit SkSVGPaint(SkSVGColor c) : fType(Type::kColor), fColor(std::move(c)) {}
+    SkSVGPaint(const SkSVGIRI& iri, SkSVGColor fallback_color)
+        : fType(Type::kIRI), fColor(std::move(fallback_color)), fIRI(iri) {}
 
     SkSVGPaint(const SkSVGPaint&)            = default;
     SkSVGPaint& operator=(const SkSVGPaint&) = default;
+    SkSVGPaint(SkSVGPaint&&)                 = default;
+    SkSVGPaint& operator=(SkSVGPaint&&)      = default;
 
     bool operator==(const SkSVGPaint& other) const {
         return fType == other.fType && fColor == other.fColor && fIRI == other.fIRI;
@@ -233,7 +261,7 @@ private:
 };
 
 // <funciri> | none (used for clip/mask/filter properties)
-class SkSVGFuncIRI {
+class SK_API SkSVGFuncIRI {
 public:
     enum class Type {
         kNone,
@@ -263,7 +291,7 @@ enum class SkSVGLineCap {
     kSquare,
 };
 
-class SkSVGLineJoin {
+class SK_API SkSVGLineJoin {
 public:
     enum class Type {
         kMiter,
@@ -287,7 +315,7 @@ private:
     Type fType;
 };
 
-class SkSVGSpreadMethod {
+class SK_API SkSVGSpreadMethod {
 public:
     // These values must match Skia's SkShader::TileMode enum.
     enum class Type {
@@ -311,7 +339,7 @@ private:
     Type fType;
 };
 
-class SkSVGFillRule {
+class SK_API SkSVGFillRule {
 public:
     enum class Type {
         kNonZero,
@@ -339,7 +367,7 @@ private:
     Type fType;
 };
 
-class SkSVGVisibility {
+class SK_API SkSVGVisibility {
 public:
     enum class Type {
         kVisible,
@@ -363,7 +391,7 @@ private:
     Type fType;
 };
 
-class SkSVGDashArray {
+class SK_API SkSVGDashArray {
 public:
     enum class Type {
         kNone,
@@ -373,7 +401,7 @@ public:
 
     SkSVGDashArray()                : fType(Type::kNone) {}
     explicit SkSVGDashArray(Type t) : fType(t) {}
-    explicit SkSVGDashArray(SkTDArray<SkSVGLength>&& dashArray)
+    explicit SkSVGDashArray(std::vector<SkSVGLength>&& dashArray)
         : fType(Type::kDashArray)
         , fDashArray(std::move(dashArray)) {}
 
@@ -387,14 +415,14 @@ public:
 
     Type type() const { return fType; }
 
-    const SkTDArray<SkSVGLength>& dashArray() const { return fDashArray; }
+    const std::vector<SkSVGLength>& dashArray() const { return fDashArray; }
 
 private:
     Type fType;
-    SkTDArray<SkSVGLength> fDashArray;
+    std::vector<SkSVGLength> fDashArray;
 };
 
-class SkSVGStopColor {
+class SK_API SkSVGStopColor {
 public:
     enum class Type {
         kColor,
@@ -423,7 +451,7 @@ private:
     SkSVGColorType fColor;
 };
 
-class SkSVGObjectBoundingBoxUnits {
+class SK_API SkSVGObjectBoundingBoxUnits {
 public:
     enum class Type {
         kUserSpaceOnUse,
@@ -446,7 +474,7 @@ private:
     Type fType;
 };
 
-class SkSVGFontFamily {
+class SK_API SkSVGFontFamily {
 public:
     enum class Type {
         kFamily,
@@ -472,7 +500,7 @@ private:
     SkString fFamily;
 };
 
-class SkSVGFontStyle {
+class SK_API SkSVGFontStyle {
 public:
     enum class Type {
         kNormal,
@@ -495,7 +523,7 @@ private:
     Type fType;
 };
 
-class SkSVGFontSize {
+class SK_API SkSVGFontSize {
 public:
     enum class Type {
         kLength,
@@ -521,7 +549,7 @@ private:
     SkSVGLength fSize;
 };
 
-class SkSVGFontWeight {
+class SK_API SkSVGFontWeight {
 public:
     enum class Type {
         k100,
@@ -554,7 +582,7 @@ private:
     Type fType;
 };
 
-struct SkSVGPreserveAspectRatio {
+struct SK_API SkSVGPreserveAspectRatio {
     enum Align : uint8_t {
         // These values are chosen such that bits [0,1] encode X alignment, and
         // bits [2,3] encode Y alignment.
@@ -580,7 +608,7 @@ struct SkSVGPreserveAspectRatio {
     Scale fScale = kMeet;
 };
 
-class SkSVGTextAnchor {
+class SK_API SkSVGTextAnchor {
 public:
     enum class Type {
         kStart,
@@ -604,7 +632,7 @@ private:
 };
 
 // https://www.w3.org/TR/SVG11/filters.html#FilterPrimitiveInAttribute
-class SkSVGFeInputType {
+class SK_API SkSVGFeInputType {
 public:
     enum class Type {
         kSourceGraphic,
@@ -646,7 +674,7 @@ enum class SkSVGFeColorMatrixType {
     kLuminanceToAlpha,
 };
 
-using SkSVGFeColorMatrixValues = SkTDArray<SkSVGNumberType>;
+using SkSVGFeColorMatrixValues = std::vector<SkSVGNumberType>;
 
 enum class SkSVGFeCompositeOperator {
     kOver,
@@ -657,7 +685,7 @@ enum class SkSVGFeCompositeOperator {
     kArithmetic,
 };
 
-class SkSVGFeTurbulenceBaseFrequency {
+class SK_API SkSVGFeTurbulenceBaseFrequency {
 public:
     SkSVGFeTurbulenceBaseFrequency() : fFreqX(0), fFreqY(0) {}
     SkSVGFeTurbulenceBaseFrequency(SkSVGNumberType freqX, SkSVGNumberType freqY)
@@ -671,7 +699,7 @@ private:
     SkSVGNumberType fFreqY;
 };
 
-struct SkSVGFeTurbulenceType {
+struct SK_API SkSVGFeTurbulenceType {
     enum Type {
         kFractalNoise,
         kTurbulence,

@@ -9,6 +9,7 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkFontTypes.h"
 #include "include/core/SkImageInfo.h"
@@ -20,6 +21,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -38,6 +40,8 @@ static const char* color_type_name(SkColorType colorType) {
         case kRGB_101010x_SkColorType:        return "101010x";
         case kBGRA_1010102_SkColorType:       return "bgra1010102";
         case kBGR_101010x_SkColorType:        return "bgr101010x";
+        case kBGR_101010x_XR_SkColorType:     return "bgr101010x_xr";
+        case kRGBA_10x6_SkColorType:          return "10101010";
         case kGray_8_SkColorType:             return "G8";
         case kRGBA_F16Norm_SkColorType:       return "F16Norm";
         case kRGBA_F16_SkColorType:           return "F16";
@@ -60,7 +64,7 @@ constexpr SkColorType gColorTypes[] = {
     kN32_SkColorType,
 };
 
-#define NUM_CONFIGS SK_ARRAY_COUNT(gColorTypes)
+#define NUM_CONFIGS std::size(gColorTypes)
 
 static void draw_checks(SkCanvas* canvas, int width, int height) {
     SkPaint paint;
@@ -82,9 +86,9 @@ class BitmapCopyGM : public skiagm::GM {
 
     void onOnceBeforeDraw() override { this->setBGColor(0xFFDDDDDD); }
 
-    SkString onShortName() override { return SkString("bitmapcopy"); }
+    SkString getName() const override { return SkString("bitmapcopy"); }
 
-    SkISize onISize() override { return {540, 330}; }
+    SkISize getISize() override { return {540, 330}; }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
@@ -104,7 +108,7 @@ class BitmapCopyGM : public skiagm::GM {
         canvas->clear(0xFFDDDDDD);
         paint.setAntiAlias(true);
 
-        SkFont font(ToolUtils::create_portable_typeface());
+        SkFont font = ToolUtils::DefaultPortableFont();
 
         SkScalar width = SkIntToScalar(40);
         SkScalar height = SkIntToScalar(40);

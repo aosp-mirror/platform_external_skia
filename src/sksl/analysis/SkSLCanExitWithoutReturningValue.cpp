@@ -5,16 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "include/private/SkSLStatement.h"
 #include "src/sksl/SkSLAnalysis.h"
+#include "src/sksl/SkSLDefines.h"
 #include "src/sksl/analysis/SkSLProgramVisitor.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLIRNode.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
+#include "src/sksl/ir/SkSLStatement.h"
+#include "src/sksl/ir/SkSLSwitchCase.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
+#include "src/sksl/ir/SkSLType.h"
+
+#include <memory>
 
 namespace SkSL {
+class Expression;
 namespace {
 
 class ReturnsOnAllPathsVisitor : public ProgramVisitor {
@@ -138,7 +145,6 @@ public:
 
             case Statement::Kind::kDiscard:
             case Statement::Kind::kExpression:
-            case Statement::Kind::kInlineMarker:
             case Statement::Kind::kNop:
             case Statement::Kind::kVarDeclaration:
                 // None of these statements could contain a return.

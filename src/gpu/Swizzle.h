@@ -8,8 +8,9 @@
 #ifndef skgpu_Swizzle_DEFINED
 #define skgpu_Swizzle_DEFINED
 
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkString.h"
-#include "include/private/SkColorData.h"
 
 class SkRasterPipeline;
 
@@ -18,11 +19,13 @@ namespace skgpu {
 /** Represents a rgba swizzle. It can be converted either into a string or a eight bit int. */
 class Swizzle {
 public:
-    constexpr Swizzle() : Swizzle("rgba") {}
+    // Equivalent to "rgba", but Clang doesn't always manage to inline this
+    // if we're too deep in the inlining already.
+    constexpr Swizzle() : Swizzle(0x3210) {}
     explicit constexpr Swizzle(const char c[4]);
 
-    constexpr Swizzle(const Swizzle&);
-    constexpr Swizzle& operator=(const Swizzle& that);
+    constexpr Swizzle(const Swizzle&) = default;
+    constexpr Swizzle& operator=(const Swizzle& that) = default;
 
     static constexpr Swizzle Concat(const Swizzle& a, const Swizzle& b);
 
@@ -37,7 +40,7 @@ public:
 
     constexpr char operator[](int i) const {
         SkASSERT(i >= 0 && i < 4);
-        int idx = (fKey >> (4U * i)) & 0xfU;
+        int idx = (fKey >> (4 * i)) & 0xfU;
         return IToC(idx);
     }
 
@@ -58,31 +61,28 @@ public:
     static constexpr Swizzle RRRA() { return Swizzle("rrra"); }
     static constexpr Swizzle RGB1() { return Swizzle("rgb1"); }
 
+    using sk_is_trivially_relocatable = std::true_type;
+
 private:
     explicit constexpr Swizzle(uint16_t key) : fKey(key) {}
 
-    static constexpr float ComponentIndexToFloat(std::array<float, 4>, int idx);
+    static constexpr float ComponentIndexToFloat(std::array<float, 4>, size_t idx);
     static constexpr int CToI(char c);
     static constexpr char IToC(int idx);
 
     uint16_t fKey;
+
+    static_assert(::sk_is_trivially_relocatable<decltype(fKey)>::value);
 };
 
 constexpr Swizzle::Swizzle(const char c[4])
-        : fKey((CToI(c[0]) << 0) | (CToI(c[1]) << 4) | (CToI(c[2]) << 8) | (CToI(c[3]) << 12)) {}
-
-constexpr Swizzle::Swizzle(const Swizzle& that)
-        : fKey(that.fKey) {}
-
-constexpr Swizzle& Swizzle::operator=(const Swizzle& that) {
-    fKey = that.fKey;
-    return *this;
-}
+        : fKey(static_cast<uint16_t>((CToI(c[0]) << 0) | (CToI(c[1]) << 4) | (CToI(c[2]) << 8) |
+                                     (CToI(c[3]) << 12))) {}
 
 constexpr std::array<float, 4> Swizzle::applyTo(std::array<float, 4> color) const {
     uint32_t key = fKey;
     // Index of the input color that should be mapped to output r.
-    int idx = (key & 15);
+    size_t idx = (key & 15);
     float outR = ComponentIndexToFloat(color, idx);
     key >>= 4;
     idx = (key & 15);
@@ -96,14 +96,14 @@ constexpr std::array<float, 4> Swizzle::applyTo(std::array<float, 4> color) cons
     return { outR, outG, outB, outA };
 }
 
-constexpr float Swizzle::ComponentIndexToFloat(std::array<float, 4> color, int idx) {
+constexpr float Swizzle::ComponentIndexToFloat(std::array<float, 4> color, size_t idx) {
     if (idx <= 3) {
         return color[idx];
     }
-    if (idx == CToI('1')) {
+    if (idx == static_cast<size_t>(CToI('1'))) {
         return 1.0f;
     }
-    if (idx == CToI('0')) {
+    if (idx == static_cast<size_t>(CToI('0'))) {
         return 0.0f;
     }
     SkUNREACHABLE;
@@ -136,12 +136,12 @@ constexpr char Swizzle::IToC(int idx) {
 
 constexpr Swizzle Swizzle::Concat(const Swizzle& a, const Swizzle& b) {
     uint16_t key = 0;
-    for (int i = 0; i < 4; ++i) {
+    for (unsigned i = 0; i < 4; ++i) {
         int idx = (b.fKey >> (4U * i)) & 0xfU;
         if (idx != CToI('0') && idx != CToI('1')) {
             SkASSERT(idx >= 0 && idx < 4);
             // Get the index value stored in a at location idx.
-            idx = ((a.fKey >> (4U * idx)) & 0xfU);
+            idx = ((a.fKey >> (4 * idx)) & 0xfU);
         }
         key |= (idx << (4U * i));
     }

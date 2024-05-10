@@ -10,15 +10,22 @@
 #include "include/core/SkData.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkFixed.h"
-#include "include/private/SkTFitsIn.h"
-#include "include/private/SkTPin.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkAlign.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkTFitsIn.h"
+#include "include/private/base/SkTPin.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkSafeMath.h"
 #include "src/core/SkOSFile.h"
-#include "src/core/SkSafeMath.h"
 #include "src/core/SkStreamPriv.h"
 
+#include <algorithm>
+#include <cstddef>
+#include <cstring>
 #include <limits>
+#include <new>
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -927,7 +934,7 @@ std::unique_ptr<SkStreamAsset> SkStream::MakeFromFile(const char path[]) {
     if (!stream->isValid()) {
         return nullptr;
     }
-    return std::move(stream);
+    return stream;
 }
 
 // Declared in SkStreamPriv.h:
@@ -968,4 +975,18 @@ bool SkStreamCopy(SkWStream* out, SkStream* input) {
             return false;
         }
     }
+}
+
+bool StreamRemainingLengthIsBelow(SkStream* stream, size_t len) {
+    SkASSERT(stream);
+    if (stream->hasLength()) {
+        if (stream->hasPosition()) {
+            size_t remainingBytes = stream->getLength() - stream->getPosition();
+            return remainingBytes < len;
+        }
+        // We don't know the position, but we can still return true if the
+        // stream's entire length is shorter than the requested length.
+        return stream->getLength() < len;
+    }
+    return false;
 }

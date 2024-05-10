@@ -34,13 +34,9 @@ protected:
 
     bool runAsBench() const override { return true; }
 
-    SkString onShortName() override {
-        return SkString("circular-clips");
-    }
+    SkString getName() const override { return SkString("circular-clips"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(800, 200);
-    }
+    SkISize getISize() override { return SkISize::Make(800, 200); }
 
     void onDraw(SkCanvas* canvas) override {
         const SkClipOp ops[] = {
@@ -73,7 +69,7 @@ protected:
             }
 
             canvas->save();
-            for (size_t op = 0; op < SK_ARRAY_COUNT(ops); op++) {
+            for (size_t op = 0; op < std::size(ops); op++) {
                 canvas->save();
 
                 canvas->clipPath(fCircle1);

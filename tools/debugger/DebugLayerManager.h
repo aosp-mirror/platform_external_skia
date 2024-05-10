@@ -8,12 +8,22 @@
 #ifndef DEBUGLAYERMANAGER_H_
 #define DEBUGLAYERMANAGER_H_
 
+#include "include/core/SkColor.h"
 #include "include/core/SkImage.h"
-#include "include/private/SkTHash.h"
-#include "src/utils/SkJSONWriter.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "src/core/SkTHash.h"
 #include "tools/debugger/DebugCanvas.h"
 
+#include <memory>
 #include <vector>
+
+class SkCanvas;
+class SkJSONWriter;
+class SkPicture;
+class SkSurface;
+class UrlDataManager;
+struct SkIRect;
 
 // A class to assist in playing back and debugging an mskp file containing offscreen layer commands.
 
@@ -32,8 +42,6 @@
 // this class will return a rendering of how it looked on that frame.
 // returning an SkImage snapshot of the internally managed surface.
 
-class DebugCanvas;
-
 class DebugLayerManager {
 public:
     DebugLayerManager() {}
@@ -41,7 +49,7 @@ public:
     // Store an SkPicture under a given nodeId (and under the currently set frame number)
     // `dirty` is the recorded rect that was used to call androidFramework_setDeviceClipRestriction
     // when the layer was drawn.
-    void storeSkPicture(int nodeId, int frame, sk_sp<SkPicture> picture, SkIRect dirty);
+    void storeSkPicture(int nodeId, int frame, const sk_sp<SkPicture>& picture, SkIRect dirty);
 
     // Set's the command playback head for a given picture/draw event.
     void setCommand(int nodeId, int frame, int command);
@@ -148,7 +156,7 @@ private:
         SkISize layerBounds;
     };
 
-    SkTHashMap<LayerKey, DrawEvent> fDraws;
+    skia_private::THashMap<LayerKey, DrawEvent> fDraws;
     // The list of all keys in the map above (it has no keys() method)
     std::vector<LayerKey> keys;
 };

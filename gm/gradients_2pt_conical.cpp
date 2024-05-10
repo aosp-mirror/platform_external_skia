@@ -307,9 +307,9 @@ constexpr struct {
     const int fCount;
     const char* fName;
 } gGradCases[] = {
-    { gGradMakersOutside,   SK_ARRAY_COUNT(gGradMakersOutside),     "outside"  },
-    { gGradMakersInside,    SK_ARRAY_COUNT(gGradMakersInside),      "inside"  },
-    { gGradMakersEdgeCases, SK_ARRAY_COUNT(gGradMakersEdgeCases),   "edge"  },
+    { gGradMakersOutside,   std::size(gGradMakersOutside),     "outside"  },
+    { gGradMakersInside,    std::size(gGradMakersInside),      "inside"  },
+    { gGradMakersEdgeCases, std::size(gGradMakersEdgeCases),   "edge"  },
 };
 
 enum GradCaseType { // these must match the order in gGradCases
@@ -344,9 +344,9 @@ public:
 private:
     void onOnceBeforeDraw() override { this->setBGColor(0xFFDDDDDD); }
 
-    SkString onShortName() override { return fName; }
+    SkString getName() const override { return fName; }
 
-    SkISize onISize() override { return {840, 815}; }
+    SkISize getISize() override { return {840, 815}; }
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -364,7 +364,7 @@ private:
         const GradMaker* gradMaker = gGradCases[fGradCaseType].fMaker;
         const int count = gGradCases[fGradCaseType].fCount;
 
-        for (size_t i = 0; i < SK_ARRAY_COUNT(gGradData); i++) {
+        for (size_t i = 0; i < std::size(gGradData); i++) {
             canvas->save();
             for (int j = 0; j < count; j++) {
                 SkMatrix scale = SkMatrix::I();

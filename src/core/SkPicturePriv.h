@@ -12,6 +12,8 @@
 
 class SkReadBuffer;
 class SkWriteBuffer;
+class SkStream;
+struct SkPictInfo;
 
 class SkPicturePriv {
 public:
@@ -31,7 +33,7 @@ public:
     static void Flatten(const sk_sp<const SkPicture> , SkWriteBuffer& buffer);
 
     // Returns NULL if this is not an SkBigPicture.
-    static const SkBigPicture* AsSkBigPicture(const sk_sp<const SkPicture> picture) {
+    static const SkBigPicture* AsSkBigPicture(const sk_sp<const SkPicture>& picture) {
         return picture->asSkBigPicture();
     }
 
@@ -100,6 +102,18 @@ public:
     // V88: Add blender to ComposeShader and BlendImageFilter
     // V89: Deprecated SkClipOps are no longer supported
     // V90: Private API for backdrop scale factor in SaveLayerRec
+    // V91: Added raw image shaders
+    // V92: Added anisotropic filtering to SkSamplingOptions
+    // V94: Removed local matrices from SkShaderBase. Local matrices always use SkLocalMatrixShader.
+    // V95: SkImageFilters::Shader only saves SkShader, not a full SkPaint
+    // V96: SkImageFilters::Magnifier updated with more complete parameters
+    // V97: SkImageFilters::RuntimeShader takes a sample radius
+    // V98: Merged SkImageFilters::Blend and ::Arithmetic implementations
+    // V99: Remove legacy Magnifier filter
+    // V100: SkImageFilters::DropShadow does not have a dedicated implementation
+    // V101: Crop image filter supports all SkTileModes instead of just kDecal
+    // V102: Convolution image filter uses ::Crop to apply tile mode
+    // V103: Remove deprecated per-image filter crop rect
 
     enum Version {
         kPictureShaderFilterParam_Version   = 82,
@@ -112,11 +126,46 @@ public:
         kNoExpandingClipOps                 = 89,
         kBackdropScaleFactor                = 90,
         kRawImageShaders                    = 91,
+        kAnisotropicFilter                  = 92,
+        kBlend4fColorFilter                 = 93,
+        kNoShaderLocalMatrix                = 94,
+        kShaderImageFilterSerializeShader   = 95,
+        kRevampMagnifierFilter              = 96,
+        kRuntimeImageFilterSampleRadius     = 97,
+        kCombineBlendArithmeticFilters      = 98,
+        kRemoveLegacyMagnifierFilter        = 99,
+        kDropShadowImageFilterComposition   = 100,
+        kCropImageFilterSupportsTiling      = 101,
+        kConvolutionImageFilterTilingUpdate = 102,
+        kRemoveDeprecatedCropRect           = 103,
 
         // Only SKPs within the min/current picture version range (inclusive) can be read.
+        //
+        // When updating kMin_Version also update oldestSupportedSkpVersion in
+        // infra/bots/gen_tasks_logic/gen_tasks_logic.go
+        //
+        // Steps on how to find which oldestSupportedSkpVersion to use:
+        // 1) Find the git hash when the desired kMin_Version was the kCurrent_Version from the
+        //    git logs: https://skia.googlesource.com/skia/+log/main/src/core/SkPicturePriv.h
+        //    Eg: https://skia.googlesource.com/skia/+/bfd330d081952424a93d51715653e4d1314d4822%5E%21/#F1
+        //
+        // 2) Use that git hash to find the SKP asset version number at that time here:
+        //    https://skia.googlesource.com/skia/+/bfd330d081952424a93d51715653e4d1314d4822/infra/bots/assets/skp/VERSION
+        //
+        // 3) [Optional] Increment the SKP asset version number from step 3 and verify that it has
+        //    the expected version number by downloading the asset and running skpinfo on it.
+        //
+        // 4) Use the incremented SKP asset version number as the oldestSupportedSkpVersion in
+        //    infra/bots/gen_tasks_logic/gen_tasks_logic.go
+        //
+        // 5) Run `make -C infra/bots train`
+        //
+        // Contact the Infra Gardener if the above steps do not work for you.
         kMin_Version     = kPictureShaderFilterParam_Version,
-        kCurrent_Version = kRawImageShaders
+        kCurrent_Version = kRemoveDeprecatedCropRect
     };
 };
+
+bool SkPicture_StreamIsSKP(SkStream*, SkPictInfo*);
 
 #endif

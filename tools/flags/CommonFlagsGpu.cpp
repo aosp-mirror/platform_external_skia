@@ -18,16 +18,10 @@ namespace CommonFlags {
 
 static DEFINE_bool(cachePathMasks, true,
                    "Allows path mask textures to be cached in GPU configs.");
+static DEFINE_bool(failFlushTimeCallbacks, false,
+                   "Causes all flush-time callbacks to fail.");
 static DEFINE_bool(allPathsVolatile, false,
                    "Causes all GPU paths to be processed as if 'setIsVolatile' had been called.");
-
-static DEFINE_bool(hwtess, false, "Enables support for tessellation shaders (if hw allows.).");
-
-static DEFINE_int(maxTessellationSegments, 0,
-                  "Overrides the max number of tessellation segments supported by the caps.");
-
-static DEFINE_bool(alwaysHwTess, false,
-        "Always try to use hardware tessellation, regardless of how small a path may be.");
 
 static DEFINE_string(pr, "",
               "Set of enabled gpu path renderers. Defined as a list of: "
@@ -49,6 +43,9 @@ static DEFINE_bool(dontReduceOpsTaskSplitting, false,
 static DEFINE_int(gpuResourceCacheLimit, -1,
                   "Maximum number of bytes to use for budgeted GPU resources. "
                   "Default is -1, which means GrResourceCache::kDefaultMaxSize.");
+
+static DEFINE_bool(allowMSAAOnNewIntel, false,
+                   "Allows MSAA to be enabled on newer intel GPUs.");
 
 static GpuPathRenderers get_named_pathrenderers_flags(const char* name) {
     if (!strcmp(name, "none")) {
@@ -84,7 +81,7 @@ static GpuPathRenderers collect_gpu_path_renderers_from_flags() {
             ? GpuPathRenderers::kDefault
             : GpuPathRenderers::kNone;
 
-    for (int i = 0; i < FLAGS_pr.count(); ++i) {
+    for (int i = 0; i < FLAGS_pr.size(); ++i) {
         const char* name = FLAGS_pr[i];
         if (name[0] == '~') {
             gpuPathRenderers &= ~get_named_pathrenderers_flags(&name[1]);
@@ -102,10 +99,8 @@ void SetCtxOptions(GrContextOptions* ctxOptions) {
 
     ctxOptions->fExecutor                            = gGpuExecutor.get();
     ctxOptions->fAllowPathMaskCaching                = FLAGS_cachePathMasks;
+    ctxOptions->fFailFlushTimeCallbacks              = FLAGS_failFlushTimeCallbacks;
     ctxOptions->fAllPathsVolatile                    = FLAGS_allPathsVolatile;
-    ctxOptions->fEnableExperimentalHardwareTessellation = FLAGS_hwtess;
-    ctxOptions->fMaxTessellationSegmentsOverride     = FLAGS_maxTessellationSegments;
-    ctxOptions->fAlwaysPreferHardwareTessellation    = FLAGS_alwaysHwTess;
     ctxOptions->fGpuPathRenderers                    = collect_gpu_path_renderers_from_flags();
     ctxOptions->fDisableDriverCorrectnessWorkarounds = FLAGS_disableDriverCorrectnessWorkarounds;
     ctxOptions->fResourceCacheLimitOverride          = FLAGS_gpuResourceCacheLimit;
@@ -122,6 +117,7 @@ void SetCtxOptions(GrContextOptions* ctxOptions) {
     } else {
         ctxOptions->fReduceOpsTaskSplitting = GrContextOptions::Enable::kYes;
     }
+    ctxOptions->fAllowMSAAOnNewIntel = FLAGS_allowMSAAOnNewIntel;
 }
 
 }  // namespace CommonFlags

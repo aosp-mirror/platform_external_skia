@@ -6,6 +6,7 @@
  */
 
 #include "gm/gm.h"
+#include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkPaint.h"
@@ -13,7 +14,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 
 #include <stddef.h>
 
@@ -24,14 +25,9 @@ public:
     PointsGM() {}
 
 protected:
+    SkString getName() const override { return SkString("points"); }
 
-    SkString onShortName() override {
-        return SkString("points");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(640, 490);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 490); }
 
     static void fill_pts(SkPoint pts[], size_t n, SkRandom* rand) {
         for (size_t i = 0; i < n; i++) {

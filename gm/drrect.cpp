@@ -21,14 +21,9 @@ public:
     DRRectGM() {}
 
 protected:
+    SkString getName() const override { return SkString("drrect"); }
 
-    SkString onShortName() override {
-        return SkString("drrect");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
@@ -59,8 +54,8 @@ protected:
         inners[4].setRectRadii(r, radii);
 
         canvas->translate(16, 16);
-        for (size_t j = 0; j < SK_ARRAY_COUNT(inners); ++j) {
-            for (size_t i = 0; i < SK_ARRAY_COUNT(outers); ++i) {
+        for (size_t j = 0; j < std::size(inners); ++j) {
+            for (size_t i = 0; i < std::size(outers); ++i) {
                 canvas->save();
                 canvas->translate(dx * j, dy * i);
                 canvas->drawDRRect(outers[i], inners[j], paint);

@@ -11,7 +11,7 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkTemplates.h"
 #include "modules/skresources/include/SkResources.h"
 #include "modules/svg/include/SkSVGIDMapper.h"
 
@@ -19,14 +19,18 @@ class SkCanvas;
 class SkDOM;
 class SkStream;
 class SkSVGNode;
+struct SkSVGPresentationContext;
 class SkSVGSVG;
 
-class SkSVGDOM : public SkRefCnt {
+class SK_API SkSVGDOM : public SkRefCnt {
 public:
     class Builder final {
     public:
         /**
-         * Specify a font manager for loading SVG fonts.
+         * Specify a font manager for loading fonts (e.g. from the system) to render <text>
+         * SVG nodes.
+         * If this is not set, but a font is required as part of rendering, the text will
+         * not be displayed.
          */
         Builder& setFontManager(sk_sp<SkFontMgr>);
 
@@ -80,6 +84,9 @@ public:
     sk_sp<SkSVGNode>* findNodeById(const char* id);
 
     void render(SkCanvas*) const;
+
+    /** Render the node with the given id as if it were the only child of the root. */
+    void renderNode(SkCanvas*, SkSVGPresentationContext&, const char* id) const;
 
 private:
     SkSVGDOM(sk_sp<SkSVGSVG>, sk_sp<SkFontMgr>, sk_sp<skresources::ResourceProvider>,

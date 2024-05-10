@@ -6,93 +6,147 @@
  */
 
 #include "include/codec/SkCodec.h"
+
+#include "include/codec/SkCodecAnimation.h"
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
+#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
-#include "include/core/SkImage.h"
+#include "include/core/SkImage.h" // IWYU pragma: keep
+#include "include/core/SkMatrix.h"
 #include "include/core/SkStream.h"
-#include "include/private/SkHalf.h"
+#include "include/private/base/SkTemplates.h"
+#include "modules/skcms/skcms.h"
+#include "src/base/SkNoDestructor.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkFrameHolder.h"
+#include "src/codec/SkSampler.h"
 
-// We always include and compile in these BMP codecs
-#include "src/codec/SkBmpCodec.h"
-#include "src/codec/SkWbmpCodec.h"
+#include <string>
+#include <string_view>
+#include <utility>
 
-#ifdef SK_HAS_ANDROID_CODEC
-#include "include/codec/SkAndroidCodec.h"
-#endif
+#if !defined(SK_DISABLE_LEGACY_INIT_DECODERS)
+#include "include/codec/SkBmpDecoder.h"
+#include "include/codec/SkWbmpDecoder.h"
+#include "include/private/base/SkOnce.h"
 
-#ifdef SK_HAS_HEIF_LIBRARY
-#include "src/codec/SkHeifCodec.h"
-#endif
-
-#ifdef SK_CODEC_DECODES_JPEG
-#include "src/codec/SkJpegCodec.h"
-#endif
-
-#ifdef SK_CODEC_DECODES_JPEGXL
-#include "src/codec/SkJpegxlCodec.h"
-#endif
-
-#ifdef SK_CODEC_DECODES_PNG
-#include "src/codec/SkIcoCodec.h"
-#include "src/codec/SkPngCodec.h"
-#endif
-
-#ifdef SK_CODEC_DECODES_RAW
-#include "src/codec/SkRawCodec.h"
-#endif
-
-#ifdef SK_CODEC_DECODES_WEBP
-#include "src/codec/SkWebpCodec.h"
+#ifdef SK_CODEC_DECODES_AVIF
+#include "include/codec/SkAvifDecoder.h"
 #endif
 
 #ifdef SK_HAS_WUFFS_LIBRARY
-#include "src/codec/SkWuffsCodec.h"
-#elif defined(SK_USE_LIBGIFCODEC)
-#include "SkGifCodec.h"
+#include "include/codec/SkGifDecoder.h"
 #endif
 
-struct DecoderProc {
-    bool (*IsFormat)(const void*, size_t);
-    std::unique_ptr<SkCodec> (*MakeFromStream)(std::unique_ptr<SkStream>, SkCodec::Result*);
-};
+#ifdef SK_HAS_HEIF_LIBRARY
+#include "include/android/SkHeifDecoder.h"
+#endif
 
-static std::vector<DecoderProc>* decoders() {
-    static auto* decoders = new std::vector<DecoderProc> {
-    #ifdef SK_CODEC_DECODES_JPEG
-        { SkJpegCodec::IsJpeg, SkJpegCodec::MakeFromStream },
-    #endif
-    #ifdef SK_CODEC_DECODES_WEBP
-        { SkWebpCodec::IsWebp, SkWebpCodec::MakeFromStream },
-    #endif
-    #ifdef SK_HAS_WUFFS_LIBRARY
-        { SkWuffsCodec_IsFormat, SkWuffsCodec_MakeFromStream },
-    #elif defined(SK_USE_LIBGIFCODEC)
-        { SkGifCodec::IsGif, SkGifCodec::MakeFromStream },
-    #endif
-    #ifdef SK_CODEC_DECODES_PNG
-        { SkIcoCodec::IsIco, SkIcoCodec::MakeFromStream },
-    #endif
-        { SkBmpCodec::IsBmp, SkBmpCodec::MakeFromStream },
-        { SkWbmpCodec::IsWbmp, SkWbmpCodec::MakeFromStream },
-    #ifdef SK_CODEC_DECODES_JPEGXL
-        { SkJpegxlCodec::IsJpegxl, SkJpegxlCodec::MakeFromStream },
-    #endif
-    };
-    return decoders;
+#ifdef SK_CODEC_DECODES_JPEG
+#include "include/codec/SkJpegDecoder.h"
+#endif
+
+#ifdef SK_CODEC_DECODES_JPEGXL
+#include "include/codec/SkJpegxlDecoder.h"
+#endif
+
+#ifdef SK_CODEC_DECODES_PNG
+#include "include/codec/SkIcoDecoder.h"
+#include "include/codec/SkPngDecoder.h"
+#endif
+
+#ifdef SK_CODEC_DECODES_RAW
+#include "include/codec/SkRawDecoder.h"
+#endif
+
+#ifdef SK_CODEC_DECODES_WEBP
+#include "include/codec/SkWebpDecoder.h"
+#endif
+#endif // !defined(SK_DISABLE_LEGACY_INIT_DECODERS)
+
+namespace SkCodecs {
+// A static variable inside a function avoids a static initializer.
+// https://chromium.googlesource.com/chromium/src/+/HEAD/docs/static_initializers.md#removing-static-initializers
+static std::vector<Decoder>* get_decoders_for_editing() {
+    static SkNoDestructor<std::vector<Decoder>> decoders;
+#if !defined(SK_DISABLE_LEGACY_INIT_DECODERS)
+    static SkOnce once;
+    once([] {
+        if (decoders->empty()) {
+#ifdef SK_CODEC_DECODES_PNG
+            decoders->push_back(SkPngDecoder::Decoder());
+#endif
+#ifdef SK_CODEC_DECODES_JPEG
+            decoders->push_back(SkJpegDecoder::Decoder());
+#endif
+#ifdef SK_CODEC_DECODES_WEBP
+            decoders->push_back(SkWebpDecoder::Decoder());
+#endif
+#ifdef SK_HAS_WUFFS_LIBRARY
+            decoders->push_back(SkGifDecoder::Decoder());
+#endif
+#ifdef SK_CODEC_DECODES_PNG
+            decoders->push_back(SkIcoDecoder::Decoder());
+#endif
+            decoders->push_back(SkBmpDecoder::Decoder());
+            decoders->push_back(SkWbmpDecoder::Decoder());
+#ifdef SK_CODEC_DECODES_AVIF
+            decoders->push_back(SkAvifDecoder::Decoder());
+#endif
+#ifdef SK_CODEC_DECODES_JPEGXL
+            decoders->push_back(SkJpegxlDecoder::Decoder());
+#endif
+#ifdef SK_HAS_HEIF_LIBRARY
+            decoders->push_back(SkHeifDecoder::Decoder());
+#endif
+#ifdef SK_CODEC_DECODES_RAW
+            decoders->push_back(SkRawDecoder::Decoder());
+#endif
+        }
+    });
+#endif // !defined(SK_DISABLE_LEGACY_INIT_DECODERS)
+    return decoders.get();
 }
 
-void SkCodec::Register(
-            bool                     (*peek)(const void*, size_t),
-            std::unique_ptr<SkCodec> (*make)(std::unique_ptr<SkStream>, SkCodec::Result*)) {
-    decoders()->push_back(DecoderProc{peek, make});
+const std::vector<Decoder>& get_decoders() {
+    auto decoders = get_decoders_for_editing();
+    return *decoders;
 }
+
+void Register(Decoder d) {
+    auto decoders = get_decoders_for_editing();
+    for (size_t i = 0; i < decoders->size(); i++) {
+        if ((*decoders)[i].id == d.id) {
+            (*decoders)[i] = d;
+            return;
+        }
+    }
+    decoders->push_back(d);
+}
+
+bool HasDecoder(std::string_view id) {
+    for (const SkCodecs::Decoder& decoder : get_decoders()) {
+        if (decoder.id == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace SkCodecs
 
 std::unique_ptr<SkCodec> SkCodec::MakeFromStream(
         std::unique_ptr<SkStream> stream, Result* outResult,
         SkPngChunkReader* chunkReader, SelectionPolicy selectionPolicy) {
+    return MakeFromStream(std::move(stream), SkCodecs::get_decoders(), outResult,
+                          chunkReader, selectionPolicy);
+}
+std::unique_ptr<SkCodec> SkCodec::MakeFromStream(
+        std::unique_ptr<SkStream> stream, SkSpan<const SkCodecs::Decoder> decoders,
+        Result* outResult, SkPngChunkReader* chunkReader, SelectionPolicy selectionPolicy) {
     Result resultStorage;
     if (!outResult) {
         outResult = &resultStorage;
@@ -137,62 +191,57 @@ std::unique_ptr<SkCodec> SkCodec::MakeFromStream(
         }
     }
 
-    // PNG is special, since we want to be able to supply an SkPngChunkReader.
-    // But this code follows the same pattern as the loop.
-#ifdef SK_CODEC_DECODES_PNG
-    if (SkPngCodec::IsPng(buffer, bytesRead)) {
-        return SkPngCodec::MakeFromStream(std::move(stream), outResult, chunkReader);
-    }
-#endif
-
-    for (DecoderProc proc : *decoders()) {
-        if (proc.IsFormat(buffer, bytesRead)) {
-            return proc.MakeFromStream(std::move(stream), outResult);
+    SkCodecs::MakeFromStreamCallback rawFallback = nullptr;
+    for (const SkCodecs::Decoder& proc : decoders) {
+        if (proc.isFormat(buffer, bytesRead)) {
+            // png and heif are special, since we want to be able to supply a SkPngChunkReader
+            // or SelectionPolicy respectively
+            if (proc.id == "png") {
+                return proc.makeFromStream(std::move(stream), outResult, chunkReader);
+            } else if (proc.id == "heif") {
+                return proc.makeFromStream(std::move(stream), outResult, &selectionPolicy);
+            } else if (proc.id == "raw") {
+                rawFallback = proc.makeFromStream;
+                continue;
+            }
+            return proc.makeFromStream(std::move(stream), outResult, nullptr);
         }
     }
-
-#ifdef SK_HAS_HEIF_LIBRARY
-    SkEncodedImageFormat format;
-    if (SkHeifCodec::IsSupported(buffer, bytesRead, &format)) {
-        return SkHeifCodec::MakeFromStream(std::move(stream), selectionPolicy,
-                format, outResult);
+    if (rawFallback != nullptr) {
+        // Fallback to raw.
+        return rawFallback(std::move(stream), outResult, nullptr);
     }
-#endif
 
-#ifdef SK_CODEC_DECODES_RAW
-    // Try to treat the input as RAW if all the other checks failed.
-    return SkRawCodec::MakeFromStream(std::move(stream), outResult);
-#else
     if (bytesRead < bytesToRead) {
         *outResult = kIncompleteInput;
     } else {
         *outResult = kUnimplemented;
     }
-
     return nullptr;
-#endif
 }
 
 std::unique_ptr<SkCodec> SkCodec::MakeFromData(sk_sp<SkData> data, SkPngChunkReader* reader) {
+    return MakeFromData(std::move(data), SkCodecs::get_decoders(), reader);
+}
+std::unique_ptr<SkCodec> SkCodec::MakeFromData(sk_sp<SkData> data,
+                                               SkSpan<const SkCodecs::Decoder> decoders,
+                                               SkPngChunkReader* reader) {
     if (!data) {
         return nullptr;
     }
-    return MakeFromStream(SkMemoryStream::Make(std::move(data)), nullptr, reader);
+    return MakeFromStream(SkMemoryStream::Make(std::move(data)), decoders, nullptr, reader);
 }
 
-SkCodec::SkCodec(SkEncodedInfo&& info, XformFormat srcFormat, std::unique_ptr<SkStream> stream,
+SkCodec::SkCodec(SkEncodedInfo&& info,
+                 XformFormat srcFormat,
+                 std::unique_ptr<SkStream> stream,
                  SkEncodedOrigin origin)
-    : fEncodedInfo(std::move(info))
-    , fSrcXformFormat(srcFormat)
-    , fStream(std::move(stream))
-    , fNeedsRewind(false)
-    , fOrigin(origin)
-    , fDstInfo()
-    , fOptions()
-    , fCurrScanline(-1)
-    , fStartedIncrementalDecode(false)
-    , fAndroidCodecHandlesFrameIndex(false)
-{}
+        : fEncodedInfo(std::move(info))
+        , fSrcXformFormat(srcFormat)
+        , fStream(std::move(stream))
+        , fOrigin(origin)
+        , fDstInfo()
+        , fOptions() {}
 
 SkCodec::~SkCodec() {}
 
@@ -229,6 +278,7 @@ bool SkCodec::conversionSupported(const SkImageInfo& dst, bool srcIsOpaque, bool
         case kBGRA_8888_SkColorType:
         case kRGBA_F16_SkColorType:
             return true;
+        case kBGR_101010x_XR_SkColorType:
         case kRGB_565_SkColorType:
             return srcIsOpaque;
         case kGray_8_SkColorType:
@@ -302,12 +352,12 @@ bool zero_rect(const SkImageInfo& dstInfo, void* pixels, size_t rowBytes,
 }
 
 SkCodec::Result SkCodec::handleFrameIndex(const SkImageInfo& info, void* pixels, size_t rowBytes,
-                                          const Options& options, SkAndroidCodec* androidCodec) {
-    if (androidCodec) {
-        // This is never set back to false. If SkAndroidCodec is calling this method, its fCodec
-        // should never call it directly.
-        fAndroidCodecHandlesFrameIndex = true;
-    } else if (fAndroidCodecHandlesFrameIndex) {
+                                          const Options& options, GetPixelsCallback getPixelsFn) {
+    if (getPixelsFn) {
+        // If a callback is used, it handles the frame index, so calls from this SkCodec
+        // should always short-circuit in the else case below.
+        fUsingCallbackForHandleFrameIndex = true;
+    } else if (fUsingCallbackForHandleFrameIndex) {
         return kSuccess;
     }
 
@@ -343,16 +393,15 @@ SkCodec::Result SkCodec::handleFrameIndex(const SkImageInfo& info, void* pixels,
 
     const int requiredFrame = frame->getRequiredFrame();
     if (requiredFrame != kNoFrame) {
+        // Decode earlier frame if necessary
         const SkFrame* preppedFrame = nullptr;
         if (options.fPriorFrame == kNoFrame) {
             Result result = kInternalError;
-            if (androidCodec) {
-#ifdef SK_HAS_ANDROID_CODEC
-                SkAndroidCodec::AndroidOptions prevFrameOptions(
-                        reinterpret_cast<const SkAndroidCodec::AndroidOptions&>(options));
-                prevFrameOptions.fFrameIndex = requiredFrame;
-                result = androidCodec->getAndroidPixels(info, pixels, rowBytes, &prevFrameOptions);
-#endif
+            // getPixelsFn will be set when things like SkAndroidCodec are calling this function.
+            // Thus, we call the provided function when recursively decoding previous frames,
+            // but only when necessary (i.e. there is a required frame).
+            if (getPixelsFn) {
+                result = getPixelsFn(info, pixels, rowBytes, options, requiredFrame);
             } else {
                 Options prevFrameOptions(options);
                 prevFrameOptions.fFrameIndex = requiredFrame;
@@ -597,9 +646,9 @@ SkCodec::Result SkCodec::startScanlineDecode(const SkImageInfo& info,
     // so that when onStartScanlineDecode calls rewindIfNeeded it would not
     // rewind. But it also relies on that call to rewindIfNeeded to set
     // fNeedsRewind to true for future decodes. When
-    // fAndroidCodecHandlesFrameIndex is true, that call to rewindIfNeeded is
+    // fUsingCallbackForHandleFrameIndex is true, that call to rewindIfNeeded is
     // skipped, so this method sets it back to true.
-    SkASSERT(fAndroidCodecHandlesFrameIndex || fNeedsRewind);
+    SkASSERT(fUsingCallbackForHandleFrameIndex || fNeedsRewind);
     fNeedsRewind = true;
 
     fCurrScanline = 0;
@@ -706,6 +755,9 @@ bool sk_select_xform_format(SkColorType colorType, bool forColorTable,
         case kRGBA_F16_SkColorType:
             *outFormat = skcms_PixelFormat_RGBA_hhhh;
             break;
+        case kBGR_101010x_XR_SkColorType:
+            *outFormat = skcms_PixelFormat_BGR_101010x_XR;
+            break;
         case kGray_8_SkColorType:
             *outFormat = skcms_PixelFormat_G_8;
             break;
@@ -720,7 +772,8 @@ bool SkCodec::initializeColorXform(const SkImageInfo& dstInfo, SkEncodedInfo::Al
     fXformTime = kNo_XformTime;
     bool needsColorXform = false;
     if (this->usesColorXform()) {
-        if (kRGBA_F16_SkColorType == dstInfo.colorType()) {
+        if (kRGBA_F16_SkColorType == dstInfo.colorType() ||
+                kBGR_101010x_XR_SkColorType == dstInfo.colorType()) {
             needsColorXform = true;
             if (dstInfo.colorSpace()) {
                 dstInfo.colorSpace()->toProfile(&fDstProfile);

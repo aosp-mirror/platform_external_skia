@@ -19,6 +19,7 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #define WIDTH 700
 #define HEIGHT 560
@@ -32,14 +33,12 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("morphology");
-    }
+    SkString getName() const override { return SkString("morphology"); }
 
     void onOnceBeforeDraw() override {
-        auto surf = SkSurface::MakeRasterN32Premul(135, 135);
+        auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(135, 135));
 
-        SkFont  font(ToolUtils::create_portable_typeface(), 64.0f);
+        SkFont  font(ToolUtils::DefaultPortableTypeface(), 64.0f);
         SkPaint paint;
         paint.setColor(0xFFFFFFFF);
         surf->getCanvas()->drawString("ABC", 10, 55,  font, paint);
@@ -48,9 +47,7 @@ protected:
         fImage = surf->makeImageSnapshot();
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(WIDTH, HEIGHT);
-    }
+    SkISize getISize() override { return SkISize::Make(WIDTH, HEIGHT); }
 
     void drawClippedBitmap(SkCanvas* canvas, const SkPaint& paint, int x, int y) {
         canvas->save();
@@ -75,7 +72,7 @@ protected:
         SkIRect cropRect = SkIRect::MakeXYWH(25, 20, 100, 80);
 
         for (unsigned j = 0; j < 4; ++j) {
-            for (unsigned i = 0; i < SK_ARRAY_COUNT(samples); ++i) {
+            for (unsigned i = 0; i < std::size(samples); ++i) {
                 const SkIRect* cr = j & 0x02 ? &cropRect : nullptr;
                 if (j & 0x01) {
                     paint.setImageFilter(SkImageFilters::Erode(

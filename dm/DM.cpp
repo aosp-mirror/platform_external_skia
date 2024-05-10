@@ -7,22 +7,32 @@
 
 #include "dm/DMJsonWriter.h"
 #include "dm/DMSrcSink.h"
-#include "gm/verifiers/gmverifier.h"
+#include "include/codec/SkBmpDecoder.h"
 #include "include/codec/SkCodec.h"
+#include "include/codec/SkEncodedImageFormat.h"
+#include "include/codec/SkGifDecoder.h"
+#include "include/codec/SkIcoDecoder.h"
+#include "include/codec/SkJpegDecoder.h"
+#include "include/codec/SkPngDecoder.h"
+#include "include/codec/SkWbmpDecoder.h"
+#include "include/codec/SkWebpDecoder.h"
 #include "include/core/SkBBHFactory.h"
 #include "include/core/SkColorPriv.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkDocument.h"
 #include "include/core/SkGraphics.h"
-#include "include/private/SkChecksum.h"
-#include "include/private/SkHalf.h"
-#include "include/private/SkSpinlock.h"
-#include "include/private/SkTHash.h"
+#include "src/base/SkHalf.h"
+#include "src/base/SkLeanWindows.h"
+#include "src/base/SkNoDestructor.h"
+#include "src/base/SkSpinlock.h"
+#include "src/base/SkTime.h"
+#include "src/core/SkChecksum.h"
 #include "src/core/SkColorSpacePriv.h"
-#include "src/core/SkLeanWindows.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkOSFile.h"
+#include "src/core/SkStringUtils.h"
+#include "src/core/SkTHash.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/utils/SkOSPath.h"
 #include "tests/Test.h"
@@ -31,9 +41,11 @@
 #include "tools/HashAndEncode.h"
 #include "tools/ProcStats.h"
 #include "tools/Resources.h"
+#include "tools/TestFontDataProvider.h"
 #include "tools/ToolUtils.h"
 #include "tools/flags/CommonFlags.h"
 #include "tools/flags/CommonFlagsConfig.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/ios_utils.h"
 #include "tools/trace/ChromeTracingTracer.h"
 #include "tools/trace/EventTracingPriv.h"
@@ -57,9 +69,31 @@
     #include "src/utils/mac/SkUniqueCFRef.h"
 #endif
 
+#if defined(SK_ENABLE_SVG)
+    #include "modules/svg/include/SkSVGOpenTypeSVGDecoder.h"
+#endif
+
+#ifdef SK_CODEC_DECODES_AVIF
+#include "include/codec/SkAvifDecoder.h"
+#endif
+
+#ifdef SK_HAS_HEIF_LIBRARY
+#include "include/android/SkHeifDecoder.h"
+#endif
+
+#ifdef SK_CODEC_DECODES_JPEGXL
+#include "include/codec/SkJpegxlDecoder.h"
+#endif
+
+#ifdef SK_CODEC_DECODES_RAW
+#include "include/codec/SkRawDecoder.h"
+#endif
+
+using namespace skia_private;
+
 extern bool gSkForceRasterPipelineBlitter;
-extern bool gUseSkVMBlitter;
-extern bool gSkVMAllowJIT;
+extern bool gForceHighPrecisionRasterPipeline;
+extern bool gCreateProtectedContext;
 
 static DEFINE_string(src, "tests gm skp mskp lottie rive svg image colorImage",
                      "Source types to test.");
@@ -93,8 +127,8 @@ static DEFINE_int(shard,  0, "Which shard do I run?");
 
 static DEFINE_string(mskps, "", "Directory to read mskps from, or a single mskp file.");
 static DEFINE_bool(forceRasterPipeline, false, "sets gSkForceRasterPipelineBlitter");
-static DEFINE_bool(skvm, false, "sets gUseSkVMBlitter");
-static DEFINE_bool(jit,  true,  "sets gSkVMAllowJIT");
+static DEFINE_bool(forceRasterPipelineHP, false, "sets gSkForceRasterPipelineBlitter and gForceHighPrecisionRasterPipeline");
+static DEFINE_bool(createProtected, false, "attempts to create a protected backend context");
 
 static DEFINE_string(bisect, "",
         "Pair of: SKP file to bisect, followed by an l/r bisect trail string (e.g., 'lrll'). The "
@@ -115,6 +149,7 @@ static DEFINE_bool2(veryVerbose, V, false, "tell individual tests to be verbose.
 static DEFINE_bool(cpu, true, "Run CPU-bound work?");
 static DEFINE_bool(gpu, true, "Run GPU-bound work?");
 static DEFINE_bool(graphite, true, "Run Graphite work?");
+static DEFINE_bool(neverYieldToWebGPU, false, "Run Graphite with never-yield context option.");
 
 static DEFINE_bool(dryRun, false,
                    "just print the tests that would be run, without actually running them.");
@@ -142,7 +177,6 @@ static DEFINE_bool2(verbose, v, false, "enable verbose output from the test driv
 
 static DEFINE_string(skps, "skps", "Directory to read skps from.");
 static DEFINE_string(lotties, "lotties", "Directory to read (Bodymovin) jsons from.");
-static DEFINE_string(rives, "rives", "Directory to read Rive/Flare files from.");
 static DEFINE_string(svgs, "", "Directory to read SVGs from, or a single SVG file.");
 
 static DEFINE_int_2(threads, j, -1,
@@ -155,9 +189,6 @@ static DEFINE_string(properties, "",
                      "Space-separated key/value pairs to add to JSON identifying this run.");
 
 static DEFINE_bool(rasterize_pdf, false, "Rasterize PDFs when possible.");
-
-static DEFINE_bool(runVerifiers, false,
-                   "if true, run SkQP-style verification of GM-produced images.");
 
 #if defined(__MSVC_RUNTIME_CHECKS)
 #include <rtcapi.h>
@@ -177,6 +208,7 @@ int RuntimeCheckErrorFunc(int errorType, const char* filename, int linenumber,
 using namespace DM;
 using sk_gpu_test::GrContextFactory;
 using sk_gpu_test::ContextInfo;
+using skiatest::TestType;
 #ifdef SK_GL
 using sk_gpu_test::GLTestContext;
 #endif
@@ -218,7 +250,7 @@ static void info(const char* fmt, ...) {
     va_end(args);
 }
 
-static SkTArray<SkString>* gFailures = new SkTArray<SkString>;
+static TArray<SkString>* gFailures = new TArray<SkString>;
 
 static void fail(const SkString& err) {
     static SkSpinlock mutex;
@@ -242,18 +274,43 @@ static void dump_json() {
     }
 }
 
+static void register_codecs() {
+    SkCodecs::Register(SkPngDecoder::Decoder());
+    SkCodecs::Register(SkJpegDecoder::Decoder());
+    SkCodecs::Register(SkWebpDecoder::Decoder());
+    SkCodecs::Register(SkGifDecoder::Decoder());
+    SkCodecs::Register(SkBmpDecoder::Decoder());
+    SkCodecs::Register(SkWbmpDecoder::Decoder());
+    SkCodecs::Register(SkIcoDecoder::Decoder());
+
+#ifdef SK_CODEC_DECODES_AVIF
+    SkCodecs::Register(SkAvifDecoder::Decoder());
+#endif
+#ifdef SK_HAS_HEIF_LIBRARY
+    SkCodecs::Register(SkHeifDecoder::Decoder());
+#endif
+#ifdef SK_CODEC_DECODES_JPEGXL
+    SkCodecs::Register(SkJpegxlDecoder::Decoder());
+#endif
+#ifdef SK_CODEC_DECODES_RAW
+    SkCodecs::Register(SkRawDecoder::Decoder());
+#endif
+}
+
 // We use a spinlock to make locking this in a signal handler _somewhat_ safe.
-static SkSpinlock*        gMutex = new SkSpinlock;
-static int                gPending;
-static SkTArray<Running>* gRunning = new SkTArray<Running>;
+static SkSpinlock                      gMutex;
+static int                             gPending;
+static int                             gTotalCounts;
+static double                          gLastUpdate;
+static SkNoDestructor<TArray<Running>> gRunning;
 
 static void done(const char* config, const char* src, const char* srcOptions, const char* name) {
     SkString id = SkStringPrintf("%s %s %s %s", config, src, srcOptions, name);
-    vlog("done  %s\n", id.c_str());
+    vlog("[%d/%d] %s done\n", gTotalCounts - gPending, gTotalCounts, id.c_str());
     int pending;
     {
-        SkAutoSpinlock lock(*gMutex);
-        for (int i = 0; i < gRunning->count(); i++) {
+        SkAutoSpinlock lock(gMutex);
+        for (int i = 0; i < gRunning->size(); i++) {
             if (gRunning->at(i).id == id) {
                 gRunning->removeShuffle(i);
                 break;
@@ -264,25 +321,35 @@ static void done(const char* config, const char* src, const char* srcOptions, co
 
     // We write out dm.json file and print out a progress update every once in a while.
     // Notice this also handles the final dm.json and progress update when pending == 0.
-    if (pending % 500 == 0) {
+    double lastUpdate = gLastUpdate;
+    double now = SkTime::GetNSecs();
+    if (pending % 500 == 0 || now - lastUpdate > 4e9) {
         dump_json();
 
         int curr = sk_tools::getCurrResidentSetSizeMB(),
             peak = sk_tools::getMaxResidentSetSizeMB();
 
-        SkAutoSpinlock lock(*gMutex);
-        info("\n%dMB RAM, %dMB peak, %d queued, %d active:\n",
-             curr, peak, gPending - gRunning->count(), gRunning->count());
-        for (auto& task : *gRunning) {
-            task.dump();
+        SkAutoSpinlock lock(gMutex);
+
+        // Since multiple threads can call `done`, it's possible that another thread has raced with
+        // this one and printed an update since we did our progress check above. We detect this case
+        // by checking to see if `gLastUpdate` has changed; if so, we don't need to print anything.
+        if (lastUpdate == gLastUpdate) {
+            info("\n[%d/%d] %dMB RAM, %dMB peak, %d queued, %d threads:\n\t%s  done\n",
+                 gTotalCounts - gPending, gTotalCounts,
+                 curr, peak, gPending - gRunning->size(), gRunning->size() + 1, id.c_str());
+            for (auto& task : *gRunning) {
+                task.dump();
+            }
+            gLastUpdate = now;
         }
     }
 }
 
 static void start(const char* config, const char* src, const char* srcOptions, const char* name) {
     SkString id = SkStringPrintf("%s %s %s %s", config, src, srcOptions, name);
-    vlog("start %s\n", id.c_str());
-    SkAutoSpinlock lock(*gMutex);
+    vlog("\tstart %s\n", id.c_str());
+    SkAutoSpinlock lock(gMutex);
     gRunning->push_back({id,SkGetThreadID()});
 }
 
@@ -312,7 +379,7 @@ static void find_culprit() {
         #undef _
         };
 
-        SkAutoSpinlock lock(*gMutex);
+        SkAutoSpinlock lock(gMutex);
 
         const DWORD code = e->ExceptionRecord->ExceptionCode;
         info("\nCaught exception %lu", code);
@@ -351,7 +418,7 @@ static void find_culprit() {
     static void (*previous_handler[max_of(SIGABRT,SIGBUS,SIGFPE,SIGILL,SIGSEGV,SIGTERM)+1])(int);
 
     static void crash_handler(int sig) {
-        SkAutoSpinlock lock(*gMutex);
+        SkAutoSpinlock lock(gMutex);
 
         info("\nCaught signal %d [%s] (%dMB RAM, peak %dMB), was running:\n",
              sig, strsignal(sig),
@@ -364,7 +431,7 @@ static void find_culprit() {
 
     #if !defined(SK_BUILD_FOR_ANDROID)
         void* stack[128];
-        int count = backtrace(stack, SK_ARRAY_COUNT(stack));
+        int count = backtrace(stack, std::size(stack));
         char** symbols = backtrace_symbols(stack, count);
         info("\nStack trace:\n");
         for (int i = 0; i < count; i++) {
@@ -410,7 +477,7 @@ struct Gold : public SkString {
         }
     };
 };
-static SkTHashSet<Gold, Gold::Hash>* gGold = new SkTHashSet<Gold, Gold::Hash>;
+static THashSet<Gold, Gold::Hash>* gGold = new THashSet<Gold, Gold::Hash>;
 
 static void add_gold(JsonWriter::BitmapResult r) {
     gGold->add(Gold(r.config, r.sourceType, r.sourceOptions, r.name, r.md5));
@@ -434,7 +501,7 @@ static void gather_gold() {
     static constexpr char kNewline[] = "\n";
 #endif
 
-static SkTHashSet<SkString>* gUninterestingHashes = new SkTHashSet<SkString>;
+static THashSet<SkString>* gUninterestingHashes = new THashSet<SkString>;
 
 static void gather_uninteresting_hashes() {
     if (!FLAGS_uninterestingHashesFile.isEmpty()) {
@@ -448,13 +515,13 @@ static void gather_uninteresting_hashes() {
         // Copy to a string to make sure SkStrSplit has a terminating \0 to find.
         SkString contents((const char*)data->data(), data->size());
 
-        SkTArray<SkString> hashes;
+        TArray<SkString> hashes;
         SkStrSplit(contents.c_str(), kNewline, &hashes);
         for (const SkString& hash : hashes) {
             gUninterestingHashes->add(hash);
         }
         info("FYI: loaded %d distinct uninteresting hashes from %d lines\n",
-             gUninterestingHashes->count(), hashes.count());
+             gUninterestingHashes->count(), hashes.size());
     }
 }
 
@@ -471,8 +538,8 @@ struct TaggedSink : public std::unique_ptr<Sink> {
 
 static constexpr bool kMemcpyOK = true;
 
-static SkTArray<TaggedSrc,  kMemcpyOK>* gSrcs  = new SkTArray<TaggedSrc,  kMemcpyOK>;
-static SkTArray<TaggedSink, kMemcpyOK>* gSinks = new SkTArray<TaggedSink, kMemcpyOK>;
+static TArray<TaggedSrc,  kMemcpyOK>* gSrcs  = new TArray<TaggedSrc,  kMemcpyOK>;
+static TArray<TaggedSink, kMemcpyOK>* gSinks = new TArray<TaggedSink, kMemcpyOK>;
 
 static bool in_shard() {
     static int N = 0;
@@ -484,7 +551,7 @@ static void push_src(const char* tag, ImplicitString options, Src* inSrc) {
     if (in_shard() && FLAGS_src.contains(tag) &&
         !CommandLineFlags::ShouldSkip(FLAGS_match, src->name().c_str())) {
         TaggedSrc& s = gSrcs->push_back();
-        s.reset(src.release());
+        s.reset(src.release());  // NOLINT(misc-uniqueptr-reset-release)
         s.tag = tag;
         s.options = options;
     }
@@ -699,7 +766,7 @@ static void push_codec_srcs(Path path) {
     // native scaling is only supported by WEBP and JPEG
     bool supportsNativeScaling = false;
 
-    SkTArray<CodecSrc::Mode> nativeModes;
+    TArray<CodecSrc::Mode> nativeModes;
     nativeModes.push_back(CodecSrc::kCodec_Mode);
     nativeModes.push_back(CodecSrc::kCodecZeroInit_Mode);
     switch (codec->getEncodedFormat()) {
@@ -720,7 +787,7 @@ static void push_codec_srcs(Path path) {
             break;
     }
 
-    SkTArray<CodecSrc::DstColorType> colorTypes;
+    TArray<CodecSrc::DstColorType> colorTypes;
     colorTypes.push_back(CodecSrc::kGetFromCanvas_DstColorType);
     colorTypes.push_back(CodecSrc::kNonNative8888_Always_DstColorType);
     switch (codec->getInfo().colorType()) {
@@ -731,7 +798,7 @@ static void push_codec_srcs(Path path) {
             break;
     }
 
-    SkTArray<SkAlphaType> alphaModes;
+    TArray<SkAlphaType> alphaModes;
     alphaModes.push_back(kPremul_SkAlphaType);
     if (codec->getInfo().alphaType() != kOpaque_SkAlphaType) {
         alphaModes.push_back(kUnpremul_SkAlphaType);
@@ -865,7 +932,7 @@ void gather_file_srcs(const CommandLineFlags::StringArray& flags,
         src_name = ext;
     }
 
-    for (int i = 0; i < flags.count(); i++) {
+    for (int i = 0; i < flags.size(); i++) {
         const char* path = flags[i];
         if (sk_isdir(path)) {
             SkOSFile::Iter it(path, ext);
@@ -879,7 +946,7 @@ void gather_file_srcs(const CommandLineFlags::StringArray& flags,
 }
 
 static bool gather_srcs() {
-    for (skiagm::GMFactory f : skiagm::GMRegistry::Range()) {
+    for (const skiagm::GMFactory& f : skiagm::GMRegistry::Range()) {
         push_src("gm", "", new GMSrc(f));
     }
 
@@ -888,19 +955,16 @@ static bool gather_srcs() {
 #if defined(SK_ENABLE_SKOTTIE)
     gather_file_srcs<SkottieSrc>(FLAGS_lotties, "json", "lottie");
 #endif
-#if defined(SK_ENABLE_SKRIVE)
-    gather_file_srcs<SkRiveSrc>(FLAGS_rives, "flr", "rive");
-#endif
 #if defined(SK_ENABLE_SVG)
     gather_file_srcs<SVGSrc>(FLAGS_svgs, "svg");
 #endif
     if (!FLAGS_bisect.isEmpty()) {
         // An empty l/r trail string will draw all the paths.
         push_src("bisect", "",
-                 new BisectSrc(FLAGS_bisect[0], FLAGS_bisect.count() > 1 ? FLAGS_bisect[1] : ""));
+                 new BisectSrc(FLAGS_bisect[0], FLAGS_bisect.size() > 1 ? FLAGS_bisect[1] : ""));
     }
 
-    SkTArray<SkString> images;
+    TArray<SkString> images;
     if (!CommonFlags::CollectImages(FLAGS_images, &images)) {
         return false;
     }
@@ -909,7 +973,7 @@ static bool gather_srcs() {
         push_codec_srcs(image);
     }
 
-    SkTArray<SkString> colorImages;
+    TArray<SkString> colorImages;
     if (!CommonFlags::CollectImages(FLAGS_colorImages, &colorImages)) {
         return false;
     }
@@ -927,7 +991,7 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
 
     // Try a simple Src as a canary.  If it fails, skip this sink.
     struct : public Src {
-        Result draw(GrDirectContext*, SkCanvas* c) const override {
+        Result draw(SkCanvas* c, skiatest::graphite::GraphiteTestContext*) const override {
             c->drawRect(SkRect::MakeWH(1,1), SkPaint());
             return Result::Ok();
         }
@@ -945,7 +1009,7 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
     }
 
     TaggedSink& ts = gSinks->push_back();
-    ts.reset(sink.release());
+    ts.reset(sink.release());  // NOLINT(misc-uniqueptr-reset-release)
     ts.tag = config.getTag();
 }
 
@@ -958,23 +1022,24 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
                      "GM tests will be skipped.\n", gpuConfig->getTag().c_str());
                 return nullptr;
             }
-            if (gpuConfig->getTestThreading()) {
-                SkASSERT(!gpuConfig->getTestPersistentCache());
-                return new GPUThreadTestingSink(gpuConfig, grCtxOptions);
-            } else if (gpuConfig->getTestPersistentCache()) {
+            if (gpuConfig->getTestPersistentCache()) {
                 return new GPUPersistentCacheTestingSink(gpuConfig, grCtxOptions);
             } else if (gpuConfig->getTestPrecompile()) {
                 return new GPUPrecompileTestingSink(gpuConfig, grCtxOptions);
             } else if (gpuConfig->getUseDDLSink()) {
                 return new GPUDDLSink(gpuConfig, grCtxOptions);
-            } else if (gpuConfig->getOOPRish()) {
-                return new GPUOOPRSink(gpuConfig, grCtxOptions);
+            } else if (gpuConfig->getSlug()) {
+                return new GPUSlugSink(gpuConfig, grCtxOptions);
+            } else if (gpuConfig->getSerializedSlug()) {
+                return new GPUSerializeSlugSink(gpuConfig, grCtxOptions);
+            } else if (gpuConfig->getRemoteSlug()) {
+                return new GPURemoteSlugSink(gpuConfig, grCtxOptions);
             } else {
                 return new GPUSink(gpuConfig, grCtxOptions);
             }
         }
     }
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     if (FLAGS_graphite) {
         if (const SkCommandLineConfigGraphite *graphiteConfig = config->asConfigGraphite()) {
             return new GraphiteSink(graphiteConfig);
@@ -1027,7 +1092,7 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
     VIA("pic",       ViaPicture,           wrapped);
     VIA("rtblend",   ViaRuntimeBlend,      wrapped);
 
-    if (FLAGS_matrix.count() == 4) {
+    if (FLAGS_matrix.size() == 4) {
         SkMatrix m;
         m.reset();
         m.setScaleX((SkScalar)atof(FLAGS_matrix[0]));
@@ -1047,7 +1112,7 @@ static bool gather_sinks(const GrContextOptions& grCtxOptions, bool defaultConfi
     SkCommandLineConfigArray configs;
     ParseConfigs(FLAGS_config, &configs);
     AutoreleasePool pool;
-    for (int i = 0; i < configs.count(); i++) {
+    for (int i = 0; i < configs.size(); i++) {
         const SkCommandLineConfig& config = *configs[i];
         Sink* sink = create_sink(grCtxOptions, &config);
         if (sink == nullptr) {
@@ -1059,8 +1124,8 @@ static bool gather_sinks(const GrContextOptions& grCtxOptions, bool defaultConfi
         // The command line config already parsed out the via-style color space. Apply it here.
         sink->setColorSpace(config.refColorSpace());
 
-        const SkTArray<SkString>& parts = config.getViaParts();
-        for (int j = parts.count(); j-- > 0;) {
+        const TArray<SkString>& parts = config.getViaParts();
+        for (int j = parts.size(); j-- > 0;) {
             const SkString& part = parts[j];
             Sink* next = create_via(part, sink);
             if (next == nullptr) {
@@ -1078,11 +1143,11 @@ static bool gather_sinks(const GrContextOptions& grCtxOptions, bool defaultConfi
     }
 
     // If no configs were requested (just running tests, perhaps?), then we're okay.
-    if (configs.count() == 0 ||
+    if (configs.size() == 0 ||
         // If we're using the default configs, we're okay.
         defaultConfigs ||
         // Otherwise, make sure that all specified configs have become sinks.
-        configs.count() == gSinks->count()) {
+        configs.size() == gSinks->size()) {
         return true;
     }
     return false;
@@ -1100,7 +1165,7 @@ static bool match(const char* needle, const char* haystack) {
 
 static bool should_skip(const char* sink, const char* src,
                         const char* srcOptions, const char* name) {
-    for (int i = 0; i < FLAGS_skip.count() - 3; i += 4) {
+    for (int i = 0; i < FLAGS_skip.size() - 3; i += 4) {
         if (match(FLAGS_skip[i+0], sink) &&
             match(FLAGS_skip[i+1], src) &&
             match(FLAGS_skip[i+2], srcOptions) &&
@@ -1154,11 +1219,6 @@ struct Task {
                                     result.c_str()));
             }
 
-            // Run verifiers if specified
-            if (FLAGS_runVerifiers) {
-                RunGMVerifiers(task, bitmap);
-            }
-
             // We're likely switching threads here, so we must capture by value, [=] or [foo,bar].
             SkStreamAsset* data = stream.detachAsStream().release();
             gDefinitelyThreadSafeWork->add([task,name,bitmap,data]{
@@ -1176,10 +1236,7 @@ struct Task {
                         hashAndEncode = std::make_unique<HashAndEncode>(bitmap);
                         hashAndEncode->feedHash(&hash);
                     }
-                    SkMD5::Digest digest = hash.finish();
-                    for (int i = 0; i < 16; i++) {
-                        md5.appendf("%02x", digest.data[i]);
-                    }
+                    md5 = hash.finish().toLowercaseHexString();
                 }
 
                 if (!FLAGS_readPath.isEmpty() &&
@@ -1250,9 +1307,9 @@ struct Task {
                     bool unclamped = false;
                     for (int y = 0; y < pm.height() && !unclamped; ++y)
                     for (int x = 0; x < pm.width() && !unclamped; ++x) {
-                        Sk4f rgba = SkHalfToFloat_finite_ftz(*pm.addr64(x, y));
+                        skvx::float4 rgba = SkHalfToFloat_finite_ftz(*pm.addr64(x, y));
                         float a = rgba[3];
-                        if (a > 1.0f || (rgba < 0.0f).anyTrue() || (rgba > a).anyTrue()) {
+                        if (a > 1.0f || any(rgba < 0.0f) || any(rgba > a)) {
                             SkDebugf("[%s] F16Norm pixel [%d, %d] unclamped: (%g, %g, %g, %g)\n",
                                      name.c_str(), x, y, rgba[0], rgba[1], rgba[2], rgba[3]);
                             unclamped = true;
@@ -1307,8 +1364,8 @@ struct Task {
 
         skcms_TransferFunction tf;
         cs->transferFn(&tf);
-        switch (classify_transfer_fn(tf)) {
-            case sRGBish_TF:
+        switch (skcms_TransferFunction_getType(&tf)) {
+            case skcms_TFType_sRGBish:
                 if (tf.a == 1 && tf.b == 0 && tf.c == 0 && tf.d == 0 && tf.e == 0 && tf.f == 0) {
                     return SkStringPrintf("gamma %.3g", tf.g);
                 }
@@ -1317,18 +1374,18 @@ struct Task {
                 return SkStringPrintf("%.3g %.3g %.3g %.3g %.3g %.3g %.3g",
                                         tf.g, tf.a, tf.b, tf.c, tf.d, tf.e, tf.f);
 
-            case PQish_TF:
+            case skcms_TFType_PQish:
                 if (eq(tf, SkNamedTransferFn::kPQ)) { return SkString("PQ"); }
                 return SkStringPrintf("PQish %.3g %.3g %.3g %.3g %.3g %.3g",
                                       tf.a, tf.b, tf.c, tf.d, tf.e, tf.f);
 
-            case HLGish_TF:
+            case skcms_TFType_HLGish:
                 if (eq(tf, SkNamedTransferFn::kHLG)) { return SkString("HLG"); }
                 return SkStringPrintf("HLGish %.3g %.3g %.3g %.3g %.3g (%.3g)",
                                       tf.a, tf.b, tf.c, tf.d, tf.e, tf.f+1);
 
-            case HLGinvish_TF: break;
-            case Bad_TF: break;
+            case skcms_TFType_HLGinvish: break;
+            case skcms_TFType_Invalid: break;
         }
         return SkString("non-numeric");
     }
@@ -1340,10 +1397,26 @@ struct Task {
                             const SkBitmap* bitmap,
                             const HashAndEncode* hashAndEncode) {
 
+        // Determine whether or not the OldestSupportedSkpVersion extra_config is provided.
+        bool isOldestSupportedSkp = false;
+        for (int i = 1; i < FLAGS_key.size(); i += 2) {
+            if (0 == strcmp(FLAGS_key[i-1], "extra_config") &&
+                0 == strcmp(FLAGS_key[i], "OldestSupportedSkpVersion")) {
+                isOldestSupportedSkp = true;
+                break;
+            }
+        }
+
         JsonWriter::BitmapResult result;
         result.name          = task.src->name();
         result.config        = task.sink.tag;
         result.sourceType    = task.src.tag;
+        // If the OldestSupportedSkpVersion extra_config is provided, override the "skp"
+        // source_type with "old-skp". This has the effect of grouping the oldest supported SKPs in
+        // a separate Gold corpus for easier triaging.
+        if (isOldestSupportedSkp && 0 == strcmp(result.sourceType.c_str(), "skp")) {
+            result.sourceType = "old-skp";
+        }
         result.sourceOptions = task.src.options;
         result.ext           = ext;
         result.md5           = md5;
@@ -1412,31 +1485,15 @@ struct Task {
             }
         }
     }
-
-    static void RunGMVerifiers(const Task& task, const SkBitmap& actualBitmap) {
-        const SkString name = task.src->name();
-        auto verifierList = task.src->getVerifiers();
-        if (verifierList == nullptr) {
-            return;
-        }
-
-        skiagm::verifiers::VerifierResult
-            res = verifierList->verifyAll(task.sink->colorInfo(), actualBitmap);
-        if (!res.ok()) {
-            fail(
-                SkStringPrintf(
-                    "%s %s %s %s: verifier failed: %s", task.sink.tag.c_str(), task.src.tag.c_str(),
-                    task.src.options.c_str(), name.c_str(), res.message().c_str()));
-        }
-    }
 };
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 // Unit tests don't fit so well into the Src/Sink model, so we give them special treatment.
 
-static SkTDArray<skiatest::Test>* gParallelTests = new SkTDArray<skiatest::Test>;
-static SkTDArray<skiatest::Test>* gSerialTests   = new SkTDArray<skiatest::Test>;
+static SkTDArray<skiatest::Test>* gCPUTests = new SkTDArray<skiatest::Test>;
+static SkTDArray<skiatest::Test>* gGaneshTests = new SkTDArray<skiatest::Test>;
+static SkTDArray<skiatest::Test>* gGraphiteTests = new SkTDArray<skiatest::Test>;
 
 static void gather_tests() {
     if (!FLAGS_src.contains("tests")) {
@@ -1449,27 +1506,38 @@ static void gather_tests() {
         if (CommandLineFlags::ShouldSkip(FLAGS_match, test.fName)) {
             continue;
         }
-        if (test.fNeedsGpu && FLAGS_gpu) {
-            gSerialTests->push_back(test);
-        } else if (test.fNeedsGraphite && FLAGS_graphite) {
-            gSerialTests->push_back(test);
-        } else if (!test.fNeedsGpu && !test.fNeedsGraphite && FLAGS_cpu) {
-            gParallelTests->push_back(test);
+        if (test.fTestType == TestType::kGanesh && FLAGS_gpu) {
+            gGaneshTests->push_back(test);
+        } else if (test.fTestType == TestType::kGraphite && FLAGS_graphite) {
+            gGraphiteTests->push_back(test);
+        } else if (test.fTestType == TestType::kCPU && FLAGS_cpu) {
+            gCPUTests->push_back(test);
         }
     }
 }
 
-static void run_test(skiatest::Test test, const GrContextOptions& grCtxOptions) {
-    struct : public skiatest::Reporter {
-        void reportFailed(const skiatest::Failure& failure) override {
-            fail(failure.toString());
-        }
-        bool allowExtendedTest() const override {
-            return FLAGS_pathOpsExtended;
-        }
-        bool verbose() const override { return FLAGS_veryVerbose; }
-    } reporter;
+struct DMReporter : public skiatest::Reporter {
+    void reportFailed(const skiatest::Failure& failure) override {
+        fail(failure.toString());
+    }
+    bool allowExtendedTest() const override {
+        return FLAGS_pathOpsExtended;
+    }
+    bool verbose() const override { return FLAGS_veryVerbose; }
+};
 
+static void run_cpu_test(skiatest::Test test) {
+    DMReporter reporter;
+    if (!FLAGS_dryRun && !should_skip("_", "tests", "_", test.fName)) {
+        skiatest::ReporterContext ctx(&reporter, SkString(test.fName));
+        start("unit", "test", "", test.fName);
+        test.cpu(&reporter);
+    }
+    done("unit", "test", "", test.fName);
+}
+
+static void run_ganesh_test(skiatest::Test test, const GrContextOptions& grCtxOptions) {
+    DMReporter reporter;
     if (!FLAGS_dryRun && !should_skip("_", "tests", "_", test.fName)) {
         AutoreleasePool pool;
         GrContextOptions options = grCtxOptions;
@@ -1477,7 +1545,20 @@ static void run_test(skiatest::Test test, const GrContextOptions& grCtxOptions) 
 
         skiatest::ReporterContext ctx(&reporter, SkString(test.fName));
         start("unit", "test", "", test.fName);
-        test.run(&reporter, options);
+        test.ganesh(&reporter, options);
+    }
+    done("unit", "test", "", test.fName);
+}
+
+static void run_graphite_test(skiatest::Test test, skiatest::graphite::TestOptions& options) {
+    DMReporter reporter;
+    if (!FLAGS_dryRun && !should_skip("_", "tests", "_", test.fName)) {
+        AutoreleasePool pool;
+        test.modifyGraphiteContextOptions(&options.fContextOptions);
+
+        skiatest::ReporterContext ctx(&reporter, SkString(test.fName));
+        start("unit", "test", "", test.fName);
+        test.graphite(&reporter, options);
     }
     done("unit", "test", "", test.fName);
 }
@@ -1507,12 +1588,15 @@ int main(int argc, char** argv) {
     setbuf(stdout, nullptr);
     setup_crash_handler();
 
-    CommonFlags::SetDefaultFontMgr();
+#if !defined(SK_DISABLE_LEGACY_FONTMGR_FACTORY)
+    ToolUtils::SetDefaultFontMgr();
+#endif
     CommonFlags::SetAnalyticAA();
+    skiatest::SetFontTestDataDirectory();
 
-    gSkForceRasterPipelineBlitter = FLAGS_forceRasterPipeline;
-    gUseSkVMBlitter               = FLAGS_skvm;
-    gSkVMAllowJIT                 = FLAGS_jit;
+    gSkForceRasterPipelineBlitter     = FLAGS_forceRasterPipelineHP || FLAGS_forceRasterPipeline;
+    gForceHighPrecisionRasterPipeline = FLAGS_forceRasterPipelineHP;
+    gCreateProtectedContext           = FLAGS_createProtected;
 
     // The bots like having a verbose.log to upload, so always touch the file even if --verbose.
     if (!FLAGS_writePath.isEmpty()) {
@@ -1523,13 +1607,22 @@ int main(int argc, char** argv) {
         gVLog = stderr;
     }
 
+    skiatest::graphite::TestOptions graphiteOptions;
+    if (FLAGS_neverYieldToWebGPU) {
+        graphiteOptions.fNeverYieldToWebGPU = true;
+    }
+
     GrContextOptions grCtxOptions;
     CommonFlags::SetCtxOptions(&grCtxOptions);
 
     dump_json();  // It's handy for the bots to assume this is ~never missing.
 
-    SkAutoGraphics ag;
+    SkGraphics::Init();
+#if defined(SK_ENABLE_SVG)
+    SkGraphics::SetOpenTypeSVGDecoderFactory(SkSVGOpenTypeSVGDecoder::Make);
+#endif
     SkTaskGroup::Enabler enabled(FLAGS_threads);
+    register_codecs();
 
     if (nullptr == GetResourceAsData("images/color_wheel.png")) {
         info("Some resources are missing.  Do you need to set --resourcePath?\n");
@@ -1540,11 +1633,9 @@ int main(int argc, char** argv) {
     if (!gather_srcs()) {
         return 1;
     }
-    // TODO(dogben): This is a bit ugly. Find a cleaner way to do this.
     bool defaultConfigs = true;
     for (int i = 0; i < argc; i++) {
-        static constexpr char kConfigArg[] = "--config";
-        if (strcmp(argv[i], kConfigArg) == 0) {
+        if (strcmp(argv[i], "--config") == 0) {
             defaultConfigs = false;
             break;
         }
@@ -1553,21 +1644,24 @@ int main(int argc, char** argv) {
         return 1;
     }
     gather_tests();
-    gPending = gSrcs->count() * gSinks->count() + gParallelTests->count() + gSerialTests->count();
+    int testCount = gCPUTests->size() + gGaneshTests->size() + gGraphiteTests->size();
+    gPending = gSrcs->size() * gSinks->size() + testCount;
+    gTotalCounts = gPending;
+    gLastUpdate = SkTime::GetNSecs();
     info("%d srcs * %d sinks + %d tests == %d tasks\n",
-         gSrcs->count(), gSinks->count(), gParallelTests->count() + gSerialTests->count(),
+         gSrcs->size(), gSinks->size(), testCount,
          gPending);
 
     // Kick off as much parallel work as we can, making note of any serial work we'll need to do.
     SkTaskGroup parallel;
-    SkTArray<Task> serial;
+    TArray<Task> serial;
 
     for (TaggedSink& sink : *gSinks) {
         for (TaggedSrc& src : *gSrcs) {
             if (src->veto(sink->flags()) ||
                 should_skip(sink.tag.c_str(), src.tag.c_str(),
                             src.options.c_str(), src->name().c_str())) {
-                SkAutoSpinlock lock(*gMutex);
+                SkAutoSpinlock lock(gMutex);
                 gPending--;
                 continue;
             }
@@ -1580,13 +1674,14 @@ int main(int argc, char** argv) {
             }
         }
     }
-    for (skiatest::Test& test : *gParallelTests) {
-        parallel.add([test, grCtxOptions] { run_test(test, grCtxOptions); });
+    for (skiatest::Test& test : *gCPUTests) {
+        parallel.add([test] { run_cpu_test(test); });
     }
 
     // With the parallel work running, run serial tasks and tests here on main thread.
     for (Task& task : serial) { Task::Run(task); }
-    for (skiatest::Test& test : *gSerialTests) { run_test(test, grCtxOptions); }
+    for (skiatest::Test& test : *gGaneshTests) { run_ganesh_test(test, grCtxOptions); }
+    for (skiatest::Test& test : *gGraphiteTests) { run_graphite_test(test, graphiteOptions); }
 
     // Wait for any remaining parallel work to complete (including any spun off of serial tasks).
     parallel.wait();
@@ -1604,7 +1699,7 @@ int main(int argc, char** argv) {
         for (const SkString& fail : *gFailures) {
             info("\t%s\n", fail.c_str());
         }
-        info("%d failures\n", gFailures->count());
+        info("%d failures\n", gFailures->size());
         return 1;
     }
 

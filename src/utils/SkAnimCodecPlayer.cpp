@@ -5,14 +5,29 @@
  * found in the LICENSE file.
  */
 
+#include "include/utils/SkAnimCodecPlayer.h"
+
 #include "include/codec/SkCodec.h"
+#include "include/codec/SkEncodedOrigin.h"
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
-#include "include/utils/SkAnimCodecPlayer.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkTypes.h"
 #include "src/codec/SkCodecImageGenerator.h"
-#include "src/core/SkPixmapPriv.h"
+
 #include <algorithm>
+#include <cstddef>
+#include <memory>
+#include <utility>
+#include <vector>
 
 SkAnimCodecPlayer::SkAnimCodecPlayer(std::unique_ptr<SkCodec> codec) : fCodec(std::move(codec)) {
     fImageInfo = fCodec->getInfo();
@@ -31,8 +46,8 @@ SkAnimCodecPlayer::SkAnimCodecPlayer(std::unique_ptr<SkCodec> codec) : fCodec(st
         // Static image -- may or may not have returned a single frame info.
         fFrameInfos.clear();
         fImages.clear();
-        fImages.push_back(SkImage::MakeFromGenerator(
-                              SkCodecImageGenerator::MakeFromCodec(std::move(fCodec))));
+        fImages.push_back(SkImages::DeferredFromGenerator(
+                SkCodecImageGenerator::MakeFromCodec(std::move(fCodec))));
     }
 }
 
@@ -99,7 +114,7 @@ sk_sp<SkImage> SkAnimCodecPlayer::getFrameAt(int index) {
         return nullptr;
     }
 
-    auto image = SkImage::MakeRasterData(imageInfo, std::move(data), rb);
+    auto image = SkImages::RasterFromData(imageInfo, std::move(data), rb);
     if (origin != kDefault_SkEncodedOrigin) {
         imageInfo = imageInfo.makeDimensions(orientedDims);
         rb = imageInfo.minRowBytes();
@@ -108,7 +123,7 @@ sk_sp<SkImage> SkAnimCodecPlayer::getFrameAt(int index) {
         auto canvas = SkCanvas::MakeRasterDirect(imageInfo, data->writable_data(), rb);
         canvas->concat(originMatrix);
         canvas->drawImage(image, 0, 0, SkSamplingOptions(), &paint);
-        image = SkImage::MakeRasterData(imageInfo, std::move(data), rb);
+        image = SkImages::RasterFromData(imageInfo, std::move(data), rb);
     }
     return fImages[index] = image;
 }

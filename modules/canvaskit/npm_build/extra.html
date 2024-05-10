@@ -27,13 +27,11 @@
 <canvas id=rtshader width=300 height=300></canvas>
 <canvas id=rtshader2 width=300 height=300></canvas>
 
-<h2> Particles </h2>
-<canvas id=particles width=500 height=500></canvas>
-
 <h2> Paragraph </h2>
 <canvas id=para1 width=600 height=600></canvas>
 <canvas id=para2 width=600 height=600 tabindex='-1'></canvas>
-
+<canvas id=para3 width=600 height=600 tabindex='-1'></canvas>
+``
 <h2> CanvasKit can serialize/deserialize .skp files</h2>
 <canvas id=skp width=500 height=500></canvas>
 
@@ -68,55 +66,9 @@
   const loadBrickTex = fetch(cdn + 'brickwork-texture.jpg').then((response) => response.arrayBuffer());
   const loadBrickBump = fetch(cdn + 'brickwork_normal-map.jpg').then((response) => response.arrayBuffer());
 
-  const curves = {
-    "MaxCount": 1000,
-    "Drawable": {
-      "Type": "SkCircleDrawable",
-      "Radius": 2
-    },
-    "Code": [`
-      void effectSpawn(inout Effect effect) {
-        effect.rate = 200;
-        effect.color = float4(1, 0, 0, 1);
-      }
-      void spawn(inout Particle p) {
-        p.lifetime = 3 + rand(p.seed);
-        p.vel.y = -50;
-      }
-
-      void update(inout Particle p) {
-        float w = mix(15, 3, p.age);
-        p.pos.x = sin(radians(p.age * 320)) * mix(25, 10, p.age) + mix(-w, w, rand(p.seed));
-        if (rand(p.seed) < 0.5) { p.pos.x = -p.pos.x; }
-
-        p.color.g = (mix(75, 220, p.age) + mix(-30, 30, rand(p.seed))) / 255;
-      }
-      `
-    ],
-    "Bindings": []
-  };
-
-  const spiralSkSL = `
-  uniform float rad_scale;
-  uniform float2 in_center;
-  uniform float4 in_colors0;
-  uniform float4 in_colors1;
-
-  half4 main(float2 p) {
-      float2 pp = p - in_center;
-      float radius = sqrt(dot(pp, pp));
-      radius = sqrt(radius);
-      float angle = atan(pp.y / pp.x);
-      float t = (angle + 3.1415926/2) / (3.1415926);
-      t += radius * rad_scale;
-      t = fract(t);
-      return half4(mix(in_colors0, in_colors1, t));
-  }`;
-
   // Examples which only require canvaskit
   ckLoaded.then((CK) => {
     CanvasKit = CK;
-    ParticlesAPI1(CanvasKit);
     RTShaderAPI1(CanvasKit);
     ColorSupport(CanvasKit);
     SkpExample(CanvasKit);
@@ -145,6 +97,7 @@
   Promise.all([ckLoaded, loadFont]).then((results) => {
     ParagraphAPI1(...results);
     ParagraphAPI2(...results);
+    ParagraphAPI3(...results);
     GlyphGame(...results)
   });
 
@@ -189,28 +142,6 @@
     surface.requestAnimationFrame(drawFrame);
 
     return surface;
-  }
-
-  function ParticlesAPI1(CanvasKit) {
-    const surface = CanvasKit.MakeCanvasSurface('particles');
-    if (!surface) {
-      console.error('Could not make surface');
-      return;
-    }
-    const canvas = surface.getCanvas();
-    canvas.translate(250, 450);
-
-    const particles = CanvasKit.MakeParticles(JSON.stringify(curves));
-    particles.start(Date.now() / 1000.0, true);
-
-    function drawFrame(canvas) {
-      canvas.clear(CanvasKit.BLACK);
-
-      particles.update(Date.now() / 1000.0);
-      particles.draw(canvas);
-      surface.requestAnimationFrame(drawFrame);
-    }
-    surface.requestAnimationFrame(drawFrame);
   }
 
   function ParagraphAPI1(CanvasKit, fontData) {
@@ -271,7 +202,7 @@
     return surface;
   }
 
-    function ParagraphAPI2(CanvasKit, fontData) {
+  function ParagraphAPI2(CanvasKit, fontData) {
       if (!CanvasKit || !fontData) {
         return;
       }
@@ -382,6 +313,105 @@
       document.getElementById('para2').addEventListener('keydown', keyhandler);
       return surface;
     }
+
+  function ParagraphAPI3(CanvasKit, fontData) {
+    if (!CanvasKit || !fontData) {
+      return;
+    }
+
+    const surface = CanvasKit.MakeCanvasSurface('para3');
+    if (!surface) {
+      console.error('Could not make surface');
+      return;
+    }
+
+    const fontMgr = CanvasKit.FontMgr.FromData([fontData]);
+
+    const paraStyle = new CanvasKit.ParagraphStyle({
+        textStyle: {
+            color: CanvasKit.BLACK,
+            fontFamilies: ['Roboto'],
+            fontSize: 50,
+        },
+        textAlign: CanvasKit.TextAlign.Left,
+        maxLines: 5,
+    });
+
+    const builder = CanvasKit.ParagraphBuilder.Make(paraStyle, fontMgr);
+    builder.addText('The quick brown fox ate a hamburgerfons and got sick.');
+
+    // The code below works for English-only text assuming
+    // that each character is a glyph (cluster), spaces are breaks between words,
+    // new lines are breaks between lines and the entire text is LTR.
+
+    // In case the paragraph text was constructed in a set of calls we need the text
+        const text = builder.getText();
+
+        // Pass the entire text as one word. It's only used for the method
+        // getWords
+        const mallocedWords = CanvasKit.Malloc(Uint32Array, 2);
+        mallocedWords.toTypedArray().set([0, text.length]);
+
+        // Pass each character as a separate grapheme
+        const mallocedGraphemes = CanvasKit.Malloc(Uint32Array, text.length + 1);
+        const graphemesArr = mallocedGraphemes.toTypedArray();
+        for (let i = 0; i <= text.length; i++) {
+            graphemesArr[i] = i;
+        }
+
+        // Pass each space as a "soft" break and each new line as a "hard" break.
+        const SOFT = 0;
+        const HARD = 1;
+        const lineBreaks = [0, SOFT];
+        for (let i = 0; i < text.length; ++i) {
+          if (text[i] === ' ') {
+              lineBreaks.push(i + 1, SOFT);
+          }
+          if (text[i] === '\n') {
+              lineBreaks.push(i + 1, HARD);
+          }
+        }
+        lineBreaks.push(text.length, SOFT);
+        const mallocedLineBreaks = CanvasKit.Malloc(Uint32Array, lineBreaks.length);
+        mallocedLineBreaks.toTypedArray().set(lineBreaks);
+
+        builder.setWordsUtf16(mallocedWords);
+        builder.setGraphemeBreaksUtf16(mallocedGraphemes);
+        builder.setLineBreaksUtf16(mallocedLineBreaks);
+        const paragraph = builder.build();
+
+        paragraph.layout(600);
+
+    let wrapTo = 0;
+
+    let X = 100;
+    let Y = 100;
+
+    const fontPaint = new CanvasKit.Paint();
+    fontPaint.setStyle(CanvasKit.PaintStyle.Fill);
+    fontPaint.setAntiAlias(true);
+
+    function drawFrame(canvas) {
+      canvas.clear(CanvasKit.WHITE);
+      wrapTo = 350 + 150 * Math.sin(Date.now() / 2000);
+      paragraph.layout(wrapTo);
+      canvas.drawParagraph(paragraph, 0, 0);
+
+      canvas.drawLine(wrapTo, 0, wrapTo, 400, fontPaint);
+
+      surface.requestAnimationFrame(drawFrame);
+    }
+    surface.requestAnimationFrame(drawFrame);
+
+    let interact = (e) => {
+      X = e.offsetX*2; // multiply by 2 because the canvas is 300 css pixels wide,
+      Y = e.offsetY*2; // but the canvas itself is 600px wide
+    };
+
+    document.getElementById('para1').addEventListener('pointermove', interact);
+
+    return surface;
+  }
 
   function RTShaderAPI1(CanvasKit) {
     if (!CanvasKit) {
@@ -540,7 +570,7 @@
     paint.setColor(CanvasKit.RED);
 
     const textPaint = new CanvasKit.Paint();
-    const textFont = new CanvasKit.Font(null, 20);
+    const textFont = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 20);
     const pr = new CanvasKit.PictureRecorder();
     const skpCanvas = pr.beginRecording(CanvasKit.LTRBRect(0, 0, 200, 200));
     skpCanvas.drawRect(CanvasKit.LTRBRect(10, 10, 50, 50), paint);
@@ -623,7 +653,7 @@
     const builder = CanvasKit.ParagraphBuilder.Make(paraStyle, fontMgr);
     builder.addText(text);
     const paragraph = builder.build();
-    const font = new CanvasKit.Font(null, 18);
+    const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 18);
     // wrap the text to a given width.
     paragraph.layout(sizeX - margin*2);
 

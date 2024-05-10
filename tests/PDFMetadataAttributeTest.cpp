@@ -4,15 +4,25 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "include/core/SkTypes.h"
+
+#ifdef SK_SUPPORT_PDF
 #include "include/core/SkData.h"
+#include "include/core/SkDocument.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkString.h"
 #include "include/docs/SkPDFDocument.h"
+#include "src/pdf/SkPDFUtils.h"
 #include "tests/Test.h"
+
+#include <cstdint>
+#include <cstring>
 
 DEF_TEST(SkPDF_Metadata, r) {
     REQUIRE_PDF_DOCUMENT(SkPDF_Metadata, r);
-    SkTime::DateTime now;
-    SkTime::GetDateTime(&now);
+    SkPDF::DateTime now;
+    SkPDFUtils::GetDateTime(&now);
     SkPDF::Metadata metadata;
     metadata.fTitle = "A1";
     metadata.fAuthor = "A2";
@@ -53,3 +63,4 @@ DEF_TEST(SkPDF_Metadata, r) {
         }
     }
 }
+#endif

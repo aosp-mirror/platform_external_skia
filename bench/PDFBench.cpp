@@ -14,12 +14,14 @@
 #include "include/core/SkPixmap.h"
 #include "include/core/SkStream.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/SkTo.h"
-#include "include/utils/SkRandom.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/pdf/SkPDFUnion.h"
 #include "src/utils/SkFloatToDecimal.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
 
 namespace {
 struct WStreamWriteTextBenchmark : public Benchmark {
@@ -93,13 +95,13 @@ protected:
         return backend == kNonRendering_Backend;
     }
     void onDelayedSetup() override {
-        sk_sp<SkImage> img(GetResourceAsImage("images/color_wheel.png"));
+        sk_sp<SkImage> img(ToolUtils::GetResourceAsImage("images/color_wheel.png"));
         if (img) {
             // force decoding, throw away reference to encoded data.
             SkAutoPixmapStorage pixmap;
             pixmap.alloc(SkImageInfo::MakeN32Premul(img->dimensions()));
             if (img->readPixels(nullptr, pixmap, 0, 0)) {
-                fImage = SkImage::MakeRasterCopy(pixmap);
+                fImage = SkImages::RasterFromPixmapCopy(pixmap);
             }
         }
     }
@@ -130,7 +132,7 @@ protected:
         return backend == kNonRendering_Backend;
     }
     void onDelayedSetup() override {
-        sk_sp<SkImage> img(GetResourceAsImage("images/mandrill_512_q075.jpg"));
+        sk_sp<SkImage> img(ToolUtils::GetResourceAsImage("images/mandrill_512_q075.jpg"));
         if (!img) { return; }
         sk_sp<SkData> encoded = img->refEncodedData();
         SkASSERT(encoded);
@@ -176,7 +178,8 @@ protected:
             SkNullWStream wStream;
             SkPDFDocument doc(&wStream, SkPDF::Metadata());
             doc.beginPage(256, 256);
-            (void)SkPDFStreamOut(nullptr, fAsset->duplicate(), &doc, true);
+            (void)SkPDFStreamOut(nullptr, fAsset->duplicate(),
+                                 &doc, SkPDFSteamCompressionEnabled::Yes);
        }
     }
 
@@ -210,7 +213,7 @@ struct PDFShaderBench : public Benchmark {
             SK_ColorWHITE, SK_ColorBLACK,
         };
         fShader = SkGradientShader::MakeLinear(
-                pts, colors, nullptr, SK_ARRAY_COUNT(colors),
+                pts, colors, nullptr, std::size(colors),
                 SkTileMode::kClamp);
     }
     void onDraw(int loops, SkCanvas*) final {
@@ -237,8 +240,8 @@ struct WritePDFTextBenchmark : public Benchmark {
         static const char kBinary[] = "\001\002\003\004\005\006";
         while (loops-- > 0) {
             for (int i = 1000; i-- > 0;) {
-                SkPDFWriteString(fWStream.get(), kHello, strlen(kHello));
-                SkPDFWriteString(fWStream.get(), kBinary, strlen(kBinary));
+                SkPDFWriteTextString(fWStream.get(), kHello, strlen(kHello));
+                SkPDFWriteByteString(fWStream.get(), kBinary, strlen(kBinary));
             }
         }
     }
@@ -372,9 +375,9 @@ void big_pdf_test(SkDocument* doc, const SkBitmap& background) {
     SkCanvas* canvas = nullptr;
     float x = 36;
     float y = 36;
-    constexpr size_t kLineCount = SK_ARRAY_COUNT(kText);
+    constexpr size_t kLineCount = std::size(kText);
     constexpr int kLoopCount = 200;
-    SkFont font;
+    SkFont font = ToolUtils::DefaultFont();
     SkPaint paint;
     for (int loop = 0; loop < kLoopCount; ++loop) {
         for (size_t line = 0; line < kLineCount; ++line) {

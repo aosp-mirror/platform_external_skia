@@ -13,6 +13,8 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
+#include "include/core/SkPathTypes.h"
+#include "include/core/SkPathUtils.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
@@ -24,13 +26,15 @@
 #include "include/effects/SkDashPathEffect.h"
 #include "tests/Test.h"
 
+#include <cstdint>
+
 // test that we can draw an aa-rect at coordinates > 32K (bigger than fixedpoint)
 static void test_big_aa_rect(skiatest::Reporter* reporter) {
     SkBitmap output;
     SkPMColor pixel[1];
     output.installPixels(SkImageInfo::MakeN32Premul(1, 1), pixel, 4);
 
-    auto surf = SkSurface::MakeRasterN32Premul(300, 33300);
+    auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(300, 33300));
     SkCanvas* canvas = surf->getCanvas();
 
     SkRect r = { 0, 33000, 300, 33300 };
@@ -106,7 +110,7 @@ static void test_crbug131181() {
     moveToH(&path, &data[0]);
     cubicToH(&path, &data[2]);
 
-    auto surface(SkSurface::MakeRasterN32Premul(640, 480));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(640, 480)));
 
     SkPaint paint;
     paint.setAntiAlias(true);
@@ -188,7 +192,7 @@ static void test_inversepathwithclip() {
 
     SkPaint paint;
 
-    auto surface(SkSurface::MakeRasterN32Premul(640, 480));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(640, 480)));
     SkCanvas* canvas = surface->getCanvas();
     canvas->save();
     canvas->clipRect(SkRect::MakeWH(19, 11));
@@ -227,7 +231,7 @@ static void test_bug533() {
     SkPaint paint;
     paint.setAntiAlias(true);
 
-    auto surface(SkSurface::MakeRasterN32Premul(640, 480));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(640, 480)));
     surface->getCanvas()->drawPath(path, paint);
 }
 
@@ -269,7 +273,7 @@ static void test_bigcubic() {
     SkPaint paint;
     paint.setAntiAlias(true);
 
-    auto surface(SkSurface::MakeRasterN32Premul(640, 480));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(640, 480)));
     surface->getCanvas()->drawPath(path, paint);
 }
 
@@ -297,7 +301,7 @@ static void test_halfway() {
     m.postTranslate(0.001f, 0.001f);
     path.transform(m, &p2);
 
-    auto surface(SkSurface::MakeRasterN32Premul(640, 480));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(640, 480)));
     SkCanvas* canvas = surface->getCanvas();
     canvas->translate(-16366, -1383);
     canvas->drawPath(p2, paint);
@@ -318,7 +322,7 @@ static void test_halfway() {
 static void test_giantaa() {
     const int W = 400;
     const int H = 400;
-    auto surface(SkSurface::MakeRasterN32Premul(33000, 10));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(33000, 10)));
 
     SkPaint paint;
     paint.setAntiAlias(true);
@@ -344,7 +348,7 @@ static void test_infinite_dash(skiatest::Reporter* reporter) {
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setPathEffect(dash);
 
-    paint.getFillPath(path, &filteredPath);
+    skpathutils::FillPathWithPaint(path, paint, &filteredPath);
     // If we reach this, we passed.
     REPORTER_ASSERT(reporter, true);
 }
@@ -372,7 +376,7 @@ static void test_crbug_165432(skiatest::Reporter* reporter) {
 // http://crbug.com/472147
 // This is a simplified version from the bug. RRect radii not properly scaled.
 static void test_crbug_472147_simple(skiatest::Reporter* reporter) {
-    auto surface(SkSurface::MakeRasterN32Premul(1000, 1000));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(1000, 1000)));
     SkCanvas* canvas = surface->getCanvas();
     SkPaint p;
     SkRect r = SkRect::MakeLTRB(-246.0f, 33.0f, 848.0f, 33554464.0f);
@@ -387,7 +391,7 @@ static void test_crbug_472147_simple(skiatest::Reporter* reporter) {
 // http://crbug.com/472147
 // RRect radii not properly scaled.
 static void test_crbug_472147_actual(skiatest::Reporter* reporter) {
-    auto surface(SkSurface::MakeRasterN32Premul(1000, 1000));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(1000, 1000)));
     SkCanvas* canvas = surface->getCanvas();
     SkPaint p;
     SkRect r = SkRect::MakeLTRB(-246.0f, 33.0f, 848.0f, 33554464.0f);

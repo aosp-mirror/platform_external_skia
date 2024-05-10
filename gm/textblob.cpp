@@ -21,8 +21,9 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTDArray.h"
+#include "include/private/base/SkTDArray.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <cstring>
 
@@ -86,7 +87,7 @@ public:
 
 protected:
     void onOnceBeforeDraw() override {
-        fTypeface = ToolUtils::create_portable_typeface("serif", SkFontStyle());
+        fTypeface = ToolUtils::CreatePortableTypeface("serif", SkFontStyle());
         SkFont font(fTypeface);
         size_t txtLen = strlen(fText);
         int glyphCount = font.countText(fText, txtLen, SkTextEncoding::kUTF8);
@@ -95,16 +96,12 @@ protected:
         font.textToGlyphs(fText, txtLen, SkTextEncoding::kUTF8, fGlyphs.begin(), glyphCount);
     }
 
-    SkString onShortName() override {
-        return SkString("textblob");
-    }
+    SkString getName() const override { return SkString("textblob"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     void onDraw(SkCanvas* canvas) override {
-        for (unsigned b = 0; b < SK_ARRAY_COUNT(blobConfigs); ++b) {
+        for (unsigned b = 0; b < std::size(blobConfigs); ++b) {
             sk_sp<SkTextBlob> blob(this->makeBlob(b));
 
             SkPaint p;
@@ -133,15 +130,15 @@ private:
         font.setEdging(SkFont::Edging::kAntiAlias);
         font.setTypeface(fTypeface);
 
-        for (unsigned l = 0; l < SK_ARRAY_COUNT(blobConfigs[blobIndex]); ++l) {
+        for (unsigned l = 0; l < std::size(blobConfigs[blobIndex]); ++l) {
             unsigned currentGlyph = 0;
 
-            for (unsigned c = 0; c < SK_ARRAY_COUNT(blobConfigs[blobIndex][l]); ++c) {
+            for (unsigned c = 0; c < std::size(blobConfigs[blobIndex][l]); ++c) {
                 const BlobCfg* cfg = &blobConfigs[blobIndex][l][c];
                 unsigned count = cfg->count;
 
-                if (count > fGlyphs.count() - currentGlyph) {
-                    count = fGlyphs.count() - currentGlyph;
+                if (count > fGlyphs.size() - currentGlyph) {
+                    count = fGlyphs.size() - currentGlyph;
                 }
                 if (0 == count) {
                     break;

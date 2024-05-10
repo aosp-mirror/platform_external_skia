@@ -7,15 +7,25 @@
 
 #include "src/core/SkAAClip.h"
 
+#include "include/core/SkClipOp.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkTypes.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkMacros.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkCPUTypes.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkMacros.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkMath.h"
+#include "include/private/base/SkTDArray.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkBlitter.h"
-#include "src/core/SkRectPriv.h"
+#include "src/core/SkMask.h"
 #include "src/core/SkScan.h"
+
+#include <algorithm>
 #include <atomic>
-#include <utility>
+#include <cstring>
 
 namespace {
 
@@ -289,7 +299,7 @@ private:
             row->fY = y;
             row->fWidth = 0;
             SkASSERT(row->fData);
-            SkASSERT(0 == row->fData->count());
+            SkASSERT(row->fData->empty());
             fCurrRow = row;
         }
 
@@ -382,7 +392,7 @@ private:
 
         size_t dataSize = 0;
         while (row < stop) {
-            dataSize += row->fData->count();
+            dataSize += row->fData->size();
             row += 1;
         }
 
@@ -395,7 +405,7 @@ private:
         int adjustY = fMinY - fBounds.fTop;
         fBounds.fTop = fMinY;
 
-        RunHead* head = RunHead::Alloc(fRows.count(), dataSize);
+        RunHead* head = RunHead::Alloc(fRows.size(), dataSize);
         YOffset* yoffset = head->yoffsets();
         uint8_t* data = head->data();
         uint8_t* baseData = data;
@@ -410,7 +420,7 @@ private:
             yoffset->fOffset = SkToU32(data - baseData);
             yoffset += 1;
 
-            size_t n = row->fData->count();
+            size_t n = row->fData->size();
             memcpy(data, row->fData->begin(), n);
             SkASSERT(compute_row_length(data, fBounds.width()) == n);
             data += n;
@@ -427,11 +437,11 @@ private:
     void dump() {
         this->validate();
         int y;
-        for (y = 0; y < fRows.count(); ++y) {
+        for (y = 0; y < fRows.size(); ++y) {
             const Row& row = fRows[y];
             SkDebugf("Y:%3d W:%3d", row.fY, row.fWidth);
             const SkTDArray<uint8_t>& data = *row.fData;
-            int count = data.count();
+            int count = data.size();
             SkASSERT(!(count & 1));
             const uint8_t* ptr = data.begin();
             for (int x = 0; x < count; x += 2) {
@@ -445,11 +455,11 @@ private:
     void validate() {
 #ifdef SK_DEBUG
         int prevY = -1;
-        for (int i = 0; i < fRows.count(); ++i) {
+        for (int i = 0; i < fRows.size(); ++i) {
             const Row& row = fRows[i];
             SkASSERT(prevY < row.fY);
             SkASSERT(fWidth == row.fWidth);
-            int count = row.fData->count();
+            int count = row.fData->size();
             const uint8_t* ptr = row.fData->begin();
             SkASSERT(!(count & 1));
             int w = 0;
@@ -476,7 +486,7 @@ private:
 
     Row* flushRow(bool readyForAnother) {
         Row* next = nullptr;
-        int count = fRows.count();
+        int count = fRows.size();
         if (count > 0) {
             this->flushRowH(&fRows[count - 1]);
         }
@@ -489,7 +499,7 @@ private:
             if (*prev->fData == *curr->fData) {
                 prev->fY = curr->fY;
                 if (readyForAnother) {
-                    curr->fData->rewind();
+                    curr->fData->clear();
                     next = curr;
                 } else {
                     delete curr->fData;
@@ -746,10 +756,6 @@ public:
     void blitMask(const SkMask&, const SkIRect& clip) override
         { unexpected(); }
 
-    const SkPixmap* justAnOpaqueColor(uint32_t*) override {
-        return nullptr;
-    }
-
     void blitH(int x, int y, int width) override {
         this->recordMinY(y);
         this->checkForYGap(y);
@@ -842,7 +848,7 @@ bool SkAAClip::Builder::blitPath(SkAAClip* target, const SkPath& path, bool doAA
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkAAClip::copyToMask(SkMask* mask) const {
+void SkAAClip::copyToMask(SkMaskBuilder* mask) const {
     auto expandRowToMask = [](uint8_t* dst, const uint8_t* row, int width) {
         while (width > 0) {
             int n = row[0];
@@ -855,21 +861,21 @@ void SkAAClip::copyToMask(SkMask* mask) const {
         SkASSERT(0 == width);
     };
 
-    mask->fFormat = SkMask::kA8_Format;
+    mask->format() = SkMask::kA8_Format;
     if (this->isEmpty()) {
-        mask->fBounds.setEmpty();
-        mask->fImage = nullptr;
-        mask->fRowBytes = 0;
+        mask->bounds().setEmpty();
+        mask->image() = nullptr;
+        mask->rowBytes() = 0;
         return;
     }
 
-    mask->fBounds = fBounds;
-    mask->fRowBytes = fBounds.width();
+    mask->bounds() = fBounds;
+    mask->rowBytes() = fBounds.width();
     size_t size = mask->computeImageSize();
-    mask->fImage = SkMask::AllocImage(size);
+    mask->image() = SkMaskBuilder::AllocImage(size);
 
     Iter iter = RunHead::Iterate(*this);
-    uint8_t* dst = mask->fImage;
+    uint8_t* dst = mask->image();
     const int width = fBounds.width();
 
     int y = fBounds.fTop;
@@ -1320,8 +1326,8 @@ bool SkAAClip::setRegion(const SkRegion& rgn) {
     SkTDArray<YOffset> yArray;
     SkTDArray<uint8_t> xArray;
 
-    yArray.setReserve(std::min(bounds.height(), 1024));
-    xArray.setReserve(std::min(bounds.width(), 512) * 128);
+    yArray.reserve(std::min(bounds.height(), 1024));
+    xArray.reserve(std::min(bounds.width(), 512) * 128);
 
     auto appendXRun = [&xArray](uint8_t value, int count) {
         SkASSERT(count >= 0);
@@ -1358,13 +1364,13 @@ bool SkAAClip::setRegion(const SkRegion& rgn) {
             if (top > prevBot) {
                 currY = yArray.append();
                 currY->fY = top - 1;
-                currY->fOffset = xArray.count();
+                currY->fOffset = xArray.size();
                 appendXRun(0, bounds.width());
             }
             // create a new record for this Y value
             currY = yArray.append();
             currY->fY = bot - 1;
-            currY->fOffset = xArray.count();
+            currY->fOffset = xArray.size();
             prevRight = 0;
             prevBot = bot;
         }
@@ -1381,9 +1387,9 @@ bool SkAAClip::setRegion(const SkRegion& rgn) {
     appendXRun(0, bounds.width() - prevRight);
 
     // now pack everything into a RunHead
-    RunHead* head = RunHead::Alloc(yArray.count(), xArray.bytes());
-    memcpy(head->yoffsets(), yArray.begin(), yArray.bytes());
-    memcpy(head->data(), xArray.begin(), xArray.bytes());
+    RunHead* head = RunHead::Alloc(yArray.size(), xArray.size_bytes());
+    memcpy(head->yoffsets(), yArray.begin(), yArray.size_bytes());
+    memcpy(head->data(), xArray.begin(), xArray.size_bytes());
 
     this->setEmpty();
     fBounds = bounds;
@@ -1868,7 +1874,7 @@ static void upscaleBW2A8(SkMask* dstMask, const SkMask& srcMask) {
 
     const uint8_t* SK_RESTRICT src = (const uint8_t*)srcMask.fImage;
     const size_t srcRB = srcMask.fRowBytes;
-    uint8_t* SK_RESTRICT dst = (uint8_t*)dstMask->fImage;
+    uint8_t* SK_RESTRICT dst = const_cast<uint8_t*>(dstMask->fImage);
     const size_t dstRB = dstMask->fRowBytes;
 
     const int wholeBytes = width >> 3;
@@ -1911,14 +1917,14 @@ void SkAAClipBlitter::blitMask(const SkMask& origMask, const SkIRect& clip) {
     const SkMask* mask = &origMask;
 
     // if we're BW, we need to upscale to A8 (ugh)
-    SkMask  grayMask;
+    SkMaskBuilder  grayMask;
     if (SkMask::kBW_Format == origMask.fFormat) {
-        grayMask.fFormat = SkMask::kA8_Format;
-        grayMask.fBounds = origMask.fBounds;
-        grayMask.fRowBytes = origMask.fBounds.width();
+        grayMask.format() = SkMask::kA8_Format;
+        grayMask.bounds() = origMask.fBounds;
+        grayMask.rowBytes() = origMask.fBounds.width();
         size_t size = grayMask.computeImageSize();
-        grayMask.fImage = (uint8_t*)fGrayMaskScratch.reset(size,
-                                               SkAutoMalloc::kReuse_OnShrink);
+        grayMask.image() = reinterpret_cast<uint8_t*>(
+            fGrayMaskScratch.reset(size, SkAutoMalloc::kReuse_OnShrink));
 
         upscaleBW2A8(&grayMask, origMask);
         mask = &grayMask;
@@ -1934,12 +1940,12 @@ void SkAAClipBlitter::blitMask(const SkMask& origMask, const SkIRect& clip) {
     const int width = clip.width();
     MergeAAProc mergeProc = find_merge_aa_proc(mask->fFormat);
 
-    SkMask rowMask;
-    rowMask.fFormat = SkMask::k3D_Format == mask->fFormat ? SkMask::kA8_Format : mask->fFormat;
-    rowMask.fBounds.fLeft = clip.fLeft;
-    rowMask.fBounds.fRight = clip.fRight;
-    rowMask.fRowBytes = mask->fRowBytes; // doesn't matter, since our height==1
-    rowMask.fImage = (uint8_t*)fScanlineScratch;
+    SkMaskBuilder rowMask;
+    rowMask.format() = SkMask::k3D_Format == mask->fFormat ? SkMask::kA8_Format : mask->fFormat;
+    rowMask.bounds().fLeft = clip.fLeft;
+    rowMask.bounds().fRight = clip.fRight;
+    rowMask.rowBytes() = mask->fRowBytes; // doesn't matter, since our height==1
+    rowMask.image() = (uint8_t*)fScanlineScratch;
 
     int y = clip.fTop;
     const int stopY = y + clip.height();
@@ -1953,15 +1959,11 @@ void SkAAClipBlitter::blitMask(const SkMask& origMask, const SkIRect& clip) {
         int initialCount;
         row = fAAClip->findX(row, clip.fLeft, &initialCount);
         do {
-            mergeProc(src, width, row, initialCount, rowMask.fImage);
-            rowMask.fBounds.fTop = y;
-            rowMask.fBounds.fBottom = y + 1;
+            mergeProc(src, width, row, initialCount, rowMask.image());
+            rowMask.bounds().fTop = y;
+            rowMask.bounds().fBottom = y + 1;
             fBlitter->blitMask(rowMask, rowMask.fBounds);
             src = (const void*)((const char*)src + srcRB);
         } while (++y < localStopY);
     } while (y < stopY);
-}
-
-const SkPixmap* SkAAClipBlitter::justAnOpaqueColor(uint32_t* value) {
-    return nullptr;
 }

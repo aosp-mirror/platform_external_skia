@@ -25,9 +25,11 @@
 #include "modules/canvaskit/WasmCommon.h"
 
 using namespace emscripten;
+using namespace skia_private;
 
 namespace para = skia::textlayout;
 
+// switch to ptrToSkColor4f (canvaskit_bindings.cpp)
 SkColor4f toSkColor4f(WASMPointerF32 cPtr) {
     float* fourFloats = reinterpret_cast<float*>(cPtr);
     SkColor4f color = {fourFloats[0], fourFloats[1], fourFloats[2], fourFloats[3]};
@@ -69,6 +71,10 @@ struct SimpleTextStyle {
     int fontFeatureLen;
     WASMPointerF32 fontFeatureNamesPtr;
     WASMPointerF32 fontFeatureValuesPtr;
+
+    int fontVariationLen;
+    WASMPointerF32 fontVariationAxesPtr;
+    WASMPointerF32 fontVariationValuesPtr;
 };
 
 struct SimpleStrutStyle {
@@ -98,10 +104,10 @@ para::StrutStyle toStrutStyle(const SimpleStrutStyle& s) {
     SkFontStyle fs(s.fontStyle.weight, s.fontStyle.width, s.fontStyle.slant);
     ss.setFontStyle(fs);
 
-    if (s.fontSize != 0) {
+    if (s.fontSize != -1) {
         ss.setFontSize(s.fontSize);
     }
-    if (s.heightMultiplier != 0) {
+    if (s.heightMultiplier != -1) {
         ss.setHeight(s.heightMultiplier);
         ss.setHeightOverride(true);
     }
@@ -137,7 +143,7 @@ para::TextStyle toTextStyle(const SimpleTextStyle& s) {
         ts.setBackgroundColor(p2);
     }
 
-    if (s.fontSize != 0) {
+    if (s.fontSize != -1) {
         ts.setFontSize(s.fontSize);
     }
     if (s.letterSpacing != 0) {
@@ -147,7 +153,7 @@ para::TextStyle toTextStyle(const SimpleTextStyle& s) {
         ts.setWordSpacing(s.wordSpacing);
     }
 
-    if (s.heightMultiplier != 0) {
+    if (s.heightMultiplier != -1) {
         ts.setHeight(s.heightMultiplier);
         ts.setHeightOverride(true);
     }
@@ -204,6 +210,28 @@ para::TextStyle toTextStyle(const SimpleTextStyle& s) {
         }
     }
 
+    if (s.fontVariationLen > 0) {
+        const char** fontVariationAxes = reinterpret_cast<const char**>(s.fontVariationAxesPtr);
+        const float* fontVariationValues = reinterpret_cast<const float*>(s.fontVariationValuesPtr);
+        std::vector<SkFontArguments::VariationPosition::Coordinate> coordinates;
+        for (int i = 0; i < s.fontVariationLen; i++) {
+            // Font variation axis tags are 4-character simple strings.
+            SkString axis(fontVariationAxes[i]);
+            if (axis.size() != 4) {
+                continue;
+            }
+            coordinates.push_back({
+                SkSetFourByteTag(axis[0], axis[1], axis[2], axis[3]),
+                fontVariationValues[i]
+            });
+        }
+        SkFontArguments::VariationPosition position = {
+            coordinates.data(),
+            static_cast<int>(coordinates.size())
+        };
+        ts.setFontArguments(SkFontArguments().setVariationDesignPosition(position));
+    }
+
     return ts;
 }
 
@@ -213,11 +241,13 @@ struct SimpleParagraphStyle {
     size_t ellipsisLen;
     SkScalar heightMultiplier;
     size_t maxLines;
+    bool replaceTabCharacters;
     para::TextAlign textAlign;
     para::TextDirection textDirection;
     para::TextHeightBehavior textHeightBehavior;
     SimpleTextStyle textStyle;
     SimpleStrutStyle strutStyle;
+    bool applyRoundingHack;
 };
 
 para::ParagraphStyle toParagraphStyle(const SimpleParagraphStyle& s) {
@@ -237,13 +267,15 @@ para::ParagraphStyle toParagraphStyle(const SimpleParagraphStyle& s) {
     ps.setTextStyle(ts);
     auto ss = toStrutStyle(s.strutStyle);
     ps.setStrutStyle(ss);
-    if (s.heightMultiplier != 0) {
+    if (s.heightMultiplier != -1) {
         ps.setHeight(s.heightMultiplier);
     }
     if (s.maxLines != 0) {
         ps.setMaxLines(s.maxLines);
     }
+    ps.setApplyRoundingHack(s.applyRoundingHack);
     ps.setTextHeightBehavior(s.textHeightBehavior);
+    ps.setReplaceTabCharacters(s.replaceTabCharacters);
     return ps;
 }
 
@@ -261,7 +293,7 @@ Float32Array TextBoxesToFloat32Array(std::vector<para::TextBox> boxes) {
         return emscripten::val::null();
     }
     SimpleTextBox* rects = new SimpleTextBox[boxes.size()];
-    for (int i = 0; i < boxes.size(); i++) {
+    for (size_t i = 0; i < boxes.size(); i++) {
         rects[i].rect = boxes[i].rect;
         if (boxes[i].direction == para::TextDirection::kRtl) {
             rects[i].direction = 0;
@@ -289,27 +321,72 @@ Float32Array GetRectsForPlaceholders(para::Paragraph& self) {
     return TextBoxesToFloat32Array(boxes);
 }
 
+JSObject JSObjectFromLineMetrics(skia::textlayout::LineMetrics& metrics) {
+    JSObject m = emscripten::val::object();
+    m.set("startIndex", metrics.fStartIndex);
+    m.set("endIndex", metrics.fEndIndex);
+    m.set("endExcludingWhitespaces", metrics.fEndExcludingWhitespaces);
+    m.set("endIncludingNewline", metrics.fEndIncludingNewline);
+    m.set("isHardBreak", metrics.fHardBreak);
+    m.set("ascent", metrics.fAscent);
+    m.set("descent", metrics.fDescent);
+    m.set("height", metrics.fHeight);
+    m.set("width", metrics.fWidth);
+    m.set("left", metrics.fLeft);
+    m.set("baseline", metrics.fBaseline);
+    m.set("lineNumber", metrics.fLineNumber);
+    return m;
+}
+
+JSObject JSObjectFromGlyphInfo(skia::textlayout::Paragraph::GlyphInfo& glyphInfo) {
+    JSObject object = emscripten::val::object();
+
+    JSObject range = emscripten::val::object();
+    range.set("start", glyphInfo.fGraphemeClusterTextRange.start);
+    range.set("end",  glyphInfo.fGraphemeClusterTextRange.end);
+    object.set("graphemeClusterTextRange", range);
+
+    JSArray rect = emscripten::val::array();
+    rect.call<void>("push", glyphInfo.fGraphemeLayoutBounds.left());
+    rect.call<void>("push", glyphInfo.fGraphemeLayoutBounds.top());
+    rect.call<void>("push", glyphInfo.fGraphemeLayoutBounds.right());
+    rect.call<void>("push", glyphInfo.fGraphemeLayoutBounds.bottom());
+    object.set("graphemeLayoutBounds", rect);
+
+    object.set("dir", glyphInfo.fDirection == skia::textlayout::TextDirection::kRtl ? 0 : 1);
+    object.set("isEllipsis", glyphInfo.fIsEllipsis);
+    return object;
+}
+
 JSArray GetLineMetrics(para::Paragraph& self) {
     std::vector<skia::textlayout::LineMetrics> metrics;
     self.getLineMetrics(metrics);
     JSArray result = emscripten::val::array();
     for (auto metric : metrics) {
-        JSObject m = emscripten::val::object();
-        m.set("startIndex", metric.fStartIndex);
-        m.set("endIndex", metric.fEndIndex);
-        m.set("endExcludingWhitespaces", metric.fEndExcludingWhitespaces);
-        m.set("endIncludingNewline", metric.fEndIncludingNewline);
-        m.set("isHardBreak", metric.fHardBreak);
-        m.set("ascent", metric.fAscent);
-        m.set("descent", metric.fDescent);
-        m.set("height", metric.fHeight);
-        m.set("width", metric.fWidth);
-        m.set("left", metric.fLeft);
-        m.set("baseline", metric.fBaseline);
-        m.set("lineNumber", metric.fLineNumber);
-        result.call<void>("push", m);
+        result.call<void>("push", JSObjectFromLineMetrics(metric));
     }
     return result;
+}
+
+JSObject GetLineMetricsAt(para::Paragraph& self, size_t lineNumber) {
+    skia::textlayout::LineMetrics metrics;
+    return self.getLineMetricsAt(lineNumber, &metrics)
+        ? JSObjectFromLineMetrics(metrics)
+        : emscripten::val::null();
+}
+
+JSObject GetGlyphInfoAt(para::Paragraph& self, size_t index) {
+    skia::textlayout::Paragraph::GlyphInfo glyphInfo;
+    return self.getGlyphInfoAtUTF16Offset(index, &glyphInfo)
+        ? JSObjectFromGlyphInfo(glyphInfo)
+        : emscripten::val::null();
+}
+
+JSObject GetClosestGlyphInfoAtCoordinate(para::Paragraph& self, SkScalar dx, SkScalar dy) {
+    skia::textlayout::Paragraph::GlyphInfo glyphInfo;
+    return self.getClosestUTF16GlyphInfoAt(dx, dy, &glyphInfo)
+        ? JSObjectFromGlyphInfo(glyphInfo)
+        : emscripten::val::null();
 }
 
 /*
@@ -325,9 +402,9 @@ JSArray GetShapedLines(para::Paragraph& self) {
         // not really accumulated, but definitely set
         float       baseline    = 0;
 
-        void reset(int lineNumber) {
+        void reset(int newLineNum) {
             new (this) LineAccumulate;
-            this->lineNumber = lineNumber;
+            this->lineNumber = newLineNum;
         }
     };
 
@@ -385,7 +462,7 @@ JSArray GetShapedLines(para::Paragraph& self) {
         jrun.set("offsets",  MakeTypedArray(N1, info->utf8Starts));
 
         // we need to modify the positions, so make a temp copy
-        SkAutoSTMalloc<32, SkPoint> positions(N1);
+        AutoSTMalloc<32, SkPoint> positions(N1);
         for (int i = 0; i < N; ++i) {
             positions.get()[i] = info->positions[i] + info->origin;
         }
@@ -410,6 +487,22 @@ JSArray GetShapedLines(para::Paragraph& self) {
     return jlines;
 }
 
+std::vector<SkUnicode::Position> convertArrayU32(WASMPointerU32 array, size_t count) {
+    std::vector<size_t> vec;
+    vec.resize(count);
+    SkUnicode::Position* data = reinterpret_cast<SkUnicode::Position*>(array);
+    std::memcpy(vec.data(), data, count * sizeof(size_t));
+    return vec;
+}
+
+JSArray UnresolvedCodepoints(para::Paragraph& self) {
+    JSArray result = emscripten::val::array();
+    for (auto cp : self.unresolvedCodepoints()) {
+        result.call<void>("push", cp);
+    }
+    return result;
+}
+
 EMSCRIPTEN_BINDINGS(Paragraph) {
 
     class_<para::Paragraph>("Paragraph")
@@ -419,15 +512,21 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .function("getHeight", &para::Paragraph::getHeight)
         .function("getIdeographicBaseline", &para::Paragraph::getIdeographicBaseline)
         .function("getLineMetrics", &GetLineMetrics)
+        .function("getLineMetricsAt", &GetLineMetricsAt)
+        .function("getLineNumberAt", &para::Paragraph::getLineNumberAt)
         .function("getLongestLine", &para::Paragraph::getLongestLine)
         .function("getMaxIntrinsicWidth", &para::Paragraph::getMaxIntrinsicWidth)
         .function("getMaxWidth", &para::Paragraph::getMaxWidth)
         .function("getMinIntrinsicWidth", &para::Paragraph::getMinIntrinsicWidth)
+        .function("getNumberOfLines", &para::Paragraph::lineNumber)
+        .function("_getClosestGlyphInfoAtCoordinate", &GetClosestGlyphInfoAtCoordinate)
+        .function("_getGlyphInfoAt", &GetGlyphInfoAt)
         .function("_getRectsForPlaceholders", &GetRectsForPlaceholders)
         .function("_getRectsForRange", &GetRectsForRange)
         .function("getShapedLines", &GetShapedLines)
         .function("getWordBoundary", &para::Paragraph::getWordBoundary)
-        .function("layout", &para::Paragraph::layout);
+        .function("layout", &para::Paragraph::layout)
+        .function("unresolvedCodepoints", &UnresolvedCodepoints);
 
     class_<para::ParagraphBuilderImpl>("ParagraphBuilder")
             .class_function(
@@ -458,6 +557,17 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
                     }),
                     allow_raw_pointers())
             .class_function(
+                    "_MakeFromFontCollection",
+                    optional_override([](SimpleParagraphStyle style,
+                                         sk_sp<para::FontCollection> fontCollection)
+                                              -> std::unique_ptr<para::ParagraphBuilderImpl> {
+                        auto ps = toParagraphStyle(style);
+                        auto pb = para::ParagraphBuilderImpl::make(ps, fontCollection);
+                        return std::unique_ptr<para::ParagraphBuilderImpl>(
+                                static_cast<para::ParagraphBuilderImpl*>(pb.release()));
+                    }),
+                    allow_raw_pointers())
+            .class_function(
                     "_ShapeText",
                     optional_override([](JSString jtext, JSArray jruns, float width) -> JSArray {
                 std::string textStorage = jtext.as<std::string>();
@@ -465,7 +575,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
                 size_t      textCount = textStorage.size();
 
                 auto fc = sk_make_sp<para::FontCollection>();
-                fc->setDefaultFontManager(SkFontMgr::RefDefault());
+                fc->setDefaultFontManager(SkFontMgr::RefEmpty());
                 fc->enableFontFallback();
 
                 para::ParagraphStyle pstyle;
@@ -516,6 +626,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
                 return GetShapedLines(*pa);
             }),
             allow_raw_pointers())
+            .class_function("RequiresClientICU", &para::ParagraphBuilderImpl::RequiresClientICU)
             .function("addText",
                       optional_override([](para::ParagraphBuilderImpl& self, std::string text) {
                           return self.addText(text.c_str(), text.length());
@@ -549,7 +660,64 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
                                                               SkScalar offset) {
                           para::PlaceholderStyle ps(width, height, alignment, baseline, offset);
                           self.addPlaceholder(ps);
-                      }));
+                      }))
+            .function("getText",
+                      optional_override([](para::ParagraphBuilderImpl& self) -> JSString {
+                          auto text = self.getText();
+                          return emscripten::val(std::string(text.data(), text.size()).c_str());
+                      }))
+            .function("_setWordsUtf8",
+                      optional_override([](para::ParagraphBuilderImpl& self,
+                                           WASMPointerU32 clientWords, size_t wordsNum) {
+                      self.setWordsUtf8(convertArrayU32(clientWords, wordsNum));
+                  }))
+            .function("_setWordsUtf16",
+                      optional_override([](para::ParagraphBuilderImpl& self,
+                                           WASMPointerU32 clientWords, size_t wordsNum) {
+                      self.setWordsUtf16(convertArrayU32(clientWords, wordsNum));
+                  }))
+            .function("_setGraphemeBreaksUtf8",
+                      optional_override([](para::ParagraphBuilderImpl& self,
+                                           WASMPointerU32 clientGraphemes, size_t graphemesNum) {
+                      self.setGraphemeBreaksUtf8(convertArrayU32(clientGraphemes, graphemesNum));
+                  }))
+            .function("_setGraphemeBreaksUtf16",
+                      optional_override([](para::ParagraphBuilderImpl& self,
+                                           WASMPointerU32 clientGraphemes, size_t graphemesNum) {
+                      self.setGraphemeBreaksUtf16(convertArrayU32(clientGraphemes, graphemesNum));
+                  }))
+            .function("_setLineBreaksUtf8",
+                      optional_override([](para::ParagraphBuilderImpl& self,
+                                           WASMPointerU32 clientLineBreaks, size_t lineBreaksNum) {
+                      SkUnicode::Position* lineBreakData = reinterpret_cast<SkUnicode::Position*>(clientLineBreaks);
+                      std::vector<SkUnicode::LineBreakBefore> lineBreaks;
+                      for (size_t i = 0; i < lineBreaksNum; i += 2) {
+                          auto pos = lineBreakData[i];
+                          auto breakType = lineBreakData[i+1];
+                          if (breakType == 0) {
+                              lineBreaks.emplace_back(pos, SkUnicode::LineBreakType::kSoftLineBreak);
+                          } else {
+                              lineBreaks.emplace_back(pos, SkUnicode::LineBreakType::kHardLineBreak);
+                          }
+                      }
+                      self.setLineBreaksUtf8(std::move(lineBreaks));
+                  }))
+            .function("_setLineBreaksUtf16",
+                      optional_override([](para::ParagraphBuilderImpl& self,
+                                           WASMPointerU32 clientLineBreaks, size_t lineBreaksNum) {
+                      SkUnicode::Position* lineBreakData = reinterpret_cast<SkUnicode::Position*>(clientLineBreaks);
+                      std::vector<SkUnicode::LineBreakBefore> lineBreaks;
+                      for (size_t i = 0; i < lineBreaksNum; i += 2) {
+                          auto pos = lineBreakData[i];
+                          auto breakType = lineBreakData[i+1];
+                          if (breakType == 0) {
+                              lineBreaks.emplace_back(pos, SkUnicode::LineBreakType::kSoftLineBreak);
+                          } else {
+                              lineBreaks.emplace_back(pos, SkUnicode::LineBreakType::kHardLineBreak);
+                          }
+                      }
+                      self.setLineBreaksUtf16(std::move(lineBreaks));
+                  }));
 
     class_<para::TypefaceFontProvider, base<SkFontMgr>>("TypefaceFontProvider")
       .smart_ptr<sk_sp<para::TypefaceFontProvider>>("sk_sp<TypefaceFontProvider>")
@@ -564,6 +732,16 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
           self.registerTypeface(typeface, fStr);
       }), allow_raw_pointers());
 
+    class_<para::FontCollection>("FontCollection")
+      .smart_ptr<sk_sp<para::FontCollection>>("sk_sp<FontCollection>")
+      .class_function("Make", optional_override([]()-> sk_sp<para::FontCollection> {
+          return sk_make_sp<para::FontCollection>();
+      }))
+      .function("setDefaultFontManager", optional_override([](para::FontCollection& self,
+                                                              const sk_sp<para::TypefaceFontProvider>& fontManager) {
+        self.setDefaultFontManager(fontManager);
+      }), allow_raw_pointers())
+      .function("enableFontFallback", &para::FontCollection::enableFontFallback);
 
     // These value objects make it easier to send data across the wire.
     value_object<para::PositionWithAffinity>("PositionWithAffinity")
@@ -576,16 +754,18 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .field("width",     &SimpleFontStyle::width);
 
     value_object<SimpleParagraphStyle>("ParagraphStyle")
-        .field("disableHinting",     &SimpleParagraphStyle::disableHinting)
-        .field("_ellipsisPtr",       &SimpleParagraphStyle::ellipsisPtr)
-        .field("_ellipsisLen",       &SimpleParagraphStyle::ellipsisLen)
-        .field("heightMultiplier",   &SimpleParagraphStyle::heightMultiplier)
-        .field("maxLines",           &SimpleParagraphStyle::maxLines)
-        .field("textAlign",          &SimpleParagraphStyle::textAlign)
-        .field("textDirection",      &SimpleParagraphStyle::textDirection)
-        .field("textHeightBehavior", &SimpleParagraphStyle::textHeightBehavior)
-        .field("textStyle",          &SimpleParagraphStyle::textStyle)
-        .field("strutStyle",         &SimpleParagraphStyle::strutStyle);
+        .field("disableHinting",       &SimpleParagraphStyle::disableHinting)
+        .field("_ellipsisPtr",         &SimpleParagraphStyle::ellipsisPtr)
+        .field("_ellipsisLen",         &SimpleParagraphStyle::ellipsisLen)
+        .field("heightMultiplier",     &SimpleParagraphStyle::heightMultiplier)
+        .field("maxLines",             &SimpleParagraphStyle::maxLines)
+        .field("replaceTabCharacters", &SimpleParagraphStyle::replaceTabCharacters)
+        .field("textAlign",            &SimpleParagraphStyle::textAlign)
+        .field("textDirection",        &SimpleParagraphStyle::textDirection)
+        .field("textHeightBehavior",   &SimpleParagraphStyle::textHeightBehavior)
+        .field("textStyle",            &SimpleParagraphStyle::textStyle)
+        .field("strutStyle",           &SimpleParagraphStyle::strutStyle)
+        .field("applyRoundingHack",    &SimpleParagraphStyle::applyRoundingHack);
 
     value_object<SimpleStrutStyle>("StrutStyle")
         .field("_fontFamiliesPtr", &SimpleStrutStyle::fontFamiliesPtr)
@@ -622,7 +802,10 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .field("_shadowBlurRadiiPtr",   &SimpleTextStyle::shadowBlurRadiiPtr)
         .field("_fontFeatureLen",       &SimpleTextStyle::fontFeatureLen)
         .field("_fontFeatureNamesPtr",  &SimpleTextStyle::fontFeatureNamesPtr)
-        .field("_fontFeatureValuesPtr", &SimpleTextStyle::fontFeatureValuesPtr);
+        .field("_fontFeatureValuesPtr", &SimpleTextStyle::fontFeatureValuesPtr)
+        .field("_fontVariationLen",     &SimpleTextStyle::fontVariationLen)
+        .field("_fontVariationAxesPtr", &SimpleTextStyle::fontVariationAxesPtr)
+        .field("_fontVariationValuesPtr", &SimpleTextStyle::fontVariationValuesPtr);
 
     // The U stands for unsigned - we can't bind a generic/template object, so we have to specify it
     // with the type we are using.

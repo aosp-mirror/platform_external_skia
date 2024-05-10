@@ -1,5 +1,8 @@
 #include <metal_stdlib>
 #include <simd/simd.h>
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wall"
+#endif
 using namespace metal;
 struct Inputs {
 };
@@ -8,7 +11,6 @@ struct Outputs {
 };
 struct T {
     int x;
-    float2 u_skRTFlip;
 };
 struct Globals {
     constant T* _anonInterface0;

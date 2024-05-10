@@ -5,13 +5,25 @@
  * found in the LICENSE file.
  */
 
-#include "tests/Test.h"
+#include "include/core/SkTypes.h"
 
 #ifdef SK_SUPPORT_PDF
-
-#include "include/private/SkTo.h"
-#include "include/utils/SkRandom.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkRandom.h"
 #include "src/pdf/SkDeflate.h"
+#include "tests/Test.h"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+
+using namespace skia_private;
 
 namespace {
 
@@ -50,14 +62,14 @@ std::unique_ptr<SkStreamAsset> stream_inflate(skiatest::Reporter* reporter, SkSt
         ERRORF(reporter, "Zlib: inflateInit failed");
         return nullptr;
     }
-    uint8_t* input = (uint8_t*)src->getMemoryBase();
+    const uint8_t* input = (const uint8_t*)src->getMemoryBase();
     size_t inputLength = src->getLength();
     if (input == nullptr || inputLength == 0) {
         input = nullptr;
         flateData.next_in = inputBuffer;
         flateData.avail_in = 0;
     } else {
-        flateData.next_in = input;
+        flateData.next_in = const_cast<uint8_t*>(input);
         flateData.avail_in = SkToUInt(inputLength);
     }
 
@@ -109,14 +121,14 @@ DEF_TEST(SkPDF_DeflateWStream, r) {
     SkRandom random(123456);
     for (int loop = 0; loop < 50; ++loop) {
         uint32_t size = random.nextULessThan(10000);
-        SkAutoTMalloc<uint8_t> buffer(size);
+        AutoTMalloc<uint8_t> buffer(size);
         for (uint32_t j = 0; j < size; ++j) {
             buffer[j] = random.nextU() & 0xff;
         }
 
         SkDynamicMemoryWStream dynamicMemoryWStream;
         {
-            SkDeflateWStream deflateWStream(&dynamicMemoryWStream);
+            SkDeflateWStream deflateWStream(&dynamicMemoryWStream, -1);
             uint32_t j = 0;
             while (j < size) {
                 uint32_t writeSize =
@@ -161,7 +173,7 @@ DEF_TEST(SkPDF_DeflateWStream, r) {
             }
         }
     }
-    SkDeflateWStream emptyDeflateWStream(nullptr);
+    SkDeflateWStream emptyDeflateWStream(nullptr, -1);
     REPORTER_ASSERT(r, !emptyDeflateWStream.writeText("FOO"));
 }
 

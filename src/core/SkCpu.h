@@ -10,6 +10,8 @@
 
 #include "include/core/SkTypes.h"
 
+#include <cstdint>
+
 struct SkCpu {
     enum {
         SSE1       = 1 << 0,
@@ -40,13 +42,6 @@ struct SkCpu {
         SKX = AVX512F  | AVX512DQ | AVX512CD | AVX512BW | AVX512VL,
 
         ERMS       = 1 << 20,
-    };
-    enum {
-        NEON     = 1 << 0,
-        NEON_FMA = 1 << 1,
-        VFP_FP16 = 1 << 2,
-        CRC32    = 1 << 3,
-        ASIMDHP  = 1 << 4,
     };
 
     static void CacheRuntimeFeatures();
@@ -99,19 +94,6 @@ inline bool SkCpu::Supports(uint32_t mask) {
     features &= (SSE1 | SSE2 | SSE3 | SSSE3 | SSE41);
     #elif defined(SK_CPU_LIMIT_SSE2)
     features &= (SSE1 | SSE2);
-    #endif
-
-#else
-    #if defined(SK_ARM_HAS_NEON)
-    features |= NEON;
-    #endif
-
-    #if defined(SK_CPU_ARM64)
-    features |= NEON|NEON_FMA|VFP_FP16;
-    #endif
-
-    #if defined(SK_ARM_HAS_CRC32)
-    features |= CRC32;
     #endif
 
 #endif

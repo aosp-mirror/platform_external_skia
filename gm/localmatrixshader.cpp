@@ -21,13 +21,16 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
+#include "tools/DecodeUtils.h"
+#include "tools/GpuToolUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+#include "tools/timer/TimeUtils.h"
 
 static sk_sp<SkImage> make_image(SkCanvas* rootCanvas) {
     static constexpr SkScalar kSize = 50;
     SkImageInfo info = SkImageInfo::MakeN32Premul(kSize, kSize);
-    auto                      surface = ToolUtils::makeSurface(rootCanvas, info);
+    auto surface(SkSurfaces::Raster(info));
 
     SkPaint p;
     p.setAntiAlias(true);
@@ -40,11 +43,15 @@ static sk_sp<SkImage> make_image(SkCanvas* rootCanvas) {
     surface->getCanvas()->drawLine(kSize * .25f, kSize * .50f, kSize * .75f, kSize * .50f, p);
     surface->getCanvas()->drawLine(kSize * .50f, kSize * .25f, kSize * .50f, kSize * .75f, p);
 
-    return surface->makeImageSnapshot();
+    sk_sp<SkImage> img = surface->makeImageSnapshot();
+    return ToolUtils::MakeTextureImage(rootCanvas, std::move(img));
 }
 
 DEF_SIMPLE_GM(localmatrixshader_nested, canvas, 450, 1200) {
     auto image = make_image(canvas);
+    if (!image) {
+        return;
+    }
 
     using FactoryT = sk_sp<SkShader> (*)(const sk_sp<SkImage>&,
                                          const SkMatrix& inner,
@@ -77,15 +84,15 @@ DEF_SIMPLE_GM(localmatrixshader_nested, canvas, 450, 1200) {
         },
     };
 
-    static const auto inner = SkMatrix::Scale(2, 2),
-                      outer = SkMatrix::Translate(20, 20);
+    static const auto outer = SkMatrix::Scale(2, 2),
+                      inner = SkMatrix::Translate(20, 20);
 
     SkPaint border;
     border.setAntiAlias(true);
     border.setStyle(SkPaint::kStroke_Style);
 
     auto rect = SkRect::Make(image->bounds());
-    SkAssertResult(SkMatrix::Concat(inner, outer).mapRect(&rect));
+    SkAssertResult(SkMatrix::Concat(outer, inner).mapRect(&rect));
 
     const auto drawColumn = [&]() {
         SkAutoCanvasRestore acr(canvas, true);
@@ -104,7 +111,7 @@ DEF_SIMPLE_GM(localmatrixshader_nested, canvas, 450, 1200) {
 
     {
         SkAutoCanvasRestore acr(canvas, true);
-        canvas->translate(0, rect.height() * SK_ARRAY_COUNT(gFactories) * 1.5f);
+        canvas->translate(0, rect.height() * std::size(gFactories) * 1.5f);
         drawColumn();
     }
 
@@ -114,7 +121,7 @@ DEF_SIMPLE_GM(localmatrixshader_nested, canvas, 450, 1200) {
 }
 
 DEF_SIMPLE_GM(localmatrixshader_persp, canvas, 542, 266) {
-    auto image = GetResourceAsImage("images/yellow_rose.png");
+    auto image = ToolUtils::GetResourceAsImage("images/yellow_rose.png");
 
     SkBitmap downsized;
     downsized.allocPixels(image->imageInfo().makeWH(128, 128));
@@ -160,11 +167,11 @@ DEF_SIMPLE_GM(localmatrixshader_persp, canvas, 542, 266) {
                                 SkSamplingOptions(), &scale);
     draw(s1, true);
 
-    // 2. persp provided to SkImage::makeShader, then wrapped in scale makeWithLocalMatrix
-    // These pre-concat, so it ends up as persp * scale.
+    // 2. scale provided to SkImage::makeShader, then wrapped in persp makeWithLocalMatrix
+    // These post-concat, so it ends up as persp * scale.
     auto s2 = image->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                SkSamplingOptions(), &persp)
-                   ->makeWithLocalMatrix(scale);
+                                SkSamplingOptions(), &scale)
+                   ->makeWithLocalMatrix(persp);
     draw(s2, false);
 
     // 3. Providing pre-computed persp*scale to SkImage::makeShader()
@@ -189,11 +196,11 @@ DEF_SIMPLE_GM(localmatrixshader_persp, canvas, 542, 266) {
                                            SkTileMode::kRepeat, 0, &scale);
     draw(g1, true);
 
-    // 2. persp provided to Make, then wrapped with makeWithLocalMatrix (pre-concat as before).
+    // 2. scale provided to Make, then wrapped with makeWithLocalMatrix (post-concat as before).
     auto g2 = SkGradientShader::MakeRadial({imgRect.centerX(), imgRect.centerY()},
                                            imgRect.width() / 2.f, kGradColors, nullptr, 2,
-                                           SkTileMode::kRepeat, 0, &persp)
-                              ->makeWithLocalMatrix(scale);
+                                           SkTileMode::kRepeat, 0, &scale)
+                              ->makeWithLocalMatrix(persp);
     draw(g2, false);
 
     // 3. Provide per-computed persp*scale to Make
@@ -210,3 +217,63 @@ DEF_SIMPLE_GM(localmatrixshader_persp, canvas, 542, 266) {
     draw(g4, false);
     canvas->restore();
 }
+
+namespace skiagm {
+class LocalMatrixOrder : public GM {
+public:
+    LocalMatrixOrder() {}
+
+protected:
+    SkString getName() const override { return SkString("localmatrix_order"); }
+
+    SkISize getISize() override { return SkISize::Make(500, 500); }
+
+    void onOnceBeforeDraw() override {
+        auto mandrill = ToolUtils::GetResourceAsImage("images/mandrill_256.png");  // 256x256
+        auto example5 = ToolUtils::GetResourceAsImage("images/example_5.png");     // 128x128
+
+        auto mshader = mandrill->makeShader(
+                SkTileMode::kRepeat,
+                SkTileMode::kRepeat,
+                SkFilterMode::kNearest,
+                SkMatrix::RotateDeg(45, {128, 128})); // rotate about center
+        auto eshader = example5->makeShader(
+                SkTileMode::kRepeat,
+                SkTileMode::kRepeat,
+                SkFilterMode::kNearest,
+                SkMatrix::Scale(2, 2)); // make same size as mandrill and...
+        // ... rotate about center
+        eshader = eshader->makeWithLocalMatrix(SkMatrix::RotateDeg(45, {128, 128}));
+
+        // blend the two rotated and aligned images.
+        fShader = SkShaders::Blend(SkBlendMode::kModulate, mshader, eshader);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
+        // Rotate fShader about the canvas center
+        auto center = SkRect::Make(canvas->imageInfo().bounds()).center();
+
+        // viewer can insert a dpi scaling matrix. Make the animation always rotate about the device
+        // center.
+        if (auto ictm = canvas->getTotalMatrix(); ictm.invert(&ictm)) {
+            center = ictm.mapPoint(center);
+        }
+
+        auto shader = fShader->makeWithLocalMatrix(SkMatrix::RotateDeg(fAngle, center));
+
+        SkPaint paint;
+        paint.setShader(shader);
+        canvas->drawPaint(paint);
+    }
+
+    bool onAnimate(double nanos) override {
+        fAngle = TimeUtils::NanosToSeconds(nanos) * 5.f;
+        return true;
+    }
+
+    sk_sp<SkShader> fShader;
+    float fAngle = 0.f;
+};
+
+DEF_GM(return new LocalMatrixOrder;)
+}  // namespace skiagm

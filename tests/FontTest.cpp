@@ -6,18 +6,25 @@
  */
 
 #include "include/core/SkFont.h"
-#include "include/utils/SkCustomTypeface.h"
-#include "src/core/SkAutoMalloc.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkAutoMalloc.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkPtrRecorder.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
+
+#include <cstddef>
 
 static SkFont serialize_deserialize(const SkFont& font, skiatest::Reporter* reporter) {
     sk_sp<SkRefCntSet> typefaces = sk_make_sp<SkRefCntSet>();
-    SkBinaryWriteBuffer wb;
+    SkBinaryWriteBuffer wb({});
     wb.setTypefaceRecorder(typefaces);
 
     SkFontPriv::Flatten(font, wb);
@@ -79,7 +86,7 @@ DEF_TEST(Font_flatten, reporter) {
         kAllBits,
     };
     const sk_sp<SkTypeface> typefaces[] = {
-        nullptr, ToolUtils::sample_user_typeface()
+        nullptr, ToolUtils::SampleUserTypeface()
     };
 
     SkFont font;
