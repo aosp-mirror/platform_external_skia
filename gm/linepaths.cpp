@@ -15,8 +15,9 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 static void drawPath(SkPath& path,SkCanvas* canvas,SkColor color,
                      const SkRect& clip,SkPaint::Cap cap, SkPaint::Join join,
@@ -83,7 +84,7 @@ static void draw(SkCanvas* canvas, bool doClose) {
         titlePaint.setColor(SK_ColorBLACK);
         titlePaint.setAntiAlias(true);
 
-        SkFont font(ToolUtils::create_portable_typeface(), 15.0f);
+        SkFont font(ToolUtils::DefaultPortableTypeface(), 15.0f);
 
         const char titleNoClose[] = "Line Drawn Into Rectangle Clips With "
             "Indicated Style, Fill and Linecaps, with stroke width 10";
@@ -97,17 +98,17 @@ static void draw(SkCanvas* canvas, bool doClose) {
         canvas->save();
         canvas->translate(10 * SK_Scalar1, 30 * SK_Scalar1);
         canvas->save();
-        for (size_t cap = 0; cap < SK_ARRAY_COUNT(gCaps); ++cap) {
+        for (size_t cap = 0; cap < std::size(gCaps); ++cap) {
             if (0 < cap) {
-                canvas->translate((rect.width() + 40 * SK_Scalar1) * SK_ARRAY_COUNT(gStyles), 0);
+                canvas->translate((rect.width() + 40 * SK_Scalar1) * std::size(gStyles), 0);
             }
             canvas->save();
-            for (size_t fill = 0; fill < SK_ARRAY_COUNT(gFills); ++fill) {
+            for (size_t fill = 0; fill < std::size(gFills); ++fill) {
                 if (0 < fill) {
                     canvas->translate(0, rect.height() + 40 * SK_Scalar1);
                 }
                 canvas->save();
-                for (size_t style = 0; style < SK_ARRAY_COUNT(gStyles); ++style) {
+                for (size_t style = 0; style < std::size(gStyles); ++style) {
                     if (0 < style) {
                         canvas->translate(rect.width() + 40 * SK_Scalar1, 0);
                     }

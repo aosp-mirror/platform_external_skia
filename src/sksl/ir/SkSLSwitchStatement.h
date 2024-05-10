@@ -8,15 +8,20 @@
 #ifndef SKSL_SWITCHSTATEMENT
 #define SKSL_SWITCHSTATEMENT
 
-#include "include/private/SkSLStatement.h"
-#include "src/sksl/ir/SkSLSwitchCase.h"
+#include "src/sksl/SkSLDefines.h"
+#include "src/sksl/SkSLPosition.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLIRNode.h"
+#include "src/sksl/ir/SkSLStatement.h"
 
 #include <memory>
-#include <vector>
+#include <string>
+#include <utility>
 
 namespace SkSL {
 
-class Expression;
+class Context;
+class SwitchCase;
 class SymbolTable;
 
 /**
@@ -24,32 +29,30 @@ class SymbolTable;
  */
 class SwitchStatement final : public Statement {
 public:
-    inline static constexpr Kind kStatementKind = Kind::kSwitch;
+    inline static constexpr Kind kIRNodeKind = Kind::kSwitch;
 
-    SwitchStatement(int line, bool isStatic, std::unique_ptr<Expression> value,
-                    StatementArray cases, std::shared_ptr<SymbolTable> symbols)
-        : INHERITED(line, kStatementKind)
-        , fIsStatic(isStatic)
-        , fValue(std::move(value))
-        , fCases(std::move(cases))
-        , fSymbols(std::move(symbols)) {}
+    SwitchStatement(Position pos,
+                    std::unique_ptr<Expression> value,
+                    StatementArray cases,
+                    std::shared_ptr<SymbolTable> symbols)
+            : INHERITED(pos, kIRNodeKind)
+            , fValue(std::move(value))
+            , fCases(std::move(cases))
+            , fSymbols(std::move(symbols)) {}
 
     // Create a `switch` statement with an array of case-values and case-statements.
     // Coerces case values to the proper type and reports an error if cases are duplicated.
     // Reports errors via the ErrorReporter.
     static std::unique_ptr<Statement> Convert(const Context& context,
-                                              int line,
-                                              bool isStatic,
+                                              Position pos,
                                               std::unique_ptr<Expression> value,
                                               ExpressionArray caseValues,
-                                              StatementArray caseStatements,
-                                              std::shared_ptr<SymbolTable> symbolTable);
+                                              StatementArray caseStatements);
 
     // Create a `switch` statement with an array of SwitchCases. The array of SwitchCases must
     // already contain non-overlapping, correctly-typed case values. Reports errors via ASSERT.
     static std::unique_ptr<Statement> Make(const Context& context,
-                                           int line,
-                                           bool isStatic,
+                                           Position pos,
                                            std::unique_ptr<Expression> value,
                                            StatementArray cases,
                                            std::shared_ptr<SymbolTable> symbolTable);
@@ -79,10 +82,6 @@ public:
         return fCases;
     }
 
-    bool isStatic() const {
-        return fIsStatic;
-    }
-
     const std::shared_ptr<SymbolTable>& symbols() const {
         return fSymbols;
     }
@@ -92,7 +91,6 @@ public:
     std::string description() const override;
 
 private:
-    bool fIsStatic;
     std::unique_ptr<Expression> fValue;
     StatementArray fCases;  // every Statement inside fCases must be a SwitchCase
     std::shared_ptr<SymbolTable> fSymbols;

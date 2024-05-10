@@ -38,14 +38,9 @@ public:
     }
 
 protected:
+    SkString getName() const override { return SkString("filltypespersp"); }
 
-    SkString onShortName() override {
-        return SkString("filltypespersp");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(835, 840);
-    }
+    SkISize getISize() override { return SkISize::Make(835, 840); }
 
     void showPath(SkCanvas* canvas, int x, int y, SkPathFillType ft,
                   SkScalar scale, const SkPaint& paint) {
@@ -72,7 +67,7 @@ protected:
                                                      SkIntToScalar(100),
                                                      colors,
                                                      pos,
-                                                     SK_ARRAY_COUNT(colors),
+                                                     std::size(colors),
                                                      SkTileMode::kClamp));
         paint.setAntiAlias(aa);
 
@@ -101,7 +96,7 @@ protected:
                                                       SkIntToScalar(1000),
                                                       colors,
                                                       pos,
-                                                      SK_ARRAY_COUNT(colors),
+                                                      std::size(colors),
                                                       SkTileMode::kClamp));
         canvas->save();
             canvas->translate(SkIntToScalar(100), SkIntToScalar(100));

@@ -5,30 +5,31 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/ganesh/GrShaderCaps.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLProgramKind.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
+#include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
 #include "fuzz/Fuzz.h"
 
-bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
-    std::unique_ptr<SkSL::ShaderCaps> caps = SkSL::ShaderCapsFactory::Default();
-    SkSL::Compiler compiler(caps.get());
-    SkSL::Program::Settings settings;
-    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-                                                    SkSL::ProgramKind::kRuntimeShader,
-                                                    std::string((const char*) bytes->data(),
-                                                                bytes->size()),
-                                                    settings);
+bool FuzzSKSL2Pipeline(const uint8_t *data, size_t size) {
+    SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Default());
+    SkSL::ProgramSettings settings;
+    std::unique_ptr<SkSL::Program> program =
+            compiler.convertProgram(SkSL::ProgramKind::kRuntimeShader,
+                                    std::string(reinterpret_cast<const char*>(data), size),
+                                    settings);
     if (!program) {
         return false;
     }
 
     class Callbacks : public SkSL::PipelineStage::Callbacks {
         std::string declareUniform(const SkSL::VarDeclaration* decl) override {
-            return std::string(decl->var().name());
+            return std::string(decl->var()->name());
         }
 
         void defineFunction(const char* /*decl*/, const char* /*body*/, bool /*isMain*/) override {}
@@ -62,8 +63,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 3000) {
         return 0;
     }
-    auto bytes = SkData::MakeWithoutCopy(data, size);
-    FuzzSKSL2Pipeline(bytes);
+    FuzzSKSL2Pipeline(data, size);
     return 0;
 }
 #endif

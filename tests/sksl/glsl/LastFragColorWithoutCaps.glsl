@@ -1,4 +1,4 @@
 ### Compilation failed:
 
-error: 2: sk_LastFragColor requires framebuffer fetch support
+error: 'sk_LastFragColor' not supported
 1 error

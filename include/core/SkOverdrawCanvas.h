@@ -8,8 +8,33 @@
 #ifndef SkOverdrawCanvas_DEFINED
 #define SkOverdrawCanvas_DEFINED
 
+#include "include/core/SkCanvas.h"
 #include "include/core/SkCanvasVirtualEnforcer.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkScalar.h"
+#include "include/private/base/SkAPI.h"
 #include "include/utils/SkNWayCanvas.h"
+
+#include <cstddef>
+
+class SkData;
+class SkDrawable;
+class SkImage;
+class SkMatrix;
+class SkPath;
+class SkPicture;
+class SkRRect;
+class SkRegion;
+class SkTextBlob;
+class SkVertices;
+enum class SkBlendMode;
+namespace sktext { class GlyphRunList; }
+struct SkDrawShadowRec;
+struct SkPoint;
+struct SkRSXform;
+struct SkRect;
 
 /**
  *  Captures all drawing commands.  Rather than draw the actual content, this device
@@ -22,7 +47,8 @@ public:
     SkOverdrawCanvas(SkCanvas*);
 
     void onDrawTextBlob(const SkTextBlob*, SkScalar, SkScalar, const SkPaint&) override;
-    void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override;
+    void onDrawGlyphRunList(
+            const sktext::GlyphRunList& glyphRunList, const SkPaint& paint) override;
     void onDrawPatch(const SkPoint[12], const SkColor[4], const SkPoint[4], SkBlendMode,
                      const SkPaint&) override;
     void onDrawPaint(const SkPaint&) override;

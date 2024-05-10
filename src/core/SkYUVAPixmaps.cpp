@@ -7,37 +7,15 @@
 
 #include "include/core/SkYUVAPixmaps.h"
 
-#include "include/private/SkImageInfoPriv.h"
-#include "src/core/SkConvertPixels.h"
+#include "include/core/SkAlphaType.h"
+#include "include/private/base/SkDebug.h"
+#include "src/base/SkRectMemcpy.h"
+#include "src/core/SkImageInfoPriv.h"
 #include "src/core/SkYUVAInfoLocation.h"
 
-#if SK_SUPPORT_GPU
-#include "include/private/GrImageContext.h"
-#endif
-
-
-SkYUVAPixmapInfo::SupportedDataTypes::SupportedDataTypes(const GrImageContext& context) {
-#if SK_SUPPORT_GPU
-    for (int n = 1; n <= 4; ++n) {
-        if (context.defaultBackendFormat(DefaultColorTypeForDataType(DataType::kUnorm8, n),
-                                         GrRenderable::kNo).isValid()) {
-            this->enableDataType(DataType::kUnorm8, n);
-        }
-        if (context.defaultBackendFormat(DefaultColorTypeForDataType(DataType::kUnorm16, n),
-                                         GrRenderable::kNo).isValid()) {
-            this->enableDataType(DataType::kUnorm16, n);
-        }
-        if (context.defaultBackendFormat(DefaultColorTypeForDataType(DataType::kFloat16, n),
-                                         GrRenderable::kNo).isValid()) {
-            this->enableDataType(DataType::kFloat16, n);
-        }
-        if (context.defaultBackendFormat(DefaultColorTypeForDataType(DataType::kUnorm10_Unorm2, n),
-                                         GrRenderable::kNo).isValid()) {
-            this->enableDataType(DataType::kUnorm10_Unorm2, n);
-        }
-    }
-#endif
-}
+#include <algorithm>
+#include <cstdint>
+#include <utility>
 
 void SkYUVAPixmapInfo::SupportedDataTypes::enableDataType(DataType type, int numChannels) {
     if (numChannels < 1 || numChannels > 4) {

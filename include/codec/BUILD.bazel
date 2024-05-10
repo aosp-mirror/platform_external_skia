@@ -1,47 +1,57 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
-generated_cc_atom(
-    name = "SkAndroidCodec_hdr",
-    hdrs = ["SkAndroidCodec.h"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        ":SkCodec_hdr",
-        "//include/core:SkEncodedImageFormat_hdr",
-        "//include/core:SkStream_hdr",
-        "//include/core:SkTypes_hdr",
+licenses(["notice"])
+
+exports_files_legacy()
+
+skia_filegroup(
+    name = "public_hdrs",
+    srcs = [
+        "SkAndroidCodec.h",
+        "SkAvifDecoder.h",
+        "SkBmpDecoder.h",
+        "SkCodec.h",
+        "SkCodecAnimation.h",
+        "SkEncodedImageFormat.h",
+        "SkEncodedOrigin.h",
+        "SkGifDecoder.h",
+        "SkIcoDecoder.h",
+        "SkJpegDecoder.h",
+        "SkJpegxlDecoder.h",
+        "SkPixmapUtils.h",
+        "SkPngChunkReader.h",
+        "SkPngDecoder.h",
+        "SkRawDecoder.h",
+        "SkWbmpDecoder.h",
+        "SkWebpDecoder.h",
     ],
+    visibility = ["//include:__pkg__"],
 )
 
-generated_cc_atom(
-    name = "SkCodecAnimation_hdr",
-    hdrs = ["SkCodecAnimation.h"],
-    visibility = ["//:__subpackages__"],
-)
-
-generated_cc_atom(
-    name = "SkCodec_hdr",
-    hdrs = ["SkCodec.h"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        ":SkCodecAnimation_hdr",
-        ":SkEncodedOrigin_hdr",
-        "//include/core:SkColor_hdr",
-        "//include/core:SkEncodedImageFormat_hdr",
-        "//include/core:SkImageInfo_hdr",
-        "//include/core:SkPixmap_hdr",
-        "//include/core:SkSize_hdr",
-        "//include/core:SkStream_hdr",
-        "//include/core:SkTypes_hdr",
-        "//include/core:SkYUVAPixmaps_hdr",
-        "//include/private:SkEncodedInfo_hdr",
-        "//include/private:SkNoncopyable_hdr",
-        "//include/private:SkTemplates_hdr",
+skia_filegroup(
+    name = "core_hdrs",
+    srcs = [
+        "SkEncodedOrigin.h",
     ],
+    visibility = ["//src/core:__pkg__"],
 )
 
-generated_cc_atom(
-    name = "SkEncodedOrigin_hdr",
-    hdrs = ["SkEncodedOrigin.h"],
-    visibility = ["//:__subpackages__"],
-    deps = ["//include/core:SkMatrix_hdr"],
+skia_filegroup(
+    name = "any_codec_hdrs",
+    srcs = [
+        "SkPixmapUtils.h",
+    ],
+    visibility = ["//src/codec:__pkg__"],
+)
+
+skia_filegroup(
+    name = "png_public_hdrs",
+    srcs = [
+        "SkCodec.h",
+        "SkCodecAnimation.h",
+        "SkEncodedImageFormat.h",
+        "SkPngChunkReader.h",
+        "SkPngDecoder.h",
+    ],
+    visibility = ["//src/codec:__pkg__"],
 )

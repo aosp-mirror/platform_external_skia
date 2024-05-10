@@ -7,12 +7,23 @@
 
 #include "include/core/SkTypes.h"
 
-#if SK_SUPPORT_GPU && defined(SK_VULKAN)
+#if defined(SK_GANESH) && defined(SK_VULKAN)
 
-#include "include/gpu/vk/GrVkTypes.h"
-#include "src/core/SkAutoMalloc.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/vk/VulkanTypes.h"
+#include "src/base/SkAutoMalloc.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/gpu/vk/VkTestUtils.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <initializer_list>
+#include <vulkan/vulkan_core.h>
+
+struct GrContextOptions;
 
 #define ACQUIRE_VK_PROC_NOCHECK(name, instance) \
     PFN_vk##name grVk##name =                                                              \
@@ -41,7 +52,7 @@
 
 #define GET_PROC_LOCAL(F, inst) PFN_vk ## F F = (PFN_vk ## F) getProc("vk" #F, inst, VK_NULL_HANDLE)
 
-static void destroy_instance(GrVkGetProc getProc, VkInstance inst) {
+static void destroy_instance(const skgpu::VulkanGetProc& getProc, VkInstance inst) {
     ACQUIRE_VK_PROC_LOCAL(DestroyInstance, inst);
     grVkDestroyInstance(inst, nullptr);
 }
@@ -49,7 +60,10 @@ static void destroy_instance(GrVkGetProc getProc, VkInstance inst) {
 // If the extension VK_EXT_GLOBAL_PRIORITY is supported, this test just tries to create a VkDevice
 // using the various global priorities. The test passes if no errors are reported or the test
 // doesn't crash.
-DEF_GPUTEST(VulkanPriorityExtension, reporter, options) {
+DEF_GANESH_TEST_FOR_VULKAN_CONTEXT(VulkanPriorityExtension,
+                                   reporter,
+                                   context_info,
+                                   CtsEnforcement::kApiLevel_T) {
     PFN_vkGetInstanceProcAddr instProc;
     if (!sk_gpu_test::LoadVkLibraryAndGetProcAddrFuncs(&instProc)) {
         return;
@@ -133,7 +147,8 @@ DEF_GPUTEST(VulkanPriorityExtension, reporter, options) {
         return;
     }
     if (!gpuCount) {
-        ERRORF(reporter, "vkEnumeratePhysicalDevices returned no supported devices.");
+        // Don't throw and error here, because this behavior is allowed by Android CTS. A device
+        // count of 0 effectively means Vulkan is not supported.
         destroy_instance(getProc, inst);
         return;
     }

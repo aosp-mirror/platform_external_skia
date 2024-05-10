@@ -7,7 +7,17 @@
 
 #include "src/codec/SkJpegUtility.h"
 
+#include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
 #include "src/codec/SkCodecPriv.h"
+#include "src/codec/SkJpegPriv.h"
+
+#include <csetjmp>
+#include <cstddef>
+
+extern "C" {
+    #include "jpeglib.h"   // NO_G3_REWRITE
+}
 
 /*
  * Call longjmp to continue execution on an error
@@ -17,10 +27,10 @@ void skjpeg_err_exit(j_common_ptr dinfo) {
     // JpegDecoderMgr will take care of freeing memory
     skjpeg_error_mgr* error = (skjpeg_error_mgr*) dinfo->err;
     (*error->output_message) (dinfo);
-    if (error->fJmpBufStack.empty()) {
+    if (error->fStack[0] == nullptr) {
         SK_ABORT("JPEG error with no jmp_buf set.");
     }
-    longjmp(*error->fJmpBufStack.back(), 1);
+    longjmp(*error->fStack[0], 1);
 }
 
 // Functions for buffered sources //

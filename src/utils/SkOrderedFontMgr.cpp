@@ -6,7 +6,16 @@
  */
 
 #include "include/utils/SkOrderedFontMgr.h"
-#include "src/core/SkFontDescriptor.h"
+
+#include "include/core/SkData.h" // IWYU pragma: keep
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkStream.h" // IWYU pragma: keep
+#include "include/core/SkTypeface.h" // IWYU pragma: keep
+
+#include <utility>
+
+class SkString;
+struct SkFontArguments;
 
 SkOrderedFontMgr::SkOrderedFontMgr() {}
 SkOrderedFontMgr::~SkOrderedFontMgr() {}
@@ -33,7 +42,7 @@ void SkOrderedFontMgr::onGetFamilyName(int index, SkString* familyName) const {
     }
 }
 
-SkFontStyleSet* SkOrderedFontMgr::onCreateStyleSet(int index) const {
+sk_sp<SkFontStyleSet> SkOrderedFontMgr::onCreateStyleSet(int index) const {
     for (const auto& fm : fList) {
         const int count = fm->countFamilies();
         if (index < count) {
@@ -44,7 +53,7 @@ SkFontStyleSet* SkOrderedFontMgr::onCreateStyleSet(int index) const {
     return nullptr;
 }
 
-SkFontStyleSet* SkOrderedFontMgr::onMatchFamily(const char familyName[]) const {
+sk_sp<SkFontStyleSet> SkOrderedFontMgr::onMatchFamily(const char familyName[]) const {
     for (const auto& fm : fList) {
         if (auto fs = fm->matchFamily(familyName)) {
             return fs;
@@ -53,8 +62,8 @@ SkFontStyleSet* SkOrderedFontMgr::onMatchFamily(const char familyName[]) const {
     return nullptr;
 }
 
-SkTypeface* SkOrderedFontMgr::onMatchFamilyStyle(const char family[],
-                                                 const SkFontStyle& style) const {
+sk_sp<SkTypeface> SkOrderedFontMgr::onMatchFamilyStyle(const char family[],
+                                                       const SkFontStyle& style) const {
     for (const auto& fm : fList) {
         if (auto tf = fm->matchFamilyStyle(family, style)) {
             return tf;
@@ -63,10 +72,11 @@ SkTypeface* SkOrderedFontMgr::onMatchFamilyStyle(const char family[],
     return nullptr;
 }
 
-SkTypeface* SkOrderedFontMgr::onMatchFamilyStyleCharacter(const char familyName[],
-                                                          const SkFontStyle& style,
-                                                          const char* bcp47[], int bcp47Count,
-                                                          SkUnichar uni) const {
+sk_sp<SkTypeface> SkOrderedFontMgr::onMatchFamilyStyleCharacter(
+    const char familyName[], const SkFontStyle& style,
+    const char* bcp47[], int bcp47Count,
+    SkUnichar uni) const
+{
     for (const auto& fm : fList) {
         if (auto tf = fm->matchFamilyStyleCharacter(familyName, style, bcp47, bcp47Count, uni)) {
             return tf;

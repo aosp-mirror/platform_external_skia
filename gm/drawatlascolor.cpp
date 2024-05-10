@@ -23,6 +23,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 // Create a square atlas of:
 //   opaque white  |     opaque red
@@ -71,11 +72,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("draw-atlas-colors");
-    }
+    SkString getName() const override { return SkString("draw-atlas-colors"); }
 
-    SkISize onISize() override {
+    SkISize getISize() override {
         return SkISize::Make(kNumXferModes * (kAtlasSize + kPad) + kPad,
                              2 * kNumColors * (kAtlasSize + kPad) + kTextPad + kPad);
     }
@@ -124,9 +123,9 @@ protected:
             0x88000088          // transparent blue
         };
 
-        const int numModes = SK_ARRAY_COUNT(gModes);
+        const int numModes = std::size(gModes);
         SkASSERT(numModes == kNumXferModes);
-        const int numColors = SK_ARRAY_COUNT(gColors);
+        const int numColors = std::size(gColors);
         SkASSERT(numColors == kNumColors);
         SkRSXform xforms[numColors];
         SkRect rects[numColors];
@@ -141,7 +140,7 @@ protected:
             quadColors[i] = gColors[i];
         }
 
-        SkFont font(ToolUtils::create_portable_typeface(), kTextPad);
+        SkFont font(ToolUtils::DefaultPortableTypeface(), kTextPad);
 
         for (int i = 0; i < numModes; ++i) {
             const char* label = SkBlendMode_Name(gModes[i]);

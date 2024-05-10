@@ -8,28 +8,32 @@
 #ifndef SKSL_BINARYEXPRESSION
 #define SKSL_BINARYEXPRESSION
 
-#include "src/sksl/SkSLLexer.h"
-#include "src/sksl/SkSLOperators.h"
+#include "include/core/SkTypes.h"
+#include "src/sksl/SkSLOperator.h"
+#include "src/sksl/SkSLPosition.h"
 #include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLFieldAccess.h"
-#include "src/sksl/ir/SkSLIndexExpression.h"
-#include "src/sksl/ir/SkSLSwizzle.h"
-#include "src/sksl/ir/SkSLTernaryExpression.h"
+#include "src/sksl/ir/SkSLIRNode.h"
 
 #include <memory>
+#include <string>
+#include <utility>
 
 namespace SkSL {
+
+class Context;
+class Type;
+class VariableReference;
 
 /**
  * A binary operation.
  */
 class BinaryExpression final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kBinary;
+    inline static constexpr Kind kIRNodeKind = Kind::kBinary;
 
-    BinaryExpression(int line, std::unique_ptr<Expression> left, Operator op,
+    BinaryExpression(Position pos, std::unique_ptr<Expression> left, Operator op,
                      std::unique_ptr<Expression> right, const Type* type)
-        : INHERITED(line, kExpressionKind, type)
+        : INHERITED(pos, kIRNodeKind, type)
         , fLeft(std::move(left))
         , fOperator(op)
         , fRight(std::move(right)) {
@@ -40,6 +44,7 @@ public:
     // Creates a potentially-simplified form of the expression. Determines the result type
     // programmatically. Typechecks and coerces input expressions; reports errors via ErrorReporter.
     static std::unique_ptr<Expression> Convert(const Context& context,
+                                               Position pos,
                                                std::unique_ptr<Expression> left,
                                                Operator op,
                                                std::unique_ptr<Expression> right);
@@ -47,6 +52,7 @@ public:
     // Creates a potentially-simplified form of the expression. Determines the result type
     // programmatically. Asserts if the expressions do not typecheck or are otherwise invalid.
     static std::unique_ptr<Expression> Make(const Context& context,
+                                            Position pos,
                                             std::unique_ptr<Expression> left,
                                             Operator op,
                                             std::unique_ptr<Expression> right);
@@ -54,6 +60,7 @@ public:
     // Creates a potentially-simplified form of the expression. Result type is passed in.
     // Asserts if the expressions do not typecheck or are otherwise invalid.
     static std::unique_ptr<Expression> Make(const Context& context,
+                                            Position pos,
                                             std::unique_ptr<Expression> left,
                                             Operator op,
                                             std::unique_ptr<Expression> right,
@@ -79,20 +86,16 @@ public:
         return fOperator;
     }
 
-    bool isConstantOrUniform() const override {
-        return this->left()->isConstantOrUniform() && this->right()->isConstantOrUniform();
-    }
+    std::unique_ptr<Expression> clone(Position pos) const override;
 
-    bool hasProperty(Property property) const override {
-        if (property == Property::kSideEffects && this->getOperator().isAssignment()) {
-            return true;
-        }
-        return this->left()->hasProperty(property) || this->right()->hasProperty(property);
-    }
+    std::string description(OperatorPrecedence parentPrecedence) const override;
 
-    std::unique_ptr<Expression> clone() const override;
-
-    std::string description() const override;
+    /**
+     * If the expression is an assignment like `a = 1` or `a += sin(b)`, returns the
+     * VariableReference that will be written to. For other types of expressions, returns null.
+     * Complex expressions that contain inner assignments, like `(a = b) * 2`, will return null.
+     */
+    VariableReference* isAssignmentIntoVariable();
 
 private:
     static bool CheckRef(const Expression& expr);

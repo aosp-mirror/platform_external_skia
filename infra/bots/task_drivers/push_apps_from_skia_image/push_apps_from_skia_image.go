@@ -21,7 +21,7 @@ import (
 	"google.golang.org/api/option"
 
 	"go.skia.org/infra/go/auth"
-	"go.skia.org/infra/go/common"
+	infra_common "go.skia.org/infra/go/common"
 	docker_pubsub "go.skia.org/infra/go/docker/build/pubsub"
 	sk_exec "go.skia.org/infra/go/exec"
 	"go.skia.org/infra/task_driver/go/lib/auth_steps"
@@ -32,6 +32,7 @@ import (
 	"go.skia.org/infra/task_driver/go/lib/os_steps"
 	"go.skia.org/infra/task_driver/go/td"
 	"go.skia.org/infra/task_scheduler/go/types"
+	"go.skia.org/skia/infra/bots/task_drivers/common"
 )
 
 var (
@@ -92,7 +93,7 @@ func buildPushFiddlerImage(ctx context.Context, dkr *docker.Docker, tag, infraCh
 	if err != nil {
 		return err
 	}
-	if err := docker.PublishToTopic(ctx, "gcr.io/skia-public/"+fiddlerImageName, tag, common.REPO_SKIA, topic); err != nil {
+	if err := docker.PublishToTopic(ctx, "gcr.io/skia-public/"+fiddlerImageName, tag, infra_common.REPO_SKIA, topic); err != nil {
 		return err
 	}
 
@@ -125,6 +126,10 @@ func buildPushApiImage(ctx context.Context, dkr *docker.Docker, tag, checkoutDir
 	}
 	doxygenCmd := []string{"/bin/sh", "-c", "cd /CHECKOUT/tools/doxygen && doxygen ProdDoxyfile"}
 	doxygenImg := "gcr.io/skia-public/doxygen:testing-slim"
+	// Make sure we have the latest doxygen image.
+	if err := dkr.Pull(ctx, doxygenImg); err != nil {
+		return err
+	}
 	if err := dkr.Run(ctx, doxygenImg, doxygenCmd, volumes, env); err != nil {
 		return err
 	}
@@ -151,7 +156,7 @@ func buildPushApiImage(ctx context.Context, dkr *docker.Docker, tag, checkoutDir
 	if err != nil {
 		return err
 	}
-	if err := docker.PublishToTopic(ctx, "gcr.io/skia-public/"+apiImageName, tag, common.REPO_SKIA, topic); err != nil {
+	if err := docker.PublishToTopic(ctx, "gcr.io/skia-public/"+apiImageName, tag, infra_common.REPO_SKIA, topic); err != nil {
 		return err
 	}
 
@@ -159,9 +164,13 @@ func buildPushApiImage(ctx context.Context, dkr *docker.Docker, tag, checkoutDir
 }
 
 func main() {
+	bazelFlags := common.MakeBazelFlags(common.MakeBazelFlagsOpts{})
+
 	// Setup.
 	ctx := td.StartRun(projectId, taskId, taskName, output, local)
 	defer td.EndRun(ctx)
+
+	bazelFlags.Validate(ctx)
 
 	if *infraRevision == "" {
 		td.Fatalf(ctx, "Must specify --infra_revision")
@@ -184,7 +193,7 @@ func main() {
 
 	// Checkout out the Skia infra repo at the specified commit.
 	infraRS := types.RepoState{
-		Repo:     common.REPO_SKIA_INFRA,
+		Repo:     infra_common.REPO_SKIA_INFRA,
 		Revision: *infraRevision,
 	}
 	infraCheckoutDir := filepath.Join("infra_repo")
@@ -197,7 +206,7 @@ func main() {
 
 	// Ensure that the bazel cache is setup.
 	opts := bazel.BazelOptions{
-		CachePath: "/mnt/pd0/bazel_cache",
+		CachePath: *bazelFlags.CacheDir,
 	}
 	if err := bazel.EnsureBazelRCFile(ctx, opts); err != nil {
 		td.Fatal(ctx, err)
@@ -234,5 +243,11 @@ func main() {
 	}
 	if err := buildPushFiddlerImage(ctx, dkr, tag, infraCheckoutDir, topic); err != nil {
 		td.Fatal(ctx, err)
+	}
+
+	if !*local {
+		if err := common.BazelCleanIfLowDiskSpace(ctx, *bazelFlags.CacheDir, skiaCheckoutDir, "bazelisk"); err != nil {
+			td.Fatal(ctx, err)
+		}
 	}
 }

@@ -19,6 +19,7 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
 #include "src/core/SkCanvasPriv.h"
+#include "src/core/SkMatrixPriv.h"
 
 #include <initializer_list>
 
@@ -29,7 +30,7 @@ static sk_sp<SkShader> make_shader(SkScalar cx, SkScalar cy, SkScalar rad) {
         SK_ColorRED, SK_ColorRED, SK_ColorBLUE, SK_ColorBLUE, SK_ColorGREEN, SK_ColorGREEN,
         SK_ColorRED, SK_ColorRED, SK_ColorBLUE, SK_ColorBLUE, SK_ColorGREEN, SK_ColorGREEN,
     };
-    constexpr int count = SK_ARRAY_COUNT(colors);
+    constexpr int count = std::size(colors);
     SkScalar pos[count] = { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6 };
     for (int i = 0; i < count; ++i) {
         pos[i] *= 1.0f/6;
@@ -57,7 +58,12 @@ static void do_draw(SkCanvas* canvas, bool useClip, bool useHintRect, SkScalar s
     }
     // Using kClamp because kDecal, the default, produces transparency near the edge of the canvas's
     // device.
-    auto blur = SkImageFilters::Blur(sigma, sigma, SkTileMode::kClamp, nullptr);
+    SkRect blurCrop;
+    SkAssertResult(SkMatrixPriv::InverseMapRect(canvas->getLocalToDeviceAs3x3(),
+                                                &blurCrop,
+                                                SkRect::MakeWH(canvas->imageInfo().width(),
+                                                               canvas->imageInfo().height())));
+    auto blur = SkImageFilters::Blur(sigma, sigma, SkTileMode::kClamp, nullptr, blurCrop);
     auto rec = SkCanvasPriv::ScaledBackdropLayer(drawrptr, nullptr, blur.get(), scaleFactor, 0);
     canvas->saveLayer(rec);
         // draw something inside, just to demonstrate that we don't blur the new contents,

@@ -8,8 +8,25 @@
 #ifndef SkPathPriv_DEFINED
 #define SkPathPriv_DEFINED
 
+#include "include/core/SkPath.h"
 #include "include/core/SkPathBuilder.h"
+#include "include/core/SkPathTypes.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
 #include "include/private/SkIDChangeListener.h"
+#include "include/private/SkPathRef.h"
+#include "include/private/base/SkDebug.h"
+#include "src/core/SkPathEnums.h"
+
+#include <cstdint>
+#include <iterator>
+#include <utility>
+
+class SkMatrix;
+class SkRRect;
 
 static_assert(0 == static_cast<int>(SkPathFillType::kWinding), "fill_type_mismatch");
 static_assert(1 == static_cast<int>(SkPathFillType::kEvenOdd), "fill_type_mismatch");
@@ -18,12 +35,6 @@ static_assert(3 == static_cast<int>(SkPathFillType::kInverseEvenOdd), "fill_type
 
 class SkPathPriv {
 public:
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    static const int kPathRefGenIDBitCnt = 30; // leave room for the fill type (skbug.com/1762)
-#else
-    static const int kPathRefGenIDBitCnt = 32;
-#endif
-
     // skbug.com/9906: Not a perfect solution for W plane clipping, but 1/16384 is a
     // reasonable limit (roughly 5e-5)
     inline static constexpr SkScalar kW0PlaneDistance = 1.f / (1 << 14);
@@ -302,7 +313,7 @@ public:
             0   // kDone
         };
 
-        SkASSERT(verb < SK_ARRAY_COUNT(gPtsInVerb));
+        SkASSERT(verb < std::size(gPtsInVerb));
         return gPtsInVerb[verb];
     }
 
@@ -319,7 +330,7 @@ public:
             0   // kDone
         };
 
-        SkASSERT(verb < SK_ARRAY_COUNT(gPtsInVerb));
+        SkASSERT(verb < std::size(gPtsInVerb));
         return gPtsInVerb[verb];
     }
 
@@ -402,9 +413,6 @@ public:
     static void SetConvexity(const SkPath& path, SkPathConvexity c) {
         path.setConvexity(c);
     }
-    static void SetConvexity(SkPathBuilder* builder, SkPathConvexity c) {
-        builder->privateSetConvexity(c);
-    }
     static void ForceComputeConvexity(const SkPath& path) {
         path.setConvexity(SkPathConvexity::kUnknown);
         (void)path.isConvex();
@@ -412,6 +420,17 @@ public:
 
     static void ReverseAddPath(SkPathBuilder* builder, const SkPath& reverseMe) {
         builder->privateReverseAddPath(reverseMe);
+    }
+
+    static SkPath MakePath(const SkPathVerbAnalysis& analysis,
+                           const SkPoint points[],
+                           const uint8_t verbs[],
+                           int verbCount,
+                           const SkScalar conics[],
+                           SkPathFillType fillType,
+                           bool isVolatile) {
+        return SkPath::MakeInternal(analysis, points, verbs, verbCount, conics, fillType,
+                                    isVolatile);
     }
 };
 

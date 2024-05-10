@@ -4,13 +4,29 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "tests/Test.h"
+#include "include/core/SkTypes.h"
 
+#ifdef SK_SUPPORT_PDF
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkDocument.h"
 #include "include/core/SkFont.h"
+#include "include/core/SkImage.h" // IWYU pragma: keep
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
 #include "include/docs/SkPDFDocument.h"
+#include "src/pdf/SkPDFUtils.h"
+#include "tests/Test.h"
+#include "tools/fonts/FontToolUtils.h"
+
+#include <memory>
+#include <utility>
+#include <vector>
 
 using PDFTag = SkPDF::StructureElementNode;
 
@@ -30,8 +46,9 @@ DEF_TEST(SkPDF_tagged_doc, r) {
     SkPDF::Metadata metadata;
     metadata.fTitle = "Example Tagged PDF";
     metadata.fCreator = "Skia";
-    SkTime::DateTime now;
-    SkTime::GetDateTime(&now);
+    metadata.fOutline = SkPDF::Metadata::Outline::StructureElementHeaders;
+    SkPDF::DateTime now;
+    SkPDFUtils::GetDateTime(&now);
     metadata.fCreation = now;
     metadata.fModified = now;
 
@@ -44,6 +61,7 @@ DEF_TEST(SkPDF_tagged_doc, r) {
     auto h1 = std::make_unique<PDFTag>();
     h1->fNodeId = 2;
     h1->fTypeString = "H1";
+    h1->fAlt = "A Header";
     root->fChildVector.push_back(std::move(h1));
 
     // Initial paragraph.
@@ -110,7 +128,7 @@ DEF_TEST(SkPDF_tagged_doc, r) {
             document->beginPage(pageSize.width(),
                                 pageSize.height());
     SkPDF::SetNodeId(canvas, 2);
-    SkFont font(nullptr, 36);
+    SkFont font(ToolUtils::DefaultTypeface(), 36);
     const char* message = "This is the title";
     canvas->translate(72, 72);
     canvas->drawString(message, 0, 0, font, paint);
@@ -178,3 +196,4 @@ DEF_TEST(SkPDF_tagged_doc, r) {
 
     outputStream.flush();
 }
+#endif

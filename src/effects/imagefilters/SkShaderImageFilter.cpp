@@ -5,30 +5,42 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkCanvas.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkImageFilter.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
+#include "src/core/SkImageFilterTypes.h"
 #include "src/core/SkImageFilter_Base.h"
+#include "src/core/SkPicturePriv.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkSpecialImage.h"
-#include "src/core/SkSpecialSurface.h"
+#include "src/core/SkRectPriv.h"
 #include "src/core/SkWriteBuffer.h"
+
+#include <optional>
+#include <utility>
 
 namespace {
 
 class SkShaderImageFilter final : public SkImageFilter_Base {
 public:
-    SkShaderImageFilter(const SkPaint& paint, const SkRect* rect)
-            : INHERITED(nullptr, 0, rect)
-            , fPaint(paint) {}
+    SkShaderImageFilter(sk_sp<SkShader> shader, SkImageFilters::Dither dither)
+            : SkImageFilter_Base(nullptr, 0)
+            , fShader(std::move(shader))
+            , fDither(dither) {
+        SkASSERT(fShader);
+    }
 
-    static sk_sp<SkImageFilter> Make(const SkPaint& paint, const SkRect* rect) {
-        return sk_sp<SkImageFilter>(new SkShaderImageFilter(paint, rect));
+    SkRect computeFastBounds(const SkRect& /*bounds*/) const override {
+        return SkRectPriv::MakeLargeS32();
     }
 
 protected:
     void flatten(SkWriteBuffer&) const override;
-    sk_sp<SkSpecialImage> onFilterImage(const Context&, SkIPoint* offset) const override;
 
 private:
     friend void ::SkRegisterShaderImageFilterFlattenable();
@@ -36,25 +48,37 @@ private:
 
     bool onAffectsTransparentBlack() const override { return true; }
 
-    // This filter only applies the shader and dithering policy of the paint.
-    SkPaint fPaint;
+    MatrixCapability onGetCTMCapability() const override { return MatrixCapability::kComplex; }
 
-    using INHERITED = SkImageFilter_Base;
+    skif::FilterResult onFilterImage(const skif::Context&) const override;
+
+    skif::LayerSpace<SkIRect> onGetInputLayerBounds(
+            const skif::Mapping& mapping,
+            const skif::LayerSpace<SkIRect>& desiredOutput,
+            std::optional<skif::LayerSpace<SkIRect>> contentBounds) const override;
+
+    std::optional<skif::LayerSpace<SkIRect>> onGetOutputLayerBounds(
+            const skif::Mapping& mapping,
+            std::optional<skif::LayerSpace<SkIRect>> contentBounds) const override;
+
+    sk_sp<SkShader> fShader;
+    SkImageFilters::Dither fDither;
 };
 
 } // end namespace
 
-// TODO(michaelludwig) - Remove this deprecated factory once modules/svg is updated
-sk_sp<SkImageFilter> SkImageFilters::Paint(const SkPaint& paint, const CropRect& cropRect) {
-    return SkShaderImageFilter::Make(paint, cropRect);
-}
-
-sk_sp<SkImageFilter> SkImageFilters::Shader(sk_sp<SkShader> shader, Dither dither,
+sk_sp<SkImageFilter> SkImageFilters::Shader(sk_sp<SkShader> shader,
+                                            Dither dither,
                                             const CropRect& cropRect) {
-    SkPaint paint;
-    paint.setShader(std::move(shader));
-    paint.setDither((bool) dither);
-    return SkShaderImageFilter::Make(paint, cropRect);
+    if (!shader) {
+        return SkImageFilters::Empty();
+    }
+
+    sk_sp<SkImageFilter> filter{new SkShaderImageFilter(std::move(shader), dither)};
+    if (cropRect) {
+        filter = SkImageFilters::Crop(*cropRect, std::move(filter));
+    }
+    return filter;
 }
 
 void SkRegisterShaderImageFilterFlattenable() {
@@ -66,48 +90,49 @@ void SkRegisterShaderImageFilterFlattenable() {
 
 sk_sp<SkFlattenable> SkShaderImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 0);
-    return SkShaderImageFilter::Make(buffer.readPaint(), common.cropRect());
+    sk_sp<SkShader> shader;
+    bool dither;
+    if (buffer.isVersionLT(SkPicturePriv::kShaderImageFilterSerializeShader)) {
+        // The old implementation stored an entire SkPaint, but we only need the SkShader and dither
+        // boolean. We could fail if the paint stores more effects than that, but this is simpler.
+        SkPaint paint = buffer.readPaint();
+        shader = paint.getShader() ? paint.refShader()
+                                   : SkShaders::Color(paint.getColor4f(), nullptr);
+        dither = paint.isDither();
+    } else {
+        shader = buffer.readShader();
+        dither = buffer.readBool();
+    }
+    return SkImageFilters::Shader(std::move(shader),
+                                  SkImageFilters::Dither(dither),
+                                  common.cropRect());
 }
 
 void SkShaderImageFilter::flatten(SkWriteBuffer& buffer) const {
-    this->INHERITED::flatten(buffer);
-    buffer.writePaint(fPaint);
+    this->SkImageFilter_Base::flatten(buffer);
+    buffer.writeFlattenable(fShader.get());
+    buffer.writeBool(fDither == SkImageFilters::Dither::kYes);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-sk_sp<SkSpecialImage> SkShaderImageFilter::onFilterImage(const Context& ctx,
-                                                         SkIPoint* offset) const {
-    SkIRect bounds;
-    const SkIRect srcBounds = SkIRect::MakeWH(ctx.sourceImage()->width(),
-                                              ctx.sourceImage()->height());
-    if (!this->applyCropRect(ctx, srcBounds, &bounds)) {
-        return nullptr;
-    }
+skif::FilterResult SkShaderImageFilter::onFilterImage(const skif::Context& ctx) const {
+    const bool dither = fDither == SkImageFilters::Dither::kYes;
+    return skif::FilterResult::MakeFromShader(ctx, fShader, dither);
+}
 
-    sk_sp<SkSpecialSurface> surf(ctx.makeSurface(bounds.size()));
-    if (!surf) {
-        return nullptr;
-    }
+skif::LayerSpace<SkIRect> SkShaderImageFilter::onGetInputLayerBounds(
+        const skif::Mapping&,
+        const skif::LayerSpace<SkIRect>&,
+        std::optional<skif::LayerSpace<SkIRect>>) const {
+    // This is a leaf filter, it requires no input and no further recursion
+    return skif::LayerSpace<SkIRect>::Empty();
+}
 
-    SkCanvas* canvas = surf->getCanvas();
-    SkASSERT(canvas);
-
-    canvas->clear(0x0);
-
-    SkMatrix matrix(ctx.ctm());
-    matrix.postTranslate(SkIntToScalar(-bounds.left()), SkIntToScalar(-bounds.top()));
-    SkRect rect = SkRect::MakeIWH(bounds.width(), bounds.height());
-    SkMatrix inverse;
-    if (matrix.invert(&inverse)) {
-        inverse.mapRect(&rect);
-    }
-    canvas->setMatrix(matrix);
-    if (rect.isFinite()) {
-        canvas->drawRect(rect, fPaint);
-    }
-
-    offset->fX = bounds.fLeft;
-    offset->fY = bounds.fTop;
-    return surf->makeImageSnapshot();
+std::optional<skif::LayerSpace<SkIRect>> SkShaderImageFilter::onGetOutputLayerBounds(
+        const skif::Mapping&,
+        std::optional<skif::LayerSpace<SkIRect>>) const {
+    // The output of a shader is infinite, unless we were to inspect the shader for a decal
+    // tile mode around a gradient or image.
+    return skif::LayerSpace<SkIRect>::Unbounded();
 }

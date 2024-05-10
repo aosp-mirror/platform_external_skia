@@ -23,6 +23,15 @@ Below is a summary of the necessary steps.
 `depot_tools` will also install Git on your system, if it wasn't installed
 already.
 
+### Install `bazelisk`
+If you intend to add or remove files, or change #includes, you will need to use Bazel to
+regenerate parts of the BUILD.bazel files. Instead of installing Bazel manually, we recommend
+you install [Bazelisk](https://github.com/bazelbuild/bazelisk#installation), which will fetch the
+appropriate version of [Bazel](https://bazel.build/) for you (as specified by //.bazelversion).
+
+### Install `ninja`
+Ninja can be supplied using `gclient` or with `bin/fetch-ninja`.
+
 ## Clone the Skia repository
 
 Skia can either be cloned using `git` or the `fetch` tool that is
@@ -34,7 +43,8 @@ installed with `depot_tools`.
     # or
     # fetch skia
     cd skia
-    python2 tools/git-sync-deps
+    python3 tools/git-sync-deps
+    bin/fetch-ninja
 
 ## Getting started with Skia
 

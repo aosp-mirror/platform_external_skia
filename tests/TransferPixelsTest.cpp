@@ -5,22 +5,42 @@
  * found in the LICENSE file.
  */
 
-// This is a GPU-backend specific test. It relies on static intializers to work
+// This is a GPU-backend specific test. It relies on static initializers to work
 
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkTypes.h"
-
-#include "include/core/SkSurface.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrGpu.h"
-#include "src/gpu/GrImageInfo.h"
-#include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/GrSurfaceProxy.h"
-#include "src/gpu/GrTexture.h"
-#include "src/gpu/SkGr.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/base/SkAlign.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrColor.h"
+#include "src/gpu/ganesh/GrDataUtils.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/GrGpuBuffer.h"
+#include "src/gpu/ganesh/GrImageInfo.h"
+#include "src/gpu/ganesh/GrPixmap.h"
+#include "src/gpu/ganesh/GrResourceProvider.h"
+#include "src/gpu/ganesh/GrTexture.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
-#include "tools/gpu/GrContextFactory.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <initializer_list>
+#include <memory>
+
+struct GrContextOptions;
 
 using sk_gpu_test::GrContextFactory;
 
@@ -126,9 +146,15 @@ void basic_transfer_to_test(skiatest::Reporter* reporter,
     int srcBufferWidth = caps->transferPixelsToRowBytesSupport() ? 20 : 16;
     const int kBufferHeight = 16;
 
-    sk_sp<GrTexture> tex =
-            resourceProvider->createTexture(kTexDims, backendFormat, GrTextureType::k2D, renderable,
-                                            1, GrMipmapped::kNo, SkBudgeted::kNo, GrProtected::kNo);
+    sk_sp<GrTexture> tex = resourceProvider->createTexture(kTexDims,
+                                                           backendFormat,
+                                                           GrTextureType::k2D,
+                                                           renderable,
+                                                           1,
+                                                           skgpu::Mipmapped::kNo,
+                                                           skgpu::Budgeted::kNo,
+                                                           GrProtected::kNo,
+                                                           /*label=*/{});
     if (!tex) {
         ERRORF(reporter, "Could not create texture");
         return;
@@ -156,7 +182,7 @@ void basic_transfer_to_test(skiatest::Reporter* reporter,
         return;
     }
     size_t srcRowBytes = SkAlignTo(GrColorTypeBytesPerPixel(allowedSrc.fColorType) * srcBufferWidth,
-                                   caps->transferBufferAlignment());
+                                   caps->transferBufferRowBytesAlignment());
 
     std::unique_ptr<char[]> srcData(new char[kTexDims.fHeight * srcRowBytes]);
 
@@ -165,8 +191,10 @@ void basic_transfer_to_test(skiatest::Reporter* reporter,
 
     // create and fill transfer buffer
     size_t size = srcRowBytes * kBufferHeight;
-    sk_sp<GrGpuBuffer> buffer(resourceProvider->createBuffer(size, GrGpuBufferType::kXferCpuToGpu,
-                                                             kDynamic_GrAccessPattern));
+    sk_sp<GrGpuBuffer> buffer = resourceProvider->createBuffer(size,
+                                                               GrGpuBufferType::kXferCpuToGpu,
+                                                               kDynamic_GrAccessPattern,
+                                                               GrResourceProvider::ZeroInit::kNo);
     if (!buffer) {
         return;
     }
@@ -313,10 +341,17 @@ void basic_transfer_from_test(skiatest::Reporter* reporter, const sk_gpu_test::C
     GrMipLevel data;
     data.fPixels = textureData.get();
     data.fRowBytes = textureDataRowBytes;
-    sk_sp<GrTexture> tex = resourceProvider->createTexture(kTexDims, format, GrTextureType::k2D,
-                                                           colorType, renderable, 1,
-                                                           SkBudgeted::kNo, GrMipMapped::kNo,
-                                                           GrProtected::kNo, &data);
+    sk_sp<GrTexture> tex = resourceProvider->createTexture(kTexDims,
+                                                           format,
+                                                           GrTextureType::k2D,
+                                                           colorType,
+                                                           renderable,
+                                                           1,
+                                                           skgpu::Budgeted::kNo,
+                                                           skgpu::Mipmapped::kNo,
+                                                           GrProtected::kNo,
+                                                           &data,
+                                                           /*label=*/{});
     if (!tex) {
         return;
     }
@@ -341,8 +376,10 @@ void basic_transfer_from_test(skiatest::Reporter* reporter, const sk_gpu_test::C
     GrImageInfo readInfo(allowedRead.fColorType, kUnpremul_SkAlphaType, nullptr, kTexDims);
 
     size_t bpp = GrColorTypeBytesPerPixel(allowedRead.fColorType);
-    size_t fullBufferRowBytes = SkAlignTo(kTexDims.fWidth * bpp, caps->transferBufferAlignment());
-    size_t partialBufferRowBytes = SkAlignTo(kPartialWidth * bpp, caps->transferBufferAlignment());
+    size_t fullBufferRowBytes = SkAlignTo(kTexDims.fWidth * bpp,
+                                          caps->transferBufferRowBytesAlignment());
+    size_t partialBufferRowBytes = SkAlignTo(kPartialWidth * bpp,
+                                             caps->transferBufferRowBytesAlignment());
     size_t offsetAlignment = allowedRead.fOffsetAlignmentForTransferBuffer;
     SkASSERT(offsetAlignment);
 
@@ -354,8 +391,10 @@ void basic_transfer_from_test(skiatest::Reporter* reporter, const sk_gpu_test::C
     bufferSize = std::max(bufferSize,
                           partialReadOffset + partialBufferRowBytes * kPartialHeight);
 
-    sk_sp<GrGpuBuffer> buffer(resourceProvider->createBuffer(
-            bufferSize, GrGpuBufferType::kXferGpuToCpu, kDynamic_GrAccessPattern));
+    sk_sp<GrGpuBuffer> buffer = resourceProvider->createBuffer(bufferSize,
+                                                               GrGpuBufferType::kXferGpuToCpu,
+                                                               kDynamic_GrAccessPattern,
+                                                               GrResourceProvider::ZeroInit::kNo);
     REPORTER_ASSERT(reporter, buffer);
     if (!buffer) {
         return;
@@ -379,7 +418,7 @@ void basic_transfer_from_test(skiatest::Reporter* reporter, const sk_gpu_test::C
     ++expectedTransferCnt;
 
     if (context->priv().caps()->mapBufferFlags() & GrCaps::kAsyncRead_MapFlag) {
-        gpu->submitToGpu(true);
+        gpu->submitToGpu(GrSyncCpu::kYes);
     }
 
     // Copy the transfer buffer contents to a temporary so we can manipulate it.
@@ -426,7 +465,7 @@ void basic_transfer_from_test(skiatest::Reporter* reporter, const sk_gpu_test::C
     ++expectedTransferCnt;
 
     if (context->priv().caps()->mapBufferFlags() & GrCaps::kAsyncRead_MapFlag) {
-        gpu->submitToGpu(true);
+        gpu->submitToGpu(GrSyncCpu::kYes);
     }
 
     map = reinterpret_cast<const char*>(buffer->map());
@@ -454,7 +493,10 @@ void basic_transfer_from_test(skiatest::Reporter* reporter, const sk_gpu_test::C
 #endif
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TransferPixelsToTextureTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TransferPixelsToTextureTest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     if (!ctxInfo.directContext()->priv().caps()->transferFromBufferToTextureSupport()) {
         return;
     }
@@ -470,6 +512,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TransferPixelsToTextureTest, reporter, ctxInf
                      GrColorType::kBGRA_8888,
                      GrColorType::kRGBA_1010102,
                      GrColorType::kBGRA_1010102,
+                     GrColorType::kRGBA_10x6,
                      GrColorType::kGray_8,
                      GrColorType::kAlpha_F16,
                      GrColorType::kRGBA_F16,
@@ -486,7 +529,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TransferPixelsToTextureTest, reporter, ctxInf
 }
 
 // TODO(bsalomon): Metal
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TransferPixelsFromTextureTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TransferPixelsFromTextureTest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     if (!ctxInfo.directContext()->priv().caps()->transferFromSurfaceToBufferSupport()) {
         return;
     }
@@ -503,6 +549,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TransferPixelsFromTextureTest, reporter, ctxI
                      GrColorType::kBGRA_8888,
                      GrColorType::kRGBA_1010102,
                      GrColorType::kBGRA_1010102,
+                     GrColorType::kRGBA_10x6,
                      GrColorType::kGray_8,
                      GrColorType::kAlpha_F16,
                      GrColorType::kRGBA_F16,

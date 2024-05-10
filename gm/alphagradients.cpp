@@ -23,13 +23,9 @@ public:
     AlphaGradientsGM() {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("alphagradients");
-    }
+    SkString getName() const override { return SkString("alphagradients"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(640, 480);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 480); }
 
     static void draw_grad(SkCanvas* canvas, const SkRect& r,
                           SkColor c0, SkColor c1, bool doPreMul) {
@@ -71,7 +67,7 @@ protected:
 
         for (int doPreMul = 0; doPreMul <= 1; ++doPreMul) {
             canvas->save();
-            for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); ++i) {
+            for (size_t i = 0; i < std::size(gRec); ++i) {
                 draw_grad(canvas, r, gRec[i].fColor0, gRec[i].fColor1, SkToBool(doPreMul));
                 canvas->translate(0, r.height() + 8);
             }

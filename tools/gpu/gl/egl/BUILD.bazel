@@ -1,12 +1,21 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_deps", "skia_filegroup")
 
-generated_cc_atom(
-    name = "CreatePlatformGLTestContext_egl_src",
-    srcs = ["CreatePlatformGLTestContext_egl.cpp"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        "//src/gpu/gl:GrGLDefines_hdr",
-        "//src/gpu/gl:GrGLUtil_hdr",
-        "//tools/gpu/gl:GLTestContext_hdr",
+licenses(["notice"])
+
+exports_files_legacy()
+
+skia_filegroup(
+    name = "srcs",
+    srcs = [
+        "CreatePlatformGLTestContext_egl.cpp",
     ],
+    visibility = ["//tools/gpu/gl:__pkg__"],
+)
+
+skia_cc_deps(
+    name = "deps",
+    linkopts = [
+        "-lEGL",
+    ],
+    visibility = ["//tools/gpu/gl:__pkg__"],
 )

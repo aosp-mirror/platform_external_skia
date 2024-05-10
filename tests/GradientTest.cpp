@@ -5,18 +5,55 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkColorPriv.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/SkTemplates.h"
-#include "src/core/SkMatrixProvider.h"
-#include "src/core/SkTLazy.h"
-#include "src/gpu/GrColorInfo.h"
-#include "src/shaders/SkColorShader.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "include/gpu/mock/GrMockTypes.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/base/SkTLazy.h"
+#include "src/gpu/ganesh/GrColorInfo.h"
+#include "src/gpu/ganesh/GrFPArgs.h"
+#include "src/gpu/ganesh/GrFragmentProcessors.h"
+#include "src/shaders/SkShaderBase.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
+
+#include <cstdint>
+#include <cstring>
+#include <string>
+
+// #if defined(SK_GRAPHITE)
+// #include "include/gpu/graphite/Context.h"
+// #include "include/gpu/graphite/Surface.h"
+// #endif
+
+struct GrContextOptions;
+
+using namespace skia_private;
 
 // https://code.google.com/p/chromium/issues/detail?id=448299
 // Giant (inverse) matrix causes overflow when converting/computing using 32.32
@@ -49,16 +86,20 @@ struct GradRec {
     const SkScalar* fRadius; // 2
     SkTileMode      fTileMode;
 
-    void gradCheck(skiatest::Reporter* reporter, const sk_sp<SkShader>& shader,
-                   SkShader::GradientInfo* info,
-                   SkShader::GradientType gt) const {
-        SkAutoTMalloc<SkColor> colorStorage(fColorCount);
-        SkAutoTMalloc<SkScalar> posStorage(fColorCount);
+    void gradCheck(skiatest::Reporter* reporter,
+                   const sk_sp<SkShader>& shader,
+                   SkShaderBase::GradientInfo* info,
+                   SkShaderBase::GradientType gt,
+                   const SkMatrix& localMatrix = SkMatrix::I()) const {
+        AutoTMalloc<SkColor> colorStorage(fColorCount);
+        AutoTMalloc<SkScalar> posStorage(fColorCount);
 
         info->fColorCount = fColorCount;
         info->fColors = colorStorage;
         info->fColorOffsets = posStorage.get();
-        REPORTER_ASSERT(reporter, shader->asAGradient(info) == gt);
+        SkMatrix shaderLocalMatrix;
+        REPORTER_ASSERT(reporter, as_SB(shader)->asGradient(info, &shaderLocalMatrix) == gt);
+        REPORTER_ASSERT(reporter, shaderLocalMatrix == localMatrix);
 
         REPORTER_ASSERT(reporter, info->fColorCount == fColorCount);
         REPORTER_ASSERT(reporter,
@@ -72,18 +113,12 @@ struct GradRec {
 
 static void none_gradproc(skiatest::Reporter* reporter, const GradRec&, const GradRec&) {
     sk_sp<SkShader> s(SkShaders::Empty());
-    REPORTER_ASSERT(reporter, SkShader::kNone_GradientType == s->asAGradient(nullptr));
+    REPORTER_ASSERT(reporter, SkShaderBase::GradientType::kNone == as_SB(s)->asGradient());
 }
 
 static void color_gradproc(skiatest::Reporter* reporter, const GradRec& rec, const GradRec&) {
-    sk_sp<SkShader> s(new SkColorShader(rec.fColors[0]));
-    REPORTER_ASSERT(reporter, SkShader::kColor_GradientType == s->asAGradient(nullptr));
-
-    SkShader::GradientInfo info;
-    info.fColors = nullptr;
-    info.fColorCount = 0;
-    s->asAGradient(&info);
-    REPORTER_ASSERT(reporter, 1 == info.fColorCount);
+    sk_sp<SkShader> s(SkShaders::Color(rec.fColors[0]));
+    REPORTER_ASSERT(reporter, SkShaderBase::GradientType::kNone == as_SB(s)->asGradient());
 }
 
 static void linear_gradproc(skiatest::Reporter* reporter, const GradRec& buildRec,
@@ -91,8 +126,8 @@ static void linear_gradproc(skiatest::Reporter* reporter, const GradRec& buildRe
     sk_sp<SkShader> s(SkGradientShader::MakeLinear(buildRec.fPoint, buildRec.fColors, buildRec.fPos,
                                                    buildRec.fColorCount, buildRec.fTileMode));
 
-    SkShader::GradientInfo info;
-    checkRec.gradCheck(reporter, s, &info, SkShader::kLinear_GradientType);
+    SkShaderBase::GradientInfo info;
+    checkRec.gradCheck(reporter, s, &info, SkShaderBase::GradientType::kLinear);
     REPORTER_ASSERT(reporter, !memcmp(info.fPoint, checkRec.fPoint, 2 * sizeof(SkPoint)));
 }
 
@@ -102,8 +137,8 @@ static void radial_gradproc(skiatest::Reporter* reporter, const GradRec& buildRe
                                                    buildRec.fColors, buildRec.fPos,
                                                    buildRec.fColorCount, buildRec.fTileMode));
 
-    SkShader::GradientInfo info;
-    checkRec.gradCheck(reporter, s, &info, SkShader::kRadial_GradientType);
+    SkShaderBase::GradientInfo info;
+    checkRec.gradCheck(reporter, s, &info, SkShaderBase::GradientType::kRadial);
     REPORTER_ASSERT(reporter, info.fPoint[0] == checkRec.fPoint[0]);
     REPORTER_ASSERT(reporter, info.fRadius[0] == checkRec.fRadius[0]);
 }
@@ -114,8 +149,8 @@ static void sweep_gradproc(skiatest::Reporter* reporter, const GradRec& buildRec
                                                   buildRec.fColors, buildRec.fPos,
                                                   buildRec.fColorCount));
 
-    SkShader::GradientInfo info;
-    checkRec.gradCheck(reporter, s, &info, SkShader::kSweep_GradientType);
+    SkShaderBase::GradientInfo info;
+    checkRec.gradCheck(reporter, s, &info, SkShaderBase::GradientType::kSweep);
     REPORTER_ASSERT(reporter, info.fPoint[0] == checkRec.fPoint[0]);
 }
 
@@ -130,10 +165,30 @@ static void conical_gradproc(skiatest::Reporter* reporter, const GradRec& buildR
                                                             buildRec.fColorCount,
                                                             buildRec.fTileMode));
 
-    SkShader::GradientInfo info;
-    checkRec.gradCheck(reporter, s, &info, SkShader::kConical_GradientType);
+    SkShaderBase::GradientInfo info;
+    checkRec.gradCheck(reporter, s, &info, SkShaderBase::GradientType::kConical);
     REPORTER_ASSERT(reporter, !memcmp(info.fPoint, checkRec.fPoint, 2 * sizeof(SkPoint)));
     REPORTER_ASSERT(reporter, !memcmp(info.fRadius, checkRec.fRadius, 2 * sizeof(SkScalar)));
+}
+
+static void linear_gradproc_matrix(skiatest::Reporter* reporter, const GradRec& buildRec,
+                                   const GradRec& checkRec) {
+    SkMatrix localMatrix = SkMatrix::RotateDeg(45, {100, 100});
+    sk_sp<SkShader> s(SkGradientShader::MakeLinear(buildRec.fPoint, buildRec.fColors, buildRec.fPos,
+                                                   buildRec.fColorCount, buildRec.fTileMode,
+                                                   /*flags=*/0,
+                                                   &localMatrix));
+
+    SkShaderBase::GradientInfo info;
+    checkRec.gradCheck(reporter, s, &info, SkShaderBase::GradientType::kLinear, localMatrix);
+    REPORTER_ASSERT(reporter, !memcmp(info.fPoint, checkRec.fPoint, 2 * sizeof(SkPoint)));
+
+    // Same but using a local matrix wrapper.
+    s = SkGradientShader::MakeLinear(buildRec.fPoint, buildRec.fColors, buildRec.fPos,
+                                     buildRec.fColorCount, buildRec.fTileMode);
+    s = s->makeWithLocalMatrix(localMatrix);
+    checkRec.gradCheck(reporter, s, &info, SkShaderBase::GradientType::kLinear, localMatrix);
+    REPORTER_ASSERT(reporter, !memcmp(info.fPoint, checkRec.fPoint, 2 * sizeof(SkPoint)));
 }
 
 // Ensure that repeated color gradients behave like drawing a single color
@@ -170,7 +225,7 @@ static void TestGradientShaders(skiatest::Reporter* reporter) {
     static const SkScalar gRad[] = { SkIntToScalar(1), SkIntToScalar(2) };
 
     GradRec rec;
-    rec.fColorCount = SK_ARRAY_COUNT(gColors);
+    rec.fColorCount = std::size(gColors);
     rec.fColors = gColors;
     rec.fPos = gPos;
     rec.fPoint = gPts;
@@ -181,100 +236,19 @@ static void TestGradientShaders(skiatest::Reporter* reporter) {
         none_gradproc,
         color_gradproc,
         linear_gradproc,
+        linear_gradproc_matrix,
         radial_gradproc,
         sweep_gradproc,
         conical_gradproc,
     };
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(gProcs); ++i) {
+    for (size_t i = 0; i < std::size(gProcs); ++i) {
         gProcs[i](reporter, rec, rec);
     }
 }
 
-static void TestGradientOptimization(skiatest::Reporter* reporter) {
-    static const struct {
-        GradProc fProc;
-        bool     fIsClampRestricted;
-    } gProcInfo[] = {
-        { linear_gradproc , false },
-        { radial_gradproc , false },
-        { sweep_gradproc  , true  }, // sweep is funky in that it always pretends to be kClamp.
-        { conical_gradproc, false },
-    };
-
-    static const SkColor   gC_00[] = { 0xff000000, 0xff000000 };
-    static const SkColor   gC_01[] = { 0xff000000, 0xffffffff };
-    static const SkColor   gC_11[] = { 0xffffffff, 0xffffffff };
-    static const SkColor  gC_001[] = { 0xff000000, 0xff000000, 0xffffffff };
-    static const SkColor  gC_011[] = { 0xff000000, 0xffffffff, 0xffffffff };
-    static const SkColor gC_0011[] = { 0xff000000, 0xff000000, 0xffffffff, 0xffffffff };
-
-    static const SkScalar   gP_01[] = { 0, 1 };
-    static const SkScalar  gP_001[] = { 0,   0, 1 };
-    static const SkScalar  gP_011[] = { 0,   1, 1 };
-    static const SkScalar  gP_0x1[] = { 0, .5f, 1 };
-    static const SkScalar gP_0011[] = { 0, 0, 1, 1 };
-
-    static const SkPoint    gPts[] = { {0, 0}, {1, 1} };
-    static const SkScalar gRadii[] = { 1, 2 };
-
-    static const struct {
-        const SkColor*  fCol;
-        const SkScalar* fPos;
-        int             fCount;
-
-        const SkColor*  fExpectedCol;
-        const SkScalar* fExpectedPos;
-        int             fExpectedCount;
-        bool            fRequiresNonClamp;
-    } gTests[] = {
-        { gC_001,  gP_001, 3,  gC_01,  gP_01, 2, false },
-        { gC_001,  gP_011, 3,  gC_00,  gP_01, 2, true  },
-        { gC_001,  gP_0x1, 3, gC_001, gP_0x1, 3, false },
-        { gC_001, nullptr, 3, gC_001, gP_0x1, 3, false },
-
-        { gC_011,  gP_001, 3,  gC_11,  gP_01, 2, true  },
-        { gC_011,  gP_011, 3,  gC_01,  gP_01, 2, false },
-        { gC_011,  gP_0x1, 3, gC_011, gP_0x1, 3, false },
-        { gC_011, nullptr, 3, gC_011, gP_0x1, 3, false },
-
-        { gC_0011, gP_0011, 4, gC_0011, gP_0011, 4, false },
-    };
-
-    const SkTileMode modes[] = {
-        SkTileMode::kClamp, SkTileMode::kRepeat, SkTileMode::kMirror,
-        // TODO: add kDecal_TileMode when it is implemented
-    };
-    for (size_t i = 0; i < SK_ARRAY_COUNT(gProcInfo); ++i) {
-        for (auto mode : modes) {
-            if (gProcInfo[i].fIsClampRestricted && mode != SkTileMode::kClamp) {
-                continue;
-            }
-
-            for (size_t t = 0; t < SK_ARRAY_COUNT(gTests); ++t) {
-                GradRec rec;
-                rec.fColorCount = gTests[t].fCount;
-                rec.fColors     = gTests[t].fCol;
-                rec.fPos        = gTests[t].fPos;
-                rec.fTileMode   = mode;
-                rec.fPoint      = gPts;
-                rec.fRadius     = gRadii;
-
-                GradRec expected = rec;
-                if (!gTests[t].fRequiresNonClamp || mode != SkTileMode::kClamp) {
-                    expected.fColorCount = gTests[t].fExpectedCount;
-                    expected.fColors     = gTests[t].fExpectedCol;
-                    expected.fPos        = gTests[t].fExpectedPos;
-                }
-
-                gProcInfo[i].fProc(reporter, rec, expected);
-            }
-        }
-    }
-}
-
 static void test_nearly_vertical(skiatest::Reporter* reporter) {
-    auto surface(SkSurface::MakeRasterN32Premul(200, 200));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(200, 200)));
 
     const SkPoint pts[] = {{ 100, 50 }, { 100.0001f, 50000 }};
     const SkColor colors[] = { SK_ColorBLACK, SK_ColorWHITE };
@@ -286,7 +260,7 @@ static void test_nearly_vertical(skiatest::Reporter* reporter) {
 }
 
 static void test_vertical(skiatest::Reporter* reporter) {
-    auto surface(SkSurface::MakeRasterN32Premul(200, 200));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(200, 200)));
 
     const SkPoint pts[] = {{ 100, 50 }, { 100, 50 }};
     const SkColor colors[] = { SK_ColorBLACK, SK_ColorWHITE };
@@ -302,7 +276,7 @@ static void test_vertical(skiatest::Reporter* reporter) {
 // The old code had an assert which this test triggered.
 // We now explicitly clamp the resulting fx value.
 static void test_linear_fuzz(skiatest::Reporter* reporter) {
-    auto surface(SkSurface::MakeRasterN32Premul(1300, 630));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(1300, 630)));
 
     const SkPoint pts[] = {{ 179.5f, -179.5f }, { 1074.5f, 715.5f }};
     const SkColor colors[] = { SK_ColorBLACK, SK_ColorWHITE, SK_ColorBLACK, SK_ColorWHITE };
@@ -318,7 +292,7 @@ static void test_linear_fuzz(skiatest::Reporter* reporter) {
 // https://bugs.chromium.org/p/skia/issues/detail?id=5023
 // We should still shade pixels for which the radius is exactly 0.
 static void test_two_point_conical_zero_radius(skiatest::Reporter* reporter) {
-    auto surface(SkSurface::MakeRasterN32Premul(5, 5));
+    auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(5, 5)));
     surface->getCanvas()->clear(SK_ColorRED);
 
     const SkColor colors[] = { SK_ColorGREEN, SK_ColorBLUE };
@@ -326,7 +300,7 @@ static void test_two_point_conical_zero_radius(skiatest::Reporter* reporter) {
     p.setShader(SkGradientShader::MakeTwoPointConical(
         SkPoint::Make(2.5f, 2.5f), 0,
         SkPoint::Make(3.0f, 3.0f), 10,
-        colors, nullptr, SK_ARRAY_COUNT(colors), SkTileMode::kClamp));
+        colors, nullptr, std::size(colors), SkTileMode::kClamp));
     surface->getCanvas()->drawPaint(p);
 
     // r == 0 for the center pixel.
@@ -344,7 +318,7 @@ static void test_clamping_overflow(skiatest::Reporter*) {
 
     p.setShader(SkGradientShader::MakeLinear(pts1, colors, nullptr, 2, SkTileMode::kClamp));
 
-    sk_sp<SkSurface> surface(SkSurface::MakeRasterN32Premul(50, 50));
+    sk_sp<SkSurface> surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(50, 50)));
     surface->getCanvas()->scale(100, 100);
     surface->getCanvas()->drawPaint(p);
 
@@ -365,7 +339,7 @@ static void test_degenerate_linear(skiatest::Reporter*) {
     };
 
     p.setShader(SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkTileMode::kClamp));
-    sk_sp<SkSurface> surface(SkSurface::MakeRasterN32Premul(50, 50));
+    sk_sp<SkSurface> surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(50, 50)));
     surface->getCanvas()->drawPaint(p);
 
     // Passes if we don't trigger asserts.
@@ -391,14 +365,14 @@ static void test_unsorted_degenerate(skiatest::Reporter* r) {
     REPORTER_ASSERT(r, SkToBool(gradient));
     // And it shouldn't crash when creating a fragment processor
 
-    SkMatrixProvider provider(SkMatrix::I());
     GrColorInfo dstColorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType,
                              SkColorSpace::MakeSRGB());
+    SkSurfaceProps props;
     GrMockOptions options;
     auto context = GrDirectContext::MakeMock(&options);
 
-    GrFPArgs args(context.get(), provider, &dstColorInfo);
-    as_SB(gradient)->asFragmentProcessor(args);
+    GrFPArgs args(context.get(), &dstColorInfo, props, GrFPArgs::Scope::kDefault);
+    GrFragmentProcessors::Make(gradient.get(), args, SkMatrix::I());
 }
 
 // "Interesting" fuzzer values.
@@ -443,7 +417,7 @@ static void test_linear_fuzzer(skiatest::Reporter*) {
             {{0, -2.752941f}, {0, 0}},
             gColors0,
             nullptr,
-            SK_ARRAY_COUNT(gColors0),
+            std::size(gColors0),
             SkTileMode::kClamp,
             0,
             gMatrix0,
@@ -453,7 +427,7 @@ static void test_linear_fuzzer(skiatest::Reporter*) {
             {{4.42539023e-39f, -4.42539023e-39f}, {9.78041162e-15f, 4.42539023e-39f}},
             gColors1,
             gPos1,
-            SK_ARRAY_COUNT(gColors1),
+            std::size(gColors1),
             SkTileMode::kClamp,
             0,
             nullptr,
@@ -463,7 +437,7 @@ static void test_linear_fuzzer(skiatest::Reporter*) {
             {{4.42539023e-39f, 6.40969056e-10f}, {6.40969056e-10f, 1.49237238e-19f}},
             gColors1,
             gPos1,
-            SK_ARRAY_COUNT(gColors1),
+            std::size(gColors1),
             SkTileMode::kClamp,
             0,
             nullptr,
@@ -473,7 +447,7 @@ static void test_linear_fuzzer(skiatest::Reporter*) {
             {{6.40969056e-10f, 6.40969056e-10f}, {6.40969056e-10f, -0.688235283f}},
             gColors0,
             nullptr,
-            SK_ARRAY_COUNT(gColors0),
+            std::size(gColors0),
             SkTileMode::kClamp,
             0,
             gMatrix3,
@@ -490,11 +464,8 @@ static void test_linear_fuzzer(skiatest::Reporter*) {
     SkPaint paint;
 
     for (const SkColorSpace* colorSpace : colorSpaces) {
-
-        sk_sp<SkSurface> surface = SkSurface::MakeRaster(SkImageInfo::Make(100, 100,
-                                                                           kN32_SkColorType,
-                                                                           kPremul_SkAlphaType,
-                                                                           sk_ref_sp(colorSpace)));
+        sk_sp<SkSurface> surface = SkSurfaces::Raster(SkImageInfo::Make(
+                100, 100, kN32_SkColorType, kPremul_SkAlphaType, sk_ref_sp(colorSpace)));
         SkCanvas* canvas = surface->getCanvas();
 
         for (const auto& config : gConfigs) {
@@ -543,12 +514,12 @@ static void test_sweep_fuzzer(skiatest::Reporter*) {
             { 0, 0 },
             gColors0,
             gPos0,
-            SK_ARRAY_COUNT(gColors0),
+            std::size(gColors0),
             gMatrix0
         },
     };
 
-    sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(100, 100);
+    sk_sp<SkSurface> surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(100, 100));
     SkCanvas* canvas = surface->getCanvas();
     SkPaint paint;
 
@@ -570,9 +541,69 @@ static void test_sweep_fuzzer(skiatest::Reporter*) {
     }
 }
 
+// Draw a sweep gradient in a translated canvas such that the colors in the center pixels of the
+// gradient will be evaluated at x = 0. The gradient implementation must not call atan2(y, x) with
+// x == 0, as this will result in undefined behavior and likely incorrect results.
+// https://crbug.com/1468916
+void test_sweep_gradient_zero_x(skiatest::Reporter* reporter, SkSurface* surface) {
+    // The gradient drawn has yellow for the first half and blue for the second half, using hard
+    // stops and running clockwise from (1, 0), so we should draw a rectangle with a blue top-half
+    // and yellow bottom-half.
+    constexpr float pts[4] = {0.0f, 0.5f, 0.5f, 1.0f};
+    constexpr SkColor colors[4] = {SK_ColorYELLOW, SK_ColorYELLOW, SK_ColorBLUE, SK_ColorBLUE};
+    SkCanvas* canvas = surface->getCanvas();
+    canvas->save();
+    canvas->translate(2.5f, 2.5f);
+    SkPaint paint;
+    paint.setShader(SkGradientShader::MakeSweep(0.0f, 0.0f, colors, pts, 4));
+    canvas->drawRect(SkRect::MakeXYWH(-2.5f, -2.5f, 5.0f, 5.0f), paint);
+    canvas->restore();
+
+    // Read pixels.
+    SkBitmap bitmap;
+    SkPixmap pixmap;
+    bitmap.allocPixels(surface->imageInfo());
+    SkAssertResult(bitmap.peekPixels(&pixmap));
+    if (!surface->readPixels(pixmap, 0, 0)) {
+        ERRORF(reporter, "readPixels failed");
+        return;
+    }
+
+    // Check the results.
+    SkColor4f topColor = pixmap.getColor4f(2, 0);
+    SkColor4f bottomColor = pixmap.getColor4f(2, 4);
+    REPORTER_ASSERT(reporter, topColor == SkColors::kBlue);
+    REPORTER_ASSERT(reporter, bottomColor == SkColors::kYellow);
+}
+
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TestSweepGradientZeroXGanesh,
+                                       reporter,
+                                       contextInfo,
+                                       CtsEnforcement::kNextRelease) {
+    SkImageInfo ii = SkImageInfo::Make(SkISize::Make(5, 5),
+                                       SkColorType::kRGBA_8888_SkColorType,
+                                       SkAlphaType::kPremul_SkAlphaType);
+    GrDirectContext* context = contextInfo.directContext();
+    sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(context, skgpu::Budgeted::kYes, ii);
+    test_sweep_gradient_zero_x(reporter, surface.get());
+}
+
+// TODO: Fix this bug in Graphite as well.
+// #if defined(SK_GRAPHITE)
+// DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(TestSweepGradientZeroXGraphite, reporter, context,
+//                                          CtsEnforcement::kNextRelease) {
+//     using namespace skgpu::graphite;
+//     SkImageInfo ii = SkImageInfo::Make(SkISize::Make(5, 5),
+//                                        SkColorType::kRGBA_8888_SkColorType,
+//                                        SkAlphaType::kPremul_SkAlphaType);
+//     std::unique_ptr<Recorder> recorder = context->makeRecorder();
+//     sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(recorder.get(), ii);
+//     test_sweep_gradient_zero_x(reporter, surface.get());
+// }
+// #endif
+
 DEF_TEST(Gradient, reporter) {
     TestGradientShaders(reporter);
-    TestGradientOptimization(reporter);
     TestConstantGradient(reporter);
     test_big_grad(reporter);
     test_nearly_vertical(reporter);

@@ -19,13 +19,16 @@
 #endif
 
 #include "include/ports/SkTypeface_mac.h"
-#include "include/private/SkTemplates.h"
-#include "src/utils/SkUTF.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkUTF.h"
+#include "src/core/SkFontPriv.h"
 #include "src/utils/mac/SkCGBase.h"
 #include "src/utils/mac/SkUniqueCFRef.h"
 
 #include <vector>
 #include <utility>
+
+using namespace skia_private;
 
 class SkShaper_CoreText : public SkShaper {
 public:
@@ -71,8 +74,6 @@ void SkShaper_CoreText::shape(const char* utf8, size_t utf8Bytes,
     if (!font.atEnd()) {
         font.consume();
         skfont = font.currentFont();
-    } else {
-        skfont.setTypeface(sk_ref_sp(skfont.getTypefaceOrDefault()));
     }
     SkASSERT(skfont.getTypeface());
     bool skbidi = 0;
@@ -126,7 +127,7 @@ static void dict_add_double(CFMutableDictionaryRef d, const void* name, double v
 }
 
 static SkUniqueCFRef<CTFontRef> create_ctfont_from_font(const SkFont& font) {
-    auto typeface = font.getTypefaceOrDefault();
+    auto typeface = font.getTypeface();
     auto ctfont = SkTypeface_GetCTFontRef(typeface);
     return SkUniqueCFRef<CTFontRef>(
             CTFontCreateCopyWithAttributes(ctfont, font.getSize(), nullptr, nullptr));
@@ -251,7 +252,7 @@ void SkShaper_CoreText::shape(const char* utf8, size_t utf8Bytes,
 
             SkASSERT(sizeof(CGGlyph) == sizeof(uint16_t));
 
-            SkAutoSTArray<4096, CGSize> advances(runGlyphs);
+            AutoSTArray<4096, CGSize> advances(runGlyphs);
             CTRunGetAdvances(run, {0, runGlyphs}, advances.data());
             SkScalar adv = 0;
             for (CFIndex k = 0; k < runGlyphs; ++k) {
@@ -285,9 +286,9 @@ void SkShaper_CoreText::shape(const char* utf8, size_t utf8Bytes,
 
             CTRunGetGlyphs(run, {0, runGlyphs}, buffer.glyphs);
 
-            SkAutoSTArray<4096, CGPoint> positions(runGlyphs);
+            AutoSTArray<4096, CGPoint> positions(runGlyphs);
             CTRunGetPositions(run, {0, runGlyphs}, positions.data());
-            SkAutoSTArray<4096, CFIndex> indices;
+            AutoSTArray<4096, CFIndex> indices;
             if (buffer.clusters) {
                 indices.reset(runGlyphs);
                 CTRunGetStringIndices(run, {0, runGlyphs}, indices.data());

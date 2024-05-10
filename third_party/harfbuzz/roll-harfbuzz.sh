@@ -23,6 +23,12 @@ rolldeps() {
   git add DEPS
 }
 
+rollbazel() {
+  STEP="roll-bazel" &&
+  sed -i'' -e "s!commit = \"${HB_PREVIOUS_REV}\",!commit = \"${HB_NEXT_REV}\",!" bazel/deps.bzl &&
+  git add bazel/deps.bzl
+}
+
 check_all_files_are_categorized() {
   #for each file name in ${HB_GIT_DIR}/src/hb-*.{cc,h,hh}
   #  if the file name is not present in BUILD.gn
@@ -41,11 +47,11 @@ check_all_files_are_categorized() {
     cd -- "${HB_GIT_DIR}" &&
 
     HB_SOURCE_MISSING=false &&
-    find src -type f \( -name "hb-*.cc" -o -name "hb-*.h" -o -name "hb-*.hh" \) | while read HB_SOURCE
+    find src -type f \( -name "*.cc" -o -name "*.h" -o -name "*.hh" \) | while read HB_SOURCE
     do
       if ! grep -qF "$HB_SOURCE" ${HB_BUILD_DIR_REL}/BUILD.gn; then
         if ! ${HB_SOURCE_MISSING}; then
-          echo "Is in src/hb-*.{cc,h,hh} but not in BUILD.gn:"
+          echo "Is in src/*.{cc,h,hh} but not in BUILD.gn:"
           HB_SOURCE_MISSING=true
         fi
         echo "      \"\$_${HB_SOURCE}\","
@@ -87,6 +93,7 @@ Disable: treat-URL-as-trailer"
 previousrev &&
 nextrev &&
 rolldeps "$@" &&
+rollbazel &&
 check_all_files_are_categorized &&
 commit &&
 true || { echo "Failed step ${STEP}"; exit 1; }

@@ -12,18 +12,18 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
+
+using namespace skia_private;
 
 namespace skiagm {
 
 // this GM tests hairlines which fill nearly the entire render target
 class StLouisArchGM : public GM {
 protected:
-    SkString onShortName() override {
-        return SkString("stlouisarch");
-    }
+    SkString getName() const override { return SkString("stlouisarch"); }
 
-    SkISize onISize() override { return SkISize::Make((int)kWidth, (int)kHeight); }
+    SkISize getISize() override { return SkISize::Make((int)kWidth, (int)kHeight); }
 
     void onOnceBeforeDraw() override {
         {
@@ -75,7 +75,7 @@ protected:
         canvas->save();
         canvas->scale(1, -1);
         canvas->translate(0, -kHeight);
-        for (int p = 0; p < fPaths.count(); ++p) {
+        for (int p = 0; p < fPaths.size(); ++p) {
             SkPaint paint;
             paint.setARGB(0xff, 0, 0, 0);
             paint.setAntiAlias(true);
@@ -90,7 +90,7 @@ protected:
     const SkScalar kHeight = 256;
 
 private:
-    SkTArray<SkPath> fPaths;
+    TArray<SkPath> fPaths;
     using INHERITED = GM;
 };
 

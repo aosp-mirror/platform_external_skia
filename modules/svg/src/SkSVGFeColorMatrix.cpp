@@ -29,17 +29,17 @@ SkColorMatrix SkSVGFeColorMatrix::makeMatrixForType() const {
 
     switch (fType) {
         case SkSVGFeColorMatrixType::kMatrix: {
-            if (fValues.count() < 20) {
+            if (fValues.size() < 20) {
                 return SkColorMatrix();
             }
             SkColorMatrix m;
-            m.setRowMajor(this->fValues.begin());
+            m.setRowMajor(fValues.data());
             return m;
         }
         case SkSVGFeColorMatrixType::kSaturate:
-            return MakeSaturate(fValues.count() > 0 ? fValues[0] : 1);
+            return MakeSaturate(!fValues.empty() ? fValues[0] : 1);
         case SkSVGFeColorMatrixType::kHueRotate:
-            return MakeHueRotate(fValues.count() > 0 ? fValues[0] : 0);
+            return MakeHueRotate(!fValues.empty() ? fValues[0] : 0);
         case SkSVGFeColorMatrixType::kLuminanceToAlpha:
             return MakeLuminanceToAlpha();
     }
@@ -95,23 +95,6 @@ sk_sp<SkImageFilter> SkSVGFeColorMatrix::onMakeImageFilter(const SkSVGRenderCont
             SkColorFilters::Matrix(makeMatrixForType()),
             fctx.resolveInput(ctx, this->getIn(), this->resolveColorspace(ctx, fctx)),
             this->resolveFilterSubregion(ctx, fctx));
-}
-
-template <> bool SkSVGAttributeParser::parse(SkSVGFeColorMatrixValues* values) {
-    SkSVGNumberType value;
-    if (!this->parse(&value)) {
-        return false;
-    }
-
-    values->push_back(value);
-    while (true) {
-        if (!this->parse(&value) || values->count() >= 20) {
-            break;
-        }
-        values->push_back(value);
-    }
-
-    return this->parseEOSToken();
 }
 
 template <> bool SkSVGAttributeParser::parse(SkSVGFeColorMatrixType* type) {

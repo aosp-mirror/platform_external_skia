@@ -5,14 +5,25 @@
  * found in the LICENSE file.
  */
 
-#include "include/utils/SkRandom.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "src/base/SkRandom.h"
+#include "src/base/SkVx.h"
 #include "src/core/SkGeometry.h"
+#include "src/gpu/tessellate/Tessellation.h"
 #include "src/gpu/tessellate/WangsFormula.h"
 #include "tests/Test.h"
 
-namespace skgpu {
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <functional>
+#include <limits>
 
-constexpr static float kPrecision = 4;  // 1/4 pixel max error.
+namespace skgpu::tess {
 
 const SkPoint kSerp[4] = {
         {285.625f, 499.687f}, {411.625f, 808.188f}, {1064.62f, 135.688f}, {1042.63f, 585.187f}};
@@ -79,7 +90,7 @@ static float wangs_formula_conic_reference_impl(float precision,
     return (tmax - tmin) / delta;
 }
 
-static void for_random_matrices(SkRandom* rand, std::function<void(const SkMatrix&)> f) {
+static void for_random_matrices(SkRandom* rand, const std::function<void(const SkMatrix&)>& f) {
     SkMatrix m;
     m.setIdentity();
     f(m);
@@ -102,7 +113,7 @@ static void for_random_matrices(SkRandom* rand, std::function<void(const SkMatri
 }
 
 static void for_random_beziers(int numPoints, SkRandom* rand,
-                               std::function<void(const SkPoint[])> f,
+                               const std::function<void(const SkPoint[])>& f,
                                int maxExponent = 30) {
     SkASSERT(numPoints <= 4);
     SkPoint pts[4];
@@ -344,7 +355,7 @@ DEF_TEST(wangs_formula_worst_case_cubic, r) {
     }
     // Make sure overflow saturates at infinity (not NaN).
     constexpr static float inf = std::numeric_limits<float>::infinity();
-    REPORTER_ASSERT(r, wangs_formula::worst_case_cubic_pow4(kPrecision, inf, inf) == inf);
+    REPORTER_ASSERT(r, wangs_formula::worst_case_cubic_p4(kPrecision, inf, inf) == inf);
     REPORTER_ASSERT(r, wangs_formula::worst_case_cubic(kPrecision, inf, inf) == inf);
 }
 
@@ -523,4 +534,48 @@ DEF_TEST(wangs_formula_conic_vectorXforms, r) {
     }
 }
 
-}  // namespace skgpu
+DEF_TEST(wangs_formula_nextlog2, r) {
+    REPORTER_ASSERT(r, 0b0'00000000'111'1111111111'1111111111 == (1u << 23) - 1u);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(-std::numeric_limits<float>::infinity()) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(-std::numeric_limits<float>::max()) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(-1000.0f) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(-0.1f) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(-std::numeric_limits<float>::min()) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(-std::numeric_limits<float>::denorm_min()) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(0.0f) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(std::numeric_limits<float>::denorm_min()) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(std::numeric_limits<float>::min()) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(0.1f) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(1.0f) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(1.1f) == 1);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(2.0f) == 1);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(2.1f) == 2);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(3.0f) == 2);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(3.1f) == 2);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(4.0f) == 2);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(4.1f) == 3);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(5.0f) == 3);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(5.1f) == 3);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(6.0f) == 3);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(6.1f) == 3);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(7.0f) == 3);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(7.1f) == 3);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(8.0f) == 3);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(8.1f) == 4);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(9.0f) == 4);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(9.1f) == 4);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(std::numeric_limits<float>::max()) == 128);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(std::numeric_limits<float>::infinity()) == 128);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(std::numeric_limits<float>::quiet_NaN()) == 0);
+    REPORTER_ASSERT(r, wangs_formula::nextlog2(-std::numeric_limits<float>::quiet_NaN()) == 0);
+
+    for (int i = 0; i < 100; ++i) {
+        float pow2 = std::ldexp(1, i);
+        float epsilon = std::ldexp(SK_ScalarNearlyZero, i);
+        REPORTER_ASSERT(r, wangs_formula::nextlog2(pow2) == i);
+        REPORTER_ASSERT(r, wangs_formula::nextlog2(pow2 + epsilon) == i + 1);
+        REPORTER_ASSERT(r, wangs_formula::nextlog2(pow2 - epsilon) == i);
+    }
+}
+
+}  // namespace skgpu::tess

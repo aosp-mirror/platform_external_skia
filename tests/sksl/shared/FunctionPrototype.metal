@@ -1,5 +1,8 @@
 #include <metal_stdlib>
 #include <simd/simd.h>
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wall"
+#endif
 using namespace metal;
 struct Uniforms {
     half4 colorGreen;
@@ -13,6 +16,7 @@ float this_function_is_prototyped_at_the_start_and_never_defined_f();
 half4 this_function_is_defined_before_use_h4h4(half4 x);
 half4 this_function_is_defined_after_use_h4h4(half4 x);
 half4 this_function_is_defined_near_the_end_h4h4(half4 x);
+fragment Outputs fragmentMain(Inputs _in [[stage_in]], constant Uniforms& _uniforms [[buffer(0)]], bool _frontFacing [[front_facing]], float4 _fragCoord [[position]]);
 half4 this_function_is_defined_before_use_h4h4(half4 x) {
     return -x;
 }

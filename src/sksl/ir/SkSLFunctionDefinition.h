@@ -8,45 +8,61 @@
 #ifndef SKSL_FUNCTIONDEFINITION
 #define SKSL_FUNCTIONDEFINITION
 
-#include "include/private/SkSLProgramElement.h"
-#include "src/sksl/ir/SkSLBlock.h"
+#include "src/sksl/SkSLPosition.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLIRNode.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
+#include "src/sksl/ir/SkSLStatement.h"
+
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace SkSL {
+
+class Context;
+class SymbolTable;
 
 /**
  * A function definition (a declaration plus an associated block of code).
  */
 class FunctionDefinition final : public ProgramElement {
 public:
-    inline static constexpr Kind kProgramElementKind = Kind::kFunction;
+    inline static constexpr Kind kIRNodeKind = Kind::kFunction;
 
-    using FunctionSet = std::unordered_set<const FunctionDeclaration*>;
-
-    FunctionDefinition(int line, const FunctionDeclaration* declaration, bool builtin,
-                       std::unique_ptr<Statement> body, FunctionSet referencedBuiltinFunctions)
-        : INHERITED(line, kProgramElementKind)
-        , fDeclaration(declaration)
-        , fBuiltin(builtin)
-        , fBody(std::move(body))
-        , fReferencedBuiltinFunctions(std::move(referencedBuiltinFunctions)) {}
+    FunctionDefinition(Position pos,
+                       const FunctionDeclaration* declaration,
+                       bool builtin,
+                       std::unique_ptr<Statement> body)
+            : INHERITED(pos, kIRNodeKind)
+            , fDeclaration(declaration)
+            , fBuiltin(builtin)
+            , fBody(std::move(body)) {}
 
     /**
      * Coerces `return` statements to the return type of the function, and reports errors in the
      * function that can't be detected at the individual statement level:
+     *
      *     - `break` and `continue` statements must be in reasonable places.
-     *     - non-void functions are required to return a value on all paths.
-     *     - vertex main() functions don't allow early returns.
+     *     - Non-void functions are required to return a value on all paths.
+     *     - Vertex main() functions don't allow early returns.
+     *     - Limits on overall stack size are enforced.
      *
      * This will return a FunctionDefinition even if an error is detected; this leads to better
      * diagnostics overall. (Returning null here leads to spurious "function 'f()' was not defined"
      * errors when trying to call a function with an error in it.)
      */
     static std::unique_ptr<FunctionDefinition> Convert(const Context& context,
-                                                       int line,
+                                                       Position pos,
                                                        const FunctionDeclaration& function,
                                                        std::unique_ptr<Statement> body,
                                                        bool builtin);
+
+    static std::unique_ptr<FunctionDefinition> Make(const Context& context,
+                                                    Position pos,
+                                                    const FunctionDeclaration& function,
+                                                    std::unique_ptr<Statement> body,
+                                                    bool builtin);
 
     const FunctionDeclaration& declaration() const {
         return *fDeclaration;
@@ -64,15 +80,9 @@ public:
         return fBody;
     }
 
-    const FunctionSet& referencedBuiltinFunctions() const {
-        return fReferencedBuiltinFunctions;
-    }
+    const SymbolTable* parameterSymbolTable() const;
 
-    std::unique_ptr<ProgramElement> clone() const override {
-        return std::make_unique<FunctionDefinition>(fLine, &this->declaration(),
-                                                    /*builtin=*/false, this->body()->clone(),
-                                                    this->referencedBuiltinFunctions());
-    }
+    std::unique_ptr<ProgramElement> clone() const override;
 
     std::string description() const override {
         return this->declaration().description() + " " + this->body()->description();
@@ -82,9 +92,6 @@ private:
     const FunctionDeclaration* fDeclaration;
     bool fBuiltin;
     std::unique_ptr<Statement> fBody;
-    // We track the builtin functions we reference so that we can ensure that all of them end up
-    // copied into the final output.
-    FunctionSet fReferencedBuiltinFunctions;
 
     using INHERITED = ProgramElement;
 };

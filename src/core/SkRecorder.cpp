@@ -7,30 +7,65 @@
 
 #include "src/core/SkRecorder.h"
 
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkDrawable.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkPicture.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRSXform.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
-#include "include/private/SkTo.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkVertices.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "include/private/chromium/Slug.h"
 #include "src/core/SkBigPicture.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/core/SkGlyphRun.h"
+#include "src/core/SkRecord.h"
+#include "src/core/SkRecords.h"
+#include "src/text/GlyphRun.h"
 #include "src/utils/SkPatchUtils.h"
 
+#include <cstdint>
+#include <cstring>
 #include <memory>
 #include <new>
 
+class SkBlender;
+class SkMesh;
+class SkPath;
+class SkRRect;
+class SkRegion;
+class SkSurfaceProps;
+enum class SkBlendMode;
+enum class SkClipOp;
+struct SkDrawShadowRec;
+
+using namespace skia_private;
+
 SkDrawableList::~SkDrawableList() {
-    fArray.unrefAll();
+    for(SkDrawable* p : fArray) {
+        p->unref();
+    }
+    fArray.reset();
 }
 
 SkBigPicture::SnapshotArray* SkDrawableList::newDrawableSnapshot() {
-    const int count = fArray.count();
+    const int count = fArray.size();
     if (0 == count) {
         return nullptr;
     }
-    SkAutoTMalloc<const SkPicture*> pics(count);
+    AutoTMalloc<const SkPicture*> pics(count);
     for (int i = 0; i < count; ++i) {
-        pics[i] = fArray[i]->newPictureSnapshot();
+        pics[i] = fArray[i]->makePictureSnapshot().release();
     }
     return new SkBigPicture::SnapshotArray(pics.release(), count);
 }
@@ -55,28 +90,25 @@ static SkIRect safe_picture_bounds(const SkRect& bounds) {
     return picBounds;
 }
 
-SkRecorder::SkRecorder(SkRecord* record, int width, int height, SkMiniRecorder* mr)
+SkRecorder::SkRecorder(SkRecord* record, int width, int height)
         : SkCanvasVirtualEnforcer<SkNoDrawCanvas>(width, height)
         , fApproxBytesUsedBySubPictures(0)
-        , fRecord(record)
-        , fMiniRecorder(mr) {
+        , fRecord(record) {
     SkASSERT(this->imageInfo().width() >= 0 && this->imageInfo().height() >= 0);
 }
 
-SkRecorder::SkRecorder(SkRecord* record, const SkRect& bounds, SkMiniRecorder* mr)
+SkRecorder::SkRecorder(SkRecord* record, const SkRect& bounds)
         : SkCanvasVirtualEnforcer<SkNoDrawCanvas>(safe_picture_bounds(bounds))
         , fApproxBytesUsedBySubPictures(0)
-        , fRecord(record)
-        , fMiniRecorder(mr) {
+        , fRecord(record) {
     SkASSERT(this->imageInfo().width() >= 0 && this->imageInfo().height() >= 0);
 }
 
-void SkRecorder::reset(SkRecord* record, const SkRect& bounds, SkMiniRecorder* mr) {
+void SkRecorder::reset(SkRecord* record, const SkRect& bounds) {
     this->forgetRecord();
     fRecord = record;
     this->resetCanvas(safe_picture_bounds(bounds));
     SkASSERT(this->imageInfo().width() >= 0 && this->imageInfo().height() >= 0);
-    fMiniRecorder = mr;
 }
 
 void SkRecorder::forgetRecord() {
@@ -88,14 +120,8 @@ void SkRecorder::forgetRecord() {
 // To make appending to fRecord a little less verbose.
 template<typename T, typename... Args>
 void SkRecorder::append(Args&&... args) {
-    if (fMiniRecorder) {
-        this->flushMiniRecorder();
-    }
     new (fRecord->append<T>()) T{std::forward<Args>(args)...};
 }
-
-#define TRY_MINIRECORDER(method, ...) \
-    if (fMiniRecorder && fMiniRecorder->method(__VA_ARGS__)) return
 
 // For methods which must call back into SkNoDrawCanvas.
 #define INHERITED(method, ...) this->SkNoDrawCanvas::method(__VA_ARGS__)
@@ -143,14 +169,6 @@ char* SkRecorder::copy(const char* src) {
     return this->copy(src, strlen(src)+1);
 }
 
-void SkRecorder::flushMiniRecorder() {
-    if (fMiniRecorder) {
-        SkMiniRecorder* mr = fMiniRecorder;
-        fMiniRecorder = nullptr;  // Needs to happen before flushAndReset() or we recurse forever.
-        mr->flushAndReset(this);
-    }
-}
-
 void SkRecorder::onDrawPaint(const SkPaint& paint) {
     this->append<SkRecords::DrawPaint>(paint);
 }
@@ -167,7 +185,6 @@ void SkRecorder::onDrawPoints(PointMode mode,
 }
 
 void SkRecorder::onDrawRect(const SkRect& rect, const SkPaint& paint) {
-    TRY_MINIRECORDER(drawRect, rect, paint);
     this->append<SkRecords::DrawRect>(paint, rect);
 }
 
@@ -201,7 +218,6 @@ void SkRecorder::onDrawDrawable(SkDrawable* drawable, const SkMatrix* matrix) {
 }
 
 void SkRecorder::onDrawPath(const SkPath& path, const SkPaint& paint) {
-    TRY_MINIRECORDER(drawPath, path, paint);
     this->append<SkRecords::DrawPath>(paint, path);
 }
 
@@ -230,11 +246,15 @@ void SkRecorder::onDrawImageLattice2(const SkImage* image, const Lattice& lattic
 
 void SkRecorder::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                 const SkPaint& paint) {
-    TRY_MINIRECORDER(drawTextBlob, blob, x, y, paint);
     this->append<SkRecords::DrawTextBlob>(paint, sk_ref_sp(blob), x, y);
 }
 
-void SkRecorder::onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) {
+void SkRecorder::onDrawSlug(const sktext::gpu::Slug* slug) {
+    this->append<SkRecords::DrawSlug>(sk_ref_sp(slug));
+}
+
+void SkRecorder::onDrawGlyphRunList(
+        const sktext::GlyphRunList& glyphRunList, const SkPaint& paint) {
     sk_sp<SkTextBlob> blob = sk_ref_sp(glyphRunList.blob());
     if (glyphRunList.blob() == nullptr) {
         blob = glyphRunList.makeBlob();
@@ -253,6 +273,10 @@ void SkRecorder::onDrawVerticesObject(const SkVertices* vertices, SkBlendMode bm
     this->append<SkRecords::DrawVertices>(paint,
                                           sk_ref_sp(const_cast<SkVertices*>(vertices)),
                                           bmode);
+}
+
+void SkRecorder::onDrawMesh(const SkMesh& mesh, sk_sp<SkBlender> blender, const SkPaint& paint) {
+    this->append<SkRecords::DrawMesh>(paint, mesh, std::move(blender));
 }
 
 void SkRecorder::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
@@ -301,7 +325,7 @@ void SkRecorder::onDrawEdgeAAImageSet2(const ImageSetEntry set[], int count,
     int totalDstClipCount, totalMatrixCount;
     SkCanvasPriv::GetDstClipAndMatrixCounts(set, count, &totalDstClipCount, &totalMatrixCount);
 
-    SkAutoTArray<ImageSetEntry> setCopy(count);
+    AutoTArray<ImageSetEntry> setCopy(count);
     for (int i = 0; i < count; ++i) {
         setCopy[i] = set[i];
     }
@@ -309,10 +333,6 @@ void SkRecorder::onDrawEdgeAAImageSet2(const ImageSetEntry set[], int count,
     this->append<SkRecords::DrawEdgeAAImageSet>(this->copy(paint), std::move(setCopy), count,
             this->copy(dstClips, totalDstClipCount),
             this->copy(preViewMatrices, totalMatrixCount), sampling, constraint);
-}
-
-void SkRecorder::onFlush() {
-    this->append<SkRecords::Flush>();
 }
 
 void SkRecorder::willSave() {

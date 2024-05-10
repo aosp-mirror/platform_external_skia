@@ -4,18 +4,27 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "tests/Test.h"
-
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkData.h"
+#include "include/core/SkDocument.h"
 #include "include/core/SkExecutor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImage.h" // IWYU pragma: keep
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkString.h"
 #include "include/docs/SkPDFDocument.h"
-#include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
-#include "tools/Resources.h"
+#include "tests/Test.h"
+#include "tools/fonts/FontToolUtils.h"
 
-#include "tools/ToolUtils.h"
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <memory>
 
 static void test_empty(skiatest::Reporter* reporter) {
     SkDynamicMemoryWStream stream;
@@ -136,7 +145,7 @@ DEF_TEST(SkPDF_document_skbug_4734, r) {
     canvas->translate(20.0f, 10.0f);
     canvas->rotate(30.0f);
     const char text[] = "HELLO";
-    canvas->drawString(text, 0, 0, SkFont(), SkPaint());
+    canvas->drawString(text, 0, 0, ToolUtils::DefaultFont(), SkPaint());
 }
 
 static bool contains(const uint8_t* result, size_t size, const char expectation[]) {

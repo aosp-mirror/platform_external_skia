@@ -9,14 +9,19 @@
 #ifndef SKFONTHOST_FREETYPE_COMMON_H_
 #define SKFONTHOST_FREETYPE_COMMON_H_
 
+#include "include/core/SkSpan.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkMutex.h"
+#include "include/private/base/SkTArray.h"
+#include "src/base/SkSharedMutex.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkScalerContext.h"
-#include "src/core/SkSharedMutex.h"
 #include "src/utils/SkCharToGlyphCache.h"
 
-#include "include/core/SkFontMgr.h"
+struct SkAdvancedTypefaceMetrics;
+class SkFontDescriptor;
+class SkFontData;
 
 // These are forward declared to avoid pimpl but also hide the FreeType implementation.
 typedef struct FT_LibraryRec_* FT_Library;
@@ -47,24 +52,29 @@ protected:
         : INHERITED(std::move(typeface), effects, desc)
     {}
 
-    bool drawColorGlyph(SkCanvas*, FT_Face, SkSpan<SkColor> palette, const SkGlyph&);
-    void generateGlyphImage(FT_Face face,
-                            SkSpan<SkColor> palette,
-                            const SkGlyph& glyph,
-                            const SkMatrix& bitmapTransform);
-    bool generateGlyphPath(FT_Face face, SkPath* path);
-    bool generateFacePath(FT_Face face, SkGlyphID glyphID, SkPath* path);
-    sk_sp<SkDrawable> generateGlyphDrawable(FT_Face face, SkSpan<SkColor> palette, const SkGlyph&);
+    bool drawCOLRv0Glyph(FT_Face, const SkGlyph&, uint32_t loadGlyphFlags,
+                         SkSpan<SkColor> palette, SkCanvas*);
+    bool drawCOLRv1Glyph(FT_Face, const SkGlyph&, uint32_t loadGlyphFlags,
+                         SkSpan<SkColor> palette, SkCanvas*);
+    bool drawSVGGlyph(FT_Face, const SkGlyph&, uint32_t loadGlyphFlags,
+                      SkSpan<SkColor> palette, SkCanvas*);
+    void generateGlyphImage(FT_Face, const SkGlyph&, void*, const SkMatrix& bitmapTransform);
+    bool generateGlyphPath(FT_Face, SkPath*);
+    bool generateFacePath(FT_Face, SkGlyphID, uint32_t loadGlyphFlags, SkPath*);
 
-    // Computes a bounding box for a COLRv1 glyph id in FT_BBox 26.6 format and FreeType's y-up
-    // coordinate space.
-    // Needed to call into COLRv1 from generateMetrics().
-    //
-    // Note : This method may change the configured size and transforms on FT_Face. Make sure to
-    // configure size, matrix and load glyphs as needed after using this function to restore the
-    // state of FT_Face.
-    bool computeColrV1GlyphBoundingBox(FT_Face face, SkGlyphID glyphID, FT_BBox* boundingBox);
+    /** Computes a bounding box for a COLRv1 glyph.
+     *
+     *  This method may change the configured size and transforms on FT_Face. Make sure to
+     *  configure size, matrix and load glyphs as needed after using this function to restore the
+     *  state of FT_Face.
+     */
+    static bool computeColrV1GlyphBoundingBox(FT_Face, SkGlyphID, SkRect* bounds);
 
+    struct ScalerContextBits {
+        static const constexpr uint32_t COLRv0 = 1;
+        static const constexpr uint32_t COLRv1 = 2;
+        static const constexpr uint32_t SVG    = 3;
+    };
 private:
     using INHERITED = SkScalerContext;
 };
@@ -84,7 +94,7 @@ public:
             SkFixed fDefault;
             SkFixed fMaximum;
         };
-        using AxisDefinitions = SkSTArray<4, AxisDefinition, true>;
+        using AxisDefinitions = skia_private::STArray<4, AxisDefinition, true>;
         bool recognizedFont(SkStreamAsset* stream, int* numFonts) const;
         bool scanFont(SkStreamAsset* stream, int ttcIndex,
                       SkString* name, SkFontStyle* style, bool* isFixedPitch,
@@ -109,6 +119,9 @@ public:
     std::unique_ptr<SkFontData> makeFontData() const;
     class FaceRec;
     FaceRec* getFaceRec() const;
+
+    static constexpr SkTypeface::FactoryId FactoryId = SkSetFourByteTag('f','r','e','e');
+    static sk_sp<SkTypeface> MakeFromStream(std::unique_ptr<SkStreamAsset>, const SkFontArguments&);
 
 protected:
     SkTypeface_FreeType(const SkFontStyle& style, bool isFixedPitch);
@@ -155,6 +168,24 @@ private:
     mutable bool fGlyphMasksMayNeedCurrentColor;
 
     using INHERITED = SkTypeface;
+};
+
+class SkTypeface_FreeTypeStream : public SkTypeface_FreeType {
+public:
+    SkTypeface_FreeTypeStream(std::unique_ptr<SkFontData> fontData, const SkString familyName,
+                              const SkFontStyle& style, bool isFixedPitch);
+    ~SkTypeface_FreeTypeStream() override;
+
+protected:
+    void onGetFamilyName(SkString* familyName) const override;
+    void onGetFontDescriptor(SkFontDescriptor*, bool* serialize) const override;
+    std::unique_ptr<SkStreamAsset> onOpenStream(int* ttcIndex) const override;
+    std::unique_ptr<SkFontData> onMakeFontData() const override;
+    sk_sp<SkTypeface> onMakeClone(const SkFontArguments&) const override;
+
+private:
+    const SkString fFamilyName;
+    const std::unique_ptr<const SkFontData> fData;
 };
 
 #endif // SKFONTHOST_FREETYPE_COMMON_H_

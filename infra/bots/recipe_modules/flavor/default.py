@@ -19,7 +19,7 @@ WIN_TOOLCHAIN_DIR = 't'
 #   dm_dir: Where DM writes.
 #   skp_dir: Holds SKP files that are consumed by RenderSKPs and BenchPictures.
 DeviceDirs = collections.namedtuple(
-    'DeviceDirs', ['bin_dir', 'dm_dir', 'perf_data_dir', 'resource_dir', 'images_dir',
+    'DeviceDirs', ['bin_dir', 'dm_dir', 'perf_data_dir', 'resource_dir', 'images_dir', 'fonts_dir',
                    'lotties_dir', 'skp_dir', 'svg_dir', 'mskp_dir', 'tmp_dir', 'texttraces_dir'])
 
 
@@ -44,6 +44,7 @@ class DefaultFlavor(object):
         perf_data_dir=self.m.vars.swarming_out_dir,
         resource_dir=self.m.path['start_dir'].join('skia', 'resources'),
         images_dir=self.m.path['start_dir'].join('skimage'),
+        fonts_dir=self.m.path['start_dir'].join('googlefonts_testdata', 'data'),
         lotties_dir=self.m.path['start_dir'].join('lottie-samples'),
         skp_dir=self.m.path['start_dir'].join('skp'),
         svg_dir=self.m.path['start_dir'].join('svg'),
@@ -118,7 +119,7 @@ class DefaultFlavor(object):
 
   def _py(self, title, script, infra_step=True, args=()):
     return self.m.run(self.m.python, title, script=script, args=args,
-               infra_step=infra_step)
+                      infra_step=infra_step)
 
   def step(self, name, cmd, **unused_kwargs):
     app = self.device_dirs.bin_dir.join(cmd[0])
@@ -128,13 +129,15 @@ class DefaultFlavor(object):
     ld_library_path = []
 
     workdir = self.m.vars.workdir
-    clang_linux = str(workdir.join('clang_linux'))
+    clang_linux = workdir.join('clang_linux')
     extra_tokens = self.m.vars.extra_tokens
 
     if self.m.vars.is_linux:
       if (self.m.vars.builder_cfg.get('cpu_or_gpu', '') == 'GPU'
           and 'Intel' in self.m.vars.builder_cfg.get('cpu_or_gpu_value', '')):
         dri_path = workdir.join('mesa_intel_driver_linux')
+        if ('IntelIrisXe' in self.m.vars.builder_cfg.get('cpu_or_gpu_value', '')):
+          dri_path = workdir.join('mesa_intel_driver_linux_22')
         ld_library_path.append(dri_path)
         env['LIBGL_DRIVERS_PATH'] = str(dri_path)
         env['VK_ICD_FILENAMES'] = str(dri_path.join('intel_icd.x86_64.json'))
@@ -158,33 +161,18 @@ class DefaultFlavor(object):
 
     # Find the MSAN/TSAN-built libc++.
     if 'MSAN' in extra_tokens:
-      ld_library_path.append(clang_linux + '/msan')
+      ld_library_path.append(clang_linux.join('msan'))
     elif 'TSAN' in extra_tokens:
-      ld_library_path.append(clang_linux + '/tsan')
+      ld_library_path.append(clang_linux.join('tsan'))
 
     if any('SAN' in t for t in extra_tokens):
       # Sanitized binaries may want to run clang_linux/bin/llvm-symbolizer.
-      path.append(clang_linux + '/bin')
+      path.append(clang_linux.join('bin'))
       # We find that testing sanitizer builds with libc++ uncovers more issues
       # than with the system-provided C++ standard library, which is usually
       # libstdc++. libc++ proactively hooks into sanitizers to help their
       # analyses. We ship a copy of libc++ with our Linux toolchain in /lib.
-      ld_library_path.append(clang_linux + '/lib')
-    elif self.m.vars.is_linux:
-      cmd = ['catchsegv'] + cmd
-    elif 'ProcDump' in extra_tokens:
-      dumps_dir = self.m.path.join(self.m.vars.swarming_out_dir, 'dumps')
-      self.m.file.ensure_directory('makedirs dumps', dumps_dir)
-      procdump = str(self.m.vars.workdir.join('procdump_win',
-                                                'procdump64.exe'))
-      # Full docs for ProcDump here:
-      # https://docs.microsoft.com/en-us/sysinternals/downloads/procdump
-      # -accepteula automatically accepts the license agreement
-      # -mp saves a packed minidump to save space
-      # -e 1 tells procdump to dump once
-      # -x <dump dir> <exe> <args> launches exe and writes dumps to the
-      #   specified dir
-      cmd = [procdump, '-accepteula', '-mp', '-e', '1', '-x', dumps_dir] + cmd
+      ld_library_path.append(clang_linux.join('lib', 'x86_64-unknown-linux-gnu'))
 
     if 'ASAN' in extra_tokens:
       os = self.m.vars.builder_cfg.get('os', '')
@@ -193,6 +181,7 @@ class DefaultFlavor(object):
         env['ASAN_OPTIONS'] = 'symbolize=1'
       else:
         env['ASAN_OPTIONS'] = 'symbolize=1 detect_leaks=1'
+        env['ASAN_SYMBOLIZER_PATH'] = clang_linux.join('bin', 'llvm-symbolizer')
       env[ 'LSAN_OPTIONS'] = 'symbolize=1 print_suppressions=1'
       env['UBSAN_OPTIONS'] = 'symbolize=1 print_stacktrace=1'
 
@@ -214,6 +203,9 @@ class DefaultFlavor(object):
       profname = '%s.profraw' % self.m.vars.builder_cfg.get('test_filter','o')
       env['LLVM_PROFILE_FILE'] = self.m.path.join(self.m.vars.swarming_out_dir,
                                                   profname)
+
+    if 'DWriteCore' in extra_tokens:
+      path.append(workdir.join('dwritecore', 'bin'))
 
     if path:
       env['PATH'] = self.m.path.pathsep.join(

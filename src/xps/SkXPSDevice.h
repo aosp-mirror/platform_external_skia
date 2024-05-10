@@ -23,15 +23,16 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "src/core/SkBitmapDevice.h"
 #include "src/core/SkClipStackDevice.h"
 #include "src/utils/SkBitSet.h"
 #include "src/utils/win/SkAutoCoInitialize.h"
 #include "src/utils/win/SkTScopedComPtr.h"
 
-class SkGlyphRunList;
-
+namespace sktext {
+class GlyphRunList;
+}
 //#define SK_XPS_USE_DETERMINISTIC_IDS
 
 /** \class SkXPSDevice
@@ -75,7 +76,6 @@ public:
     bool endSheet();
     bool endPortfolio();
 
-protected:
     void drawPaint(const SkPaint& paint) override;
     void drawPoints(SkCanvas::PointMode mode, size_t count,
                     const SkPoint[], const SkPaint& paint) override;
@@ -92,10 +92,13 @@ protected:
                        const SkRect* srcOrNull, const SkRect& dst,
                        const SkSamplingOptions&, const SkPaint& paint,
                        SkCanvas::SrcRectConstraint) override;
-    void onDrawGlyphRunList(SkCanvas*, const SkGlyphRunList&, const SkPaint&) override;
-    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) override;
-    void drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) override;
-    void drawDevice(SkBaseDevice*, const SkSamplingOptions&, const SkPaint&) override;
+
+    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) override;
+    void drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) override;
+
+    void drawDevice(SkDevice*, const SkSamplingOptions&, const SkPaint&) override;
+
+    sk_sp<SkDevice> createDevice(const CreateInfo&, const SkPaint*) override;
 
 private:
     class TypefaceUse {
@@ -112,6 +115,9 @@ private:
     };
     friend HRESULT subset_typeface(const TypefaceUse& current);
 
+    void onDrawGlyphRunList(
+            SkCanvas*, const sktext::GlyphRunList&, const SkPaint&, const SkPaint&) override;
+
     bool createCanvasForLayer();
 
     SkTScopedComPtr<IXpsOMObjectFactory> fXpsFactory;
@@ -124,8 +130,8 @@ private:
     SkVector fCurrentUnitsPerMeter;
     SkVector fCurrentPixelsPerMeter;
 
-    SkTArray<TypefaceUse, true> fTypefaces;
-    SkTArray<TypefaceUse, true>* fTopTypefaces;
+    skia_private::TArray<TypefaceUse, true> fTypefaces;
+    skia_private::TArray<TypefaceUse, true>* fTopTypefaces;
 
     /** Creates a GUID based id and places it into buffer.
         buffer should have space for at least GUID_ID_LEN wide characters.
@@ -164,21 +170,21 @@ private:
         IXpsOMBrush** xpsBrush);
 
     HRESULT createXpsImageBrush(
-        const SkBitmap& bitmap,
+        const SkPixmap& bitmap,
         const SkMatrix& localMatrix,
         const SkTileMode (&xy)[2],
         const SkAlpha alpha,
         IXpsOMTileBrush** xpsBrush);
 
     HRESULT createXpsLinearGradient(
-        SkShader::GradientInfo info,
+        SkShaderBase::GradientInfo info,
         const SkAlpha alpha,
         const SkMatrix& localMatrix,
         IXpsOMMatrixTransform* xpsMatrixToUse,
         IXpsOMBrush** xpsBrush);
 
     HRESULT createXpsRadialGradient(
-        SkShader::GradientInfo info,
+        SkShaderBase::GradientInfo info,
         const SkAlpha alpha,
         const SkMatrix& localMatrix,
         IXpsOMMatrixTransform* xpsMatrixToUse,
@@ -267,13 +273,9 @@ private:
         const SkVector& ppuScale,
         IXpsOMPath* shadedPath);
 
-    SkBaseDevice* onCreateDevice(const CreateInfo&, const SkPaint*) override;
-
     // Disable the default copy and assign implementation.
     SkXPSDevice(const SkXPSDevice&);
     void operator=(const SkXPSDevice&);
-
-    using INHERITED = SkClipStackDevice;
 };
 
 #endif  // SK_BUILD_FOR_WIN

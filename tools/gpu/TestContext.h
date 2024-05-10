@@ -11,9 +11,9 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrTypes.h"
-#include "include/private/SkNoncopyable.h"
-#include "include/private/SkTemplates.h"
-#include "src/core/SkScopeExit.h"
+#include "include/private/base/SkNoncopyable.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkScopeExit.h"
 #include "tools/gpu/FenceSync.h"
 
 class GrDirectContext;
@@ -58,7 +58,7 @@ public:
      * executes. If the concept of a current context doesn't make sense for this context type then
      * the returned object's destructor is a no-op.
      */
-    SkScopeExit SK_WARN_UNUSED_RESULT makeCurrentAndAutoRestore() const;
+    [[nodiscard]] SkScopeExit makeCurrentAndAutoRestore() const;
 
     virtual GrBackendApi backend() = 0;
 

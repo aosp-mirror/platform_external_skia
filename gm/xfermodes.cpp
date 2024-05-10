@@ -24,6 +24,7 @@
 #include "include/core/SkTypes.h"
 #include "include/utils/SkTextUtils.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 enum SrcType {
     //! A WxH image with a rectangle in the lower right.
@@ -222,13 +223,9 @@ public:
     XfermodesGM() {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("xfermodes");
-    }
+    SkString getName() const override { return SkString("xfermodes"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(1990, 570);
-    }
+    SkISize getISize() override { return SkISize::Make(1990, 570); }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
@@ -243,7 +240,7 @@ protected:
         SkPaint labelP;
         labelP.setAntiAlias(true);
 
-        SkFont font(ToolUtils::create_portable_typeface());
+        SkFont font = ToolUtils::DefaultPortableFont();
 
         const int kWrap = 5;
 
@@ -251,7 +248,7 @@ protected:
         SkScalar y0 = 0;
         for (int sourceType = 1; sourceType & kAll_SrcType; sourceType <<= 1) {
             SkScalar x = x0, y = y0;
-            for (size_t i = 0; i < SK_ARRAY_COUNT(gModes); i++) {
+            for (size_t i = 0; i < std::size(gModes); i++) {
                 if ((gModes[i].fSourceTypeMask & sourceType) == 0) {
                     continue;
                 }

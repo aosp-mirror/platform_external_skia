@@ -74,19 +74,13 @@ OUTPUT="-o $BUILD_DIR/pathkit.js"
 source $EMSDK/emsdk_env.sh
 EMCXX=`which em++`
 
-# Turn off exiting while we check for ninja (which may not be on PATH)
-set +e
-NINJA=`which ninja`
-if [[ -z $NINJA ]]; then
-  git clone "https://chromium.googlesource.com/chromium/tools/depot_tools.git" --depth 1 $BUILD_DIR/depot_tools
-  NINJA=$BUILD_DIR/depot_tools/ninja
-fi
-# Re-enable error checking
-set -e
+./bin/fetch-ninja
+NINJA=third_party/ninja/ninja
 
 echo "Compiling bitcode"
 
 ./bin/fetch-gn
+
 ./bin/gn gen ${BUILD_DIR} \
   --args="skia_emsdk_dir=\"${EMSDK}\" \
   extra_cflags=[
@@ -95,6 +89,7 @@ echo "Compiling bitcode"
   ] \
   is_debug=false \
   is_official_build=true \
+  is_trivial_abi=true \
   is_component_build=false \
   werror=true \
   target_cpu=\"wasm\" "
@@ -110,6 +105,7 @@ ${EMCXX} $RELEASE_CONF -std=c++17 \
 --pre-js $BASE_DIR/helper.js \
 --pre-js $BASE_DIR/chaining.js \
 -fno-rtti -fno-exceptions -DEMSCRIPTEN_HAS_UNBOUND_TYPE_NAMES=0 \
+"-DSK_TRIVIAL_ABI=[[clang::trivial_abi]]" \
 $WASM_CONF \
 -sERROR_ON_UNDEFINED_SYMBOLS=1 \
 -sEXPORT_NAME="PathKitInit" \

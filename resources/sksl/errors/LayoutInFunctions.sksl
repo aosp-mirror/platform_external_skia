@@ -9,7 +9,14 @@ layout (
     index = 1,
     set = 1,
     builtin = 1,
-    input_attachment_index = 1)
+    input_attachment_index = 1,
+    vulkan,
+    metal,
+    webgpu,
+    direct3d,
+    rgba8,
+    rgba32f,
+    r32f)
 void on_return() {}
 
 void on_param(
@@ -24,9 +31,18 @@ layout (
     index = 1,
     set = 1,
     builtin = 1,
-    input_attachment_index = 1) float x) {}
+    input_attachment_index = 1,
+    vulkan,
+    metal,
+    webgpu,
+    direct3d,
+    rgba8,
+    rgba32f,
+    r32f) float x) {}
 
 /*%%*
+only one backend qualifier can be used
+only one pixel format qualifier can be used
 layout qualifier 'origin_upper_left' is not permitted here
 layout qualifier 'push_constant' is not permitted here
 layout qualifier 'blend_support_all_equations' is not permitted here
@@ -38,6 +54,15 @@ layout qualifier 'index' is not permitted here
 layout qualifier 'set' is not permitted here
 layout qualifier 'builtin' is not permitted here
 layout qualifier 'input_attachment_index' is not permitted here
+layout qualifier 'vulkan' is not permitted here
+layout qualifier 'metal' is not permitted here
+layout qualifier 'webgpu' is not permitted here
+layout qualifier 'direct3d' is not permitted here
+layout qualifier 'rgba8' is not permitted here
+layout qualifier 'rgba32f' is not permitted here
+layout qualifier 'r32f' is not permitted here
+only one backend qualifier can be used
+only one pixel format qualifier can be used
 layout qualifier 'origin_upper_left' is not permitted here
 layout qualifier 'push_constant' is not permitted here
 layout qualifier 'blend_support_all_equations' is not permitted here
@@ -49,4 +74,11 @@ layout qualifier 'index' is not permitted here
 layout qualifier 'set' is not permitted here
 layout qualifier 'builtin' is not permitted here
 layout qualifier 'input_attachment_index' is not permitted here
+layout qualifier 'vulkan' is not permitted here
+layout qualifier 'metal' is not permitted here
+layout qualifier 'webgpu' is not permitted here
+layout qualifier 'direct3d' is not permitted here
+layout qualifier 'rgba8' is not permitted here
+layout qualifier 'rgba32f' is not permitted here
+layout qualifier 'r32f' is not permitted here
 *%%*/

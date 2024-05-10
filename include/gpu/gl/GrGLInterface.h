@@ -31,8 +31,6 @@ struct GrGLInterface;
  * appropriate one to build.
  */
 SK_API sk_sp<const GrGLInterface> GrGLMakeNativeInterface();
-// Deprecated alternative to GrGLMakeNativeInterface().
-SK_API const GrGLInterface* GrGLCreateNativeInterface();
 
 /**
  * GrContext uses the following interface to make all calls into OpenGL. When a
@@ -70,7 +68,7 @@ public:
     void suppressErrorLogging();
 #endif
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     GrGLInterface(const GrGLInterface& that)
             : fStandard(that.fStandard)
             , fExtensions(that.fExtensions)
@@ -121,6 +119,7 @@ public:
         GrGLFunction<GrGLCompileShaderFn> fCompileShader;
         GrGLFunction<GrGLCompressedTexImage2DFn> fCompressedTexImage2D;
         GrGLFunction<GrGLCompressedTexSubImage2DFn> fCompressedTexSubImage2D;
+        GrGLFunction<GrGLCopyBufferSubDataFn> fCopyBufferSubData;
         GrGLFunction<GrGLCopyTexSubImage2DFn> fCopyTexSubImage2D;
         GrGLFunction<GrGLCreateProgramFn> fCreateProgram;
         GrGLFunction<GrGLCreateShaderFn> fCreateShader;
@@ -170,6 +169,7 @@ public:
         GrGLFunction<GrGLGetBufferParameterivFn> fGetBufferParameteriv;
         GrGLFunction<GrGLGetErrorFn> fGetError;
         GrGLFunction<GrGLGetFramebufferAttachmentParameterivFn> fGetFramebufferAttachmentParameteriv;
+        GrGLFunction<GrGLGetFloatvFn> fGetFloatv;
         GrGLFunction<GrGLGetIntegervFn> fGetIntegerv;
         GrGLFunction<GrGLGetMultisamplefvFn> fGetMultisamplefv;
         GrGLFunction<GrGLGetProgramBinaryFn> fGetProgramBinary;
@@ -248,6 +248,7 @@ public:
         GrGLFunction<GrGLBindUniformLocationFn> fBindUniformLocation;
 
         GrGLFunction<GrGLResolveMultisampleFramebufferFn> fResolveMultisampleFramebuffer;
+        GrGLFunction<GrGLSamplerParameterfFn> fSamplerParameterf;
         GrGLFunction<GrGLSamplerParameteriFn> fSamplerParameteri;
         GrGLFunction<GrGLSamplerParameterivFn> fSamplerParameteriv;
         GrGLFunction<GrGLScissorFn> fScissor;
@@ -303,9 +304,6 @@ public:
         GrGLFunction<GrGLVertexAttribPointerFn> fVertexAttribPointer;
         GrGLFunction<GrGLViewportFn> fViewport;
 
-        /* NV_framebuffer_mixed_samples */
-        GrGLFunction<GrGLCoverageModulationFn> fCoverageModulation;
-
         /* ARB_sync */
         GrGLFunction<GrGLFenceSyncFn> fFenceSync;
         GrGLFunction<GrGLIsSyncFn> fIsSync;
@@ -333,7 +331,7 @@ public:
         GrGLFunction<GrGLEndTilingFn> fEndTiling;
     } fFunctions;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     // This exists for internal testing.
     virtual void abandon() const;
 #endif

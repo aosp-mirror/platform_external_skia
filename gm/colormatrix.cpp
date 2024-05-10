@@ -43,13 +43,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("colormatrix");
-    }
+    SkString getName() const override { return SkString("colormatrix"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(WIDTH, HEIGHT);
-    }
+    SkISize getISize() override { return SkISize::Make(WIDTH, HEIGHT); }
 
     void onOnceBeforeDraw() override {
         fSolidImg = CreateSolidBitmap(64, 64);
@@ -95,7 +91,7 @@ protected:
         paint.setBlendMode(SkBlendMode::kSrc);
         const SkImage* bmps[] = { fSolidImg.get(), fTransparentImg.get() };
 
-        for (size_t i = 0; i < SK_ARRAY_COUNT(bmps); ++i) {
+        for (size_t i = 0; i < std::size(bmps); ++i) {
             matrix.setIdentity();
             set_color_matrix(&paint, matrix);
             canvas->drawImage(bmps[i], 0, 0, SkSamplingOptions(), &paint);

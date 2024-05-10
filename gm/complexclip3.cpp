@@ -19,6 +19,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <utility>
 
@@ -34,14 +35,13 @@ public:
     }
 
 protected:
-
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString str;
         str.printf("complexclip3_%s", fDoSimpleClipFirst ? "simple" : "complex");
         return str;
     }
 
-    SkISize onISize() override { return SkISize::Make(400, 950); }
+    SkISize getISize() override { return SkISize::Make(400, 950); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPath clipSimple = SkPath::Circle(70, 50, 20);
@@ -61,7 +61,7 @@ protected:
         SkPaint paint;
         paint.setAntiAlias(true);
 
-        SkFont font(ToolUtils::create_portable_typeface(), 20);
+        SkFont font(ToolUtils::DefaultPortableTypeface(), 20);
 
         constexpr struct {
             SkClipOp    fOp;
@@ -81,7 +81,7 @@ protected:
         for (int invA = 0; invA < 2; ++invA) {
             for (int aaBits = 0; aaBits < 4; ++aaBits) {
                 canvas->save();
-                for (size_t op = 0; op < SK_ARRAY_COUNT(gOps); ++op) {
+                for (size_t op = 0; op < std::size(gOps); ++op) {
                     for (int invB = 0; invB < 2; ++invB) {
                         bool doAAA = SkToBool(aaBits & 1);
                         bool doAAB = SkToBool(aaBits & 2);

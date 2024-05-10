@@ -5,15 +5,13 @@
 
 from . import util
 
-
-# TODO(dogben): Move this mapping to a machine-editable file.
 IMAGES = {
-    'gcc-debian10': (
-        'gcr.io/skia-public/gcc-debian10@sha256:'
-        '89a72df1e2fdea6f774a3fa4199bb9aaa4a0526a3ac1f233e604d689b694f95c'),
-    'gcc-debian10-x86': (
-        'gcr.io/skia-public/gcc-debian10-x86@sha256:'
-        'b1ec55403ac66d9500d033d6ffd7663894d32335711fbbb0fb4c67dfce812203'),
+    'gcc-debian11': (
+        'gcr.io/skia-public/gcc-debian11@sha256:'
+        '1117ea368f43e45e0f543f74c8e3bf7ff6932df54ddaa4ba1fe6131209110d3d'),
+    'gcc-debian11-x86': (
+        'gcr.io/skia-public/gcc-debian11-x86@sha256:'
+        'eb30682887c4c74c95f769aacab8a1a170eb561536ded87f0914f88b7243ba23'),
 }
 
 
@@ -38,14 +36,14 @@ def compile_fn(api, checkout_root, out_dir):
     args['is_debug'] = False
 
   if 'NoGPU' in extra_tokens:
-    args['skia_enable_gpu'] = False
+    args['skia_enable_ganesh'] = False
     extra_tokens.remove('NoGPU')
   if 'Shared' in extra_tokens:
     args['is_component_build'] = True
     extra_tokens.remove('Shared')
 
   image_name = None
-  if os == 'Debian10' and compiler == 'GCC' and not extra_tokens:
+  if os == 'Debian11' and compiler == 'GCC' and not extra_tokens:
     args['cc'] = 'gcc'
     args['cxx'] = 'g++'
     # Newer GCC includes tons and tons of debugging symbols. This seems to
@@ -53,9 +51,9 @@ def compile_fn(api, checkout_root, out_dir):
     # bugs in Swarming or recipe code). Use g1 to reduce it a bit.
     args['extra_cflags'].append('-g1')
     if target_arch == 'x86_64':
-      image_name = 'gcc-debian10'
+      image_name = 'gcc-debian11'
     elif target_arch == 'x86':
-      image_name = 'gcc-debian10-x86'
+      image_name = 'gcc-debian11-x86'
 
   if not image_name:
     raise Exception('Not implemented: ' + api.vars.builder_name)

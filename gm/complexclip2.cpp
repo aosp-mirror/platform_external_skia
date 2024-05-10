@@ -17,7 +17,7 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 
 namespace skiagm {
 
@@ -98,7 +98,7 @@ protected:
         for (int i = 0; i < kRows; ++i) {
             for (int j = 0; j < kCols; ++j) {
                 for (int k = 0; k < 5; ++k) {
-                    fOps[j*kRows+i][k] = ops[r.nextU() % SK_ARRAY_COUNT(ops)];
+                    fOps[j*kRows+i][k] = ops[r.nextU() % std::size(ops)];
                 }
             }
         }
@@ -122,7 +122,7 @@ protected:
         return "";
     }
 
-    SkString onShortName() override {
+    SkString getName() const override {
         if (kRect_Clip == fClip && !fAntiAlias) {
             return SkString("complexclip2");
         }
@@ -134,7 +134,7 @@ protected:
         return str;
     }
 
-    SkISize onISize() override {
+    SkISize getISize() override {
         return SkISize::Make(SkScalarRoundToInt(fTotalWidth),
                              SkScalarRoundToInt(fTotalHeight));
     }

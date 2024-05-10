@@ -1,18 +1,24 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
-generated_cc_atom(
-    name = "GrMtlBackendContext_hdr",
-    hdrs = ["GrMtlBackendContext.h"],
-    visibility = ["//:__subpackages__"],
-    deps = [":GrMtlTypes_hdr"],
+licenses(["notice"])
+
+exports_files_legacy()
+
+# for exporting to //gn/gpu.gni:skia_shared_mtl_sources.
+skia_filegroup(
+    name = "shared_public_hdrs",
+    srcs = [
+        "MtlMemoryAllocator.h",
+    ],
 )
 
-generated_cc_atom(
-    name = "GrMtlTypes_hdr",
-    hdrs = ["GrMtlTypes.h"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        "//include/gpu:GrTypes_hdr",
-        "//include/ports:SkCFObject_hdr",
+# Group is exported to //gn/gpu.gni:skia_gpu_metal_public.
+skia_filegroup(
+    name = "public_hdrs",
+    srcs = [
+        "GrMtlBackendContext.h",
+        "GrMtlTypes.h",
+        ":shared_public_hdrs",
     ],
+    visibility = ["//include/gpu:__pkg__"],
 )

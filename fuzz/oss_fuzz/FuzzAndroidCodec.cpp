@@ -8,13 +8,14 @@
 #include "include/codec/SkAndroidCodec.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
-#include "include/core/SkData.h"
+#include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
+#include "include/private/SkGainmapInfo.h"
 
 #include "fuzz/Fuzz.h"
 
-bool FuzzAndroidCodec(sk_sp<SkData> bytes, uint8_t sampleSize) {
-    auto codec = SkAndroidCodec::MakeFromData(bytes);
+bool FuzzAndroidCodec(const uint8_t *fuzzData, size_t fuzzSize, uint8_t sampleSize) {
+    auto codec = SkAndroidCodec::MakeFromStream(SkMemoryStream::MakeDirect(fuzzData, fuzzSize));
     if (!codec) {
         return false;
     }
@@ -40,7 +41,20 @@ bool FuzzAndroidCodec(sk_sp<SkData> bytes, uint8_t sampleSize) {
             return false;
     }
 
-    auto surface = SkSurface::MakeRasterN32Premul(size.width(), size.height());
+    SkGainmapInfo gainmapInfo;
+    auto gainmapImageStream = std::unique_ptr<SkStream>();
+
+    if (codec->getAndroidGainmap(&gainmapInfo, &gainmapImageStream)) {
+        // Do something with the outputs so the compiler does not optimize the call away.
+        if (!std::isfinite(gainmapInfo.fDisplayRatioSdr)) {
+            return false;
+        }
+        if (gainmapImageStream->getLength() > 100000000) {
+            return false;
+        }
+    }
+
+    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(size.width(), size.height()));
     if (!surface) {
         // May return nullptr in memory-constrained fuzzing environments
         return false;
@@ -55,12 +69,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 10240) {
         return 0;
     }
-    auto bytes = SkData::MakeWithoutCopy(data, size);
-    Fuzz fuzz(bytes);
+    Fuzz fuzz(data, size);
     uint8_t sampleSize;
     fuzz.nextRange(&sampleSize, 1, 64);
-    bytes = SkData::MakeSubset(bytes.get(), 1, size - 1);
-    FuzzAndroidCodec(bytes, sampleSize);
+    FuzzAndroidCodec(fuzz.remainingData(), fuzz.remainingSize(), sampleSize);
     return 0;
 }
 #endif

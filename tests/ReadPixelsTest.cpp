@@ -5,16 +5,40 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkClipOp.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkColorPriv.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkHalf.h"
-#include "include/private/SkImageInfoPriv.h"
-#include "include/utils/SkNWayCanvas.h"
-#include "src/core/SkMathPriv.h"
+#include "include/private/base/SkAlign.h"
+#include "include/private/base/SkCPUTypes.h"
+#include "include/private/base/SkSafe32.h"
+#include "src/base/SkHalf.h"
+#include "src/base/SkMathPriv.h"
+#include "src/core/SkImageInfoPriv.h"
 #include "tests/Test.h"
+
+#include <cstdint>
+#include <cstring>
+#include <initializer_list>
+#include <memory>
+#include <string>
 
 static const int DEV_W = 100, DEV_H = 100;
 static const SkIRect DEV_RECT = SkIRect::MakeWH(DEV_W, DEV_H);
@@ -78,7 +102,7 @@ static SkPMColor convert_to_pmcolor(SkColorType ct, SkAlphaType at, const uint32
             r = static_cast<U8CPU>(c[0]);
             g = static_cast<U8CPU>(c[1]);
             b = static_cast<U8CPU>(c[2]);
-            // We set this even when for kRGB_888x because our caller will validate that it is 0xff.
+            // We set this even for kRGB_888x because our caller will validate that it is 0xff.
             a = static_cast<U8CPU>(c[3]);
             break;
         default:
@@ -163,7 +187,7 @@ static bool check_read_pixel(SkPMColor a, SkPMColor b, bool didPremulConversion)
 // overwritten in the area outside the readPixels.
 static bool check_read(skiatest::Reporter* reporter, const SkBitmap& bitmap, int x, int y,
                        bool checkSurfacePixels, bool checkBitmapPixels,
-                       SkImageInfo surfaceInfo) {
+                       const SkImageInfo& surfaceInfo) {
     SkAlphaType bmpAT = bitmap.alphaType();
     SkColorType bmpCT = bitmap.colorType();
     SkASSERT(!bitmap.isNull());
@@ -326,10 +350,10 @@ static void test_readpixels(skiatest::Reporter* reporter, const sk_sp<SkSurface>
                             const SkImageInfo& surfaceInfo) {
     SkCanvas* canvas = surface->getCanvas();
     fill_src_canvas(canvas);
-    for (size_t rect = 0; rect < SK_ARRAY_COUNT(gReadPixelsTestRects); ++rect) {
+    for (size_t rect = 0; rect < std::size(gReadPixelsTestRects); ++rect) {
         const SkIRect& srcRect = gReadPixelsTestRects[rect];
         for (auto tightRB : {TightRowBytes::kYes, TightRowBytes::kNo}) {
-            for (size_t c = 0; c < SK_ARRAY_COUNT(gReadPixelsConfigs); ++c) {
+            for (size_t c = 0; c < std::size(gReadPixelsConfigs); ++c) {
                 SkBitmap bmp;
                 init_bitmap(&bmp, srcRect, tightRB, gReadPixelsConfigs[c].fColorType,
                             gReadPixelsConfigs[c].fAlphaType);
@@ -370,7 +394,7 @@ static void test_readpixels(skiatest::Reporter* reporter, const sk_sp<SkSurface>
 
 DEF_TEST(ReadPixels, reporter) {
     const SkImageInfo info = SkImageInfo::MakeN32Premul(DEV_W, DEV_H);
-    auto surface(SkSurface::MakeRaster(info));
+    auto surface(SkSurfaces::Raster(info));
     test_readpixels(reporter, surface, info);
 }
 
@@ -438,7 +462,7 @@ static void test_conversion(skiatest::Reporter* r, const SkImageInfo& dstInfo,
 
     const void* srcPixels = five_reference_pixels(srcInfo.colorType());
     SkPixmap srcPixmap(srcInfo, srcPixels, srcInfo.minRowBytes());
-    sk_sp<SkImage> src = SkImage::MakeFromRaster(srcPixmap, nullptr, nullptr);
+    sk_sp<SkImage> src = SkImages::RasterFromPixmap(srcPixmap, nullptr, nullptr);
     REPORTER_ASSERT(r, src);
 
     // Enough space for 5 pixels when color type is F16, more than enough space in other cases.
@@ -514,7 +538,7 @@ DEF_TEST(ReadPixels_ValidConversion, reporter) {
 
 DEF_TEST(ReadPixels_InvalidRowBytes, reporter) {
     auto srcII = SkImageInfo::Make({10, 10}, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    auto surf = SkSurface::MakeRaster(srcII);
+    auto surf = SkSurfaces::Raster(srcII);
     for (int ct = 0; ct < kLastEnum_SkColorType + 1; ++ct) {
         auto colorType = static_cast<SkColorType>(ct);
         size_t bpp = SkColorTypeBytesPerPixel(colorType);

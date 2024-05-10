@@ -22,9 +22,12 @@
 #include "include/core/SkTypeface.h"
 #include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/private/GrTypesPriv.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
+
+using MaskFormat = skgpu::MaskFormat;
 
 static SkScalar draw_string(SkCanvas* canvas, const SkString& text, SkScalar x,
                            SkScalar y, const SkFont& font) {
@@ -46,7 +49,7 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString name("fontcache");
         if (GrContextOptions::Enable::kYes == fAllowMultipleTextures) {
             name.append("-mt");
@@ -54,15 +57,15 @@ protected:
         return name;
     }
 
-    SkISize onISize() override { return SkISize::Make(kSize, kSize); }
+    SkISize getISize() override { return SkISize::Make(kSize, kSize); }
 
     void onOnceBeforeDraw() override {
-        fTypefaces[0] = ToolUtils::create_portable_typeface("serif", SkFontStyle::Italic());
-        fTypefaces[1] = ToolUtils::create_portable_typeface("sans-serif", SkFontStyle::Italic());
-        fTypefaces[2] = ToolUtils::create_portable_typeface("serif", SkFontStyle::Normal());
-        fTypefaces[3] = ToolUtils::create_portable_typeface("sans-serif", SkFontStyle::Normal());
-        fTypefaces[4] = ToolUtils::create_portable_typeface("serif", SkFontStyle::Bold());
-        fTypefaces[5] = ToolUtils::create_portable_typeface("sans-serif", SkFontStyle::Bold());
+        fTypefaces[0] = ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Italic());
+        fTypefaces[1] = ToolUtils::CreatePortableTypeface("sans-serif", SkFontStyle::Italic());
+        fTypefaces[2] = ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Normal());
+        fTypefaces[3] = ToolUtils::CreatePortableTypeface("sans-serif", SkFontStyle::Normal());
+        fTypefaces[4] = ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Bold());
+        fTypefaces[5] = ToolUtils::CreatePortableTypeface("sans-serif", SkFontStyle::Bold());
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -71,7 +74,7 @@ protected:
         static const bool kShowAtlas = false;
         if (kShowAtlas) {
             if (auto dContext = GrAsDirectContext(canvas->recordingContext())) {
-                auto img = dContext->priv().testingOnly_getFontAtlasImage(kA8_GrMaskFormat);
+                auto img = dContext->priv().testingOnly_getFontAtlasImage(MaskFormat::kA8);
                 canvas->drawImage(img, 0, 0);
             }
         }
@@ -85,7 +88,7 @@ private:
                                           SkString("abcdefghijklmnopqrstuvwxyz"),
                                           SkString("0123456789"),
                                           SkString("!@#$%^&*()<>[]{}")};
-        SkFont font;
+        SkFont font = ToolUtils::DefaultPortableFont();
         font.setEdging(SkFont::Edging::kAntiAlias);
         font.setSubpixel(true);
 

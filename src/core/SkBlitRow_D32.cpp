@@ -5,9 +5,16 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkTypes.h"
 #include "include/private/SkColorData.h"
+#include "include/private/base/SkCPUTypes.h"
 #include "src/core/SkBlitRow.h"
-#include "src/core/SkOpts.h"
+#include "src/core/SkMemset.h"
+
+#include <cstring>
+#include <iterator>
 
 // Everyone agrees memcpy() is the best way to do this.
 static void blit_row_s32_opaque(SkPMColor* dst,
@@ -25,6 +32,7 @@ static void blit_row_s32_opaque(SkPMColor* dst,
 
 #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
     #include <emmintrin.h>
+    #include <xmmintrin.h>
 
     static inline __m128i SkPMLerp_SSE2(const __m128i& src,
                                         const __m128i& dst,
@@ -297,17 +305,17 @@ SkBlitRow::Proc32 SkBlitRow::Factory32(unsigned flags) {
         blit_row_s32a_blend
     };
 
-    SkASSERT(flags < SK_ARRAY_COUNT(kProcs));
-    flags &= SK_ARRAY_COUNT(kProcs) - 1;  // just to be safe
+    SkASSERT(flags < std::size(kProcs));
+    flags &= std::size(kProcs) - 1;  // just to be safe
 
     return flags == 2 ? SkOpts::blit_row_s32a_opaque
                       : kProcs[flags];
 }
 
-void SkBlitRow::Color32(SkPMColor dst[], const SkPMColor src[], int count, SkPMColor color) {
+void SkBlitRow::Color32(SkPMColor dst[], int count, SkPMColor color) {
     switch (SkGetPackedA32(color)) {
-        case   0: memmove(dst, src, count * sizeof(SkPMColor)); return;
-        case 255: sk_memset32(dst, color, count);               return;
+        case   0: /* Nothing to do */                  return;
+        case 255: SkOpts::memset32(dst, color, count); return;
     }
-    return SkOpts::blit_row_color32(dst, src, count, color);
+    return SkOpts::blit_row_color32(dst, count, color);
 }

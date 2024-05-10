@@ -7,60 +7,59 @@
 
 #include "src/sksl/SkSLAnalysis.h"
 
-#include "include/private/SkFloatingPoint.h"
-#include "include/private/SkSLModifiers.h"
-#include "include/private/SkSLProgramElement.h"
+#include "include/core/SkSpan.h"
+#include "include/core/SkTypes.h"
 #include "include/private/SkSLSampleUsage.h"
-#include "include/private/SkSLStatement.h"
-#include "include/sksl/SkSLErrorReporter.h"
-#include "src/core/SkSafeMath.h"
+#include "include/private/base/SkTArray.h"
+#include "src/base/SkEnumBitMask.h"
+#include "src/core/SkTHash.h"
+#include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLConstantFolder.h"
+#include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLDefines.h"
+#include "src/sksl/SkSLErrorReporter.h"
+#include "src/sksl/SkSLIntrinsicList.h"
+#include "src/sksl/SkSLOperator.h"
+#include "src/sksl/analysis/SkSLNoOpErrorReporter.h"
+#include "src/sksl/analysis/SkSLProgramUsage.h"
 #include "src/sksl/analysis/SkSLProgramVisitor.h"
-#include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLProgram.h"
-#include "src/sksl/transform/SkSLProgramWriter.h"
-
-// ProgramElements
-#include "src/sksl/ir/SkSLExtension.h"
-#include "src/sksl/ir/SkSLFunctionDefinition.h"
-#include "src/sksl/ir/SkSLInterfaceBlock.h"
-#include "src/sksl/ir/SkSLVarDeclarations.h"
-
-// Statements
-#include "src/sksl/ir/SkSLBlock.h"
-#include "src/sksl/ir/SkSLBreakStatement.h"
-#include "src/sksl/ir/SkSLContinueStatement.h"
-#include "src/sksl/ir/SkSLDiscardStatement.h"
-#include "src/sksl/ir/SkSLDoStatement.h"
-#include "src/sksl/ir/SkSLExpressionStatement.h"
-#include "src/sksl/ir/SkSLForStatement.h"
-#include "src/sksl/ir/SkSLIfStatement.h"
-#include "src/sksl/ir/SkSLNop.h"
-#include "src/sksl/ir/SkSLReturnStatement.h"
-#include "src/sksl/ir/SkSLSwitchStatement.h"
-
-// Expressions
 #include "src/sksl/ir/SkSLBinaryExpression.h"
+#include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLChildCall.h"
 #include "src/sksl/ir/SkSLConstructor.h"
-#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
-#include "src/sksl/ir/SkSLConstructorMatrixResize.h"
-#include "src/sksl/ir/SkSLExternalFunctionCall.h"
-#include "src/sksl/ir/SkSLExternalFunctionReference.h"
+#include "src/sksl/ir/SkSLDoStatement.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
+#include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
-#include "src/sksl/ir/SkSLFunctionReference.h"
+#include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLFunctionDefinition.h"
+#include "src/sksl/ir/SkSLIRNode.h"
+#include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
-#include "src/sksl/ir/SkSLInlineMarker.h"
-#include "src/sksl/ir/SkSLLiteral.h"
+#include "src/sksl/ir/SkSLLayout.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
-#include "src/sksl/ir/SkSLSetting.h"
+#include "src/sksl/ir/SkSLProgram.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
+#include "src/sksl/ir/SkSLReturnStatement.h"
+#include "src/sksl/ir/SkSLStatement.h"
+#include "src/sksl/ir/SkSLSwitchCase.h"
+#include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
-#include "src/sksl/ir/SkSLTypeReference.h"
+#include "src/sksl/ir/SkSLType.h"
+#include "src/sksl/ir/SkSLVarDeclarations.h"
+#include "src/sksl/ir/SkSLVariable.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
+#include "src/sksl/transform/SkSLProgramWriter.h"
+
+#include <optional>
+#include <string>
+#include <string_view>
 
 namespace SkSL {
 
@@ -85,9 +84,17 @@ public:
 protected:
     const Context& fContext;
     const Variable& fChild;
+    const Variable* fMainCoordsParam = nullptr;
     const bool fWritesToSampleCoords;
     SampleUsage fUsage;
     int fElidedSampleCoordCount = 0;
+
+    bool visitProgramElement(const ProgramElement& pe) override {
+        fMainCoordsParam = pe.is<FunctionDefinition>()
+                               ? pe.as<FunctionDefinition>().declaration().getMainCoordsParameter()
+                               : nullptr;
+        return INHERITED::visitProgramElement(pe);
+    }
 
     bool visitExpression(const Expression& e) override {
         // Looking for child(...)
@@ -102,8 +109,7 @@ protected:
                 // coords are never modified, we can conservatively turn this into PassThrough
                 // sampling. In all other cases, we consider it Explicit.
                 if (!fWritesToSampleCoords && maybeCoords->is<VariableReference>() &&
-                    maybeCoords->as<VariableReference>().variable()->modifiers().fLayout.fBuiltin ==
-                            SK_MAIN_COORDS_BUILTIN) {
+                    maybeCoords->as<VariableReference>().variable() == fMainCoordsParam) {
                     fUsage.merge(SampleUsage::PassThrough());
                     ++fElidedSampleCoordCount;
                 } else {
@@ -117,24 +123,6 @@ protected:
 
         return INHERITED::visitExpression(e);
     }
-
-    using INHERITED = ProgramVisitor;
-};
-
-// Visitor that searches through the program for references to a particular builtin variable
-class BuiltinVariableVisitor : public ProgramVisitor {
-public:
-    BuiltinVariableVisitor(int builtin) : fBuiltin(builtin) {}
-
-    bool visitExpression(const Expression& e) override {
-        if (e.is<VariableReference>()) {
-            const VariableReference& var = e.as<VariableReference>();
-            return var.variable()->modifiers().fLayout.fBuiltin == fBuiltin;
-        }
-        return INHERITED::visitExpression(e);
-    }
-
-    int fBuiltin;
 
     using INHERITED = ProgramVisitor;
 };
@@ -245,13 +233,6 @@ private:
     using INHERITED = ProgramVisitor;
 };
 
-// If a caller doesn't care about errors, we can use this trivial reporter that just counts up.
-class TrivialErrorReporter : public ErrorReporter {
-public:
-    ~TrivialErrorReporter() override { this->reportPendingErrors({}); }
-    void handleError(std::string_view, PositionInfo) override {}
-};
-
 // This isn't actually using ProgramVisitor, because it only considers a subset of the fields for
 // any given expression kind. For instance, when indexing an array (e.g. `x[1]`), we only want to
 // know if the base (`x`) is assignable; the index expression (`1`) doesn't need to be.
@@ -268,39 +249,48 @@ public:
         return fErrors->errorCount() == oldErrorCount;
     }
 
-    void visitExpression(Expression& expr) {
+    void visitExpression(Expression& expr, const FieldAccess* fieldAccess = nullptr) {
         switch (expr.kind()) {
             case Expression::Kind::kVariableReference: {
                 VariableReference& varRef = expr.as<VariableReference>();
                 const Variable* var = varRef.variable();
-                if (var->modifiers().fFlags & (Modifiers::kConst_Flag | Modifiers::kUniform_Flag)) {
-                    fErrors->error(expr.fLine, "cannot modify immutable variable '" +
-                                               std::string(var->name()) + "'");
+                auto fieldName = [&] {
+                    return fieldAccess ? fieldAccess->description(OperatorPrecedence::kExpression)
+                                       : std::string(var->name());
+                };
+                if (var->modifierFlags().isConst() || var->modifierFlags().isUniform()) {
+                    fErrors->error(expr.fPosition,
+                                   "cannot modify immutable variable '" + fieldName() + "'");
+                } else if (var->storage() == Variable::Storage::kGlobal &&
+                           (var->modifierFlags() & ModifierFlag::kIn)) {
+                    fErrors->error(expr.fPosition,
+                                   "cannot modify pipeline input variable '" + fieldName() + "'");
                 } else {
                     SkASSERT(fAssignedVar == nullptr);
                     fAssignedVar = &varRef;
                 }
                 break;
             }
-            case Expression::Kind::kFieldAccess:
-                this->visitExpression(*expr.as<FieldAccess>().base());
+            case Expression::Kind::kFieldAccess: {
+                const FieldAccess& f = expr.as<FieldAccess>();
+                this->visitExpression(*f.base(), &f);
                 break;
-
+            }
             case Expression::Kind::kSwizzle: {
                 const Swizzle& swizzle = expr.as<Swizzle>();
                 this->checkSwizzleWrite(swizzle);
-                this->visitExpression(*swizzle.base());
+                this->visitExpression(*swizzle.base(), fieldAccess);
                 break;
             }
             case Expression::Kind::kIndex:
-                this->visitExpression(*expr.as<IndexExpression>().base());
+                this->visitExpression(*expr.as<IndexExpression>().base(), fieldAccess);
                 break;
 
             case Expression::Kind::kPoison:
                 break;
 
             default:
-                fErrors->error(expr.fLine, "cannot assign to this expression");
+                fErrors->error(expr.fPosition, "cannot assign to this expression");
                 break;
         }
     }
@@ -312,7 +302,7 @@ private:
             SkASSERT(idx >= SwizzleComponent::X && idx <= SwizzleComponent::W);
             int bit = 1 << idx;
             if (bits & bit) {
-                fErrors->error(swizzle.fLine,
+                fErrors->error(swizzle.fPosition,
                                "cannot write to the same swizzle field more than once");
                 break;
             }
@@ -344,12 +334,31 @@ SampleUsage Analysis::GetSampleUsage(const Program& program,
 }
 
 bool Analysis::ReferencesBuiltin(const Program& program, int builtin) {
-    BuiltinVariableVisitor visitor(builtin);
-    return visitor.visit(program);
+    SkASSERT(program.fUsage);
+    for (const auto& [variable, counts] : program.fUsage->fVariableCounts) {
+        if (counts.fRead > 0 && variable->layout().fBuiltin == builtin) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Analysis::ReferencesSampleCoords(const Program& program) {
-    return Analysis::ReferencesBuiltin(program, SK_MAIN_COORDS_BUILTIN);
+    // Look for main().
+    for (const std::unique_ptr<ProgramElement>& pe : program.fOwnedElements) {
+        if (pe->is<FunctionDefinition>()) {
+            const FunctionDeclaration& func = pe->as<FunctionDefinition>().declaration();
+            if (func.isMain()) {
+                // See if main() has a coords parameter that is read from anywhere.
+                if (const Variable* coords = func.getMainCoordsParameter()) {
+                    ProgramUsage::VariableCounts counts = program.fUsage->get(*coords);
+                    return counts.fRead > 0;
+                }
+            }
+        }
+    }
+    // The program is missing a main().
+    return false;
 }
 
 bool Analysis::ReferencesFragCoords(const Program& program) {
@@ -376,13 +385,89 @@ bool Analysis::ReturnsOpaqueColor(const FunctionDefinition& function) {
     return !visitor.visitProgramElement(function);
 }
 
+bool Analysis::ContainsRTAdjust(const Expression& expr) {
+    class ContainsRTAdjustVisitor : public ProgramVisitor {
+    public:
+        bool visitExpression(const Expression& expr) override {
+            if (expr.is<VariableReference>() &&
+                expr.as<VariableReference>().variable()->name() == Compiler::RTADJUST_NAME) {
+                return true;
+            }
+            return INHERITED::visitExpression(expr);
+        }
+
+        using INHERITED = ProgramVisitor;
+    };
+
+    ContainsRTAdjustVisitor visitor;
+    return visitor.visitExpression(expr);
+}
+
+bool Analysis::ContainsVariable(const Expression& expr, const Variable& var) {
+    class ContainsVariableVisitor : public ProgramVisitor {
+    public:
+        ContainsVariableVisitor(const Variable* v) : fVariable(v) {}
+
+        bool visitExpression(const Expression& expr) override {
+            if (expr.is<VariableReference>() &&
+                expr.as<VariableReference>().variable() == fVariable) {
+                return true;
+            }
+            return INHERITED::visitExpression(expr);
+        }
+
+        using INHERITED = ProgramVisitor;
+        const Variable* fVariable;
+    };
+
+    ContainsVariableVisitor visitor{&var};
+    return visitor.visitExpression(expr);
+}
+
+bool Analysis::IsCompileTimeConstant(const Expression& expr) {
+    class IsCompileTimeConstantVisitor : public ProgramVisitor {
+    public:
+        bool visitExpression(const Expression& expr) override {
+            switch (expr.kind()) {
+                case Expression::Kind::kLiteral:
+                    // Literals are compile-time constants.
+                    return false;
+
+                case Expression::Kind::kConstructorArray:
+                case Expression::Kind::kConstructorCompound:
+                case Expression::Kind::kConstructorDiagonalMatrix:
+                case Expression::Kind::kConstructorMatrixResize:
+                case Expression::Kind::kConstructorSplat:
+                case Expression::Kind::kConstructorStruct:
+                    // Constructors might be compile-time constants, if they are composed entirely
+                    // of literals and constructors. (Casting constructors are intentionally omitted
+                    // here. If the value inside was a compile-time constant, we would have not have
+                    // generated a cast at all.)
+                    return INHERITED::visitExpression(expr);
+
+                default:
+                    // This expression isn't a compile-time constant.
+                    fIsConstant = false;
+                    return true;
+            }
+        }
+
+        bool fIsConstant = true;
+        using INHERITED = ProgramVisitor;
+    };
+
+    IsCompileTimeConstantVisitor visitor;
+    visitor.visitExpression(expr);
+    return visitor.fIsConstant;
+}
+
 bool Analysis::DetectVarDeclarationWithoutScope(const Statement& stmt, ErrorReporter* errors) {
     // A variable declaration can create either a lone VarDeclaration or an unscoped Block
     // containing multiple VarDeclaration statements. We need to detect either case.
     const Variable* var;
     if (stmt.is<VarDeclaration>()) {
         // The single-variable case. No blocks at all.
-        var = &stmt.as<VarDeclaration>().var();
+        var = stmt.as<VarDeclaration>().var();
     } else if (stmt.is<Block>()) {
         // The multiple-variable case: an unscoped, non-empty block...
         const Block& block = stmt.as<Block>();
@@ -394,7 +479,7 @@ bool Analysis::DetectVarDeclarationWithoutScope(const Statement& stmt, ErrorRepo
         if (!innerStmt.is<VarDeclaration>()) {
             return false;
         }
-        var = &innerStmt.as<VarDeclaration>().var();
+        var = innerStmt.as<VarDeclaration>().var();
     } else {
         // This statement wasn't a variable declaration. No problem.
         return false;
@@ -403,8 +488,8 @@ bool Analysis::DetectVarDeclarationWithoutScope(const Statement& stmt, ErrorRepo
     // Report an error.
     SkASSERT(var);
     if (errors) {
-        errors->error(stmt.fLine, "variable '" + std::string(var->name()) +
-                                  "' must be created in a scope");
+        errors->error(var->fPosition,
+                      "variable '" + std::string(var->name()) + "' must be created in a scope");
     }
     return true;
 }
@@ -418,8 +503,8 @@ bool Analysis::StatementWritesToVariable(const Statement& stmt, const Variable& 
 }
 
 bool Analysis::IsAssignable(Expression& expr, AssignmentInfo* info, ErrorReporter* errors) {
-    TrivialErrorReporter trivialErrors;
-    return IsAssignableVisitor{errors ? errors : &trivialErrors}.visit(expr, info);
+    NoOpErrorReporter unusedErrors;
+    return IsAssignableVisitor{errors ? errors : &unusedErrors}.visit(expr, info);
 }
 
 bool Analysis::UpdateVariableRefKind(Expression* expr,
@@ -431,134 +516,13 @@ bool Analysis::UpdateVariableRefKind(Expression* expr,
     }
     if (!info.fAssignedVar) {
         if (errors) {
-            errors->error(expr->fLine, "can't assign to expression '" + expr->description() + "'");
+            errors->error(expr->fPosition, "can't assign to expression '" + expr->description() +
+                    "'");
         }
         return false;
     }
     info.fAssignedVar->setRefKind(kind);
     return true;
-}
-
-bool Analysis::IsTrivialExpression(const Expression& expr) {
-    return expr.is<Literal>() ||
-           expr.is<VariableReference>() ||
-           (expr.is<Swizzle>() &&
-            IsTrivialExpression(*expr.as<Swizzle>().base())) ||
-           (expr.is<FieldAccess>() &&
-            IsTrivialExpression(*expr.as<FieldAccess>().base())) ||
-           (expr.isAnyConstructor() &&
-            expr.asAnyConstructor().argumentSpan().size() == 1 &&
-            IsTrivialExpression(*expr.asAnyConstructor().argumentSpan().front())) ||
-           (expr.isAnyConstructor() &&
-            expr.isConstantOrUniform()) ||
-           (expr.is<IndexExpression>() &&
-            expr.as<IndexExpression>().index()->isIntLiteral() &&
-            IsTrivialExpression(*expr.as<IndexExpression>().base()));
-}
-
-bool Analysis::IsSameExpressionTree(const Expression& left, const Expression& right) {
-    if (left.kind() != right.kind() || !left.type().matches(right.type())) {
-        return false;
-    }
-
-    // This isn't a fully exhaustive list of expressions by any stretch of the imagination; for
-    // instance, `x[y+1] = x[y+1]` isn't detected because we don't look at BinaryExpressions.
-    // Since this is intended to be used for optimization purposes, handling the common cases is
-    // sufficient.
-    switch (left.kind()) {
-        case Expression::Kind::kLiteral:
-            return left.as<Literal>().value() == right.as<Literal>().value();
-
-        case Expression::Kind::kConstructorArray:
-        case Expression::Kind::kConstructorArrayCast:
-        case Expression::Kind::kConstructorCompound:
-        case Expression::Kind::kConstructorCompoundCast:
-        case Expression::Kind::kConstructorDiagonalMatrix:
-        case Expression::Kind::kConstructorMatrixResize:
-        case Expression::Kind::kConstructorScalarCast:
-        case Expression::Kind::kConstructorStruct:
-        case Expression::Kind::kConstructorSplat: {
-            if (left.kind() != right.kind()) {
-                return false;
-            }
-            const AnyConstructor& leftCtor = left.asAnyConstructor();
-            const AnyConstructor& rightCtor = right.asAnyConstructor();
-            const auto leftSpan = leftCtor.argumentSpan();
-            const auto rightSpan = rightCtor.argumentSpan();
-            if (leftSpan.size() != rightSpan.size()) {
-                return false;
-            }
-            for (size_t index = 0; index < leftSpan.size(); ++index) {
-                if (!IsSameExpressionTree(*leftSpan[index], *rightSpan[index])) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        case Expression::Kind::kFieldAccess:
-            return left.as<FieldAccess>().fieldIndex() == right.as<FieldAccess>().fieldIndex() &&
-                   IsSameExpressionTree(*left.as<FieldAccess>().base(),
-                                        *right.as<FieldAccess>().base());
-
-        case Expression::Kind::kIndex:
-            return IsSameExpressionTree(*left.as<IndexExpression>().index(),
-                                        *right.as<IndexExpression>().index()) &&
-                   IsSameExpressionTree(*left.as<IndexExpression>().base(),
-                                        *right.as<IndexExpression>().base());
-
-        case Expression::Kind::kSwizzle:
-            return left.as<Swizzle>().components() == right.as<Swizzle>().components() &&
-                   IsSameExpressionTree(*left.as<Swizzle>().base(), *right.as<Swizzle>().base());
-
-        case Expression::Kind::kVariableReference:
-            return left.as<VariableReference>().variable() ==
-                   right.as<VariableReference>().variable();
-
-        default:
-            return false;
-    }
-}
-
-class ES2IndexingVisitor : public ProgramVisitor {
-public:
-    ES2IndexingVisitor(ErrorReporter& errors) : fErrors(errors) {}
-
-    bool visitStatement(const Statement& s) override {
-        if (s.is<ForStatement>()) {
-            const ForStatement& f = s.as<ForStatement>();
-            SkASSERT(f.initializer() && f.initializer()->is<VarDeclaration>());
-            const Variable* var = &f.initializer()->as<VarDeclaration>().var();
-            auto [iter, inserted] = fLoopIndices.insert(var);
-            SkASSERT(inserted);
-            bool result = this->visitStatement(*f.statement());
-            fLoopIndices.erase(iter);
-            return result;
-        }
-        return INHERITED::visitStatement(s);
-    }
-
-    bool visitExpression(const Expression& e) override {
-        if (e.is<IndexExpression>()) {
-            const IndexExpression& i = e.as<IndexExpression>();
-            if (!Analysis::IsConstantIndexExpression(*i.index(), &fLoopIndices)) {
-                fErrors.error(i.fLine, "index expression must be constant");
-                return true;
-            }
-        }
-        return INHERITED::visitExpression(e);
-    }
-
-    using ProgramVisitor::visitProgramElement;
-
-private:
-    ErrorReporter& fErrors;
-    std::set<const Variable*> fLoopIndices;
-    using INHERITED = ProgramVisitor;
-};
-
-void Analysis::ValidateIndexingForES2(const ProgramElement& pe, ErrorReporter& errors) {
-    ES2IndexingVisitor visitor(errors);
-    visitor.visitProgramElement(pe);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -575,8 +539,7 @@ bool ProgramVisitor::visit(const Program& program) {
 
 template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expression& e) {
     switch (e.kind()) {
-        case Expression::Kind::kCodeString:
-        case Expression::Kind::kExternalFunctionReference:
+        case Expression::Kind::kEmpty:
         case Expression::Kind::kFunctionReference:
         case Expression::Kind::kLiteral:
         case Expression::Kind::kMethodReference:
@@ -611,13 +574,6 @@ template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expre
         case Expression::Kind::kConstructorStruct: {
             auto& c = e.asAnyConstructor();
             for (auto& arg : c.argumentSpan()) {
-                if (this->visitExpressionPtr(arg)) { return true; }
-            }
-            return false;
-        }
-        case Expression::Kind::kExternalFunctionCall: {
-            auto& c = e.template as<ExternalFunctionCall>();
-            for (auto& arg : c.arguments()) {
                 if (this->visitExpressionPtr(arg)) { return true; }
             }
             return false;
@@ -663,7 +619,6 @@ template <typename T> bool TProgramVisitor<T>::visitStatement(typename T::Statem
         case Statement::Kind::kBreak:
         case Statement::Kind::kContinue:
         case Statement::Kind::kDiscard:
-        case Statement::Kind::kInlineMarker:
         case Statement::Kind::kNop:
             // Leaf statements just return false
             return false;

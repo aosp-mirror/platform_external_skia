@@ -13,11 +13,11 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkTemplates.h"
-#include "include/utils/SkRandom.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkRandom.h"
 #include "tools/Resources.h"
-
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 /*
  * A trivial test which benchmarks the performance of a textblob with a single run.
@@ -27,24 +27,24 @@ public:
     SkTextBlobBench() {}
 
     void onDelayedSetup() override {
-        fFont.setTypeface(ToolUtils::create_portable_typeface("serif", SkFontStyle()));
+        fFont.setTypeface(ToolUtils::CreatePortableTypeface("serif", SkFontStyle()));
         fFont.setSubpixel(true);
 
         // This text seems representative in both length and letter frequency.
         const char* text = "Keep your sentences short, but not overly so.";
 
-        fGlyphs.setCount(fFont.countText(text, strlen(text), SkTextEncoding::kUTF8));
-        fXPos.setCount(fGlyphs.count());
+        fGlyphs.resize(fFont.countText(text, strlen(text), SkTextEncoding::kUTF8));
+        fXPos.resize(fGlyphs.size());
 
-        fFont.textToGlyphs(text, strlen(text), SkTextEncoding::kUTF8, fGlyphs.begin(), fGlyphs.count());
-        fFont.getXPos(&fGlyphs[0], fGlyphs.count(), fXPos.begin());
+        fFont.textToGlyphs(text, strlen(text), SkTextEncoding::kUTF8, fGlyphs.begin(), fGlyphs.size());
+        fFont.getXPos(&fGlyphs[0], fGlyphs.size(), fXPos.begin());
     }
 
     sk_sp<SkTextBlob> makeBlob() {
         const SkTextBlobBuilder::RunBuffer& run =
-            fBuilder.allocRunPosH(fFont, fGlyphs.count(), 10, nullptr);
-        memcpy(run.glyphs, &fGlyphs[0], fGlyphs.count() * sizeof(uint16_t));
-        memcpy(run.pos, &fXPos[0], fXPos.count() * sizeof(SkScalar));
+            fBuilder.allocRunPosH(fFont, fGlyphs.size(), 10, nullptr);
+        memcpy(run.glyphs, &fGlyphs[0], fGlyphs.size() * sizeof(uint16_t));
+        memcpy(run.pos, &fXPos[0], fXPos.size() * sizeof(SkScalar));
         return fBuilder.make();
     }
 

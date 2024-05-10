@@ -12,7 +12,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
 
 class SimpleRectGM : public skiagm::GM {
@@ -20,15 +20,13 @@ public:
     SimpleRectGM() {}
 
 protected:
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString name;
         name.printf("simplerect");
         return name;
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(800, 800);
-    }
+    SkISize getISize() override { return SkISize::Make(800, 800); }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(1, 1);    // want to exercise non-identity ctm performance

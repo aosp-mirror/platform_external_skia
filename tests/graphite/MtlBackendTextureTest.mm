@@ -7,22 +7,25 @@
 
 #include "tests/Test.h"
 
-#include "experimental/graphite/include/BackendTexture.h"
-#include "experimental/graphite/include/Context.h"
-#include "experimental/graphite/include/mtl/MtlTypes.h"
+#include "include/gpu/graphite/BackendTexture.h"
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/Recorder.h"
+#include "include/gpu/graphite/mtl/MtlGraphiteTypes.h"
 
 #import <Metal/Metal.h>
 
-using namespace skgpu;
+using namespace skgpu::graphite;
 
 namespace {
     const SkISize kSize = {16, 16};
 }
 
-DEF_GRAPHITE_TEST_FOR_CONTEXTS(MtlBackendTextureTest, reporter, context) {
-    mtl::TextureInfo textureInfo;
+DEF_GRAPHITE_TEST_FOR_METAL_CONTEXT(MtlBackendTextureTest, reporter, context, testContext) {
+    auto recorder = context->makeRecorder();
+
+    MtlTextureInfo textureInfo;
     textureInfo.fSampleCount = 1;
-    textureInfo.fLevelCount = 1;
+    textureInfo.fMipmapped = skgpu::Mipmapped::kNo;
     textureInfo.fFormat = MTLPixelFormatRGBA8Unorm;
     textureInfo.fStorageMode = MTLStorageModePrivate;
     textureInfo.fUsage = MTLTextureUsageShaderRead;
@@ -32,26 +35,26 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(MtlBackendTextureTest, reporter, context) {
     // formats this test should iterate over a large set of combinations. See the Ganesh
     // MtlBackendAllocationTest for example of doing this.
 
-    auto beTexture = context->createBackendTexture(kSize, textureInfo);
+    auto beTexture = recorder->createBackendTexture(kSize, textureInfo);
     REPORTER_ASSERT(reporter, beTexture.isValid());
-    context->deleteBackendTexture(beTexture);
+    recorder->deleteBackendTexture(beTexture);
 
     // It should also pass if we set the usage to be a render target
     textureInfo.fUsage |= MTLTextureUsageRenderTarget;
-    beTexture = context->createBackendTexture(kSize, textureInfo);
+    beTexture = recorder->createBackendTexture(kSize, textureInfo);
     REPORTER_ASSERT(reporter, beTexture.isValid());
-    context->deleteBackendTexture(beTexture);
+    recorder->deleteBackendTexture(beTexture);
 
-    // It should fail with a format that isn't rgba8
-    textureInfo.fFormat = MTLPixelFormatR8Unorm;
-    beTexture = context->createBackendTexture(kSize, textureInfo);
+    // It should fail with a format that isn't one of our supported formats
+    textureInfo.fFormat = MTLPixelFormatRGB9E5Float;
+    beTexture = recorder->createBackendTexture(kSize, textureInfo);
     REPORTER_ASSERT(reporter, !beTexture.isValid());
-    context->deleteBackendTexture(beTexture);
+    recorder->deleteBackendTexture(beTexture);
 
     // It should fail with a sample count greater than 1
     textureInfo.fFormat = MTLPixelFormatRGBA8Unorm;
     textureInfo.fSampleCount = 4;
-    beTexture = context->createBackendTexture(kSize, textureInfo);
+    beTexture = recorder->createBackendTexture(kSize, textureInfo);
     REPORTER_ASSERT(reporter, !beTexture.isValid());
-    context->deleteBackendTexture(beTexture);
+    recorder->deleteBackendTexture(beTexture);
 }

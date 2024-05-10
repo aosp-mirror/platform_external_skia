@@ -10,9 +10,11 @@
 
 #include "include/core/SkData.h"
 #include "include/core/SkString.h"
-#include "include/private/SkOnce.h"
-#include "include/private/SkTemplates.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkAlign.h"
+#include "include/private/base/SkAlignedStorage.h"
+#include "include/private/base/SkOnce.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
 
 #include <new>
 
@@ -38,6 +40,15 @@ public:
         SkASSERT(this->isValid());
         return this->internalSize();
     }
+
+    /** Reset to an invalid key. */
+    void reset() {
+        fKey.reset(kMetaDataCnt);
+        fKey[kHash_MetaDataIdx] = 0;
+        fKey[kDomainAndSize_MetaDataIdx] = kInvalidDomain;
+    }
+
+    bool isValid() const { return kInvalidDomain != this->domain(); }
 
     /** Used to initialize a key. */
     class Builder {
@@ -69,7 +80,7 @@ public:
             size_t size = (count + kMetaDataCnt) * sizeof(uint32_t);
             SkASSERT(SkToU16(size) == size);
             SkASSERT(SkToU16(domain) == domain);
-            key->fKey[kDomainAndSize_MetaDataIdx] = domain | (size << 16);
+            key->fKey[kDomainAndSize_MetaDataIdx] = SkToU32(domain | (size << 16));
         }
 
     private:
@@ -80,13 +91,6 @@ protected:
     static const uint32_t kInvalidDomain = 0;
 
     ResourceKey() { this->reset(); }
-
-    /** Reset to an invalid key. */
-    void reset() {
-        fKey.reset(kMetaDataCnt);
-        fKey[kHash_MetaDataIdx] = 0;
-        fKey[kDomainAndSize_MetaDataIdx] = kInvalidDomain;
-    }
 
     bool operator==(const ResourceKey& that) const {
         // Both keys should be sized to at least contain the meta data. The metadata contains each
@@ -109,8 +113,6 @@ protected:
         }
         return *this;
     }
-
-    bool isValid() const { return kInvalidDomain != this->domain(); }
 
     uint32_t domain() const { return fKey[kDomainAndSize_MetaDataIdx] & 0xffff; }
 
@@ -162,8 +164,9 @@ private:
 
     friend class ::TestResource;  // For unit test to access kMetaDataCnt.
 
-    // bmp textures require 5 uint32_t values.
-    SkAutoSTMalloc<kMetaDataCnt + 5, uint32_t> fKey;
+    // For Ganesh, bmp textures require 5 uint32_t values. Graphite requires 6 (due to
+    // storing mipmap status as part of the key).
+    skia_private::AutoSTMalloc<kMetaDataCnt + 6, uint32_t> fKey;
 };
 
 /**
@@ -199,11 +202,6 @@ public:
     ScratchKey() {}
 
     ScratchKey(const ScratchKey& that) { *this = that; }
-
-    /** reset() returns the key to the invalid state. */
-    using ResourceKey::reset;
-
-    using ResourceKey::isValid;
 
     ResourceType resourceType() const { return this->domain(); }
 
@@ -246,11 +244,6 @@ public:
     UniqueKey() : fTag(nullptr) {}
 
     UniqueKey(const UniqueKey& that) { *this = that; }
-
-    /** reset() returns the key to the invalid state. */
-    using ResourceKey::reset;
-
-    using ResourceKey::isValid;
 
     UniqueKey& operator=(const UniqueKey& that) {
         this->ResourceKey::operator=(that);
@@ -358,6 +351,31 @@ private:
 static inline bool SkShouldPostMessageToBus(const UniqueKeyInvalidatedMessage& msg,
                                             uint32_t msgBusUniqueID) {
     return msg.contextID() == msgBusUniqueID;
+}
+
+class UniqueKeyInvalidatedMsg_Graphite {
+public:
+    UniqueKeyInvalidatedMsg_Graphite() = default;
+    UniqueKeyInvalidatedMsg_Graphite(const UniqueKey& key, uint32_t recorderID)
+            : fKey(key), fRecorderID(recorderID) {
+        SkASSERT(SK_InvalidUniqueID != fRecorderID);
+    }
+
+    UniqueKeyInvalidatedMsg_Graphite(const UniqueKeyInvalidatedMsg_Graphite&) = default;
+
+    UniqueKeyInvalidatedMsg_Graphite& operator=(const UniqueKeyInvalidatedMsg_Graphite&) = default;
+
+    const UniqueKey& key() const { return fKey; }
+    uint32_t recorderID() const { return fRecorderID; }
+
+private:
+    UniqueKey fKey;
+    uint32_t fRecorderID = SK_InvalidUniqueID;
+};
+
+static inline bool SkShouldPostMessageToBus(const UniqueKeyInvalidatedMsg_Graphite& msg,
+                                            uint32_t msgBusUniqueID) {
+    return msg.recorderID() == msgBusUniqueID;
 }
 
 } // namespace skgpu

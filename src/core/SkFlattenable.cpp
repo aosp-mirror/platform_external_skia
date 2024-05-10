@@ -4,12 +4,22 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 #include "include/core/SkFlattenable.h"
+
+#include "include/core/SkData.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSerialProcs.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkTDArray.h"
 #include "src/core/SkPtrRecorder.h"
 #include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <iterator>
+#include <utility>
 
 SkNamedFactorySet::SkNamedFactorySet() : fNextAddedFactory(0) {}
 
@@ -27,7 +37,7 @@ uint32_t SkNamedFactorySet::find(SkFlattenable::Factory factory) {
 }
 
 const char* SkNamedFactorySet::getNextAddedFactoryName() {
-    if (fNextAddedFactory < fNames.count()) {
+    if (fNextAddedFactory < fNames.size()) {
         return fNames[fNextAddedFactory++];
     }
     return nullptr;
@@ -81,7 +91,7 @@ void SkFlattenable::Finalize() {
 void SkFlattenable::Register(const char name[], Factory factory) {
     SkASSERT(name);
     SkASSERT(factory);
-    SkASSERT(gCount < (int)SK_ARRAY_COUNT(gEntries));
+    SkASSERT(gCount < (int)std::size(gEntries));
 
     gEntries[gCount].fName = name;
     gEntries[gCount].fFactory = factory;
@@ -114,10 +124,12 @@ const char* SkFlattenable::FactoryToName(Factory fact) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 sk_sp<SkData> SkFlattenable::serialize(const SkSerialProcs* procs) const {
-    SkBinaryWriteBuffer writer;
+    SkSerialProcs p;
     if (procs) {
-        writer.setSerialProcs(*procs);
+        p = *procs;
     }
+    SkBinaryWriteBuffer writer(p);
+
     writer.writeFlattenable(this);
     size_t size = writer.bytesWritten();
     auto data = SkData::MakeUninitialized(size);
@@ -127,12 +139,13 @@ sk_sp<SkData> SkFlattenable::serialize(const SkSerialProcs* procs) const {
 
 size_t SkFlattenable::serialize(void* memory, size_t memory_size,
                                 const SkSerialProcs* procs) const {
-  SkBinaryWriteBuffer writer(memory, memory_size);
-  if (procs) {
-      writer.setSerialProcs(*procs);
-  }
-  writer.writeFlattenable(this);
-  return writer.usingInitialStorage() ? writer.bytesWritten() : 0u;
+    SkSerialProcs p;
+    if (procs) {
+        p = *procs;
+    }
+    SkBinaryWriteBuffer writer(memory, memory_size, p);
+    writer.writeFlattenable(this);
+    return writer.usingInitialStorage() ? writer.bytesWritten() : 0u;
 }
 
 sk_sp<SkFlattenable> SkFlattenable::Deserialize(SkFlattenable::Type type, const void* data,

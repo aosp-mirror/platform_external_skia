@@ -24,10 +24,16 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/effects/SkColorMatrixFilter.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
+#include "include/gpu/GrContextOptions.h"
+#include "src/core/SkFontPriv.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
+
+#if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/ContextOptions.h"
+#endif
 
 #include <string.h>
 #include <initializer_list>
@@ -40,7 +46,7 @@ static sk_sp<SkShader> MakeLinear() {
     constexpr SkPoint     kPts[] = { { 0, 0 }, { 32, 32 } };
     constexpr SkScalar    kPos[] = { 0, SK_Scalar1/2, SK_Scalar1 };
     constexpr SkColor kColors[] = {0x80F00080, 0xF0F08000, 0x800080F0 };
-    return SkGradientShader::MakeLinear(kPts, kColors, kPos, SK_ARRAY_COUNT(kColors),
+    return SkGradientShader::MakeLinear(kPts, kColors, kPos, std::size(kColors),
                                         SkTileMode::kClamp);
 }
 
@@ -60,8 +66,8 @@ static sk_sp<SkImageFilter> make_blur(float amount, sk_sp<SkImageFilter> input) 
 }
 
 static sk_sp<SkColorFilter> make_color_filter() {
-    return SkColorMatrixFilter::MakeLightingFilter(SkColorSetRGB(0x00, 0x80, 0xFF),
-                                                   SkColorSetRGB(0xFF, 0x20, 0x00));
+    return SkColorFilters::Lighting(SkColorSetRGB(0x00, 0x80, 0xFF),
+                                    SkColorSetRGB(0xFF, 0x20, 0x00));
 }
 
 namespace skiagm {
@@ -76,15 +82,27 @@ protected:
         const char* text;
     } emojiFont;
     void onOnceBeforeDraw() override {
-        emojiFont.typeface = ToolUtils::emoji_typeface();
-        emojiFont.text     = ToolUtils::emoji_sample_text();
+        emojiFont.typeface = ToolUtils::EmojiTypeface();
+        emojiFont.text     = ToolUtils::EmojiSampleText();
     }
 
-    SkString onShortName() override {
-        return SkString("coloremoji");
+    SkString getName() const override { return SkString("coloremoji"); }
+
+    SkISize getISize() override { return SkISize::Make(650, 1200); }
+
+    void modifyGrContextOptions(GrContextOptions* ctxOptions) override {
+        // This will force multitexturing to verify that color text works with this,
+        // as well as with any additional color transformations.
+        ctxOptions->fGlyphCacheTextureMaximumBytes = 256 * 256 * 4;
     }
 
-    SkISize onISize() override { return SkISize::Make(650, 1200); }
+#if defined(SK_GRAPHITE)
+    void modifyGraphiteContextOptions(skgpu::graphite::ContextOptions* ctxOptions) const override {
+        // This will force multitexturing to verify that color text works with this,
+        // as well as with any additional color transformations.
+        ctxOptions->fGlyphCacheTextureMaximumBytes = 256 * 256 * 4;
+    }
+#endif
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -95,7 +113,7 @@ protected:
         size_t textLen = strlen(text);
 
         // draw text at different point sizes
-        constexpr SkScalar textSizes[] = { 10, 30, 50, };
+        constexpr SkScalar textSizes[] = { 10, 30, 50 };
         SkFontMetrics metrics;
         SkScalar y = 0;
         for (const bool& fakeBold : { false, true }) {
@@ -110,6 +128,12 @@ protected:
             }
         }
 
+        // draw one more big one to max out one Plot
+        font.setSize(256);
+        font.getMetrics(&metrics);
+        canvas->drawSimpleText(text, textLen, SkTextEncoding::kUTF8,
+                               190, -metrics.fAscent, font, SkPaint());
+
         y += 20;
         SkScalar savedY = y;
         // draw with shaders and image filters
@@ -118,7 +142,7 @@ protected:
                 for (int makeGray = 0; makeGray < 2; makeGray++) {
                     for (int makeMode = 0; makeMode < 2; ++makeMode) {
                         for (int alpha = 0; alpha < 2; ++alpha) {
-                            SkFont shaderFont(font.refTypefaceOrDefault());
+                            SkFont shaderFont(font.refTypeface());
                             SkPaint shaderPaint;
                             if (SkToBool(makeLinear)) {
                                 shaderPaint.setShader(MakeLinear());

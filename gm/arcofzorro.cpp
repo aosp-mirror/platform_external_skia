@@ -13,7 +13,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 
 namespace skiagm {
 
@@ -27,14 +27,9 @@ public:
     }
 
 protected:
+    SkString getName() const override { return SkString("arcofzorro"); }
 
-    SkString onShortName() override {
-        return SkString("arcofzorro");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(1000, 1000);
-    }
+    SkISize getISize() override { return SkISize::Make(1000, 1000); }
 
     void onDraw(SkCanvas* canvas) override {
         SkRandom rand;

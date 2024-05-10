@@ -4,9 +4,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
-#include "include/private/SkTPin.h"
 #include "modules/svg/include/SkSVGGradient.h"
+
+#include "include/core/SkTileMode.h"
+#include "include/private/base/SkTPin.h"
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGStop.h"
 #include "modules/svg/include/SkSVGValue.h"
@@ -40,7 +41,7 @@ void SkSVGGradient::collectColorStops(const SkSVGRenderContext& ctx,
                               0.f, 1.f));
     }
 
-    SkASSERT(colors->count() == pos->count());
+    SkASSERT(colors->size() == pos->size());
 
     if (pos->empty() && !fHref.iri().isEmpty()) {
         const auto ref = ctx.findNodeById(fHref);
@@ -63,7 +64,7 @@ SkColor4f SkSVGGradient::resolveStopColor(const SkSVGRenderContext& ctx,
 
     const auto color = SkColor4f::FromColor(ctx.resolveSvgColor(*stopColor));
 
-    return { color.fR, color.fG, color.fB, *stopOpacity };
+    return { color.fR, color.fG, color.fB, *stopOpacity * color.fA };
 }
 
 bool SkSVGGradient::onAsPaint(const SkSVGRenderContext& ctx, SkPaint* paint) const {
@@ -91,7 +92,7 @@ bool SkSVGGradient::onAsPaint(const SkSVGRenderContext& ctx, SkPaint* paint) con
                            * SkMatrix::Scale(obbt.scale.x, obbt.scale.y)
                            * fGradientTransform;
 
-    paint->setShader(this->onMakeShader(ctx, colors.begin(), pos.begin(), colors.count(), tileMode,
+    paint->setShader(this->onMakeShader(ctx, colors.begin(), pos.begin(), colors.size(), tileMode,
                                         localMatrix));
     return true;
 }
@@ -109,7 +110,7 @@ bool SkSVGAttributeParser::parse(SkSVGSpreadMethod* spread) {
     };
 
     bool parsedValue = false;
-    for (size_t i = 0; i < SK_ARRAY_COUNT(gSpreadInfo); ++i) {
+    for (size_t i = 0; i < std::size(gSpreadInfo); ++i) {
         if (this->parseExpectedStringToken(gSpreadInfo[i].fName)) {
             *spread = SkSVGSpreadMethod(gSpreadInfo[i].fType);
             parsedValue = true;

@@ -8,27 +8,38 @@
 #ifndef SKSL_CHILDCALL
 #define SKSL_CHILDCALL
 
-#include "include/private/SkTArray.h"
+#include "src/sksl/SkSLDefines.h"
+#include "src/sksl/SkSLPosition.h"
 #include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLVariable.h"
+#include "src/sksl/ir/SkSLIRNode.h"
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace SkSL {
+
+class Context;
+class Type;
+class Variable;
+enum class OperatorPrecedence : uint8_t;
 
 /**
  * A call to a child effect object (shader, color filter, or blender).
  */
 class ChildCall final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kChildCall;
+    inline static constexpr Kind kIRNodeKind = Kind::kChildCall;
 
-    ChildCall(int line, const Type* type, const Variable* child, ExpressionArray arguments)
-            : INHERITED(line, kExpressionKind, type)
+    ChildCall(Position pos, const Type* type, const Variable* child, ExpressionArray arguments)
+            : INHERITED(pos, kIRNodeKind, type)
             , fChild(*child)
             , fArguments(std::move(arguments)) {}
 
     // Creates the child call; reports errors via ASSERT.
     static std::unique_ptr<Expression> Make(const Context& context,
-                                            int line,
+                                            Position pos,
                                             const Type* returnType,
                                             const Variable& child,
                                             ExpressionArray arguments);
@@ -45,11 +56,9 @@ public:
         return fArguments;
     }
 
-    bool hasProperty(Property property) const override;
+    std::unique_ptr<Expression> clone(Position pos) const override;
 
-    std::unique_ptr<Expression> clone() const override;
-
-    std::string description() const override;
+    std::string description(OperatorPrecedence) const override;
 
 private:
     const Variable& fChild;

@@ -5,12 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "include/utils/SkRandom.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
 #include "src/core/SkGeometry.h"
 #include "src/gpu/tessellate/Tessellation.h"
 #include "tests/Test.h"
 
-namespace skgpu {
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+
+namespace skgpu::tess {
 
 static bool is_linear(SkPoint p0, SkPoint p1, SkPoint p2) {
     return SkScalarNearlyZero((p0 - p1).cross(p2 - p1));
@@ -122,4 +128,4 @@ DEF_TEST(FindCubicConvex180Chops, r) {
     REPORTER_ASSERT(r, areCusps == true);
 }
 
-}  // namespace skgpu
+}  // namespace skgpu::tess

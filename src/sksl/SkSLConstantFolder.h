@@ -10,13 +10,15 @@
 
 #include <memory>
 
-#include "include/private/SkSLDefines.h"
-#include "src/sksl/SkSLOperators.h"
+#include "src/sksl/SkSLDefines.h"
+#include "src/sksl/SkSLOperator.h"
 
 namespace SkSL {
 
 class Context;
 class Expression;
+class Position;
+class Type;
 
 /**
  * Performs constant folding on IR expressions. This simplifies expressions containing
@@ -25,14 +27,14 @@ class Expression;
 class ConstantFolder {
 public:
     /**
-     * If value is an int literal or const int variable with a known value, returns true and stores
-     * the value in out. Otherwise returns false.
+     * If `value` is an int literal or const int variable with a known value, returns true and
+     * stores the value in `out`. Otherwise, returns false.
      */
     static bool GetConstantInt(const Expression& value, SKSL_INT* out);
 
     /**
-     * If value is a literal or const scalar variable with a known value, returns true and stores
-     * the value in out. Otherwise returns false.
+     * If `value` is a literal or const scalar variable with a known value, returns true and stores
+     * the value in `out`. Otherwise, returns false.
      */
     static bool GetConstantValue(const Expression& value, double* out);
 
@@ -43,15 +45,24 @@ public:
     static const Expression* GetConstantValueForVariable(const Expression& value);
 
     /**
+     * If the expression can be replaced by a compile-time-constant value, returns that value.
+     * If not, returns null.
+     */
+    static const Expression* GetConstantValueOrNull(const Expression& value);
+
+    /** Returns true if the expression contains `value` in every slot. */
+    static bool IsConstantSplat(const Expression& expr, double value);
+
+    /**
      * If the expression is a const variable with a known compile-time-constant value, returns a
      * clone of that value. If not, returns the original expression as-is.
      */
-    static std::unique_ptr<Expression> MakeConstantValueForVariable(
+    static std::unique_ptr<Expression> MakeConstantValueForVariable(Position pos,
             std::unique_ptr<Expression> expr);
 
     /** Simplifies the binary expression `left OP right`. Returns null if it can't be simplified. */
     static std::unique_ptr<Expression> Simplify(const Context& context,
-                                                int line,
+                                                Position pos,
                                                 const Expression& left,
                                                 Operator op,
                                                 const Expression& right,

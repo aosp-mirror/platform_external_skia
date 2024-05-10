@@ -8,6 +8,7 @@
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
@@ -18,6 +19,7 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkVertices.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 #include <stddef.h>
@@ -84,33 +86,47 @@ const char* gEarlyReturn = R"(
     }
 )";
 
+class RuntimeColorFilterGM : public skiagm::GM {
+public:
+    RuntimeColorFilterGM() = default;
 
-DEF_SIMPLE_GM(runtimecolorfilter, canvas, 256 * 3, 256 * 2) {
-    sk_sp<SkImage> img = GetResourceAsImage("images/mandrill_256.png");
+protected:
+    SkString getName() const override { return SkString("runtimecolorfilter"); }
 
-    auto draw_filter = [&](const char* src) {
-        auto [effect, err] = SkRuntimeEffect::MakeForColorFilter(SkString(src));
-        if (!effect) {
-            SkDebugf("%s\n%s\n", src, err.c_str());
+    SkISize getISize() override { return SkISize::Make(256 * 3, 256 * 2); }
+
+    void onOnceBeforeDraw() override {
+        fImg = ToolUtils::GetResourceAsImage("images/mandrill_256.png");
+    }
+
+    void onDraw(SkCanvas* canvas) override {
+        auto draw_filter = [&](const char* src) {
+            auto [effect, err] = SkRuntimeEffect::MakeForColorFilter(SkString(src));
+            if (!effect) {
+                SkDebugf("%s\n%s\n", src, err.c_str());
+            }
+            SkASSERT(effect);
+            SkPaint p;
+            p.setColorFilter(effect->makeColorFilter(nullptr));
+            canvas->drawImage(fImg, 0, 0, SkSamplingOptions(), &p);
+            canvas->translate(256, 0);
+        };
+
+        for (const char* src : {gNoop, gLumaSrc}) {
+            draw_filter(src);
         }
-        SkASSERT(effect);
-        SkPaint p;
-        p.setColorFilter(effect->makeColorFilter(nullptr));
-        canvas->drawImage(img, 0, 0, SkSamplingOptions(), &p);
-        canvas->translate(256, 0);
-    };
+        canvas->translate(-256*2, 256);
+        for (const char* src : {gTernary, gIfs, gEarlyReturn}) {
+            draw_filter(src);
+        }
+    }
 
-    for (const char* src : { gNoop, gLumaSrc }) {
-        draw_filter(src);
-    }
-    canvas->translate(-256*2, 256);
-    for (const char* src : { gTernary, gIfs, gEarlyReturn}) {
-        draw_filter(src);
-    }
-}
+    sk_sp<SkImage> fImg;
+};
+DEF_GM(return new RuntimeColorFilterGM;)
 
 DEF_SIMPLE_GM(runtimecolorfilter_vertices_atlas_and_patch, canvas, 404, 404) {
-    constexpr SkRect r = SkRect::MakeWH(128, 128);
+    const SkRect r = SkRect::MakeWH(128, 128);
 
     // Make a vertices that draws the same as SkRect 'r'.
     SkPoint pos[4];
@@ -123,7 +139,7 @@ DEF_SIMPLE_GM(runtimecolorfilter_vertices_atlas_and_patch, canvas, 404, 404) {
                                   kRGBA_8888_SkColorType,
                                   kPremul_SkAlphaType,
                                   canvas->imageInfo().refColorSpace());
-    auto surf = SkSurface::MakeRaster(info);
+    auto surf = SkSurfaces::Raster(info);
     surf->getCanvas()->drawVertices(verts, SkBlendMode::kDst, SkPaint());
     auto atlas = surf->makeImageSnapshot();
     auto xform = SkRSXform::Make(1, 0, 0, 0);
@@ -150,7 +166,7 @@ DEF_SIMPLE_GM(runtimecolorfilter_vertices_atlas_and_patch, canvas, 404, 404) {
     auto makePaint = [&](bool useCF, bool useShader) {
         SkPaint paint;
         paint.setColorFilter(useCF ? colorfilter : nullptr);
-        paint.setShader(useShader ? atlas->makeShader(SkSamplingOptions{}) : nullptr);
+        paint.setShader(useShader ? atlas->makeShader(SkFilterMode::kNearest) : nullptr);
         return paint;
     };
 
@@ -173,7 +189,7 @@ DEF_SIMPLE_GM(runtimecolorfilter_vertices_atlas_and_patch, canvas, 404, 404) {
                           &kColor,
                           1,
                           SkBlendMode::kModulate,
-                          SkSamplingOptions{},
+                          SkFilterMode::kNearest,
                           nullptr,
                           &paint);
     };

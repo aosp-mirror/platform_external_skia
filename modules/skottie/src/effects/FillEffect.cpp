@@ -7,7 +7,7 @@
 
 #include "modules/skottie/src/effects/Effects.h"
 
-#include "include/private/SkTPin.h"
+#include "include/private/base/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGColorFilter.h"
@@ -50,7 +50,6 @@ private:
         EffectBinder(jprops, abuilder, this)
             .bind(  kColor_Index, fColor  )
             .bind(kOpacity_Index, fOpacity);
-
         abuilder.dispatchColorProperty(fColorNode);
     }
 
@@ -64,7 +63,7 @@ private:
     const sk_sp<sksg::Color>           fColorNode;
     const sk_sp<sksg::ModeColorFilter> fFilterNode;
 
-    VectorValue fColor;
+    ColorValue  fColor;
     ScalarValue fOpacity = 1;
 };
 

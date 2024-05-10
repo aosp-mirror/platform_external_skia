@@ -5,27 +5,45 @@
  * found in the LICENSE file.
  */
 
-// This is a GPU-backend specific test. It relies on static intializers to work
+// This is a GPU-backend specific test. It relies on static initializers to work
 
 #include "include/core/SkTypes.h"
 
-#if SK_SUPPORT_GPU && defined(SK_VULKAN)
-
-#include "include/gpu/vk/GrVkVulkan.h"
-
+#if defined(SK_GANESH) && defined(SK_VULKAN)
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkDrawable.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendDrawableInfo.h"
+#include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/vk/GrVkGpu.h"
-#include "src/gpu/vk/GrVkInterface.h"
-#include "src/gpu/vk/GrVkMemory.h"
-#include "src/gpu/vk/GrVkSecondaryCBDrawContext.h"
-#include "src/gpu/vk/GrVkUtil.h"
+#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "include/gpu/vk/GrVkTypes.h"
+#include "include/private/chromium/GrVkSecondaryCBDrawContext.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/vk/GrVkGpu.h"
+#include "src/gpu/ganesh/vk/GrVkUtil.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
-#include "tools/gpu/GrContextFactory.h"
+#include "tools/gpu/ContextType.h"
+
+#include <vulkan/vulkan_core.h>
+#include <cstdint>
+#include <memory>
+
+namespace skgpu { struct VulkanInterface; }
 
 using sk_gpu_test::GrContextFactory;
 
@@ -33,7 +51,7 @@ static const int DEV_W = 16, DEV_H = 16;
 
 class TestDrawable : public SkDrawable {
 public:
-    TestDrawable(const GrVkInterface* interface, GrDirectContext* dContext,
+    TestDrawable(const skgpu::VulkanInterface* interface, GrDirectContext* dContext,
                  int32_t width, int32_t height)
             : INHERITED()
             , fInterface(interface)
@@ -45,7 +63,7 @@ public:
 
     class DrawHandlerBasic : public GpuDrawHandler {
     public:
-        DrawHandlerBasic(const GrVkInterface* interface, int32_t width, int32_t height)
+        DrawHandlerBasic(const skgpu::VulkanInterface* interface, int32_t width, int32_t height)
             : INHERITED()
             , fInterface(interface)
             , fWidth(width)
@@ -84,9 +102,9 @@ public:
             vkInfo.fDrawBounds->extent = { (uint32_t)fWidth / 2, (uint32_t)fHeight };
         }
     private:
-        const GrVkInterface* fInterface;
-        int32_t              fWidth;
-        int32_t              fHeight;
+        const skgpu::VulkanInterface* fInterface;
+        int32_t                       fWidth;
+        int32_t                       fHeight;
 
         using INHERITED = GpuDrawHandler;
     };
@@ -152,15 +170,29 @@ public:
         canvas->drawIRect(rect, paint);
 
         // Draw to an offscreen target so that we end up with a mix of "real" secondary command
-        // buffers and the imported secondary command buffer.
-        sk_sp<SkSurface> surf = SkSurface::MakeRenderTarget(td->fDContext, SkBudgeted::kYes,
-                                                            bufferInfo);
-        surf->getCanvas()->clear(SK_ColorRED);
+        // buffers and the imported secondary command buffer. Also we do two separate offscreen
+        // draws to test that we don't share scratch textures. The GrResourceAllocator would think
+        // that the two offscreens can share a texture here since we draw them to the SCB before
+        // drawing the 2nd offscreen. However, since the SCB ends up not being submitted the GPU
+        // immediately we need to make sure to not share offscreen textures or else the second will
+        // overwrite the first. This test makes sure this non sharing logic is workng correctly.
+        sk_sp<SkSurface> surf =
+                SkSurfaces::RenderTarget(td->fDContext, skgpu::Budgeted::kYes, bufferInfo);
+        surf->getCanvas()->clear(SK_ColorBLUE);
 
-        SkRect dstRect = SkRect::MakeXYWH(3*td->fWidth/4, 0, td->fWidth/4, td->fHeight);
+        SkRect dstRect = SkRect::MakeXYWH(td->fWidth/4, 0, td->fWidth/4, td->fHeight);
         SkRect srcRect = SkRect::MakeIWH(td->fWidth/4, td->fHeight);
         canvas->drawImageRect(surf->makeImageSnapshot(), srcRect, dstRect, SkSamplingOptions(),
                               &paint, SkCanvas::kStrict_SrcRectConstraint);
+
+        surf = SkSurfaces::RenderTarget(td->fDContext, skgpu::Budgeted::kYes, bufferInfo);
+        surf->getCanvas()->clear(SK_ColorRED);
+
+        dstRect = SkRect::MakeXYWH(3*td->fWidth/4, 0, td->fWidth/4, td->fHeight);
+        canvas->drawImageRect(surf->makeImageSnapshot(), srcRect, dstRect, SkSamplingOptions(),
+                              &paint, SkCanvas::kStrict_SrcRectConstraint);
+
+        surf.reset();
 
         td->fDrawContext->flush();
     }
@@ -172,7 +204,7 @@ public:
         // on before releasing the GrVkSecondaryCBDrawContext resources. To simulate that for this
         // test (and since we are running single threaded anyways), we will just force a sync of
         // the gpu and cpu here.
-        td->fDContext->submit(true);
+        td->fDContext->submit(GrSyncCpu::kYes);
 
         td->fDrawContext->releaseResources();
         // We release the context here manually to test that we waited long enough before
@@ -211,11 +243,11 @@ public:
     }
 
 private:
-    const GrVkInterface* fInterface;
-    GrDirectContext*     fDContext;
+    const skgpu::VulkanInterface*     fInterface;
+    GrDirectContext*                  fDContext;
     sk_sp<GrVkSecondaryCBDrawContext> fDrawContext;
-    int32_t              fWidth;
-    int32_t              fHeight;
+    int32_t                           fWidth;
+    int32_t                           fHeight;
 
     using INHERITED = SkDrawable;
 };
@@ -227,8 +259,8 @@ void draw_drawable_test(skiatest::Reporter* reporter,
 
     const SkImageInfo ii = SkImageInfo::Make(DEV_W, DEV_H, kRGBA_8888_SkColorType,
                                              kPremul_SkAlphaType);
-    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(dContext, SkBudgeted::kNo,
-                                                         ii, 0, kTopLeft_GrSurfaceOrigin, nullptr));
+    sk_sp<SkSurface> surface(SkSurfaces::RenderTarget(
+            dContext, skgpu::Budgeted::kNo, ii, 0, kTopLeft_GrSurfaceOrigin, nullptr));
     SkCanvas* canvas = surface->getCanvas();
     canvas->clear(SK_ColorBLUE);
 
@@ -269,21 +301,26 @@ void draw_drawable_test(skiatest::Reporter* reporter,
     }
 }
 
-DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkDrawableTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_VULKAN_CONTEXT(VkDrawableTest, reporter, ctxInfo, CtsEnforcement::kApiLevel_T) {
     draw_drawable_test(reporter, ctxInfo.directContext(), nullptr);
 }
 
-DEF_GPUTEST(VkDrawableImportTest, reporter, options) {
-    for (int typeInt = 0; typeInt < sk_gpu_test::GrContextFactory::kContextTypeCnt; ++typeInt) {
-        sk_gpu_test::GrContextFactory::ContextType contextType =
-                (sk_gpu_test::GrContextFactory::ContextType) typeInt;
-        if (contextType != sk_gpu_test::GrContextFactory::kVulkan_ContextType) {
+DEF_GANESH_TEST(VkDrawableImportTest, reporter, options, CtsEnforcement::kApiLevel_T) {
+    for (int typeInt = 0; typeInt < skgpu::kContextTypeCount; ++typeInt) {
+        skgpu::ContextType contextType = static_cast<skgpu::ContextType>(typeInt);
+        if (contextType != skgpu::ContextType::kVulkan) {
             continue;
         }
-        sk_gpu_test::GrContextFactory factory(options);
+        GrContextOptions childOptions = options;
+        // Part of our testing of secondary command buffers here is that we don't recycle scratch
+        // textures that are drawing into the SCB. The reason being that the SCB gets played back
+        // later and thus logically gets reordered to the end. This can mess up our resource
+        // allocator which thinks it is safe to reuse things. To test this behavior we need to make
+        // sure we aren't pre-emptively reordering draws.
+        childOptions.fReduceOpsTaskSplitting = GrContextOptions::Enable::kNo;
+        sk_gpu_test::GrContextFactory factory(childOptions);
         sk_gpu_test::ContextInfo ctxInfo = factory.getContextInfo(contextType);
-        skiatest::ReporterContext ctx(
-                   reporter, SkString(sk_gpu_test::GrContextFactory::ContextTypeName(contextType)));
+        skiatest::ReporterContext ctx(reporter, SkString(skgpu::ContextTypeName(contextType)));
         if (ctxInfo.directContext()) {
             sk_gpu_test::ContextInfo child =
                     factory.getSharedContextInfo(ctxInfo.directContext(), 0);

@@ -15,6 +15,7 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -49,7 +50,7 @@ class FilterIndiaBoxGM : public skiagm::GM {
 
     void onOnceBeforeDraw() override {
         constexpr char kResource[] = "images/box.gif";
-        if (!GetResourceAsBitmap(kResource, &fBM)) {
+        if (!ToolUtils::GetResourceAsBitmap(kResource, &fBM)) {
             fBM.allocN32Pixels(1, 1);
             fBM.eraseARGB(255, 255, 0 , 0); // red == bad
         }
@@ -65,13 +66,13 @@ class FilterIndiaBoxGM : public skiagm::GM {
         fMatrix[1].setRotate(30, cx, cy); fMatrix[1].postScale(horizScale, vertScale);
     }
 
-    SkString onShortName() override { return SkString("filterindiabox"); }
+    SkString getName() const override { return SkString("filterindiabox"); }
 
-    SkISize onISize() override { return {680, 130}; }
+    SkISize getISize() override { return {680, 130}; }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(10, 10);
-        for (size_t i = 0; i < SK_ARRAY_COUNT(fMatrix); ++i) {
+        for (size_t i = 0; i < std::size(fMatrix); ++i) {
             SkSize size = computeSize(fBM, fMatrix[i]);
             size.fWidth += 20;
             size.fHeight += 20;

@@ -5,19 +5,54 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTextureCompressionType.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkMipmap.h"
-#include "src/core/SkPaintPriv.h"
-#include "src/gpu/GrBackendUtils.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/image/SkImage_Base.h"
+#include "src/gpu/ganesh/GrBackendUtils.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrDataUtils.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
-#include "tools/ToolUtils.h"
+
+#include <algorithm>
+#include <cstddef>
+#include <functional>
+#include <initializer_list>
+#include <memory>
+#include <utility>
+
+using namespace skia_private;
+
+class GrRecordingContext;
+class SkPixmap;
+struct GrContextOptions;
 
 // Just verify that 'actual' is entirely 'expected'
 static void check_solid_pixmap(skiatest::Reporter* reporter,
@@ -38,48 +73,49 @@ static void check_solid_pixmap(skiatest::Reporter* reporter,
 
 // Create an SkImage to wrap 'backendTex'
 sk_sp<SkImage> create_image(GrDirectContext* dContext, const GrBackendTexture& backendTex) {
-    SkImage::CompressionType compression =
+    SkTextureCompressionType compression =
             GrBackendFormatToCompressionType(backendTex.getBackendFormat());
 
-    SkAlphaType at = SkCompressionTypeIsOpaque(compression) ? kOpaque_SkAlphaType
+    SkAlphaType at = SkTextureCompressionTypeIsOpaque(compression) ? kOpaque_SkAlphaType
                                                             : kPremul_SkAlphaType;
 
-    return SkImage::MakeFromCompressedTexture(dContext,
-                                              backendTex,
-                                              kTopLeft_GrSurfaceOrigin,
-                                              at,
-                                              nullptr);
+    return SkImages::TextureFromCompressedTexture(
+            dContext, backendTex, kTopLeft_GrSurfaceOrigin, at, nullptr);
 }
 
 // Draw the compressed backend texture (wrapped in an SkImage) into an RGBA surface, attempting
 // to access all the mipMap levels.
-static void check_compressed_mipmaps(GrRecordingContext* rContext, sk_sp<SkImage> img,
-                                     SkImage::CompressionType compressionType,
+static void check_compressed_mipmaps(GrRecordingContext* rContext,
+                                     sk_sp<SkImage> img,
+                                     SkTextureCompressionType compressionType,
                                      const SkColor4f expectedColors[6],
-                                     GrMipmapped mipMapped,
-                                     skiatest::Reporter* reporter, const char* label) {
-
+                                     skgpu::Mipmapped mipmapped,
+                                     skiatest::Reporter* reporter,
+                                     const char* label) {
     SkImageInfo readbackSurfaceII = SkImageInfo::Make(32, 32, kRGBA_8888_SkColorType,
                                                       kPremul_SkAlphaType);
 
-    sk_sp<SkSurface> surf = SkSurface::MakeRenderTarget(rContext,
-                                                        SkBudgeted::kNo,
-                                                        readbackSurfaceII, 1,
-                                                        kTopLeft_GrSurfaceOrigin,
-                                                        nullptr);
+    sk_sp<SkSurface> surf = SkSurfaces::RenderTarget(rContext,
+                                                     skgpu::Budgeted::kNo,
+                                                     readbackSurfaceII,
+                                                     1,
+                                                     kTopLeft_GrSurfaceOrigin,
+                                                     nullptr);
     if (!surf) {
         return;
     }
 
     SkCanvas* canvas = surf->getCanvas();
 
+    // Given that we bias LOD selection with MIP maps, hitting a level exactly using
+    // SkMipmap::kLinear is difficult so we use kNearest.
     const SkSamplingOptions sampling(SkFilterMode::kLinear,
-                                     SkMipmapMode::kLinear);
+                                     SkMipmapMode::kNearest);
     SkPaint p;
     p.setBlendMode(SkBlendMode::kSrc);
 
     int numMipLevels = 1;
-    if (mipMapped == GrMipmapped::kYes) {
+    if (mipmapped == skgpu::Mipmapped::kYes) {
         numMipLevels = SkMipmap::ComputeLevelCount(32, 32)+1;
     }
 
@@ -111,7 +147,7 @@ static void check_compressed_mipmaps(GrRecordingContext* rContext, sk_sp<SkImage
 
 // Verify that we can readback from a compressed texture
 static void check_readback(GrDirectContext* dContext, sk_sp<SkImage> img,
-                           SkImage::CompressionType compressionType,
+                           SkTextureCompressionType compressionType,
                            const SkColor4f& expectedColor,
                            skiatest::Reporter* reporter, const char* label) {
 #ifdef SK_BUILD_FOR_IOS
@@ -138,15 +174,15 @@ static void check_readback(GrDirectContext* dContext, sk_sp<SkImage> img,
 }
 
 // Test initialization of compressed GrBackendTextures to a specific color
-static void test_compressed_color_init(GrDirectContext* dContext,
-                                       skiatest::Reporter* reporter,
-                                       std::function<GrBackendTexture (GrDirectContext*,
-                                                                       const SkColor4f&,
-                                                                       GrMipmapped)> create,
-                                       const SkColor4f& color,
-                                       SkImage::CompressionType compression,
-                                       GrMipmapped mipMapped) {
-    GrBackendTexture backendTex = create(dContext, color, mipMapped);
+static void test_compressed_color_init(
+        GrDirectContext* dContext,
+        skiatest::Reporter* reporter,
+        std::function<GrBackendTexture(GrDirectContext*, const SkColor4f&, skgpu::Mipmapped)>
+                create,
+        const SkColor4f& color,
+        SkTextureCompressionType compression,
+        skgpu::Mipmapped mipmapped) {
+    GrBackendTexture backendTex = create(dContext, color, mipmapped);
     if (!backendTex.isValid()) {
         return;
     }
@@ -158,7 +194,7 @@ static void test_compressed_color_init(GrDirectContext* dContext,
 
     SkColor4f expectedColors[6] = { color, color, color, color, color, color };
 
-    check_compressed_mipmaps(dContext, img, compression, expectedColors, mipMapped,
+    check_compressed_mipmaps(dContext, img, compression, expectedColors, mipmapped,
                              reporter, "colorinit");
     check_readback(dContext, img, compression, color, reporter, "solid readback");
 
@@ -174,7 +210,7 @@ static void test_compressed_color_init(GrDirectContext* dContext,
 
     SkColor4f expectedNewColors[6] = {newColor, newColor, newColor, newColor, newColor, newColor};
 
-    check_compressed_mipmaps(dContext, img, compression, expectedNewColors, mipMapped, reporter,
+    check_compressed_mipmaps(dContext, img, compression, expectedNewColors, mipmapped, reporter,
                              "colorinit");
     check_readback(dContext, std::move(img), compression, newColor, reporter, "solid readback");
 
@@ -182,27 +218,30 @@ static void test_compressed_color_init(GrDirectContext* dContext,
 }
 
 // Create compressed data pulling the color for each mipmap level from 'levelColors'.
-static std::unique_ptr<const char[]> make_compressed_data(SkImage::CompressionType compression,
+static std::unique_ptr<const char[]> make_compressed_data(SkTextureCompressionType compression,
                                                           SkColor4f levelColors[6],
-                                                          GrMipmapped mipMapped) {
+                                                          skgpu::Mipmapped mipmapped) {
     SkISize dimensions { 32, 32 };
 
     int numMipLevels = 1;
-    if (mipMapped == GrMipmapped::kYes) {
+    if (mipmapped == skgpu::Mipmapped::kYes) {
         numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
 
-    SkTArray<size_t> mipMapOffsets(numMipLevels);
+    TArray<size_t> mipMapOffsets(numMipLevels);
 
-    size_t dataSize = SkCompressedDataSize(compression, dimensions, &mipMapOffsets,
-                                           mipMapped == GrMipmapped::kYes);
+    size_t dataSize = SkCompressedDataSize(
+            compression, dimensions, &mipMapOffsets, mipmapped == skgpu::Mipmapped::kYes);
     char* data = new char[dataSize];
 
     for (int level = 0; level < numMipLevels; ++level) {
         // We have to do this a level at a time bc we might have a different color for
         // each level
-        GrFillInCompressedData(compression, dimensions,
-                               GrMipmapped::kNo, &data[mipMapOffsets[level]], levelColors[level]);
+        GrFillInCompressedData(compression,
+                               dimensions,
+                               skgpu::Mipmapped::kNo,
+                               &data[mipMapOffsets[level]],
+                               levelColors[level]);
 
         dimensions = {std::max(1, dimensions.width() /2), std::max(1, dimensions.height()/2)};
     }
@@ -212,15 +251,13 @@ static std::unique_ptr<const char[]> make_compressed_data(SkImage::CompressionTy
 
 // Verify that we can initialize a compressed backend texture with data (esp.
 // the mipmap levels).
-static void test_compressed_data_init(GrDirectContext* dContext,
-                                      skiatest::Reporter* reporter,
-                                      std::function<GrBackendTexture (GrDirectContext*,
-                                                                      const char* data,
-                                                                      size_t dataSize,
-                                                                      GrMipmapped)> create,
-                                      SkImage::CompressionType compression,
-                                      GrMipmapped mipMapped) {
-
+static void test_compressed_data_init(
+        GrDirectContext* dContext,
+        skiatest::Reporter* reporter,
+        std::function<GrBackendTexture(
+                GrDirectContext*, const char* data, size_t dataSize, skgpu::Mipmapped)> create,
+        SkTextureCompressionType compression,
+        skgpu::Mipmapped mipmapped) {
     SkColor4f expectedColors[6] = {
         { 1.0f, 0.0f, 0.0f, 1.0f }, // R
         { 0.0f, 1.0f, 0.0f, 1.0f }, // G
@@ -231,11 +268,11 @@ static void test_compressed_data_init(GrDirectContext* dContext,
     };
 
     std::unique_ptr<const char[]> data(make_compressed_data(compression, expectedColors,
-                                                            mipMapped));
-    size_t dataSize = SkCompressedDataSize(compression, { 32, 32 }, nullptr,
-                                           mipMapped == GrMipmapped::kYes);
+                                                            mipmapped));
+    size_t dataSize = SkCompressedDataSize(
+            compression, {32, 32}, nullptr, mipmapped == skgpu::Mipmapped::kYes);
 
-    GrBackendTexture backendTex = create(dContext, data.get(), dataSize, mipMapped);
+    GrBackendTexture backendTex = create(dContext, data.get(), dataSize, mipmapped);
     if (!backendTex.isValid()) {
         return;
     }
@@ -246,7 +283,7 @@ static void test_compressed_data_init(GrDirectContext* dContext,
     }
 
     check_compressed_mipmaps(dContext, img, compression, expectedColors,
-                             mipMapped, reporter, "pixmap");
+                             mipmapped, reporter, "pixmap");
     check_readback(dContext, img, compression, expectedColors[0], reporter, "data readback");
 
     SkColor4f expectedColorsNew[6] = {
@@ -259,16 +296,16 @@ static void test_compressed_data_init(GrDirectContext* dContext,
     };
 
     std::unique_ptr<const char[]> dataNew(
-            make_compressed_data(compression, expectedColorsNew, mipMapped));
-    size_t dataNewSize =
-            SkCompressedDataSize(compression, {32, 32}, nullptr, mipMapped == GrMipMapped::kYes);
+            make_compressed_data(compression, expectedColorsNew, mipmapped));
+    size_t dataNewSize = SkCompressedDataSize(
+            compression, {32, 32}, nullptr, mipmapped == skgpu::Mipmapped::kYes);
 
     bool result = dContext->updateCompressedBackendTexture(backendTex, dataNew.get(), dataNewSize,
                                                            nullptr, nullptr);
     // Since we were able to create the compressed texture we should be able to update it.
     REPORTER_ASSERT(reporter, result);
 
-    check_compressed_mipmaps(dContext, img, compression, expectedColorsNew, mipMapped, reporter,
+    check_compressed_mipmaps(dContext, img, compression, expectedColorsNew, mipmapped, reporter,
                              "pixmap");
     check_readback(dContext, std::move(img), compression, expectedColorsNew[0], reporter,
                    "data readback");
@@ -276,17 +313,20 @@ static void test_compressed_data_init(GrDirectContext* dContext,
     dContext->deleteBackendTexture(backendTex);
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CompressedBackendAllocationTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(CompressedBackendAllocationTest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     auto dContext = ctxInfo.directContext();
     const GrCaps* caps = dContext->priv().caps();
 
     struct {
-        SkImage::CompressionType fCompression;
+        SkTextureCompressionType fCompression;
         SkColor4f                fColor;
     } combinations[] = {
-        { SkImage::CompressionType::kETC2_RGB8_UNORM, SkColors::kRed },
-        { SkImage::CompressionType::kBC1_RGB8_UNORM,  SkColors::kBlue },
-        { SkImage::CompressionType::kBC1_RGBA8_UNORM, SkColors::kTransparent },
+        { SkTextureCompressionType::kETC2_RGB8_UNORM, SkColors::kRed },
+        { SkTextureCompressionType::kBC1_RGB8_UNORM,  SkColors::kBlue },
+        { SkTextureCompressionType::kBC1_RGBA8_UNORM, SkColors::kTransparent },
     };
 
     for (auto combo : combinations) {
@@ -299,8 +339,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CompressedBackendAllocationTest, reporter, ct
             continue;
         }
 
-        for (auto mipMapped : { GrMipmapped::kNo, GrMipmapped::kYes }) {
-            if (GrMipmapped::kYes == mipMapped && !caps->mipmapSupport()) {
+        for (auto mipmapped : {skgpu::Mipmapped::kNo, skgpu::Mipmapped::kYes}) {
+            if (skgpu::Mipmapped::kYes == mipmapped && !caps->mipmapSupport()) {
                 continue;
             }
 
@@ -308,28 +348,28 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CompressedBackendAllocationTest, reporter, ct
             {
                 auto createWithColorMtd = [format](GrDirectContext* dContext,
                                                    const SkColor4f& color,
-                                                   GrMipmapped mipMapped) {
+                                                   skgpu::Mipmapped mipmapped) {
                     return dContext->createCompressedBackendTexture(32, 32, format, color,
-                                                                    mipMapped, GrProtected::kNo);
+                                                                    mipmapped, GrProtected::kNo);
                 };
 
                 test_compressed_color_init(dContext, reporter, createWithColorMtd,
-                                           combo.fColor, combo.fCompression, mipMapped);
+                                           combo.fColor, combo.fCompression, mipmapped);
             }
 
             // data initialized
             {
                 auto createWithDataMtd = [format](GrDirectContext* dContext,
-                                                  const char* data, size_t dataSize,
-                                                  GrMipmapped mipMapped) {
+                                                  const char* data,
+                                                  size_t dataSize,
+                                                  skgpu::Mipmapped mipmapped) {
                     return dContext->createCompressedBackendTexture(32, 32, format, data, dataSize,
-                                                                    mipMapped, GrProtected::kNo);
+                                                                    mipmapped, GrProtected::kNo);
                 };
 
                 test_compressed_data_init(dContext, reporter, createWithDataMtd,
-                                          combo.fCompression, mipMapped);
+                                          combo.fCompression, mipmapped);
             }
-
         }
     }
 }

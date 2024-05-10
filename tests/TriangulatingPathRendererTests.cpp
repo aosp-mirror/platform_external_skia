@@ -5,23 +5,67 @@
  * found in the LICENSE file.
  */
 
-#include "tests/Test.h"
-
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPathTypes.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrEagerVertexAllocator.h"
-#include "src/gpu/GrStyle.h"
-#include "src/gpu/GrUserStencilSettings.h"
-#include "src/gpu/effects/GrPorterDuffXferProcessor.h"
-#include "src/gpu/geometry/GrAATriangulator.h"
-#include "src/gpu/geometry/GrInnerFanTriangulator.h"
-#include "src/gpu/geometry/GrStyledShape.h"
-#include "src/shaders/SkShaderBase.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/base/SkFloatBits.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/base/SkArenaAlloc.h"
+#include "src/base/SkRandom.h"
+#include "src/core/SkPathPriv.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/GrColorInfo.h"
+#include "src/gpu/ganesh/GrEagerVertexAllocator.h"
+#include "src/gpu/ganesh/GrFPArgs.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrFragmentProcessors.h"
+#include "src/gpu/ganesh/GrPaint.h"
+#include "src/gpu/ganesh/GrStyle.h"
+#include "src/gpu/ganesh/GrUserStencilSettings.h"
+#include "src/gpu/ganesh/PathRenderer.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/effects/GrPorterDuffXferProcessor.h"
+#include "src/gpu/ganesh/geometry/GrAATriangulator.h"
+#include "src/gpu/ganesh/geometry/GrInnerFanTriangulator.h"
+#include "src/gpu/ganesh/geometry/GrStyledShape.h"
+#include "src/gpu/ganesh/geometry/GrTriangulator.h"
+#include "src/gpu/ganesh/ops/TriangulatingPathRenderer.h"
+#include "tests/CtsEnforcement.h"
+#include "tests/Test.h"
 #include "tools/ToolUtils.h"
+
+#include <cmath>
+#include <cstddef>
+#include <initializer_list>
 #include <map>
+#include <memory>
+#include <utility>
+
+using namespace skia_private;
+
+class GrRecordingContext;
+class SkShader;
+struct GrContextOptions;
+
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 
 /*
  * These tests pass by not crashing, hanging or asserting in Debug.
@@ -486,9 +530,7 @@ CreatePathFn kNonEdgeAAPaths[] = {
     },
 };
 
-#if SK_GPU_V1
-#include "src/gpu/ops/TriangulatingPathRenderer.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#if defined(SK_GANESH)
 
 // A simple concave path. Test this with a non-invertible matrix.
 static SkPath create_path_17() {
@@ -779,25 +821,25 @@ static SkPath create_path_47() {
     return path;
 }
 
-static std::unique_ptr<GrFragmentProcessor> create_linear_gradient_processor(
-            GrRecordingContext* rContext) {
-
+static std::unique_ptr<GrFragmentProcessor>
+create_linear_gradient_processor(GrRecordingContext* rContext, const SkMatrix& ctm) {
     SkPoint pts[2] = { {0, 0}, {1, 1} };
     SkColor colors[2] = { SK_ColorGREEN, SK_ColorBLUE };
     sk_sp<SkShader> shader = SkGradientShader::MakeLinear(
-        pts, colors, nullptr, SK_ARRAY_COUNT(colors), SkTileMode::kClamp);
+        pts, colors, nullptr, std::size(colors), SkTileMode::kClamp);
     GrColorInfo colorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr);
-    SkMatrixProvider matrixProvider(SkMatrix::I());
-    return as_SB(shader)->asFragmentProcessor({rContext, matrixProvider, &colorInfo});
+    SkSurfaceProps props; // default props for testing
+    return GrFragmentProcessors::Make(
+            shader.get(), {rContext, &colorInfo, props, GrFPArgs::Scope::kDefault}, ctm);
 }
 
 static void test_path(GrRecordingContext* rContext,
-                      skgpu::v1::SurfaceDrawContext* sdc,
+                      skgpu::ganesh::SurfaceDrawContext* sdc,
                       const SkPath& path,
                       const SkMatrix& matrix = SkMatrix::I(),
                       GrAAType aaType = GrAAType::kNone,
                       std::unique_ptr<GrFragmentProcessor> fp = nullptr) {
-    skgpu::v1::TriangulatingPathRenderer pr;
+    skgpu::ganesh::TriangulatingPathRenderer pr;
     pr.setMaxVerbCount(100);
 
     GrPaint paint;
@@ -809,24 +851,35 @@ static void test_path(GrRecordingContext* rContext,
     SkIRect clipConservativeBounds = SkIRect::MakeWH(sdc->width(), sdc->height());
     GrStyle style(SkStrokeRec::kFill_InitStyle);
     GrStyledShape shape(path, style);
-    skgpu::v1::PathRenderer::DrawPathArgs args{rContext,
-                                               std::move(paint),
-                                               &GrUserStencilSettings::kUnused,
-                                               sdc,
-                                               nullptr,
-                                               &clipConservativeBounds,
-                                               &matrix,
-                                               &shape,
-                                               aaType,
-                                               false};
+    skgpu::ganesh::PathRenderer::DrawPathArgs args{rContext,
+                                                   std::move(paint),
+                                                   &GrUserStencilSettings::kUnused,
+                                                   sdc,
+                                                   nullptr,
+                                                   &clipConservativeBounds,
+                                                   &matrix,
+                                                   &shape,
+                                                   aaType,
+                                                   false};
     pr.drawPath(args);
 }
 
-DEF_GPUTEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests,
+                                 reporter,
+                                 ctxInfo,
+                                 CtsEnforcement::kNever) {
     auto ctx = ctxInfo.directContext();
-    auto sdc = skgpu::v1::SurfaceDrawContext::Make(
-            ctx, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {800, 800},
-            SkSurfaceProps(), 1, GrMipmapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin);
+    auto sdc = skgpu::ganesh::SurfaceDrawContext::Make(ctx,
+                                                       GrColorType::kRGBA_8888,
+                                                       nullptr,
+                                                       SkBackingFit::kApprox,
+                                                       {800, 800},
+                                                       SkSurfaceProps(),
+                                                       /*label=*/{},
+                                                       /* sampleCnt= */ 1,
+                                                       skgpu::Mipmapped::kNo,
+                                                       GrProtected::kNo,
+                                                       kTopLeft_GrSurfaceOrigin);
     if (!sdc) {
         return;
     }
@@ -839,7 +892,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests, reporter, ctxInfo) 
         test_path(ctx, sdc.get(), createPath());
     }
     SkMatrix nonInvertibleMatrix = SkMatrix::Scale(0, 0);
-    std::unique_ptr<GrFragmentProcessor> fp(create_linear_gradient_processor(ctx));
+    std::unique_ptr<GrFragmentProcessor> fp(create_linear_gradient_processor(ctx, SkMatrix()));
     test_path(ctx, sdc.get(), create_path_17(), nonInvertibleMatrix, GrAAType::kCoverage,
               std::move(fp));
     test_path(ctx, sdc.get(), create_path_20(), SkMatrix(), GrAAType::kCoverage);
@@ -858,7 +911,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests, reporter, ctxInfo) 
     test_path(ctx, sdc.get(), create_path_47(), SkMatrix(), GrAAType::kCoverage);
 }
 
-#endif // SK_GPU_V1
+#endif // defined(SK_GANESH)
 
 namespace {
 
@@ -872,7 +925,7 @@ public:
     }
     void unlock(int actualCount) override {}
     SkPoint operator[](int idx) const { return fPoints[idx]; }
-    SkAutoTMalloc<SkPoint> fPoints;
+    AutoTMalloc<SkPoint> fPoints;
 };
 
 class SimplerVertexAllocator : public GrEagerVertexAllocator {
@@ -887,7 +940,7 @@ public:
 
     void unlock(int) override {}
 
-    SkAutoTMalloc<char> fVertexData;
+    AutoTMalloc<char> fVertexData;
     size_t fVertexAllocSize = 0;
 };
 
@@ -1109,7 +1162,7 @@ DEF_TEST(GrInnerFanTriangulator, r) {
     verify_simple_inner_polygons(r, "overlapping rects with horizontal collinear edges", SkPath()
             .lineTo(2,0).lineTo(2,1).lineTo(0,1)
             .moveTo(1,0).lineTo(3,0).lineTo(3,1).lineTo(1,1).close());
-    for (int i = 0; i < (int)SK_ARRAY_COUNT(kNonEdgeAAPaths); ++i) {
+    for (int i = 0; i < (int)std::size(kNonEdgeAAPaths); ++i) {
         verify_simple_inner_polygons(r, SkStringPrintf("kNonEdgeAAPaths[%i]", i).c_str(),
                                      kNonEdgeAAPaths[i]());
     }
@@ -1311,3 +1364,5 @@ static void test_crbug_1262444(skiatest::Reporter* r) {
 DEF_TEST(TriangulatorBugs, r) {
     test_crbug_1262444(r);
 }
+
+#endif // SK_ENABLE_OPTIMIZE_SIZE

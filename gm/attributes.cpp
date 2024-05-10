@@ -10,21 +10,23 @@
 #include "include/core/SkRect.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/GrBuffer.h"
-#include "src/gpu/GrGeometryProcessor.h"
-#include "src/gpu/GrGpuBuffer.h"
-#include "src/gpu/GrOpFlushState.h"
-#include "src/gpu/GrProcessor.h"
-#include "src/gpu/GrProcessorSet.h"
-#include "src/gpu/GrProgramInfo.h"
-#include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/GrShaderVar.h"
 #include "src/gpu/KeyBuilder.h"
-#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
-#include "src/gpu/ops/GrDrawOp.h"
-#include "src/gpu/ops/GrOp.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ganesh/GrBuffer.h"
+#include "src/gpu/ganesh/GrCanvas.h"
+#include "src/gpu/ganesh/GrGeometryProcessor.h"
+#include "src/gpu/ganesh/GrGpuBuffer.h"
+#include "src/gpu/ganesh/GrOpFlushState.h"
+#include "src/gpu/ganesh/GrProcessor.h"
+#include "src/gpu/ganesh/GrProcessorSet.h"
+#include "src/gpu/ganesh/GrProgramInfo.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrResourceProvider.h"
+#include "src/gpu/ganesh/GrShaderVar.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/ganesh/glsl/GrGLSLVertexGeoBuilder.h"
+#include "src/gpu/ganesh/ops/GrDrawOp.h"
+#include "src/gpu/ganesh/ops/GrOp.h"
 #include "tools/gpu/ProxyUtils.h"
 
 #include <memory>
@@ -209,8 +211,10 @@ private:
         v[1].color = SK_ColorGREEN;
         v[2].color = SK_ColorYELLOW;
         v[3].color = SK_ColorMAGENTA;
-        fVertexBuffer = flushState->resourceProvider()->createBuffer(
-                sizeof(v), GrGpuBufferType::kVertex, kStatic_GrAccessPattern, v);
+        fVertexBuffer = flushState->resourceProvider()->createBuffer(v,
+                                                                     sizeof(v),
+                                                                     GrGpuBufferType::kVertex,
+                                                                     kStatic_GrAccessPattern);
     }
 
     void onPrepare(GrOpFlushState* flushState) override {
@@ -271,13 +275,13 @@ namespace skiagm {
  * strides.
  */
 class AttributesGM : public GpuGM {
-    SkString onShortName() override { return SkString("attributes"); }
-    SkISize onISize() override { return {120, 340}; }
+    SkString getName() const override { return SkString("attributes"); }
+    SkISize getISize() override { return {120, 340}; }
     DrawResult onDraw(GrRecordingContext*, SkCanvas*, SkString* errorMsg) override;
 };
 
 DrawResult AttributesGM::onDraw(GrRecordingContext* rc, SkCanvas* canvas, SkString* errorMsg) {
-    auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+    auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
     if (!sdc) {
         *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
         return DrawResult::kSkip;

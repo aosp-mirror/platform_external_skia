@@ -5,109 +5,128 @@
 * found in the LICENSE file.
  */
 
+#include "include/core/SkData.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSpan.h"
+#include "include/core/SkTypes.h"
+#include "src/base/SkZip.h"
+#include "src/core/SkDescriptor.h"
 #include "src/core/SkGlyph.h"
-#include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/text/GrGlyphVector.h"
-
-#include "src/core/SkGlyphBuffer.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkStrikeCache.h"
+#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeSpec.h"
 #include "src/core/SkWriteBuffer.h"
-#include "src/gpu/GrSubRunAllocator.h"
+#include "src/text/StrikeForGPU.h"
+#include "src/text/gpu/GlyphVector.h"
+#include "src/text/gpu/SubRunAllocator.h"
 #include "tests/Test.h"
+#include "tools/fonts/FontToolUtils.h"
 
-class TestingPeer {
+#include <initializer_list>
+#include <limits.h>
+#include <optional>
+#include <utility>
+
+using GlyphVector = sktext::gpu::GlyphVector;
+using SubRunAllocator = sktext::gpu::SubRunAllocator;
+
+namespace sktext::gpu {
+class GlyphVectorTestingPeer {
 public:
-    static const SkDescriptor& GetDescriptor(const GrGlyphVector& v) {
-        return v.fStrike->getDescriptor();
+    static const SkDescriptor& GetDescriptor(const GlyphVector& v) {
+        return v.fStrikePromise.descriptor();
     }
-    static SkSpan<GrGlyphVector::Variant> GetGlyphs(const GrGlyphVector& v) {
+    static SkSpan<GlyphVector::Variant> GetGlyphs(const GlyphVector& v) {
         return v.fGlyphs;
     }
 };
 
-DEF_TEST(GrGlyphVector_Serialization, r) {
-    SkFont font;
+DEF_TEST(GlyphVector_Serialization, r) {
+    SkFont font = ToolUtils::DefaultFont();
     auto [strikeSpec, _] = SkStrikeSpec::MakeCanonicalized(font);
 
-    GrSubRunAllocator alloc;
+    SubRunAllocator alloc;
 
-    SkBulkGlyphMetricsAndImages glyphFinder{strikeSpec};
     const int N = 10;
-    SkGlyphVariant* glyphs = alloc.makePODArray<SkGlyphVariant>(N);
+    SkPackedGlyphID* glyphs = alloc.makePODArray<SkPackedGlyphID>(N);
     for (int i = 0; i < N; i++) {
-        glyphs[i] = glyphFinder.glyph(SkPackedGlyphID(SkTo<SkGlyphID>(i + 1)));
+        glyphs[i] = SkPackedGlyphID(SkGlyphID(i));
     }
 
-    GrGlyphVector src = GrGlyphVector::Make(
-            strikeSpec.findOrCreateStrike(), SkMakeSpan(glyphs, N), &alloc);
+    SkStrikePromise promise{strikeSpec.findOrCreateStrike()};
 
-    SkBinaryWriteBuffer wBuffer;
+    GlyphVector src = GlyphVector::Make(std::move(promise), SkSpan(glyphs, N), &alloc);
+
+    SkBinaryWriteBuffer wBuffer({});
     src.flatten(wBuffer);
 
     auto data = wBuffer.snapshotAsData();
     SkReadBuffer rBuffer{data->data(), data->size()};
-    auto dst = GrGlyphVector::MakeFromBuffer(rBuffer, &alloc);
+    auto dst = GlyphVector::MakeFromBuffer(rBuffer, nullptr, &alloc);
     REPORTER_ASSERT(r, dst.has_value());
-    REPORTER_ASSERT(r, TestingPeer::GetDescriptor(src) == TestingPeer::GetDescriptor(*dst));
+    REPORTER_ASSERT(r,
+                    GlyphVectorTestingPeer::GetDescriptor(src) ==
+                            GlyphVectorTestingPeer::GetDescriptor(*dst));
 
-    auto srcGlyphs = TestingPeer::GetGlyphs(src);
-    auto dstGlyphs = TestingPeer::GetGlyphs(*dst);
+    auto srcGlyphs = GlyphVectorTestingPeer::GetGlyphs(src);
+    auto dstGlyphs = GlyphVectorTestingPeer::GetGlyphs(*dst);
     for (auto [srcGlyphID, dstGlyphID] : SkMakeZip(srcGlyphs, dstGlyphs)) {
         REPORTER_ASSERT(r, srcGlyphID.packedGlyphID == dstGlyphID.packedGlyphID);
     }
 }
 
-DEF_TEST(GrGlyphVector_BadLengths, r) {
-    {
-        SkFont font;
-        auto [strikeSpec, _] = SkStrikeSpec::MakeCanonicalized(font);
+DEF_TEST(GlyphVector_BadLengths, r) {
+    auto [strikeSpec, _] = SkStrikeSpec::MakeCanonicalized(ToolUtils::DefaultFont());
 
+    // Strike to keep in the strike cache.
+    auto strike = strikeSpec.findOrCreateStrike();
+
+    // Be sure to keep the strike alive. The promise to serialize as the first part of the
+    // GlyphVector.
+    SkStrikePromise promise{sk_sp<SkStrike>(strike)};
+    {
         // Make broken stream by hand - zero length
-        SkBinaryWriteBuffer wBuffer;
-        strikeSpec.descriptor().flatten(wBuffer);
+        SkBinaryWriteBuffer wBuffer({});
+        promise.flatten(wBuffer);
         wBuffer.write32(0);  // length
         auto data = wBuffer.snapshotAsData();
         SkReadBuffer rBuffer{data->data(), data->size()};
-        GrSubRunAllocator alloc;
-        auto dst = GrGlyphVector::MakeFromBuffer(rBuffer, &alloc);
+        SubRunAllocator alloc;
+        auto dst = GlyphVector::MakeFromBuffer(rBuffer, nullptr, &alloc);
         REPORTER_ASSERT(r, !dst.has_value());
     }
 
     {
-        SkFont font;
-        auto [strikeSpec, _] = SkStrikeSpec::MakeCanonicalized(font);
-
+        // Make broken stream by hand - zero length
+        SkBinaryWriteBuffer wBuffer({});
+        promise.flatten(wBuffer);
         // Make broken stream by hand - stream is too short
-        SkBinaryWriteBuffer wBuffer;
-        strikeSpec.descriptor().flatten(wBuffer);
         wBuffer.write32(5);  // length
         wBuffer.writeUInt(12);  // random data
         wBuffer.writeUInt(12);  // random data
         wBuffer.writeUInt(12);  // random data
         auto data = wBuffer.snapshotAsData();
         SkReadBuffer rBuffer{data->data(), data->size()};
-        GrSubRunAllocator alloc;
-        auto dst = GrGlyphVector::MakeFromBuffer(rBuffer, &alloc);
+        SubRunAllocator alloc;
+        auto dst = GlyphVector::MakeFromBuffer(rBuffer, nullptr, &alloc);
         REPORTER_ASSERT(r, !dst.has_value());
     }
 
     {
-        SkFont font;
-        auto [strikeSpec, _] = SkStrikeSpec::MakeCanonicalized(font);
-
         // Make broken stream by hand - length out of range of safe calculations
-        SkBinaryWriteBuffer wBuffer;
-        strikeSpec.descriptor().flatten(wBuffer);
+        SkBinaryWriteBuffer wBuffer({});
+        promise.flatten(wBuffer);
         wBuffer.write32(INT_MAX - 10);  // length
         wBuffer.writeUInt(12);  // random data
         wBuffer.writeUInt(12);  // random data
         wBuffer.writeUInt(12);  // random data
         auto data = wBuffer.snapshotAsData();
         SkReadBuffer rBuffer{data->data(), data->size()};
-        GrSubRunAllocator alloc;
-        auto dst = GrGlyphVector::MakeFromBuffer(rBuffer, &alloc);
+        SubRunAllocator alloc;
+        auto dst = GlyphVector::MakeFromBuffer(rBuffer, nullptr, &alloc);
         REPORTER_ASSERT(r, !dst.has_value());
     }
 }
+
+}  // namespace sktext::gpu

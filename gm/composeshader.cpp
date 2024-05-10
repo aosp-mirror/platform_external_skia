@@ -25,8 +25,10 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/SkTDArray.h"
-#include "src/core/SkTLazy.h"
+#include "include/private/base/SkTDArray.h"
+#include "src/base/SkTLazy.h"
+#include "tools/GpuToolUtils.h"
+#include "tools/ToolUtils.h"
 
 #include <utility>
 
@@ -55,13 +57,9 @@ protected:
         fShader = make_shader(SkBlendMode::kDstIn);
     }
 
-    SkString onShortName() override {
-        return SkString("composeshader");
-    }
+    SkString getName() const override { return SkString("composeshader"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(120, 120);
-    }
+    SkISize getISize() override { return SkISize::Make(120, 120); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
@@ -84,13 +82,9 @@ public:
     ComposeShaderAlphaGM() {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("composeshader_alpha");
-    }
+    SkString getName() const override { return SkString("composeshader_alpha"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(750, 220);
-    }
+    SkISize getISize() override { return SkISize::Make(750, 220); }
 
     void onDraw(SkCanvas* canvas) override {
         sk_sp<SkShader> shaders[] = {
@@ -103,7 +97,7 @@ protected:
 
         const SkRect r = SkRect::MakeXYWH(5, 5, 100, 100);
 
-        for (size_t y = 0; y < SK_ARRAY_COUNT(shaders); ++y) {
+        for (size_t y = 0; y < std::size(shaders); ++y) {
             canvas->save();
             for (int alpha = 0xFF; alpha > 0; alpha -= 0x28) {
                 paint.setAlphaf(1.0f);
@@ -169,27 +163,36 @@ public:
     ComposeShaderBitmapGM(bool use_lm) : fUseLocalMatrix(use_lm) {}
 
 protected:
-    void onOnceBeforeDraw() override {
-        draw_color_bm(&fColorBitmap, squareLength);
-        draw_alpha8_bm(&fAlpha8Bitmap, squareLength);
-        SkMatrix s;
-        s.reset();
-        fColorBitmapShader = fColorBitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                                     SkSamplingOptions(), s);
-        fAlpha8BitmapShader = fAlpha8Bitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                                       SkSamplingOptions(), s);
-        fLinearGradientShader = make_linear_gradient_shader(squareLength);
-    }
-
-    SkString onShortName() override {
+    SkString getName() const override {
         return SkStringPrintf("composeshader_bitmap%s", fUseLocalMatrix ? "_lm" : "");
     }
 
-    SkISize onISize() override {
+    SkISize getISize() override {
         return SkISize::Make(7 * (squareLength + 5), 2 * (squareLength + 5));
     }
 
     void onDraw(SkCanvas* canvas) override {
+        if (!fInitialized) {
+            draw_color_bm(&fColorBitmap, squareLength);
+            sk_sp<SkImage> img = SkImages::RasterFromBitmap(fColorBitmap);
+            img = ToolUtils::MakeTextureImage(canvas, std::move(img));
+            if (img) {
+                fColorBitmapShader = img->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
+                                                     SkSamplingOptions(), SkMatrix::I());
+            }
+            draw_alpha8_bm(&fAlpha8Bitmap, squareLength);
+            img = SkImages::RasterFromBitmap(fAlpha8Bitmap);
+            img = ToolUtils::MakeTextureImage(canvas, std::move(img));
+            if (img) {
+                fAlpha8BitmapShader = fAlpha8Bitmap.makeShader(SkTileMode::kRepeat,
+                                                               SkTileMode::kRepeat,
+                                                               SkSamplingOptions(),
+                                                               SkMatrix::I());
+            }
+            fLinearGradientShader = make_linear_gradient_shader(squareLength);
+            fInitialized = true;
+        }
+
         SkBlendMode mode = SkBlendMode::kDstOver;
 
         SkMatrix lm = SkMatrix::Translate(0, squareLength * 0.5f);
@@ -201,8 +204,8 @@ protected:
             SkShaders::Blend(mode, fLinearGradientShader, fAlpha8BitmapShader),
         };
         if (fUseLocalMatrix) {
-            for (unsigned i = 0; i < SK_ARRAY_COUNT(shaders); ++i) {
-                shaders[i] = shaders[i]->makeWithLocalMatrix(lm);
+            for (unsigned i = 0; i < std::size(shaders); ++i) {
+                shaders[i] = shaders[i] ? shaders[i]->makeWithLocalMatrix(lm) : nullptr;
             }
         }
 
@@ -211,7 +214,7 @@ protected:
 
         const SkRect r = SkRect::MakeIWH(squareLength, squareLength);
 
-        for (size_t y = 0; y < SK_ARRAY_COUNT(shaders); ++y) {
+        for (size_t y = 0; y < std::size(shaders); ++y) {
             canvas->save();
             for (int alpha = 0xFF; alpha > 0; alpha -= 0x28) {
                 paint.setAlpha(alpha);
@@ -235,6 +238,7 @@ private:
 
     const bool fUseLocalMatrix;
 
+    bool fInitialized = false;
     SkBitmap fColorBitmap;
     SkBitmap fAlpha8Bitmap;
     sk_sp<SkShader> fColorBitmapShader;
@@ -250,9 +254,9 @@ DEF_SIMPLE_GM(composeshader_bitmap2, canvas, 200, 200) {
     int width = 255;
     int height = 255;
     SkTDArray<uint8_t> dst8Storage;
-    dst8Storage.setCount(width * height);
+    dst8Storage.resize(width * height);
     SkTDArray<uint32_t> dst32Storage;
-    dst32Storage.setCount(width * height * sizeof(int32_t));
+    dst32Storage.resize(width * height * sizeof(int32_t));
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             dst8Storage[y * width + x] = (y + x) / 2;

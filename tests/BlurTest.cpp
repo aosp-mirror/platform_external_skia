@@ -5,51 +5,55 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
-#include "include/core/SkBlendMode.h"
 #include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorPriv.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMaskFilter.h"
-#include "include/core/SkMath.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPathUtils.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
-#include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkPerlinNoiseShader.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/private/SkFloatBits.h"
-#include "include/private/SkTPin.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "include/private/base/SkFloatBits.h"
+#include "include/private/base/SkTPin.h"
+#include "src/base/SkMathPriv.h"
 #include "src/core/SkBlurMask.h"
-#include "src/core/SkGpuBlurUtils.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskFilterBase.h"
-#include "src/core/SkMathPriv.h"
 #include "src/effects/SkEmbossMaskFilter.h"
+#include "src/gpu/ganesh/GrBlurUtils.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
-#include "tools/gpu/GrContextFactory.h"
 
 #include <math.h>
 #include <string.h>
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <initializer_list>
-#include <utility>
+
+struct GrContextOptions;
 
 #define WRITE_CSV 0
 
 ///////////////////////////////////////////////////////////////////////////////
-
-#define ILLEGAL_MODE    ((SkXfermode::Mode)-1)
 
 static const int outset = 100;
 static const SkColor bgColor = SK_ColorWHITE;
@@ -133,11 +137,11 @@ DEF_TEST(BlurDrawing, reporter) {
         for (bool respectCTM : { false, true }) {
             paint.setMaskFilter(SkMaskFilter::MakeBlur(blurStyle, sigma, respectCTM));
 
-            for (size_t test = 0; test < SK_ARRAY_COUNT(tests); ++test) {
+            for (size_t test = 0; test < std::size(tests); ++test) {
                 SkPath path;
                 tests[test].addPath(&path);
                 SkPath strokedPath;
-                paint.getFillPath(path, &strokedPath);
+                skpathutils::FillPathWithPaint(path, paint, &strokedPath);
                 SkRect refBound = strokedPath.getBounds();
                 SkIRect iref;
                 refBound.roundOut(&iref);
@@ -177,14 +181,14 @@ DEF_TEST(BlurDrawing, reporter) {
 static void ground_truth_2d(int width, int height,
                             SkScalar sigma,
                             int* result, int resultCount) {
-    SkMask src, dst;
+    SkMaskBuilder src, dst;
 
-    src.fBounds.setWH(width, height);
-    src.fFormat = SkMask::kA8_Format;
-    src.fRowBytes = src.fBounds.width();
-    src.fImage = SkMask::AllocImage(src.computeTotalImageSize());
+    src.bounds().setWH(width, height);
+    src.format() = SkMask::kA8_Format;
+    src.rowBytes() = src.fBounds.width();
+    src.image() = SkMaskBuilder::AllocImage(src.computeTotalImageSize());
 
-    memset(src.fImage, 0xff, src.computeTotalImageSize());
+    memset(src.image(), 0xff, src.computeTotalImageSize());
 
     if (!SkBlurMask::BlurGroundTruth(sigma, &dst, src, kNormal_SkBlurStyle)) {
         return;
@@ -203,8 +207,8 @@ static void ground_truth_2d(int width, int height,
         result[i] = 0;
     }
 
-    SkMask::FreeImage(src.fImage);
-    SkMask::FreeImage(dst.fImage);
+    SkMaskBuilder::FreeImage(src.image());
+    SkMaskBuilder::FreeImage(dst.image());
 }
 
 // Implement a step function that is 255 between min and max; 0 elsewhere.
@@ -323,7 +327,7 @@ DEF_TEST(BlurSigmaRange, reporter) {
         { 2.3f, 50.3f }     // a little divet to throw off the rect special case
     };
     SkPath polyPath;
-    polyPath.addPoly(polyPts, SK_ARRAY_COUNT(polyPts), true);
+    polyPath.addPoly(polyPts, std::size(polyPts), true);
 
     int rectSpecialCaseResult[kSize];
     int generalCaseResult[kSize];
@@ -367,9 +371,9 @@ DEF_TEST(BlurAsABlur, reporter) {
 
     // Test asABlur for SkBlurMaskFilter
     //
-    for (size_t i = 0; i < SK_ARRAY_COUNT(styles); ++i) {
+    for (size_t i = 0; i < std::size(styles); ++i) {
         const SkBlurStyle style = styles[i];
-        for (size_t j = 0; j < SK_ARRAY_COUNT(sigmas); ++j) {
+        for (size_t j = 0; j < std::size(sigmas); ++j) {
             const SkScalar sigma = sigmas[j];
             for (bool respectCTM : { false, true }) {
                 sk_sp<SkMaskFilter> mf(SkMaskFilter::MakeBlur(style, sigma, respectCTM));
@@ -404,7 +408,7 @@ DEF_TEST(BlurAsABlur, reporter) {
         SkEmbossMaskFilter::Light light = {
             { 1, 1, 1 }, 0, 127, 127
         };
-        for (size_t j = 0; j < SK_ARRAY_COUNT(sigmas); ++j) {
+        for (size_t j = 0; j < std::size(sigmas); ++j) {
             const SkScalar sigma = sigmas[j];
             auto mf(SkEmbossMaskFilter::Make(sigma, light));
             if (mf) {
@@ -418,10 +422,9 @@ DEF_TEST(BlurAsABlur, reporter) {
 
 // This exercises the problem discovered in crbug.com/570232. The return value from
 // SkBlurMask::BoxBlur wasn't being checked in SkBlurMaskFilter.cpp::GrRRectBlurEffect::Create
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SmallBoxBlurBug, reporter, ctxInfo) {
-
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SmallBoxBlurBug, reporter, ctxInfo, CtsEnforcement::kNever) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(128, 128);
-    auto surface(SkSurface::MakeRenderTarget(ctxInfo.directContext(), SkBudgeted::kNo, info));
+    auto surface(SkSurfaces::RenderTarget(ctxInfo.directContext(), skgpu::Budgeted::kNo, info));
     SkCanvas* canvas = surface->getCanvas();
 
     SkRect r = SkRect::MakeXYWH(10, 10, 100, 100);
@@ -440,10 +443,10 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
     bool ninePatchable;
     SkRRect rrectToDraw;
     SkISize size;
-    SkScalar rectXs[SkGpuBlurUtils::kBlurRRectMaxDivisions],
-             rectYs[SkGpuBlurUtils::kBlurRRectMaxDivisions];
-    SkScalar texXs[SkGpuBlurUtils::kBlurRRectMaxDivisions],
-             texYs[SkGpuBlurUtils::kBlurRRectMaxDivisions];
+    SkScalar rectXs[GrBlurUtils::kBlurRRectMaxDivisions],
+             rectYs[GrBlurUtils::kBlurRRectMaxDivisions];
+    SkScalar texXs[GrBlurUtils::kBlurRRectMaxDivisions],
+             texYs[GrBlurUtils::kBlurRRectMaxDivisions];
 
     // not nine-patchable
     {
@@ -452,7 +455,7 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
         SkRRect rr;
         rr.setRectRadii(r, radii);
 
-        ninePatchable = SkGpuBlurUtils::ComputeBlurredRRectParams(rr, rr, kBlurRad, kBlurRad,
+        ninePatchable = GrBlurUtils::ComputeBlurredRRectParams(rr, rr, kBlurRad, kBlurRad,
                                                                   &rrectToDraw, &size,
                                                                   rectXs, rectYs, texXs, texYs);
         REPORTER_ASSERT(reporter, !ninePatchable);
@@ -464,7 +467,7 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
         SkRRect rr;
         rr.setRectXY(r, kCornerRad, kCornerRad);
 
-        ninePatchable = SkGpuBlurUtils::ComputeBlurredRRectParams(rr, rr, kBlurRad, kBlurRad,
+        ninePatchable = GrBlurUtils::ComputeBlurredRRectParams(rr, rr, kBlurRad, kBlurRad,
                                                                   &rrectToDraw, &size,
                                                                   rectXs, rectYs, texXs, texYs);
 
@@ -481,7 +484,7 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
         SkRRect rr;
         rr.setRectXY(r, kXCornerRad, kYCornerRad);
 
-        ninePatchable = SkGpuBlurUtils::ComputeBlurredRRectParams(rr, rr, kBlurRad, kBlurRad,
+        ninePatchable = GrBlurUtils::ComputeBlurredRRectParams(rr, rr, kBlurRad, kBlurRad,
                                                                   &rrectToDraw, &size,
                                                                   rectXs, rectYs, texXs, texYs);
 
@@ -502,16 +505,16 @@ DEF_TEST(EmbossPerlinCrash, reporter) {
         { 1, 1, 1 }, 0, 127, 127
     };
     p.setMaskFilter(SkEmbossMaskFilter::Make(1, light));
-    p.setShader(SkPerlinNoiseShader::MakeFractalNoise(1.0f, 1.0f, 2, 0.0f));
+    p.setShader(SkShaders::MakeFractalNoise(1.0f, 1.0f, 2, 0.0f));
 
-    sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(100, 100);
+    sk_sp<SkSurface> surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(100, 100));
     surface->getCanvas()->drawPaint(p);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 DEF_TEST(BlurZeroSigma, reporter) {
-    auto surf = SkSurface::MakeRasterN32Premul(20, 20);
+    auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(20, 20));
     SkPaint paint;
     paint.setAntiAlias(true);
 
@@ -542,12 +545,15 @@ DEF_TEST(BlurZeroSigma, reporter) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(BlurMaskBiggerThanDest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(BlurMaskBiggerThanDest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     auto context = ctxInfo.directContext();
 
     SkImageInfo ii = SkImageInfo::Make(32, 32, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 
-    sk_sp<SkSurface> dst(SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, ii));
+    sk_sp<SkSurface> dst(SkSurfaces::RenderTarget(context, skgpu::Budgeted::kNo, ii));
     if (!dst) {
         ERRORF(reporter, "Could not create surface for test.");
         return;

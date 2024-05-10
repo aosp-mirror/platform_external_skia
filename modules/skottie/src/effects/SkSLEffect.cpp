@@ -7,8 +7,9 @@
 
 #include "modules/skottie/src/effects/Effects.h"
 
+#include "include/core/SkCanvas.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "include/private/SkMalloc.h"
+#include "include/private/base/SkMalloc.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottieValue.h"
@@ -16,7 +17,7 @@
 
 namespace skottie::internal {
 
-#ifdef SK_ENABLE_SKSL
+#if defined(SK_ENABLE_SKOTTIE_SKSLEFFECT)
 
 namespace  {
 class SkSLShaderNode final : public sksg::CustomRenderNode {
@@ -170,11 +171,11 @@ private:
 
 } // namespace
 
-#endif  // SK_ENABLE_SKSL
+#endif  // SK_ENABLE_SKOTTIE_SKSLEFFECT
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachSkSLShader(const skjson::ArrayValue& jprops,
                                                         sk_sp<sksg::RenderNode> layer) const {
-#ifdef SK_ENABLE_SKSL
+#if defined(SK_ENABLE_SKOTTIE_SKSLEFFECT)
     auto shaderNode = sk_make_sp<SkSLShaderNode>(std::move(layer));
     return fBuilder->attachDiscardableAdapter<SkSLShaderAdapter>(jprops, *fBuilder,
                                                                  std::move(shaderNode));
@@ -185,7 +186,7 @@ sk_sp<sksg::RenderNode> EffectBuilder::attachSkSLShader(const skjson::ArrayValue
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachSkSLColorFilter(const skjson::ArrayValue& jprops,
                                                              sk_sp<sksg::RenderNode> layer) const {
-#ifdef SK_ENABLE_SKSL
+#if defined(SK_ENABLE_SKOTTIE_SKSLEFFECT)
     auto cfNode = sksg::ExternalColorFilter::Make(std::move(layer));
     return fBuilder->attachDiscardableAdapter<SkSLColorFilterAdapter>(jprops, *fBuilder,
                                                                       std::move(cfNode));

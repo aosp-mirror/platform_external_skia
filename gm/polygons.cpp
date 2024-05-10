@@ -15,8 +15,10 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTArray.h"
-#include "include/utils/SkRandom.h"
+#include "include/private/base/SkTArray.h"
+#include "src/base/SkRandom.h"
+
+using namespace skia_private;
 
 namespace skiagm {
 
@@ -28,12 +30,9 @@ public:
     PolygonsGM() {}
 
 protected:
+    SkString getName() const override { return SkString("polygons"); }
 
-    SkString onShortName() override {
-        return SkString("polygons");
-    }
-
-    SkISize onISize() override {
+    SkISize getISize() override {
         int width = kNumPolygons * kCellSize + 40;
         int height = (kNumJoins * kNumStrokeWidths + kNumExtraStyles) * kCellSize + 40;
         return SkISize::Make(width, height);
@@ -53,8 +52,8 @@ protected:
         SkPoint p7[] = {{0, 20}, {20, 20}, {30, 0}, {40, 20}, {60, 20},
                         {45, 30}, {55, 50}, {30, 40}, {5, 50}, {15, 30}};  // five-point stars
 
-        for (size_t i = 0; i < SK_ARRAY_COUNT(p4); ++i) {
-            SkScalar angle = 2 * SK_ScalarPI * i / SK_ARRAY_COUNT(p4);
+        for (size_t i = 0; i < std::size(p4); ++i) {
+            SkScalar angle = 2 * SK_ScalarPI * i / std::size(p4);
             p4[i].set(20 * SkScalarCos(angle) + 20, 20 * SkScalarSin(angle) + 20);
         }
 
@@ -62,18 +61,18 @@ protected:
             SkPoint* fPoints;
             size_t fPointNum;
         } pgs[] = {
-            { p0, SK_ARRAY_COUNT(p0) },
-            { p1, SK_ARRAY_COUNT(p1) },
-            { p2, SK_ARRAY_COUNT(p2) },
-            { p3, SK_ARRAY_COUNT(p3) },
-            { p4, SK_ARRAY_COUNT(p4) },
-            { p5, SK_ARRAY_COUNT(p5) },
-            { p6, SK_ARRAY_COUNT(p6) },
-            { p7, SK_ARRAY_COUNT(p7) }
+            { p0, std::size(p0) },
+            { p1, std::size(p1) },
+            { p2, std::size(p2) },
+            { p3, std::size(p3) },
+            { p4, std::size(p4) },
+            { p5, std::size(p5) },
+            { p6, std::size(p6) },
+            { p7, std::size(p7) }
         };
 
-        SkASSERT(SK_ARRAY_COUNT(pgs) == kNumPolygons);
-        for (size_t pgIndex = 0; pgIndex < SK_ARRAY_COUNT(pgs); ++pgIndex) {
+        SkASSERT(std::size(pgs) == kNumPolygons);
+        for (size_t pgIndex = 0; pgIndex < std::size(pgs); ++pgIndex) {
             SkPathBuilder b;
             b.moveTo(pgs[pgIndex].fPoints[0].fX,
                      pgs[pgIndex].fPoints[0].fY);
@@ -107,12 +106,12 @@ protected:
         // 0(may use hairline rendering), 10(common case for stroke-style)
         // 40(>= geometry width/height, make the contour filled in fact)
         constexpr int kStrokeWidths[] = {0, 10, 40};
-        SkASSERT(kNumStrokeWidths == SK_ARRAY_COUNT(kStrokeWidths));
+        SkASSERT(kNumStrokeWidths == std::size(kStrokeWidths));
 
         constexpr SkPaint::Join kJoins[] = {
             SkPaint::kMiter_Join, SkPaint::kRound_Join, SkPaint::kBevel_Join
         };
-        SkASSERT(kNumJoins == SK_ARRAY_COUNT(kJoins));
+        SkASSERT(kNumJoins == std::size(kJoins));
 
         int counter = 0;
         SkPaint paint;
@@ -123,9 +122,9 @@ protected:
         paint.setStyle(SkPaint::kStroke_Style);
         for (int join = 0; join < kNumJoins; ++join) {
             for (int width = 0; width < kNumStrokeWidths; ++width) {
-                for (int i = 0; i < fPolygons.count(); ++i) {
+                for (int i = 0; i < fPolygons.size(); ++i) {
                     canvas->save();
-                    SetLocation(canvas, counter, fPolygons.count());
+                    SetLocation(canvas, counter, fPolygons.size());
 
                     SetColorAndAlpha(&paint, &rand);
                     paint.setStrokeJoin(kJoins[join]);
@@ -142,15 +141,15 @@ protected:
         constexpr SkPaint::Style kStyles[] = {
             SkPaint::kStrokeAndFill_Style, SkPaint::kFill_Style
         };
-        SkASSERT(kNumExtraStyles == SK_ARRAY_COUNT(kStyles));
+        SkASSERT(kNumExtraStyles == std::size(kStyles));
 
         paint.setStrokeJoin(SkPaint::kMiter_Join);
         paint.setStrokeWidth(SkIntToScalar(20));
         for (int style = 0; style < kNumExtraStyles; ++style) {
             paint.setStyle(kStyles[style]);
-            for (int i = 0; i < fPolygons.count(); ++i) {
+            for (int i = 0; i < fPolygons.size(); ++i) {
                 canvas->save();
-                SetLocation(canvas, counter, fPolygons.count());
+                SetLocation(canvas, counter, fPolygons.size());
                 SetColorAndAlpha(&paint, &rand);
                 canvas->drawPath(fPolygons[i], paint);
                 canvas->restore();
@@ -166,7 +165,7 @@ private:
     inline static constexpr int kNumStrokeWidths = 3;
     inline static constexpr int kNumJoins = 3;
 
-    SkTArray<SkPath> fPolygons;
+    TArray<SkPath> fPolygons;
     using INHERITED = GM;
 };
 

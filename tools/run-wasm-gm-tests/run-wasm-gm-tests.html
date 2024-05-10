@@ -106,43 +106,60 @@ array of the test names and what they drew.
 
   const gmSkipList = new Set([
     'exoticformats', // Uses SkFILEStream to load resource.
-     // uses skresources::FileResourceProvider
-    'particles_mandrill',
-    'particles_sprite_frame',
   ]);
 
   async function RunGMs(GM) {
     const canvas = document.getElementById('gm_canvas');
     const ctx = GM.GetWebGLContext(canvas, 2);
     const grcontext = GM.MakeGrContext(ctx);
-    window._results = [];
-
-    const names = GM.ListGMs();
-    names.sort();
-    // When debugging locally, it can be handy to skip to a certain GM by using
-    // names.indexOf here instead of 0.
-    let i = 0;
-    for (; i < names.length; i++) {
-      const name = names[i];
-      if (gmSkipList.has(name)) {
-        continue;
-      }
-      log(`Starting GM ${name}`);
-      const pngAndMetadata = GM.RunGM(grcontext, name);
-      if (!pngAndMetadata || !pngAndMetadata.hash) {
-        console.debug('No output for ', name);
-        continue; // Was skipped
-      }
-      log(`    drew ${pngAndMetadata.hash}`);
-      window._results.push({
-        name: name,
-        digest: pngAndMetadata.hash,
-      });
-      if (pngAndMetadata.png) {
-        await postPNG(pngAndMetadata.hash, pngAndMetadata.png);
-      }
-      window._testsProgress++;
+    if (!grcontext) {
+      window._error = 'Could not make GrContext for gms';
+      return;
     }
+    window._results = [];
+    // We run these tests in batches so as not to lock up the main thread, which makes it easier
+    // to read the progress as well as making the page more responsive when debugging.
+    await new Promise((resolve, reject) => {
+      const names = GM.ListGMs();
+      names.sort();
+      // When debugging locally, it can be handy to skip to a certain GM by using
+      // names.indexOf here instead of 0.
+      let testIdx = 0;
+      const nextBatch = async () => {
+        for (let i = 0; i < 10 && testIdx < names.length; i++) {
+          testIdx++;
+          const name = names[testIdx];
+          if (!name) {
+            testIdx = names.length;
+            break;
+          }
+          if (gmSkipList.has(name)) {
+            continue;
+          }
+          log(`Starting GM ${name}`);
+          const pngAndMetadata = GM.RunGM(grcontext, name);
+          if (!pngAndMetadata || !pngAndMetadata.hash) {
+            log('    No output (was skipped)');
+            continue; // Was skipped
+          }
+          log(`    drew ${pngAndMetadata.hash}`);
+          window._results.push({
+            name: name,
+            digest: pngAndMetadata.hash,
+          });
+          if (pngAndMetadata.png) {
+            await postPNG(pngAndMetadata.hash, pngAndMetadata.png);
+          }
+          window._testsProgress++;
+        }
+        if (testIdx >= names.length) {
+          resolve();
+          return;
+        }
+        setTimeout(nextBatch);
+      };
+      setTimeout(nextBatch);
+    });
     grcontext.delete();
   }
 
@@ -160,9 +177,11 @@ array of the test names and what they drew.
         successfulPOSTs += 1;
       } else {
         console.error('not ok response', resp);
+        log('not ok response ' + resp.toString());
       }
     }).catch((e) => {
       console.error('Could not post PNG', e);
+      log('Could not post PNG ' + resp.toString());
     });
   }
 
@@ -197,7 +216,7 @@ array of the test names and what they drew.
     'GrContextFactory_sharedContexts',
     'RefCnt',
     'SkRuntimeEffectThreaded',
-    'SkScalerCacheMultiThread',
+    'SkStrikeMultiThread',
     'String_Threaded',
 
     // These tests are crashing for unknown reasons
@@ -220,8 +239,10 @@ array of the test names and what they drew.
     'WritePixelsNonTextureMSAA_Gpu',
 
     // These SkSL tests fail on the Quadro P400s in the Golo
-    'SkSLMatrixFoldingES2_GPU',
-    'SkSLCommaSideEffects_GPU',
+    'SkSLCommaSideEffects_Ganesh',
+    'SkSLMatrixScalarNoOpFolding_Ganesh',
+    'SkSLPreserveSideEffects_Ganesh',
+    'SkSLStructFieldNoFolding_Ganesh',
 
     // These tests use files on disk, which is not supported for WASM
     'Stream',
@@ -239,7 +260,7 @@ array of the test names and what they drew.
       window._error = 'Could not make GrContext for tests';
       return;
     }
-    // We run these tests in batchs so as not to lock up the main thread, which makes it easier
+    // We run these tests in batches so as not to lock up the main thread, which makes it easier
     // to read the progress as well as making the page more responsive when debugging.
     await new Promise((resolve, reject) => {
       const names = GM.ListTests();

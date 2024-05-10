@@ -3,6 +3,10 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef SKSL_ENABLE_TRACING
+#define SKSL_ENABLE_TRACING
+#endif
+
 #ifndef SK_ASSUME_GL
 #define SK_ASSUME_GL 1
 #endif
@@ -23,6 +27,14 @@
 #define SK_CODEC_DECODES_WEBP
 #endif
 
+#ifndef SK_DEFAULT_TYPEFACE_IS_EMPTY
+#define SK_DEFAULT_TYPEFACE_IS_EMPTY
+#endif
+
+#ifndef SK_DISABLE_LEGACY_DEFAULT_TYPEFACE
+#define SK_DISABLE_LEGACY_DEFAULT_TYPEFACE
+#endif
+
 #ifndef SK_ENABLE_ANDROID_UTILS
 #define SK_ENABLE_ANDROID_UTILS
 #endif
@@ -31,20 +43,12 @@
 #define SK_ENABLE_API_AVAILABLE
 #endif
 
-#ifndef SK_ENABLE_SKSL
-#define SK_ENABLE_SKSL
+#ifndef SK_ENABLE_PRECOMPILE
+#define SK_ENABLE_PRECOMPILE
 #endif
 
-#ifndef SK_ENCODE_JPEG
-#define SK_ENCODE_JPEG
-#endif
-
-#ifndef SK_ENCODE_PNG
-#define SK_ENCODE_PNG
-#endif
-
-#ifndef SK_ENCODE_WEBP
-#define SK_ENCODE_WEBP
+#ifndef SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE
+#define SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE
 #endif
 
 #ifndef SK_GAMMA_APPLY_TO_A8
@@ -59,20 +63,16 @@
 #define SK_GAMMA_EXPONENT 1.4
 #endif
 
-#ifndef SK_HAS_ANDROID_CODEC
-#define SK_HAS_ANDROID_CODEC
-#endif
-
 #ifndef SK_HAS_WUFFS_LIBRARY
 #define SK_HAS_WUFFS_LIBRARY
 #endif
 
-#ifndef SK_SUPPORT_GPU
-#define SK_SUPPORT_GPU 0
-#endif
-
 #ifndef SK_SUPPORT_PDF
 #define SK_SUPPORT_PDF
+#endif
+
+#ifndef SK_TYPEFACE_FACTORY_FREETYPE
+#define SK_TYPEFACE_FACTORY_FREETYPE
 #endif
 
 #ifndef SK_XML

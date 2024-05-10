@@ -24,6 +24,8 @@
 #include "include/core/SkTypeface.h"
 #include "include/utils/SkTextUtils.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -31,16 +33,14 @@ namespace skiagm {
 
 class Xfermodes2GM : public GM {
 public:
-    Xfermodes2GM() {}
+    Xfermodes2GM(bool grayscale) : fGrayscale(grayscale) {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("xfermodes2");
+    SkString getName() const override {
+        return fGrayscale ? SkString("xfermodes2_gray") : SkString("xfermodes2");
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(455, 475);
-    }
+    SkISize getISize() override { return SkISize::Make(455, 475); }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
@@ -48,12 +48,12 @@ protected:
         const SkScalar w = SkIntToScalar(kSize);
         const SkScalar h = SkIntToScalar(kSize);
 
-        SkFont font(ToolUtils::create_portable_typeface());
+        SkFont font = ToolUtils::DefaultPortableFont();
 
         const int W = 6;
 
         SkScalar x = 0, y = 0;
-        for (size_t m = 0; m <= (size_t)SkBlendMode::kLastMode; m++) {
+        for (size_t m = 0; m < kSkBlendModeCount; m++) {
             SkBlendMode mode = static_cast<SkBlendMode>(m);
 
             canvas->save();
@@ -118,7 +118,7 @@ private:
 
         for (int y = 0; y < kSize; ++y) {
             int c = y * (1 << kShift);
-            SkPMColor rowColor = SkPackARGB32(c, c, 0, c/2);
+            SkPMColor rowColor = fGrayscale ? SkPackARGB32(c, c, c, c) : SkPackARGB32(c, c, 0, c/2);
             for (int x = 0; x < kSize; ++x) {
                 pixels[kSize * y + x] = rowColor;
             }
@@ -130,7 +130,7 @@ private:
 
         for (int x = 0; x < kSize; ++x) {
             int c = x * (1 << kShift);
-            SkPMColor colColor = SkPackARGB32(c, 0, c, c/2);
+            SkPMColor colColor = fGrayscale ? SkPackARGB32(c, c, c, c) : SkPackARGB32(c, 0, c, c/2);
             for (int y = 0; y < kSize; ++y) {
                 pixels[kSize * y + x] = colColor;
             }
@@ -143,6 +143,7 @@ private:
         kSize = 256 >> kShift,
     };
 
+    bool fGrayscale;
     sk_sp<SkShader> fBG;
     sk_sp<SkShader> fSrc;
     sk_sp<SkShader> fDst;
@@ -152,6 +153,7 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM( return new Xfermodes2GM; )
+DEF_GM( return new Xfermodes2GM(false); )
+DEF_GM( return new Xfermodes2GM(true); )
 
 }  // namespace skiagm

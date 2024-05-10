@@ -7,22 +7,27 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkString.h"
-#include "include/private/SkChecksum.h"
-#include "include/private/SkTHash.h"
-#include "src/core/SkOpts.h"
+#include "include/core/SkTypes.h"
+#include "src/core/SkTHash.h"
 #include "tests/Test.h"
 
-#include <tuple>
+#include <cstdint>
+#include <initializer_list>
+#include <string>
+#include <string_view>
+#include <utility>
+
+using namespace skia_private;
 
 // Tests use of const foreach().  map.count() is of course the better way to do this.
-static int count(const SkTHashMap<int, double>& map) {
+static int count(const THashMap<int, double>& map) {
     int n = 0;
     map.foreach([&n](int, double) { n++; });
     return n;
 }
 
 DEF_TEST(HashMap, r) {
-    SkTHashMap<int, double> map;
+    THashMap<int, double> map;
 
     map.set(3, 4.0);
     REPORTER_ASSERT(r, map.count() == 1);
@@ -48,8 +53,23 @@ DEF_TEST(HashMap, r) {
         map.set(i, 2.0*i);
     }
 
+    // Test walking the map with foreach(const K&, V)
+    map.foreach([&](const int& key, double value) {
+        REPORTER_ASSERT(r, key * 2 == value);
+    });
+
+    // Test walking the map with foreach(const K&, V*)
+    map.foreach([&](const int& key, double* value) {
+        REPORTER_ASSERT(r, key * 2 == *value);
+    });
+
+    // Test walking the map with foreach(const Pair&)
+    map.foreach([&](const THashMap<int, double>::Pair& pair) {
+        REPORTER_ASSERT(r, pair.first * 2 == pair.second);
+    });
+
     // Test walking the map with iterators, using preincrement (++iter).
-    for (SkTHashMap<int, double>::Iter iter = map.begin(); iter != map.end(); ++iter) {
+    for (THashMap<int, double>::Iter iter = map.begin(); iter != map.end(); ++iter) {
         REPORTER_ASSERT(r, iter->first * 2 == (*iter).second);
     }
 
@@ -60,7 +80,7 @@ DEF_TEST(HashMap, r) {
 
     // Ensure that iteration works equally well on a const map, using postincrement (iter++).
     const auto& cmap = map;
-    for (SkTHashMap<int, double>::Iter iter = cmap.begin(); iter != cmap.end(); iter++) {
+    for (THashMap<int, double>::Iter iter = cmap.begin(); iter != cmap.end(); iter++) {
         REPORTER_ASSERT(r, iter->first * 2 == (*iter).second);
     }
 
@@ -74,7 +94,7 @@ DEF_TEST(HashMap, r) {
         REPORTER_ASSERT(r, number * 2 == timesTwo);
     }
 
-    SkTHashMap<int, double> clone = map;
+    THashMap<int, double> clone = map;
 
     for (int i = 0; i < N; i++) {
         found = map.find(i);
@@ -115,7 +135,7 @@ DEF_TEST(HashMap, r) {
 
     {
         // Test that we don't leave dangling values in empty slots.
-        SkTHashMap<int, sk_sp<SkRefCnt>> refMap;
+        THashMap<int, sk_sp<SkRefCnt>> refMap;
         auto ref = sk_make_sp<SkRefCnt>();
         REPORTER_ASSERT(r, ref->unique());
 
@@ -129,56 +149,139 @@ DEF_TEST(HashMap, r) {
     }
 }
 
-DEF_TEST(HashSet, r) {
-    SkTHashSet<SkString> set;
+DEF_TEST(HashMapCtor, r) {
+    THashMap<int, std::string_view> map{{1, "one"}, {2, "two"}, {3, "three"}, {4, "four"}};
+    REPORTER_ASSERT(r, map.count() == 4);
+    REPORTER_ASSERT(r, map.approxBytesUsed() >= 4 * (sizeof(int) + sizeof(std::string_view)));
 
-    set.add(SkString("Hello"));
-    set.add(SkString("World"));
+    std::string_view* found = map.find(1);
+    REPORTER_ASSERT(r, found);
+    REPORTER_ASSERT(r, *found == "one");
+
+    found = map.find(2);
+    REPORTER_ASSERT(r, found);
+    REPORTER_ASSERT(r, *found == "two");
+
+    found = map.find(3);
+    REPORTER_ASSERT(r, found);
+    REPORTER_ASSERT(r, *found == "three");
+
+    found = map.find(4);
+    REPORTER_ASSERT(r, found);
+    REPORTER_ASSERT(r, *found == "four");
+
+    found = map.find(5);
+    REPORTER_ASSERT(r, !found);
+
+    found = map.find(6);
+    REPORTER_ASSERT(r, !found);
+}
+
+DEF_TEST(HashMapCtorOneElem, r) {
+    // Start out with a single element. The initializer list constructor sets the capacity
+    // conservatively. Searching for elements beyond the capacity should succeed.
+    THashMap<int, std::string_view> map{{1, "one"}};
+    REPORTER_ASSERT(r, map.count() == 1);
+    REPORTER_ASSERT(r, map.approxBytesUsed() >= (sizeof(int) + sizeof(std::string_view)));
+
+    std::string_view* found = map.find(1);
+    REPORTER_ASSERT(r, found);
+    REPORTER_ASSERT(r, *found == "one");
+
+    found = map.find(2);
+    REPORTER_ASSERT(r, !found);
+
+    // Grow the collection by one element. Searching for non-existing elements should still succeed.
+    map.set(2, "two");
+    found = map.find(2);
+    REPORTER_ASSERT(r, found);
+    REPORTER_ASSERT(r, *found == "two");
+
+    found = map.find(3);
+    REPORTER_ASSERT(r, !found);
+}
+
+DEF_TEST(HashSetCtor, r) {
+    THashSet<std::string_view> set{"one", "two", "three", "four"};
+    REPORTER_ASSERT(r, set.count() == 4);
+    REPORTER_ASSERT(r, set.approxBytesUsed() >= 4 * sizeof(std::string_view));
+
+    REPORTER_ASSERT(r, set.contains("one"));
+    REPORTER_ASSERT(r, set.contains("two"));
+    REPORTER_ASSERT(r, set.contains("three"));
+    REPORTER_ASSERT(r, set.contains("four"));
+    REPORTER_ASSERT(r, !set.contains("five"));
+    REPORTER_ASSERT(r, !set.contains("six"));
+}
+
+DEF_TEST(HashSetCtorOneElem, r) {
+    // Start out with a single element. The initializer list constructor sets the capacity
+    // conservatively. Searching for elements beyond the capacity should succeed.
+    THashSet<std::string_view> set{"one"};
+    REPORTER_ASSERT(r, set.count() == 1);
+    REPORTER_ASSERT(r, set.approxBytesUsed() >= sizeof(std::string_view));
+
+    REPORTER_ASSERT(r, set.contains("one"));
+    REPORTER_ASSERT(r, !set.contains("two"));
+
+    // Grow the collection by one element. Searching for non-existing elements should still succeed.
+    set.add("two");
+    REPORTER_ASSERT(r, set.contains("one"));
+    REPORTER_ASSERT(r, set.contains("two"));
+    REPORTER_ASSERT(r, !set.contains("three"));
+}
+
+template <typename T>
+static void test_hash_set(skiatest::Reporter* r) {
+    THashSet<T> set;
+
+    set.add(T("Hello"));
+    set.add(T("World"));
     REPORTER_ASSERT(r, set.count() == 2);
-    REPORTER_ASSERT(r, set.contains(SkString("Hello")));
-    REPORTER_ASSERT(r, set.contains(SkString("World")));
-    REPORTER_ASSERT(r, !set.contains(SkString("Goodbye")));
-    REPORTER_ASSERT(r, set.find(SkString("Hello")));
-    REPORTER_ASSERT(r, *set.find(SkString("Hello")) == SkString("Hello"));
+    REPORTER_ASSERT(r, set.contains(T("Hello")));
+    REPORTER_ASSERT(r, set.contains(T("World")));
+    REPORTER_ASSERT(r, !set.contains(T("Goodbye")));
+    REPORTER_ASSERT(r, set.find(T("Hello")));
+    REPORTER_ASSERT(r, *set.find(T("Hello")) == T("Hello"));
 
     // Test walking the set with iterators, using preincrement (++iter).
-    for (SkTHashSet<SkString>::Iter iter = set.begin(); iter != set.end(); ++iter) {
-        REPORTER_ASSERT(r, iter->equals("Hello") || (*iter).equals("World"));
+    for (typename THashSet<T>::Iter iter = set.begin(); iter != set.end(); ++iter) {
+        REPORTER_ASSERT(r, *iter == T("Hello") || *iter == T("World"));
     }
 
     // Test walking the set with iterators, using postincrement (iter++).
-    for (SkTHashSet<SkString>::Iter iter = set.begin(); iter != set.end(); iter++) {
-        REPORTER_ASSERT(r, iter->equals("Hello") || (*iter).equals("World"));
+    for (typename THashSet<T>::Iter iter = set.begin(); iter != set.end(); iter++) {
+        REPORTER_ASSERT(r, *iter == T("Hello") || *iter == T("World"));
     }
 
     // Test walking the set with range-based for.
     for (auto& entry : set) {
-        REPORTER_ASSERT(r, entry.equals("Hello") || entry.equals("World"));
+        REPORTER_ASSERT(r, entry == T("Hello") || entry == T("World"));
     }
 
     // Ensure that iteration works equally well on a const set.
     const auto& cset = set;
-    for (SkTHashSet<SkString>::Iter iter = cset.begin(); iter != cset.end(); iter++) {
-        REPORTER_ASSERT(r, iter->equals("Hello") || (*iter).equals("World"));
+    for (typename THashSet<T>::Iter iter = cset.begin(); iter != cset.end(); iter++) {
+        REPORTER_ASSERT(r, *iter == T("Hello") || *iter == T("World"));
     }
 
     // Ensure that range-based for works equally well on a const set.
     for (auto& entry : cset) {
-        REPORTER_ASSERT(r, entry.equals("Hello") || entry.equals("World"));
+        REPORTER_ASSERT(r, entry == T("Hello") || entry == T("World"));
     }
 
-    SkTHashSet<SkString> clone = set;
+    THashSet<T> clone = set;
     REPORTER_ASSERT(r, clone.count() == 2);
-    REPORTER_ASSERT(r, clone.contains(SkString("Hello")));
-    REPORTER_ASSERT(r, clone.contains(SkString("World")));
-    REPORTER_ASSERT(r, !clone.contains(SkString("Goodbye")));
-    REPORTER_ASSERT(r, clone.find(SkString("Hello")));
-    REPORTER_ASSERT(r, *clone.find(SkString("Hello")) == SkString("Hello"));
+    REPORTER_ASSERT(r, clone.contains(T("Hello")));
+    REPORTER_ASSERT(r, clone.contains(T("World")));
+    REPORTER_ASSERT(r, !clone.contains(T("Goodbye")));
+    REPORTER_ASSERT(r, clone.find(T("Hello")));
+    REPORTER_ASSERT(r, *clone.find(T("Hello")) == T("Hello"));
 
-    set.remove(SkString("Hello"));
-    REPORTER_ASSERT(r, !set.contains(SkString("Hello")));
+    set.remove(T("Hello"));
+    REPORTER_ASSERT(r, !set.contains(T("Hello")));
     REPORTER_ASSERT(r, set.count() == 1);
-    REPORTER_ASSERT(r, clone.contains(SkString("Hello")));
+    REPORTER_ASSERT(r, clone.contains(T("Hello")));
     REPORTER_ASSERT(r, clone.count() == 2);
 
     set.reset();
@@ -186,6 +289,18 @@ DEF_TEST(HashSet, r) {
 
     clone = set;
     REPORTER_ASSERT(r, clone.count() == 0);
+}
+
+DEF_TEST(HashSetWithSkString, r) {
+    test_hash_set<SkString>(r);
+}
+
+DEF_TEST(HashSetWithStdString, r) {
+    test_hash_set<std::string>(r);
+}
+
+DEF_TEST(HashSetWithStdStringView, r) {
+    test_hash_set<std::string_view>(r);
 }
 
 namespace {
@@ -234,7 +349,7 @@ struct HashCopyCounter {
 }  // namespace
 
 DEF_TEST(HashSetCopyCounter, r) {
-    SkTHashSet<CopyCounter, HashCopyCounter> set;
+    THashSet<CopyCounter, HashCopyCounter> set;
 
     uint32_t globalCounter = 0;
     CopyCounter copyCounter1(1, &globalCounter);
@@ -272,7 +387,7 @@ DEF_TEST(HashFindOrNull, r) {
         static uint32_t Hash(int key) { return key; }
     };
 
-    SkTHashTable<Entry*, int, HashTraits> table;
+    THashTable<Entry*, int, HashTraits> table;
 
     REPORTER_ASSERT(r, nullptr == table.findOrNull(7));
 
@@ -283,7 +398,7 @@ DEF_TEST(HashFindOrNull, r) {
 }
 
 DEF_TEST(HashTableGrowsAndShrinks, r) {
-    SkTHashSet<int> s;
+    THashSet<int> s;
     auto check_count_cap = [&](int count, int cap) {
         REPORTER_ASSERT(r, s.count() == count);
         REPORTER_ASSERT(r, s.approxBytesUsed() == (sizeof(int) + sizeof(uint32_t)) * cap);
@@ -330,22 +445,4 @@ DEF_TEST(HashTableGrowsAndShrinks, r) {
         s.   add(2); check_count_cap(2,4);
         s.remove(2); check_count_cap(1,4);
     }
-}
-
-DEF_TEST(HashCollision, r) {
-
-    // Two different sets of data. Same hash.
-    uint8_t data1[] = {
-        15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 21, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 40, 0, 0, 0, 2, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0, 0, 18, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 40, 0, 0, 0, 3, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 18, 0, 0, 0, 7, 0, 0, 0, 5, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 28, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 6, 0, 0, 0, 13, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 6, 0, 0, 0, 13, 0, 0, 0, 14, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 36, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 8, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 8, 0, 0, 0, 17, 0, 0, 0, 18, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 44, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 27, 0, 0, 0, 16, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 16, 0, 0, 0, 21, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 28, 0, 0, 0, 21, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 16, 0, 0, 0, 21, 0, 0, 0, 22, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 28, 0, 0, 0, 21, 0, 0, 0, 22, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 25, 0, 0, 0, 31, 0, 0, 0, 27, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 25, 0, 0, 0, 32, 0, 0, 0, 27, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 33, 0, 0, 0, 23, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 33, 0, 0, 0, 23, 0, 0, 0, 24, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    };
-    uint8_t data2[] = {
-        15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 21, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 40, 0, 0, 0, 2, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0, 0, 18, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 40, 0, 0, 0, 3, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 18, 0, 0, 0, 7, 0, 0, 0, 5, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 28, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 6, 0, 0, 0, 13, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 6, 0, 0, 0, 13, 0, 0, 0, 14, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 36, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 8, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 8, 0, 0, 0, 17, 0, 0, 0, 18, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 44, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 27, 0, 0, 0, 16, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 16, 0, 0, 0, 21, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 28, 0, 0, 0, 21, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 16, 0, 0, 0, 21, 0, 0, 0, 22, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 28, 0, 0, 0, 21, 0, 0, 0, 22, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 0, 31, 0, 0, 0, 27, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 0, 32, 0, 0, 0, 27, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 33, 0, 0, 0, 23, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 33, 0, 0, 0, 23, 0, 0, 0, 24, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    };
-
-    REPORTER_ASSERT(r, sizeof(data1) == sizeof(data2));
-    REPORTER_ASSERT(r, memcmp(data1, data2, sizeof(data1)) != 0);
-
-    uint32_t hash1 = SkOpts::hash(data1, sizeof(data1), 0);
-    uint32_t hash2 = SkOpts::hash(data2, sizeof(data2), 0);
-    REPORTER_ASSERT(r, hash1 != hash2);
 }

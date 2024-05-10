@@ -9,7 +9,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "modules/skparagraph/include/DartTypes.h"
 #include "modules/skparagraph/include/TextStyle.h"
 #include "modules/skshaper/include/SkShaper.h"
@@ -120,8 +120,9 @@ public:
         return SkRect::MakeXYWH(fOffset.fX, fOffset.fY, fAdvance.fX, fAdvance.fY);
     }
 
-    SkScalar addSpacesAtTheEnd(SkScalar space, Cluster* cluster);
+    void addSpacesAtTheEnd(SkScalar space, Cluster* cluster);
     SkScalar addSpacesEvenly(SkScalar space, Cluster* cluster);
+    SkScalar addSpacesEvenly(SkScalar space);
     void shift(const Cluster* cluster, SkScalar offset);
 
     SkScalar calculateHeight(LineMetricStyle ascentStyle, LineMetricStyle descentStyle) const {
@@ -142,6 +143,7 @@ public:
     void iterateThroughClusters(const ClusterVisitor& visitor);
 
     std::tuple<bool, ClusterIndex, ClusterIndex> findLimitingClusters(TextRange text) const;
+    std::tuple<bool, TextIndex, TextIndex> findLimitingGlyphClusters(TextRange text) const;
     std::tuple<bool, TextIndex, TextIndex> findLimitingGraphemes(TextRange text) const;
     SkSpan<const SkGlyphID> glyphs() const {
         return SkSpan<const SkGlyphID>(fGlyphs.begin(), fGlyphs.size());
@@ -149,23 +151,20 @@ public:
     SkSpan<const SkPoint> positions() const {
         return SkSpan<const SkPoint>(fPositions.begin(), fPositions.size());
     }
+    SkSpan<const SkPoint> offsets() const {
+        return SkSpan<const SkPoint>(fOffsets.begin(), fOffsets.size());
+    }
     SkSpan<const uint32_t> clusterIndexes() const {
         return SkSpan<const uint32_t>(fClusterIndexes.begin(), fClusterIndexes.size());
     }
-    SkSpan<const SkScalar> shifts() const { return SkSpan<const SkScalar>(fShifts.begin(), fShifts.size()); }
 
-    void commit();
-
-    SkRect getBounds(size_t pos) const { return fBounds[pos]; }
-
-    void resetShifts() {
-        for (auto& r: fShifts) { r = 0; }
-        fSpaced = false;
-    }
+    void commit() { }
 
     void resetJustificationShifts() {
-        fJustificationShifts.reset();
+        fJustificationShifts.clear();
     }
+
+    bool isResolved() const;
 private:
     friend class ParagraphImpl;
     friend class TextLine;
@@ -188,19 +187,19 @@ private:
     // These fields are not modified after shaping completes and can safely be
     // shared among copies of the run that are held by different paragraphs.
     struct GlyphData {
-        SkSTArray<128, SkGlyphID, true> glyphs;
-        SkSTArray<128, SkPoint, true> positions;
-        SkSTArray<128, uint32_t, true> clusterIndexes;
-        SkSTArray<128, SkRect, true> bounds;
+        skia_private::STArray<64, SkGlyphID, true> glyphs;
+        skia_private::STArray<64, SkPoint, true> positions;
+        skia_private::STArray<64, SkPoint, true> offsets;
+        skia_private::STArray<64, uint32_t, true> clusterIndexes;
     };
     std::shared_ptr<GlyphData> fGlyphData;
-    SkSTArray<128, SkGlyphID, true>& fGlyphs;
-    SkSTArray<128, SkPoint, true>& fPositions;
-    SkSTArray<128, uint32_t, true>& fClusterIndexes;
-    SkSTArray<128, SkRect, true>& fBounds;
+    skia_private::STArray<64, SkGlyphID, true>& fGlyphs;
+    skia_private::STArray<64, SkPoint, true>& fPositions;
+    skia_private::STArray<64, SkPoint, true>& fOffsets;
+    skia_private::STArray<64, uint32_t, true>& fClusterIndexes;
 
-    SkSTArray<128, SkScalar, true> fShifts;  // For formatting (letter/word spacing)
-    SkSTArray<128, SkPoint, true> fJustificationShifts; // For justification (current and prev shifts)
+    skia_private::STArray<64, SkPoint, true> fJustificationShifts; // For justification
+                                                                   // (current and prev shifts)
 
     SkFontMetrics fFontMetrics;
     const SkScalar fHeightMultiplier;
@@ -210,7 +209,6 @@ private:
     SkScalar fCorrectDescent;
     SkScalar fCorrectLeading;
 
-    bool fSpaced;
     bool fEllipsis;
     uint8_t fBidiLevel;
 };
@@ -278,7 +276,6 @@ public:
             , fStart(0)
             , fEnd()
             , fWidth()
-            , fSpacing(0)
             , fHeight()
             , fHalfLetterSpacing(0.0) {}
 
@@ -300,14 +297,17 @@ public:
 
     size_t roundPos(SkScalar s) const;
 
-    void space(SkScalar shift, SkScalar space) {
-        fSpacing += space;
+    void space(SkScalar shift) {
         fWidth += shift;
     }
+
+    ParagraphImpl* getOwner() const { return fOwner; }
+    void setOwner(ParagraphImpl* owner) { fOwner = owner; }
 
     bool isWhitespaceBreak() const { return fIsWhiteSpaceBreak; }
     bool isIntraWordBreak() const { return fIsIntraWordBreak; }
     bool isHardBreak() const { return fIsHardBreak; }
+    bool isIdeographic() const { return fIsIdeographic; }
 
     bool isSoftBreak() const;
     bool isGraphemeBreak() const;
@@ -354,13 +354,13 @@ private:
     size_t fStart;
     size_t fEnd;
     SkScalar fWidth;
-    SkScalar fSpacing;
     SkScalar fHeight;
     SkScalar fHalfLetterSpacing;
 
     bool fIsWhiteSpaceBreak;
     bool fIsIntraWordBreak;
     bool fIsHardBreak;
+    bool fIsIdeographic;
 };
 
 class InternalLineMetrics {
@@ -412,7 +412,6 @@ public:
         if (fForceStrut) {
             return;
         }
-
         fAscent = std::min(fAscent, run->correctAscent());
         fDescent = std::max(fDescent, run->correctDescent());
         fLeading = std::max(fLeading, run->correctLeading());
@@ -438,6 +437,15 @@ public:
         fRawAscent = SK_ScalarMax;
         fRawDescent = SK_ScalarMin;
         fRawLeading = 0;
+    }
+
+    bool isClean() {
+        return (fAscent == SK_ScalarMax &&
+                fDescent == SK_ScalarMin &&
+                fLeading == 0 &&
+                fRawAscent == SK_ScalarMax &&
+                fRawDescent == SK_ScalarMin &&
+                fRawLeading == 0);
     }
 
     SkScalar delta() const { return height() - ideographicBaseline(); }
@@ -474,6 +482,11 @@ public:
         fLeading = l;
     }
 
+    void updateRawData(SkScalar ra, SkScalar rd) {
+        fRawAscent = ra;
+        fRawDescent = rd;
+    }
+
     SkScalar alphabeticBaseline() const { return fLeading / 2 - fAscent; }
     SkScalar ideographicBaseline() const { return fDescent - fAscent + fLeading; }
     SkScalar deltaBaselines() const { return fLeading / 2 + fDescent; }
@@ -488,6 +501,7 @@ public:
 
 private:
 
+    friend class ParagraphImpl;
     friend class TextWrapper;
     friend class TextLine;
 

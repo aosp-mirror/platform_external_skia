@@ -5,31 +5,29 @@
  * found in the LICENSE file.
  */
 
+#include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
 
 class Poison : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kPoison;
+    inline static constexpr Kind kIRNodeKind = Kind::kPoison;
 
-    static std::unique_ptr<Expression> Make(int line, const Context& context) {
-        return std::make_unique<Poison>(line, context.fTypes.fPoison.get());
+    static std::unique_ptr<Expression> Make(Position pos, const Context& context) {
+        return std::make_unique<Poison>(pos, context.fTypes.fPoison.get());
     }
 
-    Poison(int line, const Type* type)
-        : INHERITED(line, kExpressionKind, type) {}
+    Poison(Position pos, const Type* type)
+        : INHERITED(pos, kIRNodeKind, type) {}
 
-    bool hasProperty(Property property) const override {
-        return false;
+    std::unique_ptr<Expression> clone(Position pos) const override {
+        return std::make_unique<Poison>(pos, &this->type());
     }
 
-    std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<Poison>(fLine, &this->type());
-    }
-
-    std::string description() const override {
+    std::string description(OperatorPrecedence) const override {
         return Compiler::POISON_TAG;
     }
 

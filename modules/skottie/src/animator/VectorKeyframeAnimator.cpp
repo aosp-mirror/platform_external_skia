@@ -8,12 +8,13 @@
 #include "modules/skottie/src/animator/VectorKeyframeAnimator.h"
 
 #include "include/core/SkTypes.h"
-#include "include/private/SkNx.h"
-#include "include/private/SkTPin.h"
+#include "include/private/base/SkTPin.h"
 #include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/animator/Animator.h"
-#include "src/core/SkSafeMath.h"
+#include "src/base/SkSafeMath.h"
+#include "src/base/SkVx.h"
 
 #include <algorithm>
 #include <cstring>
@@ -44,11 +45,11 @@ VectorValue::operator SkV3() const {
     };
 }
 
-VectorValue::operator SkColor() const {
+ColorValue::operator SkColor() const {
     return static_cast<SkColor4f>(*this).toSkColor();
 }
 
-VectorValue::operator SkColor4f() const {
+ColorValue::operator SkColor4f() const {
     // best effort to turn a vector into a color
     const auto r = this->size() > 0 ? SkTPin((*this)[0], 0.0f, 1.0f) : 0,
                g = this->size() > 1 ? SkTPin((*this)[1], 0.0f, 1.0f) : 0,
@@ -112,10 +113,12 @@ private:
         bool changed = false;
 
         while (count >= 4) {
-            const auto old_val = Sk4f::Load(dst),
-                       new_val = Lerp(Sk4f::Load(v0), Sk4f::Load(v1), lerp_info.weight);
+            const auto old_val = skvx::float4::Load(dst),
+                       new_val = Lerp(skvx::float4::Load(v0),
+                                      skvx::float4::Load(v1),
+                                      lerp_info.weight);
 
-            changed |= (new_val != old_val).anyTrue();
+            changed |= any(new_val != old_val);
             new_val.store(dst);
 
             v0    += 4;
@@ -296,6 +299,17 @@ bool AnimatablePropertyContainer::bind<VectorValue>(const AnimationBuilder& abui
     bool boundY = this->bind(abuilder, (*jprop)["y"], v->data() + 1);
     bool boundZ = this->bind(abuilder, (*jprop)["z"], v->data() + 2);
     return boundX || boundY || boundZ;
+}
+
+template <>
+bool AnimatablePropertyContainer::bind<ColorValue>(const AnimationBuilder& abuilder,
+                                                    const skjson::ObjectValue* jprop,
+                                                    ColorValue* v) {
+    if (const auto* sid = ParseSlotID(jprop)) {
+        fHasSlotID = true;
+        abuilder.fSlotManager->trackColorValue(SkString(sid->begin()), v, sk_ref_sp(this));
+    }
+    return this->bind(abuilder, jprop, static_cast<VectorValue*>(v));
 }
 
 } // namespace internal

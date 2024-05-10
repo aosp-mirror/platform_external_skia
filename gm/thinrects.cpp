@@ -27,13 +27,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString(fRound ? "thinroundrects" : "thinrects");
-    }
+    SkString getName() const override { return SkString(fRound ? "thinroundrects" : "thinrects"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(240, 320);
-    }
+    SkISize getISize() override { return SkISize::Make(240, 320); }
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -88,7 +84,7 @@ private:
         static constexpr SkVector radii[4] = {{1/32.f, 2/32.f}, {3/32.f, 1/32.f}, {2/32.f, 3/32.f},
                                               {1/32.f, 3/32.f}};
         SkRRect rrect;
-        for (size_t j = 0; j < SK_ARRAY_COUNT(vertRects); ++j) {
+        for (size_t j = 0; j < std::size(vertRects); ++j) {
             if (fRound) {
                 rrect.setRectRadii(vertRects[j], radii);
                 canvas->drawRRect(rrect, p);
@@ -110,7 +106,7 @@ private:
         };
 
         SkRRect rrect;
-        for (size_t j = 0; j < SK_ARRAY_COUNT(horizRects); ++j) {
+        for (size_t j = 0; j < std::size(horizRects); ++j) {
             if (fRound) {
                 rrect.setNinePatch(horizRects[j], 1/32.f, 2/32.f, 3/32.f, 4/32.f);
                 canvas->drawRRect(rrect, p);
@@ -132,7 +128,7 @@ private:
         };
 
         SkRRect rrect;
-        for (size_t j = 0; j < SK_ARRAY_COUNT(squares); ++j) {
+        for (size_t j = 0; j < std::size(squares); ++j) {
             if (fRound) {
                 rrect.setRectXY(squares[j], 1/32.f, 2/32.f);
                 canvas->drawRRect(rrect, p);

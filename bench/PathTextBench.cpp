@@ -9,11 +9,12 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
-#include "include/utils/SkRandom.h"
-#include "src/core/SkScalerCache.h"
+#include "src/base/SkRandom.h"
+#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkStrikeSpec.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 static constexpr int kScreenWidth = 1500;
 static constexpr int kScreenHeight = 1500;
@@ -43,19 +44,17 @@ private:
         }
         return fName.c_str();
     }
-    SkIPoint onGetSize() override { return SkIPoint::Make(kScreenWidth, kScreenHeight); }
+    SkISize onGetSize() override { return SkISize::Make(kScreenWidth, kScreenHeight); }
 
     void onDelayedSetup() override {
-        SkFont defaultFont;
+        SkFont defaultFont = ToolUtils::DefaultFont();
         SkStrikeSpec strikeSpec = SkStrikeSpec::MakeWithNoDevice(defaultFont);
-        auto strike = strikeSpec.findOrCreateStrike();
-        SkArenaAlloc alloc(1 << 12); // This is a mock SkStrikeCache.
+        SkBulkGlyphMetricsAndPaths pathMaker{strikeSpec};
         for (int i = 0; i < kNumGlyphs; ++i) {
-            SkPackedGlyphID id(defaultFont.unicharToGlyph(kGlyphs[i]));
-            SkGlyph glyph = strike->getScalerContext()->makeGlyph(id, &alloc);
-            strike->getScalerContext()->getPath(glyph, &alloc);
-            if (glyph.path()) {
-                fGlyphs[i] = *glyph.path();
+            SkGlyphID id(defaultFont.unicharToGlyph(kGlyphs[i]));
+            const SkGlyph* glyph = pathMaker.glyph(id);
+            if (glyph->path()) {
+                fGlyphs[i] = *glyph->path();
             }
             fGlyphs[i].setIsVolatile(fUncached);
         }
@@ -65,6 +64,7 @@ private:
             const SkPath& glyph = fGlyphs[i % kNumGlyphs];
             const SkRect& bounds = glyph.getBounds();
             float glyphSize = std::max(bounds.width(), bounds.height());
+            SkASSERT(glyphSize > 0);
 
             float t0 = pow(rand.nextF(), 100);
             float size = (1 - t0) * std::min(kScreenWidth, kScreenHeight) / 50 +

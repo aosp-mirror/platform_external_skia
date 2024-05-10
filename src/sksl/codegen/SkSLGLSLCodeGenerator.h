@@ -8,55 +8,67 @@
 #ifndef SKSL_GLSLCODEGENERATOR
 #define SKSL_GLSLCODEGENERATOR
 
-#include <unordered_map>
-
-#include "src/sksl/SkSLOperators.h"
+#include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
+
+#include <cstdint>
+#include <string>
+#include <string_view>
 
 namespace SkSL {
 
+class AnyConstructor;
 class BinaryExpression;
 class Block;
+class ConstructorCompound;
 class ConstructorDiagonalMatrix;
-class ConstructorScalarCast;
 class DoStatement;
+class Expression;
 class ExpressionStatement;
-class Extension;
 class FieldAccess;
 class ForStatement;
 class FunctionCall;
 class FunctionDeclaration;
 class FunctionDefinition;
 class FunctionPrototype;
+class GlobalVarDeclaration;
 class IfStatement;
-struct IndexExpression;
+class IndexExpression;
 class InterfaceBlock;
 class Literal;
+class OutputStream;
 class PostfixExpression;
 class PrefixExpression;
+class ProgramElement;
 class ReturnStatement;
-class Setting;
+class Statement;
 class StructDefinition;
 class SwitchStatement;
-struct Swizzle;
+class Swizzle;
 class TernaryExpression;
+class Type;
 class VarDeclaration;
+class Variable;
 class VariableReference;
+enum class OperatorPrecedence : uint8_t;
+struct Layout;
+struct Program;
+struct ShaderCaps;
 
 /**
  * Converts a Program into GLSL code.
  */
-class GLSLCodeGenerator : public CodeGenerator {
+class GLSLCodeGenerator final : public CodeGenerator {
 public:
     GLSLCodeGenerator(const Context* context, const Program* program, OutputStream* out)
-    : INHERITED(context, program, out)
-    , fLineEnding("\n") {}
+            : INHERITED(context, program, out) {}
 
     bool generateCode() override;
 
 protected:
-    using Precedence = Operator::Precedence;
+    using Precedence = OperatorPrecedence;
 
     void write(std::string_view s);
 
@@ -64,11 +76,13 @@ protected:
 
     void finishLine();
 
-    virtual void writeHeader();
+    void writeHeader();
 
-    virtual bool usesPrecisionModifiers() const;
+    bool usesPrecisionModifiers() const;
 
-    virtual std::string getTypeName(const Type& type);
+    void writeIdentifier(std::string_view identifier);
+
+    std::string getTypeName(const Type& type);
 
     void writeStructDefinition(const StructDefinition& s);
 
@@ -78,31 +92,31 @@ protected:
 
     void writeInterfaceBlock(const InterfaceBlock& intf);
 
-    void writeFunctionStart(const FunctionDeclaration& f);
-
     void writeFunctionDeclaration(const FunctionDeclaration& f);
 
     void writeFunctionPrototype(const FunctionPrototype& f);
 
-    virtual void writeFunction(const FunctionDefinition& f);
+    void writeFunction(const FunctionDefinition& f);
 
     void writeLayout(const Layout& layout);
 
-    void writeModifiers(const Modifiers& modifiers, bool globalContext);
+    void writeModifiers(const Layout& layout, ModifierFlags flags, bool globalContext);
 
-    virtual void writeInputVars();
+    void writeInputVars();
 
-    virtual void writeVarInitializer(const Variable& var, const Expression& value);
+    void writeVarInitializer(const Variable& var, const Expression& value);
 
     const char* getTypePrecision(const Type& type);
 
     void writeTypePrecision(const Type& type);
 
+    void writeGlobalVarDeclaration(const GlobalVarDeclaration& e);
+
     void writeVarDeclaration(const VarDeclaration& var, bool global);
 
     void writeFragCoord();
 
-    virtual void writeVariableReference(const VariableReference& ref);
+    void writeVariableReference(const VariableReference& ref);
 
     void writeExpression(const Expression& expr, Precedence parentPrecedence);
 
@@ -120,41 +134,41 @@ protected:
 
     void writeMatrixComparisonWorkaround(const BinaryExpression& x);
 
-    virtual void writeFunctionCall(const FunctionCall& c);
+    void writeFunctionCall(const FunctionCall& c);
+
+    void writeConstructorCompound(const ConstructorCompound& c, Precedence parentPrecedence);
 
     void writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c,
                                         Precedence parentPrecedence);
 
-    virtual void writeAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence);
+    void writeAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence);
 
-    virtual void writeCastConstructor(const AnyConstructor& c, Precedence parentPrecedence);
+    void writeCastConstructor(const AnyConstructor& c, Precedence parentPrecedence);
 
-    virtual void writeFieldAccess(const FieldAccess& f);
+    void writeFieldAccess(const FieldAccess& f);
 
-    virtual void writeSwizzle(const Swizzle& swizzle);
+    void writeSwizzle(const Swizzle& swizzle);
 
-    virtual void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
+    void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
 
     void writeShortCircuitWorkaroundExpression(const BinaryExpression& b,
                                                Precedence parentPrecedence);
 
-    virtual void writeTernaryExpression(const TernaryExpression& t, Precedence parentPrecedence);
+    void writeTernaryExpression(const TernaryExpression& t, Precedence parentPrecedence);
 
-    virtual void writeIndexExpression(const IndexExpression& expr);
+    void writeIndexExpression(const IndexExpression& expr);
 
     void writePrefixExpression(const PrefixExpression& p, Precedence parentPrecedence);
 
     void writePostfixExpression(const PostfixExpression& p, Precedence parentPrecedence);
 
-    virtual void writeLiteral(const Literal& l);
-
-    virtual void writeSetting(const Setting& s);
+    void writeLiteral(const Literal& l);
 
     void writeStatement(const Statement& s);
 
     void writeBlock(const Block& b);
 
-    virtual void writeIfStatement(const IfStatement& stmt);
+    void writeIfStatement(const IfStatement& stmt);
 
     void writeForStatement(const ForStatement& f);
 
@@ -162,15 +176,16 @@ protected:
 
     void writeExpressionStatement(const ExpressionStatement& s);
 
-    virtual void writeSwitchStatement(const SwitchStatement& s);
+    void writeSwitchStatement(const SwitchStatement& s);
 
-    virtual void writeReturnStatement(const ReturnStatement& r);
+    void writeReturnStatement(const ReturnStatement& r);
 
-    virtual void writeProgramElement(const ProgramElement& e);
+    void writeProgramElement(const ProgramElement& e);
 
-    const ShaderCaps& caps() const { return fContext.fCaps; }
+    const ShaderCaps& caps() const { return *fContext.fCaps; }
 
-    const char* fLineEnding;
+    bool shouldRewriteVoidTypedFunctions(const FunctionDeclaration* func) const;
+
     StringStream fExtensions;
     StringStream fGlobals;
     StringStream fExtraFunctions;
@@ -178,7 +193,8 @@ protected:
     int fVarCount = 0;
     int fIndentation = 0;
     bool fAtLineStart = false;
-    std::set<std::string> fWrittenIntrinsics;
+    const FunctionDeclaration* fCurrentFunction = nullptr;
+
     // true if we have run into usages of dFdx / dFdy
     bool fFoundDerivatives = false;
     bool fFoundExternalSamplerDecl = false;
@@ -186,29 +202,12 @@ protected:
     bool fSetupClockwise = false;
     bool fSetupFragPosition = false;
     bool fSetupFragCoordWorkaround = false;
-    // if non-empty, replace all texture / texture2D / textureProj / etc. calls with this name
-    std::string fTextureFunctionOverride;
 
-    // We map function names to function class so we can quickly deal with function calls that need
-    // extra processing
-    enum class FunctionClass {
-        kAbs,
-        kAtan,
-        kDeterminant,
-        kDFdx,
-        kDFdy,
-        kFwidth,
-        kFMA,
-        kFract,
-        kInverse,
-        kInverseSqrt,
-        kMin,
-        kPow,
-        kSaturate,
-        kTexture,
-        kTranspose
-    };
-    static std::unordered_map<std::string_view, FunctionClass>* fFunctionClasses;
+    // Workaround/polyfill flags
+    bool fWrittenAbsEmulation = false;
+    bool fWrittenDeterminant2 = false, fWrittenDeterminant3 = false, fWrittenDeterminant4 = false;
+    bool fWrittenInverse2 = false, fWrittenInverse3 = false, fWrittenInverse4 = false;
+    bool fWrittenTranspose[3][3] = {};
 
     using INHERITED = CodeGenerator;
 };

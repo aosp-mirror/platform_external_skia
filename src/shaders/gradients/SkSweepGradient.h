@@ -1,50 +1,47 @@
 /*
- * Copyright 2012 Google Inc.
+ * Copyright 2023 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#ifndef SkSweepGradientShader_DEFINED
+#define SkSweepGradientShader_DEFINED
 
-#ifndef SkSweepGradient_DEFINED
-#define SkSweepGradient_DEFINED
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkScalar.h"
+#include "src/shaders/gradients/SkGradientBaseShader.h"
 
-#include "src/shaders/gradients/SkGradientShaderPriv.h"
+class SkArenaAlloc;
+class SkMatrix;
+class SkRasterPipeline;
+class SkReadBuffer;
+class SkWriteBuffer;
 
-class SkSweepGradient final : public SkGradientShaderBase {
+class SkSweepGradient final : public SkGradientBaseShader {
 public:
     SkSweepGradient(const SkPoint& center, SkScalar t0, SkScalar t1, const Descriptor&);
 
-    GradientType asAGradient(GradientInfo* info) const override;
+    GradientType asGradient(GradientInfo* info, SkMatrix* localMatrix) const override;
 
-#if SK_SUPPORT_GPU
-    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&) const override;
-#endif
-    void addToKey(SkShaderCodeDictionary*,
-                  SkBackend,
-                  SkPaintParamsKeyBuilder*,
-                  SkUniformBlock*) const override;
-
-    SkScalar getTBias() const { return fTBias; }
-
-    SkScalar getTScale() const { return fTScale; }
+    const SkPoint& center() const { return fCenter; }
+    SkScalar tBias() const { return fTBias; }
+    SkScalar tScale() const { return fTScale; }
 
 protected:
     void flatten(SkWriteBuffer& buffer) const override;
 
-    void appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline* tPipeline,
+    void appendGradientStages(SkArenaAlloc* alloc,
+                              SkRasterPipeline* tPipeline,
                               SkRasterPipeline* postPipeline) const override;
 
-    skvm::F32 transformT(skvm::Builder*, skvm::Uniforms*,
-                         skvm::Coord coord, skvm::I32* mask) const final;
 private:
+    friend void ::SkRegisterSweepGradientShaderFlattenable();
     SK_FLATTENABLE_HOOKS(SkSweepGradient)
 
-    const SkPoint  fCenter;
-    const SkScalar fTBias,
-                   fTScale;
-
-    friend class SkGradientShader;
-    using INHERITED = SkGradientShaderBase;
+    const SkPoint fCenter;
+    const SkScalar fTBias;
+    const SkScalar fTScale;
 };
 
 #endif

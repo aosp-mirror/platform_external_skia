@@ -33,7 +33,9 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/pathops/SkPathOps.h"
 #include "include/utils/SkTextUtils.h"
+#include "src/image/SkImageGeneratorPriv.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 #include <memory>
@@ -47,7 +49,7 @@ static void draw_vector_logo(SkCanvas* canvas, const SkRect& viewBox) {
     SkPaint paint;
     paint.setAntiAlias(true);
 
-    SkFont font(ToolUtils::create_portable_typeface());
+    SkFont font = ToolUtils::DefaultPortableFont();
     font.setSubpixel(true);
     font.setEmbolden(true);
 
@@ -89,8 +91,8 @@ static void draw_vector_logo(SkCanvas* canvas, const SkRect& viewBox) {
                              SkPoint::Make(iBox.centerX(), 0) };
     const SkScalar pos1[] = { 0, 0.75f };
     const SkColor colors1[] = { SK_ColorTRANSPARENT, SK_ColorBLACK };
-    SkASSERT(SK_ARRAY_COUNT(pos1) == SK_ARRAY_COUNT(colors1));
-    paint.setShader(SkGradientShader::MakeLinear(pts1, colors1, pos1, SK_ARRAY_COUNT(pos1),
+    SkASSERT(std::size(pos1) == std::size(colors1));
+    paint.setShader(SkGradientShader::MakeLinear(pts1, colors1, pos1, std::size(pos1),
                                                  SkTileMode::kClamp));
     canvas->drawRect(underlineRect, paint);
 
@@ -107,8 +109,8 @@ static void draw_vector_logo(SkCanvas* canvas, const SkRect& viewBox) {
         0xff5460a5,
         SK_ColorBLACK
     };
-    SkASSERT(SK_ARRAY_COUNT(pos2) == SK_ARRAY_COUNT(colors2));
-    paint.setShader(SkGradientShader::MakeLinear(pts2, colors2, pos2, SK_ARRAY_COUNT(pos2),
+    SkASSERT(std::size(pos2) == std::size(colors2));
+    paint.setShader(SkGradientShader::MakeLinear(pts2, colors2, pos2, std::size(pos2),
                                                  SkTileMode::kClamp));
     canvas->drawSimpleText(kSkiaStr, textLen, SkTextEncoding::kUTF8, 0, 0, font, paint);
 }
@@ -117,13 +119,9 @@ static void draw_vector_logo(SkCanvas* canvas, const SkRect& viewBox) {
 // (in particular its matrix vs. bounds semantics).
 class PictureGeneratorGM : public skiagm::GM {
 protected:
-    SkString onShortName() override {
-        return SkString("pictureimagegenerator");
-    }
+    SkString getName() const override { return SkString("pictureimagegenerator"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(1160, 860);
-    }
+    SkISize getISize() override { return SkISize::Make(1160, 860); }
 
     void onOnceBeforeDraw() override {
         const SkRect rect = SkRect::MakeWH(kPictureWidth, kPictureHeight);
@@ -164,7 +162,7 @@ protected:
         const unsigned kDrawsPerRow = 4;
         const SkScalar kDrawSize = 250;
 
-        for (size_t i = 0; i < SK_ARRAY_COUNT(configs); ++i) {
+        for (size_t i = 0; i < std::size(configs); ++i) {
             SkPaint p;
             p.setAlphaf(configs[i].opacity);
 
@@ -176,9 +174,12 @@ protected:
                 m.postTranslate(0, SkIntToScalar(configs[i].size.height()));
             }
             std::unique_ptr<SkImageGenerator> gen =
-                SkImageGenerator::MakeFromPicture(configs[i].size, fPicture, &m,
-                                                 p.getAlpha() != 255 ? &p : nullptr,
-                                                 SkImage::BitDepth::kU8, srgbColorSpace);
+                    SkImageGenerators::MakeFromPicture(configs[i].size,
+                                                       fPicture,
+                                                       &m,
+                                                       p.getAlpha() != 255 ? &p : nullptr,
+                                                       SkImages::BitDepth::kU8,
+                                                       srgbColorSpace);
 
             SkImageInfo bmInfo = gen->getInfo().makeColorSpace(canvas->imageInfo().refColorSpace());
 

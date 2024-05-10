@@ -20,7 +20,7 @@
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/private/SkMalloc.h"
+#include "include/private/base/SkMalloc.h"
 #include "tools/ToolUtils.h"
 
 static sk_sp<SkSurface> make_surface(SkCanvas* root, int N, int padLeft, int padTop,
@@ -96,13 +96,9 @@ public:
     LatticeGM() {}
 
 protected:
-    SkString onShortName() override {
-        return SkString("lattice");
-    }
+    SkString getName() const override { return SkString("lattice"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(800, 800);
-    }
+    SkISize getISize() override { return SkISize::Make(800, 800); }
 
     void onDrawHelper(GrDirectContext* dContext, SkCanvas* canvas, int padLeft, int padTop,
                       int padRight, int padBottom) {
@@ -230,13 +226,9 @@ DEF_GM( return new LatticeGM; )
 class LatticeGM2 : public skiagm::GM {
 public:
     LatticeGM2() {}
-    SkString onShortName() override {
-        return SkString("lattice2");
-    }
+    SkString getName() const override { return SkString("lattice2"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(800, 800);
-    }
+    SkISize getISize() override { return SkISize::Make(800, 800); }
 
     sk_sp<SkImage> makeImage(SkCanvas* root, int padLeft, int padTop, int padRight, int padBottom) {
         const int kSize = 80;

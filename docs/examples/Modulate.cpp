@@ -8,13 +8,13 @@ void draw(SkCanvas* canvas) {
         const SkColor colors[] = { SK_ColorBLACK, SK_ColorWHITE };
         const SkPoint horz[] = { { 0, 0 }, { 128, 0 } };
         SkPaint paint;
-        paint.setShader(SkGradientShader::MakeLinear(horz, colors, nullptr, SK_ARRAY_COUNT(colors),
+        paint.setShader(SkGradientShader::MakeLinear(horz, colors, nullptr, std::size(colors),
                 SkTileMode::kClamp));
         paint.setBlendMode(mode);
         canvas->translate(dx, dy);
         canvas->drawRect({0, 0, 128, 128}, paint);
         paint.setBlendMode(SkBlendMode::kXor);
-        SkFont font;
+        SkFont font = SkFont(fontMgr->matchFamilyStyle(nullptr, {}));
         canvas->drawString(label, 40, 100, font, paint);
     };
     drawSquare(0, 0, SkBlendMode::kSrc, "destination");

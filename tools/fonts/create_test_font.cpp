@@ -11,18 +11,32 @@
 
 #include "include/core/SkFont.h"
 #include "include/core/SkFontMetrics.h"
+#include "include/core/SkFontMgr.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkTDArray.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkOSFile.h"
 #include "src/core/SkPathPriv.h"
 #include "src/utils/SkOSPath.h"
-#include "src/utils/SkUTF.h"
 
 #include <stdio.h>
+
+#if defined(SK_FONTMGR_CORETEXT_AVAILABLE)
+#include "include/ports/SkFontMgr_mac_ct.h"
+#endif
+
+#if defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
+#include "include/ports/SkFontMgr_fontconfig.h"
+#endif
+
+#if defined(SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE)
+#include "include/ports/SkFontMgr_empty.h"
+#endif
 
 namespace {
 
@@ -56,7 +70,7 @@ static FILE* font_header(const char* family) {
         if (dashIndex < 0) {
             break;
         }
-        fam.writable_str()[dashIndex] = '_';
+        fam.data()[dashIndex] = '_';
     } while (true);
     outPath.append(fam);
     outPath.append(".inc");
@@ -206,7 +220,7 @@ static void output_font(sk_sp<SkTypeface> face, const char* identifier, FILE* ou
     fprintf(out, "%s", ptsOut.c_str());
     fprintf(out, "\n};\n\n");
     fprintf(out, "const unsigned char %sVerbs[] = {\n", identifier);
-    int verbCount = verbs.count();
+    int verbCount = verbs.size();
     int outChCount = 0;
     for (int index = 0; index < verbCount;) {
         SkPath::Verb verb = verbs[index];
@@ -229,7 +243,7 @@ static void output_font(sk_sp<SkTypeface> face, const char* identifier, FILE* ou
     // all fonts are now 0x00, 0x20 - 0xFE
     // don't need to generate or output character codes?
     fprintf(out, "const SkUnichar %sCharCodes[] = {\n", identifier);
-    int offsetCount = charCodes.count();
+    int offsetCount = charCodes.size();
     for (int index = 0; index < offsetCount;) {
         unsigned offset = charCodes[index];
         fprintf(out, "%u", offset);
@@ -254,7 +268,7 @@ static void output_font(sk_sp<SkTypeface> face, const char* identifier, FILE* ou
     widthsStr = strip_final(widthsStr);
     fprintf(out, "%s\n};\n\n", widthsStr.c_str());
 
-    fprintf(out, "const size_t %sCharCodesCount = SK_ARRAY_COUNT(%sCharCodes);\n\n",
+    fprintf(out, "const size_t %sCharCodesCount = std::size(%sCharCodes);\n\n",
             identifier, identifier);
 
     SkFontMetrics metrics;
@@ -287,14 +301,17 @@ static SkString identifier(const FontFamilyDesc& family, const FontDesc& font) {
     return id;
 }
 
-static void generate_fonts(const char* basepath, const SkSpan<const FontFamilyDesc>& families) {
+static void generate_fonts(const char* basepath,
+                           const SkSpan<const FontFamilyDesc>& families,
+                           sk_sp<const SkFontMgr> mgr) {
+    SkASSERT_RELEASE(mgr);
     FILE* out = nullptr;
     for (const FontFamilyDesc& family : families) {
         out = font_header(family.fGenericName);
         for (const FontDesc& font : family.fFonts) {
             SkString filepath(SkOSPath::Join(basepath, font.fFile));
             SkASSERTF(sk_exists(filepath.c_str()), "The file %s does not exist.", filepath.c_str());
-            sk_sp<SkTypeface> resourceTypeface = SkTypeface::MakeFromFile(filepath.c_str());
+            sk_sp<SkTypeface> resourceTypeface = mgr->makeFromFile(filepath.c_str(), 0);
             SkASSERTF(resourceTypeface, "The file %s is not a font.", filepath.c_str());
             output_font(std::move(resourceTypeface), identifier(family, font).c_str(), out);
         }
@@ -403,18 +420,33 @@ int main(int , char * const []) {
     };
 
     static constexpr FontFamilyDesc kFamiliesData[] = {
-        {"monospace",  "Liberation Mono",  "LiberationMono",  SkMakeSpan(kMonoFonts)},
-        {"sans-serif", "Liberation Sans",  "LiberationSans",  SkMakeSpan(kSansFonts)},
-        {"serif",      "Liberation Serif", "LiberationSerif", SkMakeSpan(kSerifFonts)},
+        {"monospace",  "Liberation Mono",  "LiberationMono",  kMonoFonts},
+        {"sans-serif", "Liberation Sans",  "LiberationSans",  kSansFonts},
+        {"serif",      "Liberation Serif", "LiberationSerif", kSerifFonts},
     };
 
-    static constexpr SkSpan<const FontFamilyDesc> kFamilies(SkMakeSpan(kFamiliesData));
+    static constexpr SkSpan<const FontFamilyDesc> kFamilies(kFamiliesData);
 
-#ifdef SK_BUILD_FOR_UNIX
-    generate_fonts("/usr/share/fonts/truetype/liberation/", kFamilies);
+    sk_sp<SkFontMgr> mgr;
+#if defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
+    mgr = SkFontMgr_New_FontConfig(nullptr);
+#elif defined(SK_FONTMGR_CORETEXT_AVAILABLE)
+    mgr = SkFontMgr_New_CoreText(nullptr);
+#elif defined(SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE)
+    mgr = SkFontMgr_New_Custom_Empty();
 #else
-    generate_fonts("/Library/Fonts/", kFamilies);
+    SkDEBUGFAIL("Unsupported FontMgr");
 #endif
+
+#if defined(SK_BUILD_FOR_UNIX)
+#define SK_FONT_FOLDER "/usr/share/fonts/truetype/liberation/"
+#elif defined(SK_BUILD_FOR_MAC)
+#define SK_FONT_FOLDER "/Library/Fonts/"
+#else
+#error "Unsupported OS"
+#endif
+
+    generate_fonts(SK_FONT_FOLDER, kFamilies, mgr);
     generate_index(kFamilies, &kFamilies[1].fFonts[0]);
     return 0;
 }

@@ -1,12 +1,14 @@
 *.pyc
 *.swp
 *.iml
+*.perfetto-trace
 .DS_Store
 .android_config
 .gclient*
 .gradle
 .idea
 .cproject
+.clwb/
 .project
 .recipe_deps/
 .settings/
@@ -37,7 +39,6 @@ platform_tools/android/apps/*/.externalNativeBuild
 tools/skp/page_sets/data/*.json
 tools/skp/page_sets/data/*.wpr
 
-common
 buildtools
 third_party/externals
 
@@ -48,8 +49,16 @@ bin/clang-format.exe
 bin/sk
 bin/sk.exe
 bin/sk.version
+third_party/ninja
+bin/ninja
+bin/ninja.exe
+bin/ninja.version
+
 
 node_modules
 tools/lottiecap/filmstrip.png
 
 bazel-*
+
+# A user is free to specify custom builds or options here without them being checked in.
+bazel/user/buildrc

@@ -9,10 +9,14 @@
 
 #include <memory>
 
+#include "include/core/SkBitmap.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkPictureRecorder.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/utils/SkJSONWriter.h"
 #include "tools/ToolUtils.h"
+#include "tools/debugger/DrawCommand.h"
 
 using namespace sk_gpu_test;
 
@@ -54,10 +58,10 @@ sk_sp<SkData> Request::writeCanvasToPng(SkCanvas* canvas) {
 SkCanvas* Request::getCanvas() {
 #ifdef SK_GL
     GrContextFactory* factory = fContextFactory;
-    GLTestContext* gl = factory->getContextInfo(GrContextFactory::kGL_ContextType,
+    GLTestContext* gl = factory->getContextInfo(skgpu::ContextType::kGL,
             GrContextFactory::ContextOverrides::kNone).glContext();
     if (!gl) {
-        gl = factory->getContextInfo(GrContextFactory::kGLES_ContextType,
+        gl = factory->getContextInfo(skgpu::ContextType::kGLES,
                                      GrContextFactory::ContextOverrides::kNone).glContext();
     }
     if (gl) {
@@ -96,10 +100,10 @@ sk_sp<SkData> Request::writeOutSkp() {
 }
 
 GrDirectContext* Request::directContext() {
-    auto result = fContextFactory->get(GrContextFactory::kGL_ContextType,
+    auto result = fContextFactory->get(skgpu::ContextType::kGL,
                                        GrContextFactory::ContextOverrides::kNone);
     if (!result) {
-        result = fContextFactory->get(GrContextFactory::kGLES_ContextType,
+        result = fContextFactory->get(skgpu::ContextType::kGLES,
                                       GrContextFactory::ContextOverrides::kNone);
     }
     return result;
@@ -148,7 +152,7 @@ SkSurface* Request::createCPUSurface() {
                     : SkColorSpace::MakeSRGB();
     SkImageInfo info = SkImageInfo::Make(bounds.size(), cap.fColorType, kPremul_SkAlphaType,
                                          cap.fSRGB ? colorSpace : nullptr);
-    return SkSurface::MakeRaster(info).release();
+    return SkSurfaces::Raster(info).release();
 }
 
 SkSurface* Request::createGPUSurface() {
@@ -160,7 +164,7 @@ SkSurface* Request::createGPUSurface() {
                     : SkColorSpace::MakeSRGB();
     SkImageInfo info = SkImageInfo::Make(bounds.size(), cap.fColorType, kPremul_SkAlphaType,
                                          cap.fSRGB ? colorSpace : nullptr);
-    SkSurface* surface = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info).release();
+    SkSurface* surface = SkSurfaces::RenderTarget(context, skgpu::Budgeted::kNo, info).release();
     return surface;
 }
 
@@ -186,7 +190,7 @@ bool Request::enableGPU(bool enable) {
             // TODO understand what is actually happening here
             if (fDebugCanvas) {
                 fDebugCanvas->drawTo(this->getCanvas(), this->getLastOp());
-                fSurface->flush();
+                this->directContext()->flush(fSurface.get());
             }
 
             return true;
@@ -216,7 +220,7 @@ bool Request::initPictureFromStream(SkStream* stream) {
 
     // for some reason we need to 'flush' the debug canvas by drawing all of the ops
     fDebugCanvas->drawTo(this->getCanvas(), this->getLastOp());
-    fSurface->flush();
+    this->directContext()->flush(fSurface.get());
     return true;
 }
 
@@ -226,7 +230,7 @@ sk_sp<SkData> Request::getJsonOps() {
     SkJSONWriter writer(&stream, SkJSONWriter::Mode::kFast);
     writer.beginObject(); // root
 
-    writer.appendString("mode", fGPUEnabled ? "gpu" : "cpu");
+    writer.appendCString("mode", fGPUEnabled ? "gpu" : "cpu");
     writer.appendBool("drawGpuOpBounds", fDebugCanvas->getDrawGpuOpBounds());
     writer.appendS32("colorMode", fColorMode);
     fDebugCanvas->toJSON(writer, fUrlDataManager, canvas);

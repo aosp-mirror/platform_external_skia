@@ -20,7 +20,7 @@ import (
 	"go.skia.org/infra/task_driver/go/td"
 )
 
-const dockerImage = "gcr.io/skia-public/canvaskit-emsdk:3.1.3_v1"
+const dockerImage = "gcr.io/skia-public/canvaskit-emsdk:3.1.26_v2"
 const innerBuildScript = "/SRC/infra/canvaskit/build_gmtests.sh"
 
 func main() {
@@ -57,7 +57,7 @@ func main() {
 	if err != nil {
 		td.Fatal(ctx, err)
 	}
-	defer doc.Cleanup(ctx)
+	defer func() { _ = doc.Cleanup(ctx) }()
 
 	command := []string{innerBuildScript}
 	volumes := []string{skiaAbsPath + ":/SRC", workAbsPath + ":/OUT"}

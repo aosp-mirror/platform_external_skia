@@ -7,26 +7,38 @@
 
 #include "src/sksl/ir/SkSLTypeReference.h"
 
-#include "include/sksl/SkSLErrorReporter.h"
+#include "include/core/SkTypes.h"
+#include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLProgramSettings.h"
 
 namespace SkSL {
 
-std::unique_ptr<TypeReference> TypeReference::Convert(const Context& context,
-                                                      int line,
-                                                      const Type* type) {
-    if (!type->isAllowedInES2(context)) {
-        context.fErrors->error(line, "type '" + type->displayName() + "' is not supported");
-        return nullptr;
+bool TypeReference::VerifyType(const Context& context, const SkSL::Type* type, Position pos) {
+    if (!context.fConfig->fIsBuiltinCode && type) {
+        if (type->isGeneric() || type->isLiteral()) {
+            context.fErrors->error(pos, "type '" + std::string(type->name()) + "' is generic");
+            return false;
+        }
+        if (!type->isAllowedInES2(context)) {
+            context.fErrors->error(pos, "type '" + std::string(type->name()) +"' is not supported");
+            return false;
+        }
     }
-    return TypeReference::Make(context, line, type);
+    return true;
+}
+
+std::unique_ptr<TypeReference> TypeReference::Convert(const Context& context,
+                                                      Position pos,
+                                                      const Type* type) {
+    return VerifyType(context, type, pos) ? TypeReference::Make(context, pos, type)
+                                          : nullptr;
 }
 
 std::unique_ptr<TypeReference> TypeReference::Make(const Context& context,
-                                                   int line,
+                                                   Position pos,
                                                    const Type* type) {
     SkASSERT(type->isAllowedInES2(context));
-    return std::make_unique<TypeReference>(context, line, type);
+    return std::make_unique<TypeReference>(context, pos, type);
 }
 
 } // namespace SkSL

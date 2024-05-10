@@ -7,7 +7,10 @@
 
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTileMode.h"
 
 DEF_SIMPLE_GM(bicubic, canvas, 300, 320) {
     canvas->clear(SK_ColorBLACK);
@@ -19,7 +22,7 @@ DEF_SIMPLE_GM(bicubic, canvas, 300, 320) {
     };
 
     auto make_img = []() {
-        auto surf = SkSurface::MakeRasterN32Premul(7, 7);
+        auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(7, 7));
         surf->getCanvas()->drawColor(SK_ColorBLACK);
 
         SkPaint paint;
@@ -39,7 +42,7 @@ DEF_SIMPLE_GM(bicubic, canvas, 300, 320) {
     const SkRect r = SkRect::MakeIWH(img->width(), img->height());
     SkPaint paint;
 
-    SkImage::CubicResampler cubics[] = {
+    SkCubicResampler cubics[] = {
         SkCubicResampler::CatmullRom(),
         SkCubicResampler::Mitchell(),
     };

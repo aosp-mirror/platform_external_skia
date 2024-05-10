@@ -8,7 +8,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkString.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 #include "modules/svg/include/SkSVGAttributeParser.h"
 #include "modules/svg/include/SkSVGCircle.h"
 #include "modules/svg/include/SkSVGClipPath.h"
@@ -46,7 +46,7 @@
 #include "modules/svg/include/SkSVGTypes.h"
 #include "modules/svg/include/SkSVGUse.h"
 #include "modules/svg/include/SkSVGValue.h"
-#include "src/core/SkTSearch.h"
+#include "src/base/SkTSearch.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/xml/SkDOM.h"
 
@@ -291,7 +291,7 @@ bool set_string_attribute(const sk_sp<SkSVGNode>& node, const char* name, const 
     }
 
     const int attrIndex = SkStrSearch(&gAttributeParseInfo[0].fKey,
-                                      SkTo<int>(SK_ARRAY_COUNT(gAttributeParseInfo)),
+                                      SkTo<int>(std::size(gAttributeParseInfo)),
                                       name, sizeof(gAttributeParseInfo[0]));
     if (attrIndex < 0) {
 #if defined(SK_VERBOSE_SVG_PARSING)
@@ -300,7 +300,7 @@ bool set_string_attribute(const sk_sp<SkSVGNode>& node, const char* name, const 
         return false;
     }
 
-    SkASSERT(SkTo<size_t>(attrIndex) < SK_ARRAY_COUNT(gAttributeParseInfo));
+    SkASSERT(SkTo<size_t>(attrIndex) < std::size(gAttributeParseInfo));
     const auto& attrInfo = gAttributeParseInfo[attrIndex].fValue;
     if (!attrInfo.fSetter(node, attrInfo.fAttr, value)) {
 #if defined(SK_VERBOSE_SVG_PARSING)
@@ -351,7 +351,7 @@ sk_sp<SkSVGNode> construct_svg_node(const SkDOM& dom, const ConstructionContext&
         }
 
         const int tagIndex = SkStrSearch(&gTagFactories[0].fKey,
-                                         SkTo<int>(SK_ARRAY_COUNT(gTagFactories)),
+                                         SkTo<int>(std::size(gTagFactories)),
                                          elem, sizeof(gTagFactories[0]));
         if (tagIndex < 0) {
 #if defined(SK_VERBOSE_SVG_PARSING)
@@ -359,7 +359,7 @@ sk_sp<SkSVGNode> construct_svg_node(const SkDOM& dom, const ConstructionContext&
 #endif
             return nullptr;
         }
-        SkASSERT(SkTo<size_t>(tagIndex) < SK_ARRAY_COUNT(gTagFactories));
+        SkASSERT(SkTo<size_t>(tagIndex) < std::size(gTagFactories));
 
         return gTagFactories[tagIndex].fValue();
     };
@@ -440,6 +440,17 @@ void SkSVGDOM::render(SkCanvas* canvas) const {
         SkSVGPresentationContext pctx;
         fRoot->render(SkSVGRenderContext(canvas, fFontMgr, fResourceProvider, fIDMapper, lctx, pctx,
                                          {nullptr, nullptr}));
+    }
+}
+
+void SkSVGDOM::renderNode(SkCanvas* canvas, SkSVGPresentationContext& pctx, const char* id) const {
+    TRACE_EVENT0("skia", TRACE_FUNC);
+
+    if (fRoot) {
+        SkSVGLengthContext lctx(fContainerSize);
+        fRoot->renderNode(SkSVGRenderContext(canvas, fFontMgr, fResourceProvider, fIDMapper,
+                                             lctx, pctx, {nullptr, nullptr}),
+                          SkSVGIRI(SkSVGIRI::Type::kLocal, SkSVGStringType(id)));
     }
 }
 

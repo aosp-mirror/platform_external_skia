@@ -9,11 +9,12 @@
 #include "src/sksl/lex/TransitionTable.h"
 
 #include <array>
-#include <bitset>
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -31,9 +32,8 @@ constexpr int kNumValues = (1 << kNumBits) - 1;
 constexpr int kDataPerByte = 8 / kNumBits;
 
 enum IndexType {
-    kZero = 0,
+    kCompactEntry = 0,
     kFullEntry,
-    kCompactEntry,
 };
 struct IndexEntry {
     IndexType type;
@@ -57,14 +57,14 @@ static int add_compact_entry(const TransitionSet& transitionSet,
     CompactEntry result{};
     assert(transitionSet.size() <= result.v.size());
     std::copy(transitionSet.begin(), transitionSet.end(), result.v.begin());
-    std::sort(result.v.begin(), result.v.end());
+    std::sort(result.v.rbegin(), result.v.rend());
 
-    // Create a mapping from real values to small values. (0 -> 0, v[0] -> 1, v[1] -> 2, v[2] -> 3)
+    // Create a mapping from real values to small values.
     std::unordered_map<int, int> translationTable;
     for (size_t index = 0; index < result.v.size(); ++index) {
-        translationTable[result.v[index]] = 1 + index;
+        translationTable[result.v[index]] = index;
     }
-    translationTable[0] = 0;
+    translationTable[0] = result.v.size();
 
     // Convert the real values into small values.
     for (size_t index = 0; index < data.size(); ++index) {
@@ -129,11 +129,7 @@ void WriteTransitionTable(std::ofstream& out, const DFA& dfa, size_t states) {
         }
 
         transitionSet.erase(0);
-        if (transitionSet.empty()) {
-            // This transition table was completely empty (every value was zero). No data needed;
-            // zero pages are handled as a special index type.
-            indices.push_back(IndexEntry{kZero, 0});
-        } else if (transitionSet.size() <= kNumValues) {
+        if (transitionSet.size() <= kNumValues) {
             // This table only contained a small number of unique nonzero values.
             // Use a compact representation that squishes each value down to a few bits.
             int index = add_compact_entry(transitionSet, data, &compactEntries);
@@ -146,32 +142,33 @@ void WriteTransitionTable(std::ofstream& out, const DFA& dfa, size_t states) {
     }
 
     // Find the largest value for each compact-entry slot.
-    int maxValue[kNumValues] = {};
+    int maxValue = 0;
     for (const CompactEntry& entry : compactEntries) {
         for (int index=0; index < kNumValues; ++index) {
-            maxValue[index] = std::max(maxValue[index], entry.v[index]);
+            maxValue = std::max(maxValue, entry.v[index]);
         }
     }
 
+    // Figure out how many bits we need to store our max value.
+    int bitsPerValue = std::ceil(std::log2(maxValue));
+    maxValue = (1 << bitsPerValue) - 1;
+
+    // If we exceed 10 bits per value, three values would overflow 32 bits. If this happens, we'll
+    // need to pack our values another way.
+    assert(bitsPerValue <= 10);
+
     // Emit all the structs our transition table will use.
-    out << "struct IndexEntry {\n"
-        << "    uint16_t type : 2;\n"
-        << "    uint16_t pos : 14;\n"
-        << "};\n"
+    out << "using IndexEntry = int16_t;\n"
         << "struct FullEntry {\n"
         << "    State data[" << numTransitions << "];\n"
         << "};\n";
 
-    // Emit the compact-entry structure; minimize the number of bits needed per value.
-    out << "struct CompactEntry {\n";
-    for (int index=0; index < kNumValues; ++index) {
-        if (maxValue[index] > 0) {
-            out << "    State v" << index << " : " << int(std::ceil(std::log2(maxValue[index])))
-                << ";\n";
-        }
-    }
-
-    out << "    uint8_t data[" << std::ceil(float(numTransitions) / float(kDataPerByte)) << "];\n"
+    // Emit the compact-entry structure. We store all three values in `v`. If kNumBits were to
+    // change, we would need to adjust the packing algorithm.
+    static_assert(kNumBits == 2);
+    out << "struct CompactEntry {\n"
+        << "    uint32_t values;\n"
+        << "    uint8_t data[" << std::ceil(float(numTransitions) / float(kDataPerByte)) << "];\n"
         << "};\n";
 
     // Emit the full-table data.
@@ -189,12 +186,19 @@ void WriteTransitionTable(std::ofstream& out, const DFA& dfa, size_t states) {
     out << "static constexpr CompactEntry kCompact[] = {\n";
     for (const CompactEntry& entry : compactEntries) {
         out << "    {";
-        for (int index=0; index < kNumValues; ++index) {
-            if (maxValue[index] > 0) {
-                out << entry.v[index] << ", ";
-            }
+
+        // We pack all three values into `v`. If kNumBits were to change, we would need to adjust
+        // this packing algorithm.
+        static_assert(kNumBits == 2);
+        out << entry.v[0];
+        if (entry.v[1]) {
+            out << " | (" << entry.v[1] << " << " << bitsPerValue << ")";
         }
-        out << "{";
+        if (entry.v[2]) {
+            out << " | (" << entry.v[2] << " << " << (2 * bitsPerValue) << ")";
+        }
+        out << ", {";
+
         unsigned int shiftBits = 0, combinedBits = 0;
         for (int index = 0; index < numTransitions; index++) {
             combinedBits |= entry.data[index] << shiftBits;
@@ -215,28 +219,23 @@ void WriteTransitionTable(std::ofstream& out, const DFA& dfa, size_t states) {
     out << "};\n"
         << "static constexpr IndexEntry kIndices[] = {\n";
     for (const IndexEntry& entry : indices) {
-        out << "    {" << entry.type << ", " << entry.pos << "},\n";
-    }
-    out << "};\n"
-        << "State get_transition(int transition, int state) {\n"
-        << "    IndexEntry index = kIndices[state];\n"
-        << "    if (index.type == 0) { return 0; }\n"
-        << "    if (index.type == 1) { return kFull[index.pos].data[transition]; }\n"
-        << "    const CompactEntry& entry = kCompact[index.pos];\n"
-        << "    int value = entry.data[transition >> " << std::log2(kDataPerByte) << "];\n"
-        << "    value >>= " << kNumBits << " * (transition & " << kDataPerByte - 1 << ");\n"
-        << "    value &= " << kNumValues << ";\n"
-        << "    State table[] = {0";
-
-    for (int index=0; index < kNumValues; ++index) {
-        if (maxValue[index] > 0) {
-            out << ", entry.v" << index;
+        if (entry.type == kFullEntry) {
+            // Bit-not is used so that full entries start at -1 and go down from there.
+            out << ~entry.pos << ", ";
         } else {
-            out << ", 0";
+            // Compact entries start at 0 and go up from there.
+            out << entry.pos << ", ";
         }
     }
-
     out << "};\n"
-        << "    return table[value];\n"
+        << "static State get_transition(uint8_t transition, State state) {\n"
+        << "    IndexEntry index = kIndices[state];\n"
+        << "    if (index < 0) { return kFull[~index].data[transition]; }\n"
+        << "    const CompactEntry& entry = kCompact[index];\n"
+        << "    int v = entry.data[transition >> " << std::log2(kDataPerByte) << "];\n"
+        << "    v >>= " << kNumBits << " * (transition & " << kDataPerByte - 1 << ");\n"
+        << "    v &= " << kNumValues << ";\n"
+        << "    v *= " << bitsPerValue << ";\n"
+        << "    return (entry.values >> v) & " << maxValue << ";\n"
         << "}\n";
 }

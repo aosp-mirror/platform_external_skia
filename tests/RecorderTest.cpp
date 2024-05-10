@@ -5,14 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "tests/Test.h"
-
-#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkSurface.h"
+#include "include/private/base/SkMalloc.h"
 #include "src/core/SkRecord.h"
 #include "src/core/SkRecorder.h"
 #include "src/core/SkRecords.h"
+#include "tests/Test.h"
 
 #define COUNT(T) + 1
 static const int kRecordTypes = SK_RECORD_TYPES(COUNT);
@@ -74,7 +82,7 @@ DEF_TEST(Recorder_drawImage_takeReference, reporter) {
 
     sk_sp<SkImage> image;
     {
-        auto surface(SkSurface::MakeRasterN32Premul(100, 100));
+        auto surface(SkSurfaces::Raster(SkImageInfo::MakeN32Premul(100, 100)));
         surface->getCanvas()->clear(SK_ColorGREEN);
         image = surface->makeImageSnapshot();
     }
@@ -90,7 +98,11 @@ DEF_TEST(Recorder_drawImage_takeReference, reporter) {
         Tally tally;
         tally.apply(record);
 
+#if defined(SK_RESOLVE_FILTERS_BEFORE_RESTORE)
         REPORTER_ASSERT(reporter, 1 == tally.count<SkRecords::DrawImage>());
+#else
+        REPORTER_ASSERT(reporter, 1 == tally.count<SkRecords::DrawImageRect>());
+#endif
     }
     REPORTER_ASSERT(reporter, image->unique());
 

@@ -21,8 +21,10 @@
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGValue.h"
 #include "modules/svg/src/SkSVGTextPriv.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkTextBlobPriv.h"
-#include "src/utils/SkUTF.h"
+
+using namespace skia_private;
 
 namespace {
 
@@ -75,7 +77,10 @@ static SkFont ResolveFont(const SkSVGRenderContext& ctx) {
     // TODO: we likely want matchFamilyStyle here, but switching away from legacyMakeTypeface
     // changes all the results when using the default fontmgr.
     auto tf = ctx.fontMgr()->legacyMakeTypeface(family.c_str(), style);
-
+    if (!tf) {
+        tf = ctx.fontMgr()->legacyMakeTypeface(nullptr, style);
+    }
+    SkASSERT(tf);
     SkFont font(std::move(tf), size);
     font.setHinting(SkFontHinting::kNone);
     font.setSubpixel(true);
@@ -572,7 +577,7 @@ SkRect SkSVGText::onObjectBoundingBox(const SkSVGRenderContext& ctx) const {
                 return;
             }
 
-            SkAutoSTArray<64, SkRect> glyphBounds;
+            AutoSTArray<64, SkRect> glyphBounds;
 
             for (SkTextBlobRunIterator it(blob.get()); !it.done(); it.next()) {
                 glyphBounds.reset(SkToInt(it.glyphCount()));

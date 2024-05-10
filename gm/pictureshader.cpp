@@ -24,6 +24,7 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 static struct {
     SkTileMode tmx;
@@ -59,16 +60,13 @@ public:
         this->drawTile(&bitmapCanvas);
     }
 
-
-    SkString onShortName() override {
+    SkString getName() const override {
         return SkStringPrintf("pictureshader%s%s",
                               fUseLocalMatrixWrapper ? "_localwrapper" : "",
                               fAlpha < 1 ? "_alpha" : "");
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(1400, 1450);
-    }
+    SkISize getISize() override { return SkISize::Make(1400, 1450); }
 
     void onDraw(SkCanvas* canvas) override {
         this->drawSceneColumn(canvas, SkPoint::Make(0, 0), 1, 1, 0);
@@ -156,7 +154,7 @@ private:
 
     void drawScene(SkCanvas* canvas, const SkMatrix& matrix, const SkMatrix& localMatrix,
                    unsigned tileMode) {
-        SkASSERT(tileMode < SK_ARRAY_COUNT(kTileConfigs));
+        SkASSERT(tileMode < std::size(kTileConfigs));
 
         SkPaint paint;
         paint.setStyle(SkPaint::kFill_Style);
@@ -262,10 +260,8 @@ DEF_SIMPLE_GM(pictureshader_persp, canvas, 215, 110) {
     };
 
     auto picture = []() {
-        sk_sp<SkTypeface> typeface = SkTypeface::MakeDefault();
-        if (!typeface) {
-            typeface = SkTypeface::MakeFromName("monospace", SkFontStyle());
-        }
+        sk_sp<SkTypeface> typeface = ToolUtils::DefaultPortableTypeface();
+        SkASSERT(typeface);
         SkFont font;
         font.setTypeface(typeface);
         font.setHinting(SkFontHinting::kNormal);

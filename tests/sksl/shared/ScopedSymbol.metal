@@ -1,5 +1,8 @@
 #include <metal_stdlib>
 #include <simd/simd.h>
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wall"
+#endif
 using namespace metal;
 struct S {
     int i;
@@ -37,7 +40,7 @@ fragment Outputs fragmentMain(Inputs _in [[stage_in]], constant Uniforms& _unifo
     Outputs _out;
     (void)_out;
     _globals.glob = 2;
-    bool _0_var = true;
+    const bool _0_var = true;
     _out.sk_FragColor = (((_0_var && block_variable_hides_global_variable_b(_globals)) && local_variable_hides_struct_b()) && local_struct_variable_hides_struct_type_b()) && local_variable_hides_global_variable_b() ? _uniforms.colorGreen : _uniforms.colorRed;
     return _out;
 }

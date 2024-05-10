@@ -1,4 +1,4 @@
 ### Compilation failed:
 
-error: 9: sk_SecondaryFragColor is not allowed in SPIR-V
+error: 'sk_SecondaryFragColor' not supported
 1 error

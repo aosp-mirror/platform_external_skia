@@ -83,7 +83,8 @@ struct ParagraphStyle {
                this->fEllipsis == rhs.fEllipsis &&
                this->fEllipsisUtf16 == rhs.fEllipsisUtf16 &&
                this->fTextDirection == rhs.fTextDirection && this->fTextAlign == rhs.fTextAlign &&
-               this->fDefaultTextStyle == rhs.fDefaultTextStyle;
+               this->fDefaultTextStyle == rhs.fDefaultTextStyle &&
+               this->fReplaceTabCharacters == rhs.fReplaceTabCharacters;
     }
 
     const StrutStyle& getStrutStyle() const { return fStrutStyle; }
@@ -119,8 +120,12 @@ struct ParagraphStyle {
     TextAlign effective_align() const;
     bool hintingIsOn() const { return fHintingIsOn; }
     void turnHintingOff() { fHintingIsOn = false; }
-    DrawOptions getDrawOptions() { return fDrawingOptions; }
-    void setDrawOptions(DrawOptions value) { fDrawingOptions = value; }
+
+    bool getReplaceTabCharacters() const { return fReplaceTabCharacters; }
+    void setReplaceTabCharacters(bool value) { fReplaceTabCharacters = value; }
+
+    bool getApplyRoundingHack() const { return fApplyRoundingHack; }
+    void setApplyRoundingHack(bool value) { fApplyRoundingHack = value; }
 
 private:
     StrutStyle fStrutStyle;
@@ -133,7 +138,8 @@ private:
     SkScalar fHeight;
     TextHeightBehavior fTextHeightBehavior;
     bool fHintingIsOn;
-    DrawOptions fDrawingOptions = DrawOptions::kDirect;
+    bool fReplaceTabCharacters;
+    bool fApplyRoundingHack = true;
 };
 }  // namespace textlayout
 }  // namespace skia

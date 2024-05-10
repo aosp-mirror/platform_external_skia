@@ -18,35 +18,36 @@
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/private/GrTypesPriv.h"
 #include "include/private/SkColorData.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/GrBuffer.h"
-#include "src/gpu/GrCaps.h"
-#include "src/gpu/GrColorSpaceXform.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrGeometryProcessor.h"
-#include "src/gpu/GrGpuBuffer.h"
-#include "src/gpu/GrMemoryPool.h"
-#include "src/gpu/GrOpFlushState.h"
-#include "src/gpu/GrOpsRenderPass.h"
-#include "src/gpu/GrPipeline.h"
-#include "src/gpu/GrProcessor.h"
-#include "src/gpu/GrProcessorSet.h"
-#include "src/gpu/GrProgramInfo.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/GrSamplerState.h"
-#include "src/gpu/GrShaderCaps.h"
-#include "src/gpu/GrShaderVar.h"
-#include "src/gpu/GrSurfaceProxy.h"
-#include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/KeyBuilder.h"
-#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/glsl/GrGLSLVarying.h"
-#include "src/gpu/ops/GrDrawOp.h"
-#include "src/gpu/ops/GrOp.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ganesh/GrBuffer.h"
+#include "src/gpu/ganesh/GrCanvas.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrColorSpaceXform.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrGeometryProcessor.h"
+#include "src/gpu/ganesh/GrGpuBuffer.h"
+#include "src/gpu/ganesh/GrMemoryPool.h"
+#include "src/gpu/ganesh/GrOpFlushState.h"
+#include "src/gpu/ganesh/GrOpsRenderPass.h"
+#include "src/gpu/ganesh/GrPipeline.h"
+#include "src/gpu/ganesh/GrProcessor.h"
+#include "src/gpu/ganesh/GrProcessorSet.h"
+#include "src/gpu/ganesh/GrProgramInfo.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrResourceProvider.h"
+#include "src/gpu/ganesh/GrSamplerState.h"
+#include "src/gpu/ganesh/GrShaderCaps.h"
+#include "src/gpu/ganesh/GrShaderVar.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/ganesh/glsl/GrGLSLVarying.h"
+#include "src/gpu/ganesh/ops/GrDrawOp.h"
+#include "src/gpu/ganesh/ops/GrOp.h"
 #include "tools/gpu/ProxyUtils.h"
 
 #include <memory>
@@ -204,8 +205,10 @@ private:
             {0, fY},
             {100, fY+100},
         };
-        fVertexBuffer = flushState->resourceProvider()->createBuffer(
-                sizeof(vertices), GrGpuBufferType::kVertex, kStatic_GrAccessPattern, vertices);
+        fVertexBuffer = flushState->resourceProvider()->createBuffer(vertices,
+                                                                     sizeof(vertices),
+                                                                     GrGpuBufferType::kVertex,
+                                                                     kStatic_GrAccessPattern);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
@@ -251,13 +254,13 @@ namespace skiagm {
  * target origins. We draw clockwise triangles green and counter-clockwise red.
  */
 class ClockwiseGM : public GpuGM {
-    SkString onShortName() override { return SkString("clockwise"); }
-    SkISize onISize() override { return {300, 200}; }
+    SkString getName() const override { return SkString("clockwise"); }
+    SkISize getISize() override { return {300, 200}; }
     DrawResult onDraw(GrRecordingContext*, SkCanvas*, SkString* errorMsg) override;
 };
 
 DrawResult ClockwiseGM::onDraw(GrRecordingContext* rContext, SkCanvas* canvas, SkString* errorMsg) {
-    auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+    auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
     if (!sdc) {
         *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
         return DrawResult::kSkip;
@@ -271,10 +274,18 @@ DrawResult ClockwiseGM::onDraw(GrRecordingContext* rContext, SkCanvas* canvas, S
 
     // Draw the test to an off-screen, top-down render target.
     GrColorType sdcColorType = sdc->colorInfo().colorType();
-    if (auto topLeftSDC = skgpu::v1::SurfaceDrawContext::Make(
-                rContext, sdcColorType, nullptr, SkBackingFit::kExact, {100, 200}, SkSurfaceProps(),
-                1, GrMipmapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin,
-                SkBudgeted::kYes)) {
+    if (auto topLeftSDC = skgpu::ganesh::SurfaceDrawContext::Make(rContext,
+                                                                  sdcColorType,
+                                                                  nullptr,
+                                                                  SkBackingFit::kExact,
+                                                                  {100, 200},
+                                                                  SkSurfaceProps(),
+                                                                  /*label=*/{},
+                                                                  /* sampleCnt= */ 1,
+                                                                  skgpu::Mipmapped::kNo,
+                                                                  GrProtected::kNo,
+                                                                  kTopLeft_GrSurfaceOrigin,
+                                                                  skgpu::Budgeted::kYes)) {
         topLeftSDC->clear(SK_PMColor4fTRANSPARENT);
         topLeftSDC->addDrawOp(ClockwiseTestOp::Make(rContext, false, 0));
         topLeftSDC->addDrawOp(ClockwiseTestOp::Make(rContext, true, 100));
@@ -287,7 +298,6 @@ DrawResult ClockwiseGM::onDraw(GrRecordingContext* rContext, SkCanvas* canvas, S
                          SK_PMColor4fWHITE,
                          {0, 0, 100, 200},
                          {100, 0, 200, 200},
-                         GrAA::kNo,
                          GrQuadAAFlags::kNone,
                          SkCanvas::SrcRectConstraint::kStrict_SrcRectConstraint,
                          SkMatrix::I(),
@@ -295,10 +305,13 @@ DrawResult ClockwiseGM::onDraw(GrRecordingContext* rContext, SkCanvas* canvas, S
     }
 
     // Draw the test to an off-screen, bottom-up render target.
-    if (auto topLeftSDC = skgpu::v1::SurfaceDrawContext::Make(
-                rContext, sdcColorType, nullptr, SkBackingFit::kExact, {100, 200}, SkSurfaceProps(),
-                1, GrMipmapped::kNo, GrProtected::kNo, kBottomLeft_GrSurfaceOrigin,
-                SkBudgeted::kYes)) {
+    if (auto topLeftSDC = skgpu::ganesh::SurfaceDrawContext::Make(rContext,
+                                                                  sdcColorType,
+                                                                  nullptr,
+                                                                  SkBackingFit::kExact,
+                                                                  {100, 200},
+                                                                  SkSurfaceProps(),
+                                                                  /*label=*/{})) {
         topLeftSDC->clear(SK_PMColor4fTRANSPARENT);
         topLeftSDC->addDrawOp(ClockwiseTestOp::Make(rContext, false, 0));
         topLeftSDC->addDrawOp(ClockwiseTestOp::Make(rContext, true, 100));
@@ -311,7 +324,6 @@ DrawResult ClockwiseGM::onDraw(GrRecordingContext* rContext, SkCanvas* canvas, S
                          SK_PMColor4fWHITE,
                          {0, 0, 100, 200},
                          {200, 0, 300, 200},
-                         GrAA::kNo,
                          GrQuadAAFlags::kNone,
                          SkCanvas::SrcRectConstraint::kStrict_SrcRectConstraint,
                          SkMatrix::I(),

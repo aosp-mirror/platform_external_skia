@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	outDir  = flag.String("out_dir", "../../src/gpu/gl", "Where to output the GrGlAssembleInterface_* and GrGlInterface.cpp files")
+	outDir  = flag.String("out_dir", "../../src/gpu/ganesh/gl", "Where to output the GrGlAssembleInterface_* and GrGlInterface.cpp files")
 	inTable = flag.String("in_table", "./interface.json5", "The JSON5 table to read in")
 	dryRun  = flag.Bool("dryrun", false, "Print the outputs, don't write to file")
 )
@@ -152,7 +152,7 @@ func fillAssembleTemplate(template string, features []FeatureSet, getReqs Requir
 			}
 			sort.Strings(feature.TestOnlyFunctions)
 			if len(feature.TestOnlyFunctions) > 0 {
-				block += "#if GR_TEST_UTILS\n"
+				block += "#if defined(GR_TEST_UTILS)\n"
 				for _, function := range feature.TestOnlyFunctions {
 					block = assembleFunction(block, ifExpr, function, req)
 				}
@@ -368,7 +368,7 @@ func functionCheck(feature FeatureSet, indentLevel int) string {
 	}
 	preCheck := ""
 	if len(testOnly) != 0 {
-		preCheck = fmt.Sprintf(`#if GR_TEST_UTILS
+		preCheck = fmt.Sprintf(`#if defined(GR_TEST_UTILS)
 %sif (%s) {
 %s%sRETURN_FALSE_INTERFACE;
 %s}

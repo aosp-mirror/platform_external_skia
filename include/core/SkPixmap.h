@@ -9,10 +9,20 @@
 #define SkPixmap_DEFINED
 
 #include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkSamplingOptions.h"
+#include "include/core/SkSize.h"
+#include "include/private/base/SkAPI.h"
+#include "include/private/base/SkAssert.h"
 
-class SkData;
+#include <cstddef>
+#include <cstdint>
+
+class SkColorSpace;
+enum SkAlphaType : int;
 struct SkMask;
 
 /** \class SkPixmap
@@ -104,7 +114,7 @@ public:
 
     /** Deprecated.
     */
-    bool SK_WARN_UNUSED_RESULT reset(const SkMask& mask);
+    [[nodiscard]] bool reset(const SkMask& mask);
 
     /** Sets subset width, height, pixel address to intersection of SkPixmap with area,
         if intersection is not empty; and return true. Otherwise, leave subset unchanged
@@ -116,7 +126,7 @@ public:
         @param area    bounds to intersect with SkPixmap
         @return        true if intersection of SkPixmap and area is not empty
     */
-    bool SK_WARN_UNUSED_RESULT extractSubset(SkPixmap* subset, const SkIRect& area) const;
+    [[nodiscard]] bool extractSubset(SkPixmap* subset, const SkIRect& area) const;
 
     /** Returns width, height, SkAlphaType, SkColorType, and SkColorSpace.
 
@@ -170,7 +180,7 @@ public:
 
         @return  SkColorSpace in SkImageInfo, or nullptr
     */
-    SkColorSpace* colorSpace() const { return fInfo.colorSpace(); }
+    SkColorSpace* colorSpace() const;
 
     /** Returns smart pointer to SkColorSpace, the range of colors, associated with
         SkImageInfo. The smart pointer tracks the number of objects sharing this
@@ -180,7 +190,7 @@ public:
 
         @return  SkColorSpace in SkImageInfo wrapped in a smart pointer
     */
-    sk_sp<SkColorSpace> refColorSpace() const { return fInfo.refColorSpace(); }
+    sk_sp<SkColorSpace> refColorSpace() const;
 
     /** Returns true if SkAlphaType is kOpaque_SkAlphaType.
         Does not check if SkColorType allows alpha, or if any pixel value has
@@ -259,6 +269,25 @@ public:
         example: https://fiddle.skia.org/c/@Pixmap_getColor
     */
     SkColor getColor(int x, int y) const;
+
+    /** Returns pixel at (x, y) as unpremultiplied color as an SkColor4f.
+        Returns black with alpha if SkColorType is kAlpha_8_SkColorType.
+
+        Input is not validated: out of bounds values of x or y trigger an assert() if
+        built with SK_DEBUG defined; and returns undefined values or may crash if
+        SK_RELEASE is defined. Fails if SkColorType is kUnknown_SkColorType or
+        pixel address is nullptr.
+
+        SkColorSpace in SkImageInfo is ignored. Some color precision may be lost in the
+        conversion to unpremultiplied color; original pixel data may have additional
+        precision, though this is less likely than for getColor(). Rounding errors may
+        occur if the underlying type has lower precision.
+
+        @param x  column index, zero or greater, and less than width()
+        @param y  row index, zero or greater, and less than height()
+        @return   pixel converted to unpremultiplied float color
+    */
+    SkColor4f getColor4f(int x, int y) const;
 
     /** Look up the pixel at (x,y) and return its alpha component, normalized to [0..1].
         This is roughly equivalent to SkGetColorA(getColor()), but can be more efficent
@@ -687,34 +716,16 @@ public:
         colorType() is kUnknown_SkColorType, if subset is not nullptr and does
         not intersect bounds(), or if subset is nullptr and bounds() is empty.
 
-        @param color   sRGB unpremultiplied color to write
-        @param subset  bounding integer SkRect of pixels to write; may be nullptr
-        @return        true if pixels are changed
-
-        example: https://fiddle.skia.org/c/@Pixmap_erase_3
-    */
-    bool erase(const SkColor4f& color, const SkIRect* subset = nullptr) const {
-        return this->erase(color, nullptr, subset);
-    }
-
-    /** Writes color to pixels bounded by subset; returns true on success.
-        if subset is nullptr, writes colors pixels inside bounds(). Returns false if
-        colorType() is kUnknown_SkColorType, if subset is not nullptr and does
-        not intersect bounds(), or if subset is nullptr and bounds() is empty.
-
         @param color   unpremultiplied color to write
-        @param cs      SkColorSpace of color
         @param subset  bounding integer SkRect of pixels to write; may be nullptr
         @return        true if pixels are changed
     */
-    bool erase(const SkColor4f& color, SkColorSpace* cs, const SkIRect* subset = nullptr) const;
+    bool erase(const SkColor4f& color, const SkIRect* subset = nullptr) const;
 
 private:
     const void*     fPixels;
     size_t          fRowBytes;
     SkImageInfo     fInfo;
-
-    friend class SkPixmapPriv;
 };
 
 #endif

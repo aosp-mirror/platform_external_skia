@@ -5,29 +5,64 @@
  * found in the LICENSE file.
  */
 
-#include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrShaderCaps.h"
-#include "src/gpu/GrTexture.h"
-#include "src/gpu/GrTextureProxyPriv.h"
-#include "src/gpu/SurfaceFillContext.h"
-#include "src/gpu/gl/GrGLGpu.h"
-#include "src/gpu/gl/GrGLUtil.h"
+
 #include "tests/Test.h"
+
+
+#ifdef SK_GL
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
+#include "include/gpu/ganesh/gl/GrGLDirectContext.h"
+#include "include/gpu/gl/GrGLFunctions.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "include/gpu/gl/GrGLTypes.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/RefCntedCallback.h"
+#include "src/gpu/Swizzle.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrColorInfo.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/GrShaderCaps.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
+#include "src/gpu/ganesh/GrTexture.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+#include "src/gpu/ganesh/SurfaceContext.h"
+#include "src/gpu/ganesh/SurfaceFillContext.h" // IWYU pragma: keep
+#include "src/gpu/ganesh/gl/GrGLCaps.h"
+#include "src/gpu/ganesh/gl/GrGLDefines.h"
+#include "src/gpu/ganesh/gl/GrGLGpu.h"
+#include "src/gpu/ganesh/gl/GrGLUtil.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/TestUtils.h"
-#include "tools/gpu/GrContextFactory.h"
 #include "tools/gpu/ManagedBackendTexture.h"
 #include "tools/gpu/gl/GLTestContext.h"
 
-#ifdef SK_GL
+#include <cstdint>
+#include <memory>
+#include <utility>
+
+using namespace skia_private;
+
+struct GrContextOptions;
 
 using sk_gpu_test::GLTestContext;
 
 static void cleanup(GLTestContext* glctx0,
                     GrGLuint texID0,
                     GLTestContext* glctx1,
-                    sk_sp<GrDirectContext> dContext,
+                    const sk_sp<GrDirectContext>& dContext,
                     GrEGLImage image1) {
     if (glctx1) {
         glctx1->makeCurrent();
@@ -42,7 +77,7 @@ static void cleanup(GLTestContext* glctx0,
     }
 }
 
-DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_GL_CONTEXT(EGLImageTest, reporter, ctxInfo, CtsEnforcement::kApiLevel_T) {
     auto context0 = ctxInfo.directContext();
     sk_gpu_test::GLTestContext* glCtx0 = ctxInfo.glContext();
 
@@ -53,7 +88,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
         return;
     }
     GrGLGpu* gpu0 = static_cast<GrGLGpu*>(context0->priv().getGpu());
-    if (!gpu0->glCaps().shaderCaps()->externalTextureSupport()) {
+    if (!gpu0->glCaps().shaderCaps()->fExternalTextureSupport) {
         return;
     }
 
@@ -61,7 +96,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     if (!glCtx1) {
         return;
     }
-    sk_sp<GrDirectContext> context1 = GrDirectContext::MakeGL(sk_ref_sp(glCtx1->gl()));
+    sk_sp<GrDirectContext> context1 = GrDirectContexts::MakeGL(sk_ref_sp(glCtx1->gl()));
     GrEGLImage image = GR_EGL_NO_IMAGE;
     GrGLTextureInfo externalTexture;
     externalTexture.fID = 0;
@@ -83,9 +118,13 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     context1->flushAndSubmit();
     static const int kSize = 100;
 
-    auto mbet = sk_gpu_test::ManagedBackendTexture::MakeWithoutData(
-            context1.get(), kSize, kSize, kRGBA_8888_SkColorType, GrMipmapped::kNo,
-            GrRenderable::kNo, GrProtected::kNo);
+    auto mbet = sk_gpu_test::ManagedBackendTexture::MakeWithoutData(context1.get(),
+                                                                    kSize,
+                                                                    kSize,
+                                                                    kRGBA_8888_SkColorType,
+                                                                    skgpu::Mipmapped::kNo,
+                                                                    GrRenderable::kNo,
+                                                                    GrProtected::kNo);
 
     if (!mbet) {
         ERRORF(reporter, "Error creating texture for EGL Image");
@@ -94,7 +133,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     }
 
     GrGLTextureInfo texInfo;
-    if (!mbet->texture().getGLTextureInfo(&texInfo)) {
+    if (!GrBackendTextures::GetGLTextureInfo(mbet->texture(), &texInfo)) {
         ERRORF(reporter, "Failed to get GrGLTextureInfo");
         return;
     }
@@ -122,7 +161,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     // Populate the texture using GL context 1. Important to use TexSubImage as TexImage orphans
     // the EGL image. Also, this must be done after creating the EGLImage as the texture
     // contents may not be preserved when the image is created.
-    SkAutoTMalloc<uint32_t> pixels(kSize * kSize);
+    AutoTMalloc<uint32_t> pixels(kSize * kSize);
     for (int i = 0; i < kSize*kSize; ++i) {
         pixels.get()[i] = 0xDDAABBCC;
     }
@@ -149,7 +188,8 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     }
 
     // Wrap this texture ID in a GrTexture
-    GrBackendTexture backendTex(kSize, kSize, GrMipmapped::kNo, externalTexture);
+    GrBackendTexture backendTex =
+            GrBackendTextures::MakeGL(kSize, kSize, skgpu::Mipmapped::kNo, externalTexture);
 
     GrColorInfo colorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr);
     // TODO: If I make this TopLeft origin to match resolve_origin calls for kDefault, this test
@@ -174,8 +214,8 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     }
 
     GrTextureProxy* proxy = surfaceContext->asTextureProxy();
-    REPORTER_ASSERT(reporter, proxy->mipmapped() == GrMipmapped::kNo);
-    REPORTER_ASSERT(reporter, proxy->peekTexture()->mipmapped() == GrMipmapped::kNo);
+    REPORTER_ASSERT(reporter, proxy->mipmapped() == skgpu::Mipmapped::kNo);
+    REPORTER_ASSERT(reporter, proxy->peekTexture()->mipmapped() == skgpu::Mipmapped::kNo);
 
     REPORTER_ASSERT(reporter, proxy->textureType() == GrTextureType::kExternal);
     REPORTER_ASSERT(reporter, proxy->peekTexture()->textureType() == GrTextureType::kExternal);

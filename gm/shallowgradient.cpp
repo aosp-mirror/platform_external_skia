@@ -52,15 +52,15 @@ private:
     const char* fName;
     bool fDither;
 
-    SkString onShortName() override {
+    SkString getName() const override {
         return SkStringPrintf("shallow_gradient_%s%s", fName, fDither ? "" : "_nodither");
     }
 
-    SkISize onISize() override { return {800, 800}; }
+    SkISize getISize() override { return {800, 800}; }
 
     void onDraw(SkCanvas* canvas) override {
         const SkColor colors[] = { 0xFF555555, 0xFF444444 };
-        const int colorCount = SK_ARRAY_COUNT(colors);
+        const int colorCount = std::size(colors);
 
         SkRect r = { 0, 0, this->width(), this->height() };
         SkSize size = SkSize::Make(r.width(), r.height());
