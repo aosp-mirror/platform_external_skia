@@ -2730,6 +2730,7 @@ cc_defaults {
         "modules/svg/src/SkSVGFe.cpp",
         "modules/svg/src/SkSVGFeBlend.cpp",
         "modules/svg/src/SkSVGFeColorMatrix.cpp",
+        "modules/svg/src/SkSVGFeComponentTransfer.cpp",
         "modules/svg/src/SkSVGFeComposite.cpp",
         "modules/svg/src/SkSVGFeDisplacementMap.cpp",
         "modules/svg/src/SkSVGFeFlood.cpp",
