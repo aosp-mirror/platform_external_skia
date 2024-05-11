@@ -487,7 +487,7 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
 
     // The initial layout we pass here is not important as it will be re-assigned when writing
     // shading and geometry uniforms below.
-    PipelineDataGatherer gatherer(uniformLayout);
+    PipelineDataGatherer gatherer(recorder->priv().caps(), uniformLayout);
 
     std::vector<SortKey> keys;
     keys.reserve(draws->renderStepCount());
@@ -511,6 +511,7 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
                                      uniformLayout,
                                      draw.fDrawParams.transform(),
                                      draw.fPaintParams.value(),
+                                     draw.fDrawParams.geometry(),
                                      curDst,
                                      dstCopyOffset,
                                      targetInfo.colorInfo());
@@ -674,19 +675,16 @@ bool DrawPass::prepareResources(ResourceProvider* resourceProvider,
     // once we've created pipelines, so we drop the storage for them here.
     fPipelineDescs.clear();
 
+#if defined(SK_DEBUG)
     for (int i = 0; i < fSampledTextures.size(); ++i) {
-        // TODO: We need to remove this check once we are creating valid SkImages from things like
-        // snapshot, save layers, etc. Right now we only support SkImages directly made for graphite
-        // and all others have a TextureProxy with an invalid TextureInfo.
-        if (!fSampledTextures[i]->textureInfo().isValid()) {
-            SKGPU_LOG_W("Failed to validate sampled texture. Will not create renderpass!");
-            return false;
-        }
-        if (!TextureProxy::InstantiateIfNotLazy(resourceProvider, fSampledTextures[i].get())) {
-            SKGPU_LOG_W("Failed to instantiate sampled texture. Will not create renderpass!");
-            return false;
-        }
+        // It should not have been possible to draw an Image that has an invalid texture info
+        SkASSERT(fSampledTextures[i]->textureInfo().isValid());
+        // Tasks should have been ordered to instantiate any scratch textures already, or any
+        // client-owned image will have been instantiated at creation.
+        SkASSERT(fSampledTextures[i]->isInstantiated() ||
+                 fSampledTextures[i]->isLazy());
     }
+#endif
 
     fSamplers.reserve(fSamplers.size() + fSamplerDescs.size());
     for (int i = 0; i < fSamplerDescs.size(); ++i) {

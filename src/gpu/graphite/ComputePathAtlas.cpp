@@ -25,8 +25,18 @@
 namespace skgpu::graphite {
 namespace {
 
-// TODO: This is the maximum target dimension that vello can handle today
+// TODO: This is the maximum target dimension that vello can handle today.
 constexpr uint16_t kComputeAtlasDim = 4096;
+
+// TODO: Currently we reject shapes that are smaller than a subset of a given atlas page to avoid
+// creating too many flushes in a Recording containing many large path draws. These shapes often
+// don't make efficient use of the available atlas texture space and the cost of sequential
+// dispatches to render multiple atlas pages can be prohibitive.
+constexpr size_t kBboxAreaThreshold = 1024 * 512;
+
+// Coordinate size that is too large for vello to handle efficiently. See the discussion on
+// https://github.com/linebender/vello/pull/542.
+constexpr float kCoordinateThreshold = 1e10;
 
 }  // namespace
 
@@ -47,8 +57,10 @@ bool ComputePathAtlas::initializeTextureIfNeeded() {
     return fTexture != nullptr;
 }
 
-bool ComputePathAtlas::isSuitableForAtlasing(const Rect& transformedShapeBounds) const {
-    Rect maskBounds = transformedShapeBounds.makeRoundOut();
+bool ComputePathAtlas::isSuitableForAtlasing(const Rect& transformedShapeBounds,
+                                             const Rect& clipBounds) const {
+    Rect shapeBounds = transformedShapeBounds.makeRoundOut();
+    Rect maskBounds = shapeBounds.makeIntersect(clipBounds);
     skvx::float2 maskSize = maskBounds.size();
     float width = maskSize.x(), height = maskSize.y();
 
@@ -59,16 +71,18 @@ bool ComputePathAtlas::isSuitableForAtlasing(const Rect& transformedShapeBounds)
     // For now we're allowing paths that are smaller than 1/32nd of the full 4096x4096 atlas size
     // to prevent the atlas texture from filling up too often. There are several approaches we
     // should explore to alleviate the cost of atlasing large paths.
-    //
-    // 1. Rendering multiple atlas textures requires an extra compute pass for each texture. This
-    // impairs performance because there is a fixed cost to each dispatch and all dispatches get
-    // serialized by pipeline barrier synchronization. We should explore ways to render to multiple
-    // textures by issuing more workgroups in fewer dispatches as well as removing pipeline barriers
-    // across dispatches that target different atlas pages.
-    //
-    // 2. Implement a compressed "sparse" mask rendering scheme to render paths with a large
-    // bounding box using less texture space.
-    return (width * height) <= (1024 * 512);
+    if (width * height > kBboxAreaThreshold) {
+        return false;
+    }
+
+    // Reject pathological shapes that vello can't handle efficiently yet.
+    skvx::float2 unclippedSize = shapeBounds.size();
+    if (std::fabs(unclippedSize.x()) > kCoordinateThreshold ||
+        std::fabs(unclippedSize.y()) > kCoordinateThreshold) {
+        return false;
+    }
+
+    return true;
 }
 
 const TextureProxy* ComputePathAtlas::addRect(skvx::half2 maskSize,
