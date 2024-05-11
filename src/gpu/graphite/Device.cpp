@@ -1374,8 +1374,7 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
         // having to evaluate the entire clip stack before choosing the renderer as it will have to
         // get evaluated again if we fall back to a different renderer).
         Rect drawBounds = localToDevice.mapRect(shape.bounds());
-        drawBounds.intersect(fClip.conservativeBounds());
-        if (pathAtlas->isSuitableForAtlasing(drawBounds)) {
+        if (pathAtlas->isSuitableForAtlasing(drawBounds, fClip.conservativeBounds())) {
             return {nullptr, pathAtlas};
         }
     }
@@ -1608,7 +1607,7 @@ void Device::drawCoverageMask(const SkSpecialImage* mask,
     TextureDataBlock tdb;
     // NOTE: CoverageMaskRenderStep controls the final sampling options; this texture data block
     // serves only to keep the mask alive so the sampling passed to add() doesn't matter.
-    tdb.add(SkFilterMode::kLinear, kClamp, maskProxyView.refProxy());
+    tdb.add(fRecorder->priv().caps(), SkFilterMode::kLinear, kClamp, maskProxyView.refProxy());
     fRecorder->priv().textureDataCache()->insert(tdb);
 
     // CoverageMaskShape() wraps a Shape when it's used as a PathAtlas, but in this case the
