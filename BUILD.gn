@@ -2550,6 +2550,7 @@ if (skia_enable_tools) {
         ":flags",
         ":skia",
         ":tool_utils",
+        "//modules/svg",
       ]
     }
   }
@@ -2743,6 +2744,8 @@ if (skia_enable_tools) {
       deps = [
         ":skia",
         "modules/skottie",
+        "modules/skshaper",
+        "modules/skunicode",
       ]
     }
 
