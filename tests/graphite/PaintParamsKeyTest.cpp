@@ -95,6 +95,7 @@ std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_random_colo
     M(PerlinNoise)        \
     M(Picture)            \
     M(RadialGradient)     \
+    M(Runtime)            \
     M(SolidColor)         \
     M(SweepGradient)      \
     M(WorkingColorSpace)
@@ -497,6 +498,28 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_picture_shader(SkRand
     return { s, o };
 }
 
+std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_runtime_shader(SkRandom* /* rand */) {
+    static SkRuntimeEffect* sEffect = SkMakeRuntimeEffect(
+            SkRuntimeEffect::MakeForShader,
+            // draw a circle centered at "center" w/ inner and outer radii in "radii"
+            "uniform float2 center;"
+            "uniform float2 radii;"
+            "half4 main(float2 xy) {"
+                "float len = length(xy - center);"
+                "half value = len < radii.x ? 0.0 : (len > radii.y ? 0.0 : 1.0);"
+                "return half4(value);"
+            "}"
+    );
+
+    static const float kUniforms[4] = { 50.0f, 50.0f, 40.0f, 50.0f };
+
+    sk_sp<SkData> uniforms = SkData::MakeWithCopy(kUniforms, sizeof(kUniforms));
+
+    sk_sp<SkShader> s = sEffect->makeShader(std::move(uniforms), /* children= */ {});
+    sk_sp<PrecompileShader> o = MakePrecompileShader(sk_ref_sp(sEffect));
+    return { std::move(s), std::move(o) };
+}
+
 std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_solid_shader(
         SkRandom* rand,
         ColorConstraint constraint = ColorConstraint::kNone) {
@@ -538,24 +561,24 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_gradient_shader(
     switch (type) {
         case SkShaderBase::GradientType::kLinear:
             s = SkGradientShader::MakeLinear(pts, colors, offsets, 2, tm, flags, lmPtr);
-            o = PrecompileShadersPriv::LinearGradient(SkToBool(lmPtr));
+            o = PrecompileShaders::LinearGradient();
             break;
         case SkShaderBase::GradientType::kRadial:
             s = SkGradientShader::MakeRadial({0, 0}, 100, colors, offsets, 2, tm, flags, lmPtr);
-            o = PrecompileShadersPriv::RadialGradient(SkToBool(lmPtr));
+            o = PrecompileShaders::RadialGradient();
             break;
         case SkShaderBase::GradientType::kSweep:
             s = SkGradientShader::MakeSweep(0, 0, colors, offsets, 2, tm,
                                             /* startAngle= */ 0, /* endAngle= */ 359,
                                             flags, lmPtr);
-            o = PrecompileShadersPriv::SweepGradient(SkToBool(lmPtr));
+            o = PrecompileShaders::SweepGradient();
             break;
         case SkShaderBase::GradientType::kConical:
             s = SkGradientShader::MakeTwoPointConical({100, 100}, 100,
                                                       {-100, -100}, 100,
                                                       colors, offsets, 2,
                                                       tm, flags, lmPtr);
-            o = PrecompileShadersPriv::TwoPointConicalGradient(SkToBool(lmPtr));
+            o = PrecompileShaders::TwoPointConicalGradient();
             break;
         case SkShaderBase::GradientType::kNone:
             SkDEBUGFAIL("Gradient shader says its type is none");
@@ -693,6 +716,8 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>>  create_shader(SkRandom* ran
             return create_picture_shader(rand);
         case ShaderType::kRadialGradient:
             return create_gradient_shader(rand, SkShaderBase::GradientType::kRadial);
+        case ShaderType::kRuntime:
+            return create_runtime_shader(rand);
         case ShaderType::kSolidColor:
             return create_solid_shader(rand);
         case ShaderType::kSweepGradient:
@@ -740,7 +765,7 @@ std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> src_blender() {
 
     sk_sp<SkBlender> b = sSrcEffect->makeBlender(/* uniforms= */ nullptr);
     sk_sp<PrecompileBlender> o = MakePrecompileBlender(sk_ref_sp(sSrcEffect));
-    return { b , o };
+    return { std::move(b) , std::move(o) };
 }
 
 std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> dest_blender() {
@@ -753,7 +778,7 @@ std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> dest_blender() {
 
     sk_sp<SkBlender> b = sDestEffect->makeBlender(/* uniforms= */ nullptr);
     sk_sp<PrecompileBlender> o = MakePrecompileBlender(sk_ref_sp(sDestEffect));
-    return { b , o };
+    return { std::move(b) , std::move(o) };
 }
 
 
@@ -779,7 +804,7 @@ std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> combo_blender() {
     sk_sp<SkData> uniforms = SkData::MakeWithCopy(kUniforms, sizeof(kUniforms));
     sk_sp<SkBlender> b = sComboEffect->makeBlender(std::move(uniforms), children);
     sk_sp<PrecompileBlender> o = MakePrecompileBlender(sk_ref_sp(sComboEffect), { childOptions });
-    return { b , o };
+    return { std::move(b) , std::move(o) };
 }
 
 std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> create_bm_blender(SkRandom* rand,
@@ -1213,12 +1238,6 @@ std::pair<SkPaint, PaintOptions> create_paint(SkRandom* rand,
     return { paint, paintOptions };
 }
 
-#ifdef SK_DEBUG
-void dump(ShaderCodeDictionary* dict, UniquePaintParamsID id) {
-    dict->lookup(id).dump(dict);
-}
-#endif
-
 SkPath make_path() {
     SkPathBuilder path;
     path.moveTo(0, 0);
@@ -1453,6 +1472,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
             ShaderType::kLocalMatrix,
             ShaderType::kPerlinNoise,
             ShaderType::kPicture,
+            ShaderType::kRuntime,
             ShaderType::kSweepGradient,
             ShaderType::kWorkingColorSpace,
 #endif
@@ -1673,11 +1693,11 @@ void run_test(skiatest::Reporter* reporter,
 #ifdef SK_DEBUG
             if (result == precompileIDs.end()) {
                 SkDebugf("From paint: ");
-                dump(dict, paintID);
+                dict->dump(paintID);
 
                 SkDebugf("From combination builder [%d]:", static_cast<int>(precompileIDs.size()));
                 for (auto iter : precompileIDs) {
-                    dump(dict, iter);
+                    dict->dump(iter);
                 }
             }
 #endif

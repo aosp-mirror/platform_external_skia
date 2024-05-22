@@ -64,6 +64,7 @@ namespace {
 sk_sp<Surface> make_renderable_scratch_surface(
         Recorder* recorder,
         const SkImageInfo& info,
+        SkBackingFit backingFit,
         std::string_view label,
         const SkSurfaceProps* surfaceProps = nullptr) {
     SkColorType ct = recorder->priv().caps()->getRenderableColorType(info.colorType());
@@ -78,7 +79,7 @@ sk_sp<Surface> make_renderable_scratch_surface(
                                 std::move(label),
                                 Budgeted::kYes,
                                 Mipmapped::kNo,
-                                SkBackingFit::kExact);
+                                backingFit);
 }
 
 bool valid_client_provided_image(const SkImage* clientProvided,
@@ -488,7 +489,8 @@ sk_sp<TextureProxy> MakePromiseImageLazyProxy(
         sk_sp<RefCntedCallback> releaseHelper,
         GraphitePromiseTextureFulfillProc fulfillProc,
         GraphitePromiseTextureFulfillContext fulfillContext,
-        GraphitePromiseTextureReleaseProc textureReleaseProc) {
+        GraphitePromiseTextureReleaseProc textureReleaseProc,
+        std::string_view label) {
     SkASSERT(!dimensions.isEmpty());
     SkASSERT(releaseHelper);
 
@@ -497,7 +499,7 @@ sk_sp<TextureProxy> MakePromiseImageLazyProxy(
     }
 
     PromiseLazyInstantiateCallback callback{std::move(releaseHelper), fulfillProc,
-                                            fulfillContext, textureReleaseProc, "PromiseImage"};
+                                            fulfillContext, textureReleaseProc, std::move(label)};
     // Proxies for promise images are assumed to always be destined for a client's SkImage so
     // are never considered budgeted.
     return TextureProxy::MakeLazy(caps, dimensions, textureInfo, Budgeted::kNo, isVolatile,
@@ -613,9 +615,12 @@ sk_sp<SkImage> RescaleImage(Recorder* recorder,
         return nullptr;
     }
 
-    // make a Surface matching dstInfo to rescale into
+    // make a Surface *exactly* matching dstInfo to rescale into
     SkSurfaceProps surfaceProps = {};
-    sk_sp<SkSurface> dst = make_renderable_scratch_surface(recorder, dstInfo, "RescaleDstTexture",
+    sk_sp<SkSurface> dst = make_renderable_scratch_surface(recorder,
+                                                           dstInfo,
+                                                           SkBackingFit::kExact,
+                                                           "RescaleDstTexture",
                                                            &surfaceProps);
     if (!dst) {
         return nullptr;
@@ -647,7 +652,7 @@ sk_sp<SkImage> RescaleImage(Recorder* recorder,
                                                      tempInput->imageInfo().colorType(),
                                                      kPremul_SkAlphaType,
                                                      std::move(linearGamma));
-        tempOutput = make_renderable_scratch_surface(recorder, gammaDstInfo,
+        tempOutput = make_renderable_scratch_surface(recorder, gammaDstInfo, SkBackingFit::kApprox,
                                                      "RescaleLinearGammaTexture", &surfaceProps);
         if (!tempOutput) {
             return nullptr;
@@ -687,7 +692,7 @@ sk_sp<SkImage> RescaleImage(Recorder* recorder,
             stepDstRect = dstRect;
         } else {
             SkImageInfo nextInfo = outImageInfo.makeDimensions(nextDims);
-            tempOutput = make_renderable_scratch_surface(recorder, nextInfo,
+            tempOutput = make_renderable_scratch_surface(recorder, nextInfo, SkBackingFit::kApprox,
                                                          "RescaleImageTempTexture", &surfaceProps);
             if (!tempOutput) {
                 return nullptr;
@@ -744,6 +749,7 @@ bool GenerateMipmaps(Recorder* recorder,
                 SkImageInfo::Make(SkISize::Make(std::max(1, srcSize.width() >> (i + 1)),
                                                 std::max(1, srcSize.height() >> (i + 1))),
                                   outColorInfo),
+                SkBackingFit::kApprox,
                 "GenerateMipmapsScratchTexture");
         if (!scratchSurfaces[i]) {
             return false;
