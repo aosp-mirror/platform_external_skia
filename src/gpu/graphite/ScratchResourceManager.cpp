@@ -10,21 +10,24 @@
 #include "src/gpu/graphite/Resource.h"
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/Texture.h"
+#include "src/gpu/graphite/TextureProxy.h"
 
 namespace skgpu::graphite {
 
-ScratchResourceManager::ScratchResourceManager(ResourceProvider* resourceProvider)
-        : fResourceProvider(resourceProvider) {
+ScratchResourceManager::ScratchResourceManager(ResourceProvider* resourceProvider,
+                                               std::unique_ptr<ProxyReadCountMap> proxyCounts)
+        : fResourceProvider(resourceProvider)
+        , fProxyReadCounts(std::move(proxyCounts)) {
     SkASSERT(resourceProvider);
+    SkASSERT(fProxyReadCounts);
 }
 
 ScratchResourceManager::~ScratchResourceManager() = default;
 
 sk_sp<Texture> ScratchResourceManager::getScratchTexture(SkISize dimensions,
-                                                         const TextureInfo& info) {
+                                                         const TextureInfo& info,
+                                                         std::string_view label) {
     for (ScratchTexture& st : fScratchTextures) {
-        if (!st.fAvailable) { continue; }
-
         if (st.fAvailable &&
             st.fTexture->dimensions() == dimensions &&
             st.fTexture->textureInfo() == info) {
@@ -36,8 +39,10 @@ sk_sp<Texture> ScratchResourceManager::getScratchTexture(SkISize dimensions,
 
     // No texture was available so go out to the resource provider, which will hopefully find a
     // cached resource that was freed up from a previous recording (or create a new one, if not).
+    // TODO(b/339496039): Always start with a fixed label like "ScratchTexture" and then concatenate
+    // the proxy label that's passed in onto the texture's label, including when reusing a texture.
     sk_sp<Texture> newScratchTexture = fResourceProvider->findOrCreateScratchTexture(
-            dimensions, info, Budgeted::kYes);
+            dimensions, info, std::move(label), Budgeted::kYes);
     if (newScratchTexture) {
         fScratchTextures.push_back({newScratchTexture, /*fAvailable=*/false});
     }

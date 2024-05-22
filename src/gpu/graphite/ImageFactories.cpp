@@ -85,7 +85,8 @@ sk_sp<SkImage> WrapTexture(Recorder* recorder,
         return nullptr;
     }
 
-    sk_sp<Texture> texture = recorder->priv().resourceProvider()->createWrappedTexture(backendTex);
+    sk_sp<Texture> texture =
+            recorder->priv().resourceProvider()->createWrappedTexture(backendTex, "WrappedImage");
     if (!texture) {
         SKGPU_LOG_W("Texture creation failed");
         return nullptr;
@@ -297,24 +298,25 @@ static sk_sp<SkImage> generate_picture_texture(skgpu::graphite::Recorder* record
                                                const SkImageInfo& info,
                                                SkImage::RequiredProperties requiredProps) {
     auto mm = requiredProps.fMipmapped ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
-    sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(recorder, info, mm, img->props());
+    // Use a non-budgeted surface since the image wrapping the surface's texture will be owned by
+    // the client.
+    sk_sp<Surface> surface = Surface::Make(recorder,
+                                           info,
+                                           "LazySkImagePictureTexture",
+                                           skgpu::Budgeted::kNo,
+                                           mm,
+                                           SkBackingFit::kExact,
+                                           img->props());
+
     if (!surface) {
         SKGPU_LOG_E("Failed to create Surface");
         return nullptr;
     }
 
     img->replay(surface->getCanvas());
-
-    if (requiredProps.fMipmapped) {
-        skgpu::graphite::Flush(surface);
-        sk_sp<TextureProxy> texture =
-                static_cast<Surface*>(surface.get())->readSurfaceView().refProxy();
-        if (!GenerateMipmaps(recorder, std::move(texture), info.colorInfo())) {
-            SKGPU_LOG_W("Failed to create mipmaps for texture from SkPicture");
-        }
-    }
-
-    return SkSurfaces::AsImage(surface);
+    // If the surface was created with mipmaps, they will be automatically generated when flushing
+    // the tasks when 'surface' goes out of scope.
+    return surface->asImage();
 }
 
 /*
@@ -352,7 +354,8 @@ static sk_sp<SkImage> make_texture_image_from_lazy(skgpu::graphite::Recorder* re
                                                    bitmap,
                                                    nullptr,
                                                    skgpu::Budgeted::kNo,
-                                                   requiredProps);
+                                                   requiredProps,
+                                                   "LazySkImageBitmapTexture");
         }
     }
 
@@ -379,7 +382,8 @@ sk_sp<SkImage> TextureFromImage(skgpu::graphite::Recorder* recorder,
                                                raster->bitmap(),
                                                raster->refMips(),
                                                skgpu::Budgeted::kNo,
-                                               requiredProps);
+                                               requiredProps,
+                                               "RasterBitmapTexture");
     }
     if (ib->isLazyGenerated()) {
         return make_texture_image_from_lazy(
@@ -434,7 +438,8 @@ sk_sp<SkImage> TextureFromYUVAPixmaps(Recorder* recorder,
         }
 
         auto [view, _] = MakeBitmapProxyView(recorder, bmp, /*mipmapsIn=*/nullptr,
-                                             mipmapped,  skgpu::Budgeted::kNo);
+                                             mipmapped,  skgpu::Budgeted::kNo,
+                                             "YUVRasterBitmapTexture");
         planes[i] = std::move(view);
     }
     return Image_YUVA::Make(recorder->priv().caps(), finalInfo.yuvaInfo(),
@@ -454,7 +459,7 @@ sk_sp<SkImage> TextureFromYUVATextures(Recorder* recorder,
     TextureProxyView planes[SkYUVAInfo::kMaxPlanes];
     for (int i = 0; i < yuvaTextures.yuvaInfo().numPlanes(); ++i) {
         sk_sp<Texture> texture = recorder->priv().resourceProvider()->createWrappedTexture(
-                yuvaTextures.planeTexture(i));
+                yuvaTextures.planeTexture(i), "WrappedYUVPlane");
         if (!texture) {
             SKGPU_LOG_W("Failed to wrap backend texture for YUVA plane %d", i);
             return nullptr;

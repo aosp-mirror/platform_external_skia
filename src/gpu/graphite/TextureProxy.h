@@ -22,6 +22,7 @@ namespace skgpu::graphite {
 class Caps;
 class Recorder;
 class ResourceProvider;
+class ScratchResourceManager;
 class Texture;
 
 class TextureProxy : public SkRefCnt {
@@ -35,6 +36,8 @@ public:
 
     SkISize dimensions() const;
     const TextureInfo& textureInfo() const { return fInfo; }
+
+    const char* label() const { return fLabel.c_str(); }
 
     bool isLazy() const;
     bool isFullyLazy() const;
@@ -57,8 +60,21 @@ public:
     /*
      * For Lazy proxies this will return true. Otherwise, it will return the result of
      * calling instantiate on the texture proxy.
+     *
+     * DEPRECATED: Eventually all un-instantiated non-lazy proxies should use the
+     *             ScratchResourceManager function instead of the ResourceProvider directly.
      */
     static bool InstantiateIfNotLazy(ResourceProvider*, TextureProxy*);
+
+    /*
+     * Instantiate any scratch proxy (not already instantiated and not lazy) by using a texture
+     * from the ScratchResourceManager. When possible, this will be a texture that has been returned
+     * for reuse by a prior task. Lazy proxies and already instantiated proxies will return true.
+     *
+     * False is returned if instantiation fails.
+     */
+    static bool InstantiateIfNotLazy(ScratchResourceManager*, TextureProxy*);
+
     bool isInstantiated() const { return SkToBool(fTexture); }
     void deinstantiate();
     sk_sp<Texture> refTexture() const;
@@ -70,6 +86,7 @@ public:
                                     ResourceProvider*,
                                     SkISize dimensions,
                                     const TextureInfo&,
+                                    std::string_view label,
                                     skgpu::Budgeted);
 
     using LazyInstantiateCallback = std::function<sk_sp<Texture> (ResourceProvider*)>;
@@ -88,7 +105,10 @@ public:
     static sk_sp<TextureProxy> Wrap(sk_sp<Texture>);
 
 private:
-    TextureProxy(SkISize dimensions, const TextureInfo& info, skgpu::Budgeted budgeted);
+    TextureProxy(SkISize dimensions,
+                 const TextureInfo& info,
+                 std::string_view label,
+                 skgpu::Budgeted budgeted);
     TextureProxy(SkISize dimensions,
                  const TextureInfo&,
                  skgpu::Budgeted,
@@ -104,6 +124,10 @@ private:
     // multiple threads so need to remain immutable.
     SkISize fDimensions;
     const TextureInfo fInfo;
+
+    // String used to describe the current use of this TextureProxy. It will be set on its
+    // Texture object when the proxy gets instantiated.
+    std::string fLabel;
 
     skgpu::Budgeted fBudgeted;
     const Volatile fVolatile;

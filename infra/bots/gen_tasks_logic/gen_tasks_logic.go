@@ -882,8 +882,8 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			d["os"] = DEFAULT_OS_LINUX_GCE
 		}
 		if os == "Win10" && b.parts["model"] == "Golo" {
-			// ChOps-owned machines have Windows 10 21h1.
-			d["os"] = "Windows-10-19043"
+			// ChOps-owned machines have Windows 10 22H2.
+			d["os"] = "Windows-10-19045"
 		}
 		if b.parts["model"] == "iPhone11" {
 			d["os"] = "iOS-13.6"
@@ -998,7 +998,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"IntelIrisXe":   "8086:9a49-31.0.101.5186",
 					"RadeonHD7770":  "1002:683d-26.20.13031.18002",
 					"RadeonR9M470X": "1002:6646-26.20.13031.18002",
-					"QuadroP400":    "10de:1cb3-30.0.15.1179",
+					"QuadroP400":    "10de:1cb3-31.0.15.5222",
 					"RadeonVega6":   "1002:1636-31.0.14057.5006",
 					"RTX3060":       "10de:2489-31.0.15.3699",
 				}[b.parts["cpu_or_gpu_value"]]
@@ -1814,6 +1814,8 @@ func (b *jobBuilder) dm() {
 		} else if b.arch("x86") && b.debug() {
 			// skia:6737
 			b.timeout(6 * time.Hour)
+		} else if b.matchOs("Mac11") {
+			b.timeout(30 * time.Minute)
 		}
 		b.maybeAddIosDevImage()
 	})
@@ -2022,7 +2024,11 @@ func (b *jobBuilder) perf() {
 		} else if b.parts["arch"] == "x86" && b.parts["configuration"] == "Debug" {
 			// skia:6737
 			b.timeout(6 * time.Hour)
-		} else if b.extraConfig("LottieWeb", "SkottieWASM") {
+		} else if b.matchOs("Mac11") {
+			b.timeout(30 * time.Minute)
+		}
+
+		if b.extraConfig("LottieWeb", "SkottieWASM") {
 			b.asset("node", "lottie-samples")
 		} else if b.matchExtraConfig("SkottieTracing") {
 			b.needsLottiesWithAssets()
@@ -2179,16 +2185,16 @@ type labelAndSavedOutputDir struct {
 // label or "target pattern" https://bazel.build/docs/build#specifying-build-targets
 // The reason we need this mapping is because Buildbucket build names cannot have / or : in them.
 var shorthandToLabel = map[string]labelAndSavedOutputDir{
-	"base":                           {"//src/base:base", ""},
-	"modules_canvaskit":              {"//modules/canvaskit:canvaskit", ""},
-	"modules_canvaskit_js_tests":     {"//modules/canvaskit:canvaskit_js_tests", ""},
-	"skia_public":                    {"//:skia_public", ""},
-	"skottie_tool_gpu":               {"//modules/skottie:skottie_tool_gpu", ""},
-	"all_tests":                      {"//tests:linux_rbe_tests", ""},
-	"experimental_bazel_test_client": {"//experimental/bazel_test/client:client_lib", ""},
-	"cpu_gms":                        {"//gm:cpu_gm_tests", ""},
-	"hello_bazel_world_test":         {"//gm:hello_bazel_world_test", ""},
-	"cpu_8888_benchmark_test":        {"//bench:cpu_8888_test", ""},
+	"all_tests":                  {"//tests:linux_rbe_tests", ""},
+	"core":                       {"//:core", ""},
+	"cpu_8888_benchmark_test":    {"//bench:cpu_8888_test", ""},
+	"cpu_gms":                    {"//gm:cpu_gm_tests", ""},
+	"full_library":               {"//tools:full_build", ""},
+	"ganesh_gl":                  {"//:ganesh_gl", ""},
+	"hello_bazel_world_test":     {"//gm:hello_bazel_world_test", ""},
+	"modules_canvaskit":          {"//modules/canvaskit:canvaskit", ""},
+	"modules_canvaskit_js_tests": {"//modules/canvaskit:canvaskit_js_tests", ""},
+	"skottie_tool_gpu":           {"//modules/skottie:skottie_tool_gpu", ""},
 
 	// Note: these paths are relative to the WORKSPACE in //example/external_client
 	"decode_everything":  {"//:decode_everything", ""},
@@ -2201,6 +2207,7 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"use_ganesh_vulkan":  {"//:use_ganesh_vulkan", ""},
 	"use_skresources":    {"//:use_skresources", ""},
 	"write_text_to_png":  {"//:write_text_to_png", ""},
+	"write_to_pdf":       {"//:write_to_pdf", ""},
 
 	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
 	// under a test_suite.

@@ -33,6 +33,7 @@
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
+#include "src/gpu/graphite/geom/Geometry.h"
 #include "tools/ToolUtils.h"
 #include "tools/gpu/GrContextFactory.h"
 #include "tools/graphite/ContextFactory.h"
@@ -328,6 +329,7 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
                                                             recorder->priv().resourceProvider(),
                                                             SkISize::Make(1, 1),
                                                             dstTexInfo,
+                                                            "FuzzPrecompileFakeDstTexture",
                                                             skgpu::Budgeted::kYes);
     constexpr SkIPoint fakeDstOffset = SkIPoint::Make(0, 0);
 
@@ -338,7 +340,7 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
                                                                     : Layout::kStd140;
 
     PaintParamsKeyBuilder builder(dict);
-    PipelineDataGatherer gatherer(layout);
+    PipelineDataGatherer gatherer(recorder->priv().caps(), layout);
 
 
     auto [paint, paintOptions] = create_random_paint(fuzz, depth);
@@ -360,14 +362,20 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
                           dstReadReq == DstReadRequirement::kTextureSample;
     sk_sp<TextureProxy> curDst = needsDstSample ? fakeDstTexture : nullptr;
 
-    auto [paintID, uData, tData] = ExtractPaintData(
-            recorder.get(), &gatherer, &builder, layout, {},
-            PaintParams(paint,
-                        /* primitiveBlender= */ nullptr,
-                        /* clipShader= */nullptr,
-                        dstReadReq,
-                        /* skipColorXform= */ false),
-            curDst, fakeDstOffset, ci);
+    auto [paintID, uData, tData] = ExtractPaintData(recorder.get(),
+                                                    &gatherer,
+                                                    &builder,
+                                                    layout,
+                                                    {},
+                                                    PaintParams(paint,
+                                                                /* primitiveBlender= */ nullptr,
+                                                                /* clipShader= */ nullptr,
+                                                                dstReadReq,
+                                                                /* skipColorXform= */ false),
+                                                    {},
+                                                    curDst,
+                                                    fakeDstOffset,
+                                                    ci);
 
     std::vector<UniquePaintParamsID> precompileIDs;
     paintOptions.priv().buildCombinations(precompileKeyContext,

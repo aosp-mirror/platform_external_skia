@@ -66,8 +66,12 @@ public:
     }
     ProxyCache* proxyCache() { return this->resourceProvider()->proxyCache(); }
 
+    // NOTE: Temporary access for DrawTask to manipulate pending read counts.
+    void addPendingRead(const TextureProxy*);
+
     static sk_sp<TextureProxy> CreateCachedProxy(Recorder*,
                                                  const SkBitmap&,
+                                                 std::string_view label,
                                                  Mipmapped = skgpu::Mipmapped::kNo);
 
     uint32_t uniqueID() const { return fRecorder->fUniqueID; }

@@ -43,7 +43,6 @@ skia_cc_library(
     name = "skia_public",
     srcs = [
         "//include:private_hdrs",
-        "//include:srcs",
         "//src:private_hdrs",
         "//src:srcs",
     ],
@@ -65,7 +64,6 @@ skia_cc_library(
 skia_cc_library(
     name = "skia_internal",
     srcs = [
-        "//include:srcs",
         "//src:srcs",
     ],
     hdrs = [
@@ -272,8 +270,16 @@ alias(
 ###
 
 alias(
-    name = "skparagraph_harfbuzz_unicode",
-    actual = "//modules/skparagraph:skparagraph_harfbuzz_unicode",
+    name = "pdf_writer",
+    actual = "//src/pdf:pdf",
+    visibility = ["//visibility:public"],
+)
+
+###
+
+alias(
+    name = "skparagraph_harfbuzz_skunicode",
+    actual = "//modules/skparagraph:skparagraph_harfbuzz_skunicode",
     visibility = ["//visibility:public"],
 )
 
@@ -313,9 +319,17 @@ alias(
 
 ###
 
+# Allows Skia to take an SVG in as an input
 alias(
     name = "svg_renderer",
     actual = "//modules/svg:svg_renderer",
+    visibility = ["//visibility:public"],
+)
+
+# Allows Skia to draw to an SVG
+alias(
+    name = "svg_writer",
+    actual = "//src/svg:svg",
     visibility = ["//visibility:public"],
 )
 

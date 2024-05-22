@@ -5,10 +5,15 @@
  * found in the LICENSE file.
  */
 
+#include "src/pdf/SkPDFFont.h"
+
 #include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
+#include "include/core/SkDrawable.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkFontMetrics.h"
+#include "include/core/SkFontStyle.h"
 #include "include/core/SkFontTypes.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
@@ -22,13 +27,13 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurfaceProps.h"
-#include "include/core/SkTypes.h"
-#include "include/docs/SkPDFDocument.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkBitmaskEnum.h"
 #include "src/base/SkUTF.h"
+#include "src/core/SkDevice.h"
 #include "src/core/SkGlyph.h"
-#include "src/core/SkImagePriv.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkScalerContext.h"
 #include "src/core/SkStrike.h"
@@ -37,7 +42,6 @@
 #include "src/pdf/SkPDFBitmap.h"
 #include "src/pdf/SkPDFDevice.h"
 #include "src/pdf/SkPDFDocumentPriv.h"
-#include "src/pdf/SkPDFFont.h"
 #include "src/pdf/SkPDFFormXObject.h"
 #include "src/pdf/SkPDFMakeCIDGlyphWidthsArray.h"
 #include "src/pdf/SkPDFMakeToUnicodeCmap.h"
@@ -46,6 +50,8 @@
 #include "src/pdf/SkPDFUtils.h"
 
 #include <limits.h>
+#include <algorithm>
+#include <cstddef>
 #include <initializer_list>
 #include <memory>
 #include <utility>
@@ -282,20 +288,6 @@ void SkPDFFont::PopulateCommonFontDescriptor(SkPDFDict* descriptor,
 //  Type0Font
 ///////////////////////////////////////////////////////////////////////////////
 
-// if possible, make no copy.
-static sk_sp<SkData> stream_to_data(std::unique_ptr<SkStreamAsset> stream) {
-    SkASSERT(stream);
-    (void)stream->rewind();
-    SkASSERT(stream->hasLength());
-    size_t size = stream->getLength();
-    if (const void* base = stream->getMemoryBase()) {
-        SkData::ReleaseProc proc =
-            [](const void*, void* ctx) { delete (SkStreamAsset*)ctx; };
-        return SkData::MakeWithProc(base, size, proc, stream.release());
-    }
-    return SkData::MakeFromStream(stream.get(), size);
-}
-
 static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
     const SkAdvancedTypefaceMetrics* metricsPtr =
         SkPDFFont::GetMetrics(font.typeface(), doc);
@@ -325,10 +317,7 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
                 if (!SkToBool(metrics.fFlags &
                               SkAdvancedTypefaceMetrics::kNotSubsettable_FontFlag)) {
                     SkASSERT(font.firstGlyphID() == 1);
-                    sk_sp<SkData> subsetFontData = SkPDFSubsetFont(
-                            stream_to_data(std::move(fontAsset)), font.glyphUsage(),
-                            doc->metadata().fSubsetter,
-                            ttcIndex);
+                    sk_sp<SkData> subsetFontData = SkPDFSubsetFont(*face, font.glyphUsage());
                     if (subsetFontData) {
                         std::unique_ptr<SkPDFDict> tmp = SkPDFMakeDict();
                         tmp->insertInt("Length1", SkToInt(subsetFontData->size()));
@@ -340,10 +329,6 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
                         break;
                     }
                     // If subsetting fails, fall back to original font data.
-                    fontAsset = face->openStream(&ttcIndex);
-                    SkASSERT(fontAsset);
-                    SkASSERT(fontAsset->getLength() == fontSize);
-                    if (!fontAsset || fontAsset->getLength() == 0) { break; }
                 }
                 std::unique_ptr<SkPDFDict> tmp = SkPDFMakeDict();
                 tmp->insertInt("Length1", fontSize);

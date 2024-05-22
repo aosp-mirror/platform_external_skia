@@ -89,7 +89,7 @@ cc_binary(
         "@skia//:core",
         "@skia//:fontmgr_empty_freetype",
         "@skia//:jpeg_encode_codec",
-        "@skia//:skparagraph_harfbuzz_unicode",
+        "@skia//:skparagraph_harfbuzz_skunicode",
         "@skia//:skunicode_icu",
     ],
 )
@@ -234,6 +234,23 @@ cc_binary(
         "@skia//:skshaper_unicode",
         "@skia//:skunicode_icu",
         "@skia//:svg_renderer",
+    ] + select({
+        "@platforms//os:linux": ["@skia//:fontmgr_fontconfig_freetype"],
+        "@platforms//os:macos": ["@skia//:fontmgr_coretext"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_binary(
+    name = "write_to_pdf",
+    srcs = ["src/write_to_pdf.cpp"],
+    copts = ["-std=c++17"],
+    linkopts = [
+        "-lpthread",
+    ],
+    deps = [
+        "@skia//:core",
+        "@skia//:pdf_writer",
     ] + select({
         "@platforms//os:linux": ["@skia//:fontmgr_fontconfig_freetype"],
         "@platforms//os:macos": ["@skia//:fontmgr_coretext"],

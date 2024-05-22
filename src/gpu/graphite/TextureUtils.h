@@ -32,6 +32,7 @@ namespace skgpu::graphite {
 
 class Caps;
 class Context;
+class Image;
 class Recorder;
 class TextureProxyView;
 
@@ -41,7 +42,8 @@ std::tuple<TextureProxyView, SkColorType> MakeBitmapProxyView(Recorder*,
                                                               const SkBitmap&,
                                                               sk_sp<SkMipmap>,
                                                               Mipmapped,
-                                                              skgpu::Budgeted);
+                                                              skgpu::Budgeted,
+                                                              std::string_view label);
 
 sk_sp<TextureProxy> MakePromiseImageLazyProxy(const Caps*,
                                               SkISize dimensions,
@@ -57,9 +59,19 @@ sk_sp<SkImage> MakeFromBitmap(Recorder*,
                               const SkBitmap&,
                               sk_sp<SkMipmap>,
                               skgpu::Budgeted,
-                              SkImage::RequiredProperties);
+                              SkImage::RequiredProperties,
+                              std::string_view label);
 
 size_t ComputeSize(SkISize dimensions, const TextureInfo&);
+
+sk_sp<Image> CopyAsDraw(Recorder*,
+                        const SkImage* image,
+                        const SkIRect& subset,
+                        const SkColorInfo& dstColorInfo,
+                        Budgeted,
+                        Mipmapped,
+                        SkBackingFit,
+                        std::string_view label);
 
 sk_sp<SkImage> RescaleImage(Recorder*,
                             const SkImage* srcImage,

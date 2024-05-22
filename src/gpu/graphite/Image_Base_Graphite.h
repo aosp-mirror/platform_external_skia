@@ -13,12 +13,15 @@
 #include "src/base/SkSpinlock.h"
 #include "src/image/SkImage_Base.h"
 
+#include <string_view>
+
 enum class SkBackingFit;
 
 namespace skgpu::graphite {
 
 class Context;
 class Device;
+class DrawContext;
 class Image;
 class Recorder;
 class TextureProxy;
@@ -28,16 +31,20 @@ public:
     ~Image_Base() override;
 
     // Must be called at the time of recording an action that reads from the image, be it a draw
-    // or a copy operation.
-    void notifyInUse(Recorder*) const;
+    // or a copy operation. `drawContext` can be null if the "use" is scoped by a draw.
+    void notifyInUse(Recorder*, DrawContext* drawContext) const;
 
     // Returns true if this image is linked to a device that may render their shared texture(s).
     bool isDynamic() const;
 
     // Always copy this image, even if 'subset' and mipmapping match this image exactly.
     // The base implementation performs all copies as draws.
-    virtual sk_sp<Image> copyImage(Recorder*, const SkIRect& subset,
-                                   Budgeted, Mipmapped, SkBackingFit) const;
+    virtual sk_sp<Image> copyImage(Recorder*,
+                                   const SkIRect& subset,
+                                   Budgeted,
+                                   Mipmapped,
+                                   SkBackingFit,
+                                   std::string_view label) const;
 
     // From SkImage.h
     // TODO(egdaniel) This feels wrong. Re-think how this method is used and works.
@@ -88,13 +95,6 @@ public:
 
 protected:
     Image_Base(const SkImageInfo& info, uint32_t uniqueID);
-
-    // Create a new flattened copy of the base image using draw operations.
-    static sk_sp<Image> CopyAsDraw(Recorder*,
-                                   const Image_Base*,
-                                   const SkIRect& subset,
-                                   const SkColorInfo& dstColorInfo,
-                                   Budgeted, Mipmapped, SkBackingFit);
 
     // If the passed-in image is linked with Devices that modify its texture, copy the links to
     // this Image. This is used when a new Image is created that shares the same texture proxy as
