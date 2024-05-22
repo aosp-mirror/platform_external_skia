@@ -23,7 +23,7 @@ vars = {
 #     ./tools/git-sync-deps
 deps = {
   "buildtools"                                   : "https://chromium.googlesource.com/chromium/src/buildtools.git@b138e6ce86ae843c42a1a08f37903207bebcca75",
-  "third_party/externals/angle2"                 : "https://chromium.googlesource.com/angle/angle.git@66bc9cfa00143312cc7545556041622a92745a91",
+  "third_party/externals/angle2"                 : "https://chromium.googlesource.com/angle/angle.git@322608986a23c1d76507d5b66b3f3b915393d95a",
   "third_party/externals/brotli"                 : "https://skia.googlesource.com/external/github.com/google/brotli.git@6d03dfbedda1615c4cba1211f8d81735575209c8",
   "third_party/externals/d3d12allocator"         : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
@@ -59,7 +59,7 @@ deps = {
   "third_party/externals/vulkanmemoryallocator"  : "https://chromium.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator@a6bfc237255a6bac1513f7c1ebde6d8aed6b5191",
   # vulkan-deps is a meta-repo containing several interdependent Khronos Vulkan repositories.
   # When the vulkan-deps revision is updated, those repos (spirv-*, vulkan-*) should be updated as well.
-  "third_party/externals/vulkan-deps"            : "https://chromium.googlesource.com/vulkan-deps@2c797ac1064b7c81092c1a12e6757bc11ae23c29",
+  "third_party/externals/vulkan-deps"            : "https://chromium.googlesource.com/vulkan-deps@21666dacf74300527819905d157ee4398d582da8",
   "third_party/externals/spirv-cross"            : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@b8fcf307f1f347089e3c46eb4451d27f32ebc8d3",
   "third_party/externals/spirv-headers"          : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@49a1fceb9b1d087f3c25ad5ec077bb0e46231297",
   "third_party/externals/spirv-tools"            : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@ee749f50576b164afdf02e4b116a073661ecf8ff",
