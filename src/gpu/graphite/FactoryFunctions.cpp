@@ -947,6 +947,98 @@ sk_sp<PrecompileShader> PrecompileShadersPriv::Blur(sk_sp<PrecompileShader> wrap
 }
 
 //--------------------------------------------------------------------------------------------------
+class PrecompileMorphologyShader : public PrecompileShader {
+public:
+    PrecompileMorphologyShader(sk_sp<PrecompileShader> wrapped,
+                               SkKnownRuntimeEffects::StableKey stableKey)
+            : fWrapped(std::move(wrapped))
+            , fStableKey(stableKey) {
+        fNumWrappedCombos = fWrapped->numCombinations();
+        SkASSERT(stableKey == SkKnownRuntimeEffects::StableKey::kLinearMorphology ||
+                 stableKey == SkKnownRuntimeEffects::StableKey::kSparseMorphology);
+    }
+
+private:
+    int numChildCombinations() const override { return fNumWrappedCombos; }
+
+    void addToKey(const KeyContext& keyContext,
+                  PaintParamsKeyBuilder* builder,
+                  PipelineDataGatherer* gatherer,
+                  int desiredCombination) const override {
+        SkASSERT(desiredCombination < fNumWrappedCombos);
+
+        const SkRuntimeEffect* effect = GetKnownRuntimeEffect(fStableKey);
+
+        KeyContextWithScope childContext(keyContext, KeyContext::Scope::kRuntimeEffect);
+
+        RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer, { sk_ref_sp(effect) });
+            fWrapped->priv().addToKey(childContext, builder, gatherer, desiredCombination);
+        builder->endBlock();
+    }
+
+    sk_sp<PrecompileShader> fWrapped;
+    int fNumWrappedCombos;
+    SkKnownRuntimeEffects::StableKey fStableKey;
+};
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::LinearMorphology(sk_sp<PrecompileShader> wrapped) {
+    return sk_make_sp<PrecompileMorphologyShader>(
+            std::move(wrapped),
+            SkKnownRuntimeEffects::StableKey::kLinearMorphology);
+}
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::SparseMorphology(sk_sp<PrecompileShader> wrapped) {
+    return sk_make_sp<PrecompileMorphologyShader>(
+            std::move(wrapped),
+            SkKnownRuntimeEffects::StableKey::kSparseMorphology);
+}
+
+//--------------------------------------------------------------------------------------------------
+class PrecompileLightingShader : public PrecompileShader {
+public:
+    PrecompileLightingShader(sk_sp<PrecompileShader> wrapped)
+            : fWrapped(std::move(wrapped)) {
+        fNumWrappedCombos = fWrapped->numCombinations();
+    }
+
+private:
+    int numChildCombinations() const override { return fNumWrappedCombos; }
+
+    void addToKey(const KeyContext& keyContext,
+                  PaintParamsKeyBuilder* builder,
+                  PipelineDataGatherer* gatherer,
+                  int desiredCombination) const override {
+        SkASSERT(desiredCombination < fNumWrappedCombos);
+
+        const SkRuntimeEffect* normalEffect =
+                GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kNormal);
+        const SkRuntimeEffect* lightingEffect =
+                GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kLighting);
+
+        KeyContextWithScope childContext(keyContext, KeyContext::Scope::kRuntimeEffect);
+
+        RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer,
+                                       { sk_ref_sp(lightingEffect) });
+            RuntimeEffectBlock::BeginBlock(childContext, builder, gatherer,
+                                           { sk_ref_sp(normalEffect) });
+                fWrapped->priv().addToKey(childContext, builder, gatherer, desiredCombination);
+            builder->endBlock();
+        builder->endBlock();
+    }
+
+    sk_sp<PrecompileShader> fWrapped;
+    int fNumWrappedCombos;
+};
+
+sk_sp<PrecompileShader> PrecompileShadersPriv::Lighting(sk_sp<PrecompileShader> wrapped) {
+    return sk_make_sp<PrecompileLightingShader>(std::move(wrapped));
+}
+
+//--------------------------------------------------------------------------------------------------
+// This class doesn't actually add any combinations to a given PaintOptions' combinatorics.
+// Its mere presence triggers the precompilation of the BlurImageFilter's Shaders.
+// TODO(b/342413572): the analytic blurmasks are triggered off of the simple DrawType thus
+// over-generate when a simple draw doesn't have a blur mask.
 class PrecompileBlurMaskFilter : public PrecompileMaskFilter {
 public:
     PrecompileBlurMaskFilter() {}
@@ -957,9 +1049,6 @@ private:
                   PipelineDataGatherer* gatherer,
                   int desiredCombination) const override {
         SkASSERT(desiredCombination == 0);
-
-        // TODO: need to add a BlurMaskFilter Block. This is somewhat blocked on figuring out
-        // what we're going to do with the Blur system.
     }
 };
 
@@ -1020,11 +1109,31 @@ sk_sp<PrecompileColorFilter> PrecompileColorFiltersPriv::ColorSpaceXform() {
 }
 
 //--------------------------------------------------------------------------------------------------
+sk_sp<PrecompileColorFilter> PrecompileColorFilters::HighContrast() {
+    const SkRuntimeEffect* highContrastEffect =
+            GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kHighContrast);
+
+    sk_sp<PrecompileColorFilter> cf = MakePrecompileColorFilter(sk_ref_sp(highContrastEffect));
+    if (!cf) {
+        return nullptr;
+    }
+    return PrecompileColorFiltersPriv::WithWorkingFormat({ std::move(cf) });
+}
+
+//--------------------------------------------------------------------------------------------------
 sk_sp<PrecompileColorFilter> PrecompileColorFilters::Luma() {
     const SkRuntimeEffect* lumaEffect =
             GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kLuma);
 
     return MakePrecompileColorFilter(sk_ref_sp(lumaEffect));
+}
+
+//--------------------------------------------------------------------------------------------------
+sk_sp<PrecompileColorFilter> PrecompileColorFilters::Overdraw() {
+    const SkRuntimeEffect* overdrawEffect =
+            GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kOverdraw);
+
+    return MakePrecompileColorFilter(sk_ref_sp(overdrawEffect));
 }
 
 //--------------------------------------------------------------------------------------------------

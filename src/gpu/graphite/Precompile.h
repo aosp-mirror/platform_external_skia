@@ -133,8 +133,6 @@ public:
     sk_sp<PrecompileShader> makeWithColorFilter(sk_sp<PrecompileColorFilter>);
 
     sk_sp<PrecompileShader> makeWithWorkingColorSpace(sk_sp<SkColorSpace>);
-
-    sk_sp<PrecompileShader> makeWithCTM();
 };
 
 class PrecompileMaskFilter : public PrecompileBase {
@@ -161,6 +159,8 @@ public:
 enum class PrecompileImageFilters : uint32_t {
     kNone = 0x0,
     kBlur = 0x1,
+    kLighting = 0x2,
+    kMorphology = 0x4,
 };
 SK_MAKE_BITMASK_OPS(PrecompileImageFilters)
 
@@ -174,11 +174,13 @@ public:
     }
 
     void setMaskFilters(SkSpan<const sk_sp<PrecompileMaskFilter>> maskFilters) {
-        fMaskFilterOptions.assign(maskFilters.begin(), maskFilters.end());
-        if (fMaskFilterOptions.size()) {
-            // Currently Graphite only supports BlurMaskFilters which are implemented
-            // via BlurImageFiltering
-            fImageFilterOptions |= PrecompileImageFilters::kBlur;
+        for (const sk_sp<PrecompileMaskFilter>& mf : maskFilters) {
+            if (mf) {
+                // Currently Graphite only supports BlurMaskFilters which are implemented
+                // via BlurImageFiltering
+                fImageFilterOptions |= PrecompileImageFilters::kBlur;
+                break;
+            }
         }
     }
 
@@ -190,7 +192,8 @@ public:
         fImageFilterOptions = options;
     }
 
-    void setBlendModes(SkSpan<SkBlendMode> blendModes) {
+    void setBlendModes(SkSpan<const SkBlendMode> blendModes) {
+        fBlendModeOptions.clear();
         fBlendModeOptions.append(blendModes.size(), blendModes.data());
     }
     void setBlenders(SkSpan<const sk_sp<PrecompileBlender>> blenders) {
@@ -201,6 +204,17 @@ public:
                 fBlenderOptions.push_back(b);
             }
         }
+    }
+    void addBlendMode(SkBlendMode bm) {
+        fBlendModeOptions.push_back(bm);
+    }
+
+    SkSpan<const SkBlendMode> blendModes() const {
+        return SkSpan<const SkBlendMode>(fBlendModeOptions.data(),
+                                         fBlendModeOptions.size());
+    }
+    SkSpan<const sk_sp<PrecompileBlender>> blenders() const {
+        return SkSpan<const sk_sp<PrecompileBlender>>(fBlenderOptions);
     }
 
     void setClipShaders(SkSpan<const sk_sp<PrecompileShader>> clipShaders);
@@ -220,7 +234,6 @@ private:
     friend class PaintOptionsPriv;
 
     int numShaderCombinations() const;
-    int numMaskFilterCombinations() const;
     int numColorFilterCombinations() const;
     // TODO: need to decompose imagefilters into component draws
     int numBlendModeCombinations() const;
@@ -244,7 +257,6 @@ private:
         const ProcessCombination& processCombination) const;
 
     std::vector<sk_sp<PrecompileShader>> fShaderOptions;
-    std::vector<sk_sp<PrecompileMaskFilter>> fMaskFilterOptions;
     std::vector<sk_sp<PrecompileColorFilter>> fColorFilterOptions;
     SkEnumBitMask<PrecompileImageFilters> fImageFilterOptions = PrecompileImageFilters::kNone;
     SkTDArray<SkBlendMode> fBlendModeOptions;

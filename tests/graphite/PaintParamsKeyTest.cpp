@@ -25,8 +25,10 @@
 #include "include/effects/SkBlenders.h"
 #include "include/effects/SkColorMatrix.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/effects/SkHighContrastFilter.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkLumaColorFilter.h"
+#include "include/effects/SkOverdrawColorFilter.h"
 #include "include/effects/SkPerlinNoiseShader.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/Image.h"
@@ -182,12 +184,14 @@ const char* to_str(BlenderType b) {
     M(ColorSpaceXform) \
     M(Compose)         \
     M(Gaussian)        \
+    M(HighContrast)    \
     M(HSLAMatrix)      \
     M(Lerp)            \
     M(Lighting)        \
     M(LinearToSRGB)    \
     M(Luma)            \
     M(Matrix)          \
+    M(Overdraw)        \
     M(Runtime)         \
     M(SRGBToLinear)    \
     M(Table)           \
@@ -240,13 +244,15 @@ const char* to_str(ClipType c) {
 //--------------------------------------------------------------------------------------------------
 #define SK_ALL_TEST_IMAGE_FILTERS(M) \
     M(None)            \
-    M(Blur)
+    M(Blur)            \
+    M(Lighting)        \
+    M(Morphology)
 
 enum class ImageFilterType {
 #define M(type) k##type,
     SK_ALL_TEST_IMAGE_FILTERS(M)
 #undef M
-    kLast = kBlur
+    kLast = kMorphology
 };
 
 static constexpr int kImageFilterTypeCount = static_cast<int>(ImageFilterType::kLast) + 1;
@@ -991,8 +997,29 @@ std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_srgb_to_lin
     return { SkColorFilters::SRGBToLinearGamma(), PrecompileColorFilters::SRGBToLinearGamma() };
 }
 
+std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_high_contrast_colorfilter() {
+    SkHighContrastConfig config(/* grayscale= */ false,
+                                SkHighContrastConfig::InvertStyle::kInvertBrightness,
+                                /* contrast= */ 0.5f);
+    return { SkHighContrastFilter::Make(config), PrecompileColorFilters::HighContrast() };
+}
+
 std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_luma_colorfilter() {
     return { SkLumaColorFilter::Make(), PrecompileColorFilters::Luma() };
+}
+
+std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_overdraw_colorfilter() {
+    // Black to red heat map gradation
+    static const SkColor kColors[SkOverdrawColorFilter::kNumColors] = {
+        SK_ColorBLACK,
+        SK_ColorBLUE,
+        SK_ColorCYAN,
+        SK_ColorGREEN,
+        SK_ColorYELLOW,
+        SK_ColorRED
+    };
+
+    return { SkOverdrawColorFilter::MakeWithSkColors(kColors), PrecompileColorFilters::Overdraw() };
 }
 
 std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_compose_colorfilter(
@@ -1061,6 +1088,8 @@ std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_colorfilter
             return create_compose_colorfilter(rand);
         case ColorFilterType::kGaussian:
             return create_gaussian_colorfilter();
+        case ColorFilterType::kHighContrast:
+            return create_high_contrast_colorfilter();
         case ColorFilterType::kHSLAMatrix:
             return create_hsla_matrix_colorfilter();
         case ColorFilterType::kLerp:
@@ -1073,6 +1102,8 @@ std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_colorfilter
             return create_luma_colorfilter();
         case ColorFilterType::kMatrix:
             return create_matrix_colorfilter();
+        case ColorFilterType::kOverdraw:
+            return create_overdraw_colorfilter();
         case ColorFilterType::kRuntime:
             return create_rt_colorfilter(rand);
         case ColorFilterType::kSRGBToLinear:
@@ -1112,6 +1143,79 @@ sk_sp<SkImageFilter> blur_imagefilter(SkRandom* rand,
     return blurIF;
 }
 
+sk_sp<SkImageFilter> lighting_imagefilter(
+        SkRandom* rand,
+        SkEnumBitMask<PrecompileImageFilters>* imageFilterMask) {
+    static constexpr SkPoint3 kLocation{10.0f, 2.0f, 30.0f};
+    static constexpr SkPoint3 kTarget{0, 0, 0};
+    static constexpr SkPoint3 kDirection{0, 1, 0};
+
+    *imageFilterMask |= PrecompileImageFilters::kLighting;
+
+    int option = rand->nextULessThan(6);
+    switch (option) {
+        case 0:
+            return SkImageFilters::DistantLitDiffuse(kDirection, SK_ColorRED,
+                                                     /* surfaceScale= */ 1.0f,
+                                                     /* kd= */ 0.5f,
+                                                     /* input= */ nullptr);
+        case 1:
+            return SkImageFilters::PointLitDiffuse(kLocation, SK_ColorGREEN,
+                                                   /* surfaceScale= */ 1.0f,
+                                                   /* kd= */ 0.5f,
+                                                   /* input= */ nullptr);
+        case 2:
+            return SkImageFilters::SpotLitDiffuse(kLocation, kTarget,
+                                                  /* falloffExponent= */ 2.0f,
+                                                  /* cutoffAngle= */ 30.0f,
+                                                  SK_ColorBLUE,
+                                                  /* surfaceScale= */ 1.0f,
+                                                  /* kd= */ 0.5f,
+                                                  /* input= */ nullptr);
+        case 3:
+            return SkImageFilters::DistantLitSpecular(kDirection, SK_ColorCYAN,
+                                                      /* surfaceScale= */ 1.0f,
+                                                      /* ks= */ 0.5f,
+                                                      /* shininess= */ 2.0f,
+                                                      /* input= */ nullptr);
+        case 4:
+            return SkImageFilters::PointLitSpecular(kLocation, SK_ColorMAGENTA,
+                                                    /* surfaceScale= */ 1.0f,
+                                                    /* ks= */ 0.5f,
+                                                    /* shininess= */ 2.0f,
+                                                    /* input= */ nullptr);
+        case 5:
+            return SkImageFilters::SpotLitSpecular(kLocation, kTarget,
+                                                   /* falloffExponent= */ 2.0f,
+                                                   /* cutoffAngle= */ 30.0f,
+                                                   SK_ColorYELLOW,
+                                                   /* surfaceScale= */ 1.0f,
+                                                   /* ks= */ 4.0f,
+                                                   /* shininess= */ 0.5f,
+                                                   /* input= */ nullptr);
+    }
+
+    SkUNREACHABLE;
+}
+
+sk_sp<SkImageFilter> morphology_imagefilter(
+        SkRandom* rand,
+        SkEnumBitMask<PrecompileImageFilters>* imageFilterMask) {
+    static constexpr float kRadX = 2.0f, kRadY = 4.0f;
+
+    sk_sp<SkImageFilter> morphologyIF;
+
+    if (rand->nextBool()) {
+        morphologyIF = SkImageFilters::Erode(kRadX, kRadY, /* input= */ nullptr);
+    } else {
+        morphologyIF = SkImageFilters::Dilate(kRadX, kRadY, /* input= */ nullptr);
+    }
+    SkASSERT(morphologyIF);
+    *imageFilterMask |= PrecompileImageFilters::kMorphology;
+
+    return morphologyIF;
+}
+
 std::pair<sk_sp<SkImageFilter>, SkEnumBitMask<PrecompileImageFilters>> create_image_filter(
         SkRandom* rand,
         ImageFilterType type) {
@@ -1124,6 +1228,13 @@ std::pair<sk_sp<SkImageFilter>, SkEnumBitMask<PrecompileImageFilters>> create_im
             break;
         case ImageFilterType::kBlur:
             imgFilter = blur_imagefilter(rand, &imageFilterMask);
+            break;
+        case ImageFilterType::kLighting:
+            imgFilter = lighting_imagefilter(rand, &imageFilterMask);
+            break;
+        case ImageFilterType::kMorphology:
+            imgFilter = morphology_imagefilter(rand, &imageFilterMask);
+            break;
     }
 
     return { std::move(imgFilter), imageFilterMask };
@@ -1496,11 +1607,13 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
             ColorFilterType::kColorSpaceXform,
             ColorFilterType::kCompose,
             ColorFilterType::kGaussian,
+            ColorFilterType::kHighContrast,
             ColorFilterType::kHSLAMatrix,
             ColorFilterType::kLerp,
             ColorFilterType::kLighting,
             ColorFilterType::kLinearToSRGB,
             ColorFilterType::kLuma,
+            ColorFilterType::kOverdraw,
             ColorFilterType::kRuntime,
             ColorFilterType::kSRGBToLinear,
             ColorFilterType::kTable,
@@ -1519,6 +1632,8 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
             ImageFilterType::kNone,
 #if EXPANDED_SET
             ImageFilterType::kBlur,
+            ImageFilterType::kLighting,
+            ImageFilterType::kMorphology,
 #endif
     };
 

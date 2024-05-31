@@ -141,6 +141,20 @@ impl<'a> Pen for PathWrapperPen<'a> {
     }
 }
 
+struct NoOpPen {}
+
+impl<'a> Pen for NoOpPen {
+    fn move_to(&mut self, _x: f32, _y: f32) {}
+
+    fn line_to(&mut self, _x: f32, _y: f32) {}
+
+    fn quad_to(&mut self, _cx0: f32, _cy0: f32, _x: f32, _y: f32) {}
+
+    fn curve_to(&mut self, _cx0: f32, _cy0: f32, _cx1: f32, _cy1: f32, _x: f32, _y: f32) {}
+
+    fn close(&mut self) {}
+}
+
 struct ColorPainterImpl<'a> {
     color_painter_wrapper: Pin<&'a mut ffi::ColorPainterWrapper>,
 }
@@ -413,7 +427,7 @@ fn get_path(
         .is_some()
 }
 
-fn advance_width_or_zero(
+fn unhinted_advance_width_or_zero(
     font_ref: &BridgeFontRef,
     size: f32,
     coords: &BridgeNormalizedCoords,
@@ -425,6 +439,30 @@ fn advance_width_or_zero(
                 .advance_width(GlyphId::new(glyph_id))
         })
         .unwrap_or_default()
+}
+
+fn scaler_hinted_advance_width(
+    outlines: &BridgeOutlineCollection,
+    hinting_instance: &BridgeHintingInstance,
+    glyph_id: u16,
+    out_advance_width: &mut f32,
+) -> bool {
+    hinting_instance
+        .0
+        .as_ref()
+        .and_then(|instance| {
+            let draw_settings = DrawSettings::hinted(instance, false);
+
+            let outlines = outlines.0.as_ref()?;
+            let glyph = outlines.get(GlyphId::new(glyph_id))?;
+            let mut pen_dump = NoOpPen {};
+            let adjusted_metrics = glyph.draw(draw_settings, &mut pen_dump).ok()?;
+            adjusted_metrics.advance_width.map(|adjusted_advance| {
+                *out_advance_width = adjusted_advance;
+                ()
+            })
+        })
+        .is_some()
 }
 
 fn units_per_em_or_zero(font_ref: &BridgeFontRef) -> u16 {
@@ -444,8 +482,8 @@ fn convert_metrics(skrifa_metrics: &Metrics) -> ffi::Metrics {
         leading: skrifa_metrics.leading,
         avg_char_width: skrifa_metrics.average_width.unwrap_or(0.0),
         max_char_width: skrifa_metrics.max_width.unwrap_or(0.0),
-        x_height: skrifa_metrics.x_height.unwrap_or(0.0),
-        cap_height: skrifa_metrics.cap_height.unwrap_or(0.0),
+        x_height: -skrifa_metrics.x_height.unwrap_or(0.0),
+        cap_height: -skrifa_metrics.cap_height.unwrap_or(0.0),
         underline_position: skrifa_metrics.underline.map_or(f32::NAN, |u| u.offset),
         underline_thickness: skrifa_metrics.underline.map_or(f32::NAN, |u| u.thickness),
         strikeout_position: skrifa_metrics.strikeout.map_or(f32::NAN, |s| s.offset),
@@ -1435,12 +1473,18 @@ mod ffi {
             path_wrapper: Pin<&mut PathWrapper>,
             scaler_metrics: &mut BridgeScalerMetrics,
         ) -> bool;
-        fn advance_width_or_zero(
+        fn unhinted_advance_width_or_zero(
             font_ref: &BridgeFontRef,
             size: f32,
             coords: &BridgeNormalizedCoords,
             glyph_id: u16,
         ) -> f32;
+        fn scaler_hinted_advance_width(
+            outlines: &BridgeOutlineCollection,
+            hinting_instance: &BridgeHintingInstance,
+            glyph_id: u16,
+            out_advance_width: &mut f32,
+        ) -> bool;
         fn units_per_em_or_zero(font_ref: &BridgeFontRef) -> u16;
         fn get_skia_metrics(
             font_ref: &BridgeFontRef,

@@ -132,13 +132,25 @@ BackendApi Context::backend() const { return fSharedContext->backend(); }
 std::unique_ptr<Recorder> Context::makeRecorder(const RecorderOptions& options) {
     ASSERT_SINGLE_OWNER
 
-    auto recorder = std::unique_ptr<Recorder>(new Recorder(fSharedContext, options));
+    // This is a client-owned Recorder so pass a null context so it creates its own ResourceProvider
+    auto recorder = std::unique_ptr<Recorder>(new Recorder(fSharedContext, options, nullptr));
 #if defined(GRAPHITE_TEST_UTILS)
     if (fStoreContextRefInRecorder) {
         recorder->priv().setContext(this);
     }
 #endif
     return recorder;
+}
+
+std::unique_ptr<Recorder> Context::makeInternalRecorder() const {
+    ASSERT_SINGLE_OWNER
+
+    // Unlike makeRecorder(), this Recorder is meant to be short-lived and go
+    // away before a Context public API function returns to the caller. As such
+    // it shares the Context's resource provider (no separate budget) and does
+    // not get tracked. The internal drawing performed with an internal recorder
+    // should not require a client image provider.
+    return std::unique_ptr<Recorder>(new Recorder(fSharedContext, {}, this));
 }
 
 bool Context::insertRecording(const InsertRecordingInfo& info) {
@@ -185,27 +197,13 @@ struct Context::AsyncParams {
         if (!fSrcImage) {
             return false;
         }
-        // SkImage handling. If we used AsyncParams<Image_Base> the is_same_v guard
-        // wouldn't be necessary, but then all of the public functions would have to
-        // handle checking for if the SkImage was graphite-backed.
-        if constexpr (std::is_same_v<SrcPixels, SkImage>) {
-            if (!as_IB(fSrcImage)->isGraphiteBacked() ||
-                static_cast<const Image_Base*>(fSrcImage)->isProtected()) {
-                return false;
-            }
-        } else {
-            if (fSrcImage->isProtected()) {
-                return false;
-            }
+        if (fSrcImage->isProtected()) {
+            return false;
         }
-
         if (!SkIRect::MakeSize(fSrcImage->dimensions()).contains(fSrcRect)) {
             return false;
         }
         if (!SkImageInfoIsValid(fDstImageInfo)) {
-            return false;
-        }
-        if (fSrcImage->isProtected()) {
             return false;
         }
         return true;
@@ -228,7 +226,7 @@ void Context::asyncRescaleAndReadImpl(ReadFn Context::* asyncRead,
     }
 
     // Make a recorder to collect the rescale drawing commands and the copy commands
-    std::unique_ptr<Recorder> recorder = this->makeRecorder();
+    std::unique_ptr<Recorder> recorder = this->makeInternalRecorder();
     sk_sp<SkImage> scaledImage = RescaleImage(recorder.get(),
                                               params.fSrcImage,
                                               params.fSrcRect,
@@ -299,21 +297,21 @@ void Context::asyncReadPixels(std::unique_ptr<Recorder> recorder,
         // This is either a YUVA image (null view) or the texture can't be read directly, so
         // perform a draw into a compatible texture format and/or flatten any YUVA planes to RGBA.
         if (!recorder) {
-            recorder = this->makeRecorder();
+            recorder = this->makeInternalRecorder();
         }
-        // TODO: Historically this was kExact fit, but it should be able to be kApprox.
         sk_sp<SkImage> flattened = CopyAsDraw(recorder.get(),
                                             params.fSrcImage,
                                             params.fSrcRect,
                                             params.fDstImageInfo.colorInfo(),
                                             Budgeted::kYes,
                                             Mipmapped::kNo,
-                                            SkBackingFit::kExact,
+                                            SkBackingFit::kApprox,
                                             "AsyncReadPixelsFallbackTexture");
         if (!flattened) {
             SKGPU_LOG_W("AsyncRead failed because copy-as-drawing into a readable format failed");
             return params.fail();
         }
+        // Use the original fSrcRect and not flattened's size since it's approx-fit.
         return this->asyncReadPixels(std::move(recorder),
                                      params.withNewSource(flattened.get(),
                                      SkIRect::MakeSize(params.fSrcRect.size())));
@@ -445,7 +443,7 @@ void Context::asyncReadPixelsYUV420(std::unique_ptr<Recorder> recorder,
 
     // The planes are always extracted via drawing, so create the Recorder if there isn't one yet.
     if (!recorder) {
-        recorder = this->makeRecorder();
+        recorder = this->makeInternalRecorder();
     }
 
     // copyPlane renders the source image into an A8 image and sets up a transfer stored in 'result'
@@ -454,14 +452,12 @@ void Context::asyncReadPixelsYUV420(std::unique_ptr<Recorder> recorder,
                          float rgb2yuv[20],
                          const SkMatrix& texMatrix,
                          PixelTransferResult* result) {
-        // TODO: Can these be approx-fit surfaces and still be copied into buffers without accessing
-        // the extra row bytes?
         sk_sp<Surface> dstSurface = Surface::MakeScratch(recorder.get(),
                                                          planeInfo,
                                                          std::move(label),
                                                          Budgeted::kYes,
                                                          Mipmapped::kNo,
-                                                         SkBackingFit::kExact);
+                                                         SkBackingFit::kApprox);
         if (!dstSurface) {
             return false;
         }
@@ -487,11 +483,12 @@ void Context::asyncReadPixelsYUV420(std::unique_ptr<Recorder> recorder,
         // Manually flush the surface before transferPixels() is called to ensure the rendering
         // operations run before the CopyTextureToBuffer task.
         Flush(dstSurface);
+        // Must use planeInfo.bounds() for srcRect since dstSurface is kApprox-fit.
         *result = this->transferPixels(recorder.get(),
                                        dstSurface->backingTextureProxy(),
                                        dstSurface->imageInfo().colorInfo(),
                                        planeInfo.colorInfo(),
-                                       dstSurface->imageInfo().bounds());
+                                       planeInfo.bounds());
         return SkToBool(result->fTransferBuffer);
     };
 
@@ -817,17 +814,30 @@ bool ContextPriv::readPixels(const SkPixmap& pm,
         bool fCalled = false;
         std::unique_ptr<const SkImage::AsyncReadResult> fResult;
     } asyncContext;
-    fContext->asyncReadTexture(/*recorder=*/nullptr,
-                               {textureProxy,
-                                rect,
-                                pm.info(),
-                                [](void* c, std::unique_ptr<const SkImage::AsyncReadResult> out) {
-                                    auto context = static_cast<AsyncContext*>(c);
-                                    context->fResult = std::move(out);
-                                    context->fCalled = true;
-                                },
-                                &asyncContext},
-                                srcImageInfo.colorInfo());
+
+    auto asyncCallback = [](void* c, std::unique_ptr<const SkImage::AsyncReadResult> out) {
+        auto context = static_cast<AsyncContext*>(c);
+        context->fResult = std::move(out);
+        context->fCalled = true;
+    };
+
+    const SkColorInfo& srcColorInfo = srcImageInfo.colorInfo();
+
+    // This is roughly equivalent to the logic taken in asyncRescaleAndRead(SkSurface) to either
+    // try the image-based readback (with copy-as-draw fallbacks) or read the texture directly
+    // if it supports reading.
+    if (!fContext->fSharedContext->caps()->supportsReadPixels(textureProxy->textureInfo())) {
+        // Since this is a synchronous testing-only API, callers should have flushed any pending
+        // work that modifies this texture proxy already. This means we don't have to worry about
+        // re-wrapping the proxy in a new Image (that wouldn't tbe connected to any Device, etc.).
+        sk_sp<SkImage> image{new Image(TextureProxyView(sk_ref_sp(textureProxy)), srcColorInfo)};
+        fContext->asyncReadPixels(/*recorder=*/nullptr,
+                                  {image.get(), rect, pm.info(), asyncCallback, &asyncContext});
+    } else {
+        fContext->asyncReadTexture(/*recorder=*/nullptr,
+                                   {textureProxy, rect, pm.info(), asyncCallback, &asyncContext},
+                                   srcImageInfo.colorInfo());
+    }
 
     if (fContext->fSharedContext->caps()->allowCpuSync()) {
         fContext->submit(SyncToCpu::kYes);
