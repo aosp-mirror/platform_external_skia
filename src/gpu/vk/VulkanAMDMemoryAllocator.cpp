@@ -8,23 +8,15 @@
 #include "src/gpu/vk/VulkanAMDMemoryAllocator.h"
 
 #include "include/gpu/vk/VulkanExtensions.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/vk/VulkanInterface.h"
 
+#include <algorithm>
+#include <cstring>
+
 namespace skgpu {
-
-#if !defined(SK_USE_VMA)
-sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(VkInstance,
-                                                            VkPhysicalDevice,
-                                                            VkDevice,
-                                                            uint32_t,
-                                                            const VulkanExtensions*,
-                                                            const VulkanInterface*,
-                                                            ThreadSafe) {
-    return nullptr;
-}
-
-#else
 
 sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(VkInstance instance,
                                                             VkPhysicalDevice physicalDevice,
@@ -39,7 +31,7 @@ sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(VkInstance instance,
     VmaVulkanFunctions functions;
     // We should be setting all the required functions (at least through vulkan 1.1), but this is
     // just extra belt and suspenders to make sure there isn't unitialized values here.
-    memset(&functions, 0, sizeof(VmaVulkanFunctions));
+    std::memset(&functions, 0, sizeof(VmaVulkanFunctions));
 
     // We don't use dynamic function getting in the allocator so we set the getProc functions to
     // null.
@@ -273,7 +265,5 @@ std::pair<uint64_t, uint64_t> VulkanAMDMemoryAllocator::totalAllocatedAndUsedMem
     vmaCalculateStatistics(fAllocator, &stats);
     return {stats.total.statistics.blockBytes, stats.total.statistics.allocationBytes};
 }
-
-#endif // SK_USE_VMA
 
 } // namespace skgpu
