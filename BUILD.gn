@@ -918,6 +918,7 @@ optional("gpu_shared") {
       public_defines += [ "SK_ENABLE_VK_LAYERS" ]
     }
     if (skia_use_vma) {
+      sources += skia_vma_sources
       public_deps += [ "src/gpu/vk/vulkanmemoryallocator" ]
     }
   }
@@ -3019,21 +3020,6 @@ if (skia_enable_tools) {
           "//third_party/externals/spirv-tools:spvtools_val",
         ]
       }
-    }
-  }
-
-  if (skia_use_gl && !skia_use_angle && (is_linux || is_win || is_mac)) {
-    test_app("HelloWorld") {
-      sources = [ "example/HelloWorld.cpp" ]
-      libs = []
-
-      deps = [
-        ":flags",
-        ":gpu_tool_utils",
-        ":sk_app",
-        ":skia",
-        ":tool_utils",
-      ]
     }
   }
 

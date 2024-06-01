@@ -80,7 +80,8 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_random_shader(SkRando
 std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> create_random_blender(SkRandom*);
 std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_random_colorfilter(SkRandom*);
 [[maybe_unused]] std::pair<sk_sp<SkImageFilter>, SkEnumBitMask<PrecompileImageFilters>>
-                                                             create_random_image_filter(SkRandom*);
+                                                             create_random_image_filter(
+                                                                     Recorder*, SkRandom*);
 
 //--------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------
@@ -243,9 +244,11 @@ const char* to_str(ClipType c) {
 //--------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------
 #define SK_ALL_TEST_IMAGE_FILTERS(M) \
-    M(None)            \
-    M(Blur)            \
-    M(Lighting)        \
+    M(None)              \
+    M(Blur)              \
+    M(Displacement)      \
+    M(Lighting)          \
+    M(MatrixConvolution) \
     M(Morphology)
 
 enum class ImageFilterType {
@@ -1143,6 +1146,33 @@ sk_sp<SkImageFilter> blur_imagefilter(SkRandom* rand,
     return blurIF;
 }
 
+sk_sp<SkImageFilter> displacement_imagefilter(
+        Recorder* recorder,
+        SkRandom* rand,
+        SkEnumBitMask<PrecompileImageFilters>* imageFilterMask) {
+
+    sk_sp<SkImage> checkerboard = ToolUtils::create_checkerboard_image(16, 16,
+                                                                       SK_ColorWHITE,
+                                                                       SK_ColorBLACK,
+                                                                       /* checkSize= */ 4);
+    checkerboard = SkImages::TextureFromImage(recorder, std::move(checkerboard), {false});
+    SkASSERT(checkerboard);
+
+    sk_sp<SkImageFilter> imageIF(SkImageFilters::Image(std::move(checkerboard),
+                                                       SkFilterMode::kLinear));
+
+    sk_sp<SkImageFilter> displacementIF;
+
+    displacementIF = SkImageFilters::DisplacementMap(SkColorChannel::kR,
+                                                     SkColorChannel::kB,
+                                                     /* scale= */ 2.0f,
+                                                     /* displacement= */ std::move(imageIF),
+                                                     /* color= */ nullptr);
+    *imageFilterMask |= PrecompileImageFilters::kDisplacement;
+
+    return displacementIF;
+}
+
 sk_sp<SkImageFilter> lighting_imagefilter(
         SkRandom* rand,
         SkEnumBitMask<PrecompileImageFilters>* imageFilterMask) {
@@ -1198,6 +1228,38 @@ sk_sp<SkImageFilter> lighting_imagefilter(
     SkUNREACHABLE;
 }
 
+sk_sp<SkImageFilter> matrix_convolution_imagefilter(
+        SkRandom* rand,
+        SkEnumBitMask<PrecompileImageFilters>* imageFilterMask) {
+
+    int kernelSize = 1;
+
+    int option = rand->nextULessThan(3);
+    switch (option) {
+        case 0: kernelSize = 3;  break;
+        case 1: kernelSize = 7;  break;
+        case 2: kernelSize = 11; break;
+    }
+
+    int center = (kernelSize * kernelSize - 1) / 2;
+    std::vector<float> kernel(kernelSize * kernelSize, SkIntToScalar(1));
+    kernel[center] = 2.0f - kernelSize * kernelSize;
+
+    sk_sp<SkImageFilter> matrixConvIF;
+    matrixConvIF = SkImageFilters::MatrixConvolution({ kernelSize, kernelSize },
+                                                     /* kernel= */ kernel.data(),
+                                                     /* gain= */ 0.3f,
+                                                     /* bias= */ 100.0f,
+                                                     /* kernelOffset= */ { 1, 1 },
+                                                     SkTileMode::kMirror,
+                                                     /* convolveAlpha= */ false,
+                                                     /* input= */ nullptr);
+    SkASSERT(matrixConvIF);
+    *imageFilterMask |= PrecompileImageFilters::kMatrixConvolution;
+
+    return matrixConvIF;
+}
+
 sk_sp<SkImageFilter> morphology_imagefilter(
         SkRandom* rand,
         SkEnumBitMask<PrecompileImageFilters>* imageFilterMask) {
@@ -1217,6 +1279,7 @@ sk_sp<SkImageFilter> morphology_imagefilter(
 }
 
 std::pair<sk_sp<SkImageFilter>, SkEnumBitMask<PrecompileImageFilters>> create_image_filter(
+        Recorder* recorder,
         SkRandom* rand,
         ImageFilterType type) {
 
@@ -1229,8 +1292,14 @@ std::pair<sk_sp<SkImageFilter>, SkEnumBitMask<PrecompileImageFilters>> create_im
         case ImageFilterType::kBlur:
             imgFilter = blur_imagefilter(rand, &imageFilterMask);
             break;
+        case ImageFilterType::kDisplacement:
+            imgFilter = displacement_imagefilter(recorder, rand, &imageFilterMask);
+            break;
         case ImageFilterType::kLighting:
             imgFilter = lighting_imagefilter(rand, &imageFilterMask);
+            break;
+        case ImageFilterType::kMatrixConvolution:
+            imgFilter = matrix_convolution_imagefilter(rand, &imageFilterMask);
             break;
         case ImageFilterType::kMorphology:
             imgFilter = morphology_imagefilter(rand, &imageFilterMask);
@@ -1241,8 +1310,10 @@ std::pair<sk_sp<SkImageFilter>, SkEnumBitMask<PrecompileImageFilters>> create_im
 }
 
 std::pair<sk_sp<SkImageFilter>, SkEnumBitMask<PrecompileImageFilters>>
-                                                        create_random_image_filter(SkRandom* rand) {
-    return create_image_filter(rand, random_imagefiltertype(rand));
+                                                        create_random_image_filter(
+                                                                Recorder* recorder,
+                                                                SkRandom* rand) {
+    return create_image_filter(recorder, rand, random_imagefiltertype(rand));
 }
 
 std::pair<sk_sp<SkMaskFilter>, sk_sp<PrecompileMaskFilter>> create_blur_maskfilter(SkRandom* rand) {
@@ -1332,7 +1403,7 @@ std::pair<SkPaint, PaintOptions> create_paint(SkRandom* rand,
     }
 
     {
-        auto [filter, filterO] = create_image_filter(rand, imageFilterType);
+        auto [filter, filterO] = create_image_filter(recorder, rand, imageFilterType);
         SkASSERT(!filter == !filterO);
 
         if (filter) {
@@ -1632,7 +1703,9 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
             ImageFilterType::kNone,
 #if EXPANDED_SET
             ImageFilterType::kBlur,
+            ImageFilterType::kDisplacement,
             ImageFilterType::kLighting,
+            ImageFilterType::kMatrixConvolution,
             ImageFilterType::kMorphology,
 #endif
     };
