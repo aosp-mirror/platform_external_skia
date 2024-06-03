@@ -229,6 +229,10 @@ public:
 
     PaintParamsKey lookup(UniquePaintParamsID) const SK_EXCLUDES(fSpinLock);
 
+    SkString idToString(UniquePaintParamsID id) const {
+        return this->lookup(id).toString(this);
+    }
+
     SkSpan<const Uniform> getUniforms(BuiltInCodeSnippetID) const;
     SkEnumBitMask<SnippetRequirementFlags> getSnippetRequirementFlags(
             BuiltInCodeSnippetID id) const {
@@ -237,6 +241,8 @@ public:
 
 #if defined(SK_DEBUG)
     bool isValidID(int snippetID) const SK_EXCLUDES(fSpinLock);
+
+    void dump(UniquePaintParamsID) const;
 #endif
 
     // This method can return nullptr

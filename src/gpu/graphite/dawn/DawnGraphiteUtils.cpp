@@ -41,7 +41,8 @@ std::unique_ptr<Context> MakeDawn(const DawnBackendContext& backendContext,
 
 bool DawnFormatIsDepthOrStencil(wgpu::TextureFormat format) {
     switch (format) {
-        case wgpu::TextureFormat::Stencil8: // fallthrough
+        case wgpu::TextureFormat::Stencil8:             [[fallthrough]];
+        case wgpu::TextureFormat::Depth16Unorm:
         case wgpu::TextureFormat::Depth32Float:
         case wgpu::TextureFormat::Depth24PlusStencil8:
         case wgpu::TextureFormat::Depth32FloatStencil8:
@@ -53,6 +54,7 @@ bool DawnFormatIsDepthOrStencil(wgpu::TextureFormat format) {
 
 bool DawnFormatIsDepth(wgpu::TextureFormat format) {
     switch (format) {
+        case wgpu::TextureFormat::Depth16Unorm:         [[fallthrough]];
         case wgpu::TextureFormat::Depth32Float:
         case wgpu::TextureFormat::Depth24PlusStencil8:
         case wgpu::TextureFormat::Depth32FloatStencil8:
@@ -64,7 +66,7 @@ bool DawnFormatIsDepth(wgpu::TextureFormat format) {
 
 bool DawnFormatIsStencil(wgpu::TextureFormat format) {
     switch (format) {
-        case wgpu::TextureFormat::Stencil8: // fallthrough
+        case wgpu::TextureFormat::Stencil8:             [[fallthrough]];
         case wgpu::TextureFormat::Depth24PlusStencil8:
         case wgpu::TextureFormat::Depth32FloatStencil8:
             return true;
@@ -77,8 +79,9 @@ wgpu::TextureFormat DawnDepthStencilFlagsToFormat(SkEnumBitMask<DepthStencilFlag
     // TODO: Decide if we want to change this to always return a combined depth and stencil format
     // to allow more sharing of depth stencil allocations.
     if (mask == DepthStencilFlags::kDepth) {
-        // wgpu::TextureFormatDepth16Unorm is also a universally supported option here
-        return wgpu::TextureFormat::Depth32Float;
+        // If needed for workarounds or performance, Depth32Float is also available but requires 2x
+        // the amount of memory.
+        return wgpu::TextureFormat::Depth16Unorm;
     } else if (mask == DepthStencilFlags::kStencil) {
         return wgpu::TextureFormat::Stencil8;
     } else if (mask == DepthStencilFlags::kDepthStencil) {
@@ -97,7 +100,7 @@ static bool check_shader_module(wgpu::ShaderModule* module,
          (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ <  1) || \
          (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ == 1 && __EMSCRIPTEN_tiny__ < 51)))
     return true;
-#endif
+#else
     struct Handler {
         static void Fn(WGPUCompilationInfoRequestStatus status,
                        const WGPUCompilationInfo* info,
@@ -141,9 +144,11 @@ static bool check_shader_module(wgpu::ShaderModule* module,
     module->GetCompilationInfo(&Handler::Fn, &handler);
 
     return handler.fSuccess;
+#endif
 }
 
 bool DawnCompileWGSLShaderModule(const DawnSharedContext* sharedContext,
+                                 const char* label,
                                  const std::string& wgsl,
                                  wgpu::ShaderModule* module,
                                  ShaderErrorHandler* errorHandler) {
@@ -152,6 +157,9 @@ bool DawnCompileWGSLShaderModule(const DawnSharedContext* sharedContext,
 
     wgpu::ShaderModuleDescriptor desc;
     desc.nextInChain = &wgslDesc;
+    if (sharedContext->caps()->setBackendLabels()) {
+        desc.label = label;
+    }
 
     *module = sharedContext->device().CreateShaderModule(&desc);
 

@@ -64,10 +64,8 @@
 
 using namespace skia_private;
 
-#if defined(SK_GANESH)
-class SkMesh;
-#endif
 class SkBlender;
+class SkMesh;
 class SkVertices;
 struct SkSamplingOptions;
 
@@ -246,21 +244,21 @@ public:
             , fColorFilterCount(0) {}
 
     SkString addLinearGradient() {
-        return SkStringPrintf("gradient_%d", fGradientCount++);
+        return SkStringPrintf("gradient_%u", fGradientCount++);
     }
 
     SkString addPath() {
-        return SkStringPrintf("path_%d", fPathCount++);
+        return SkStringPrintf("path_%u", fPathCount++);
     }
 
     SkString addImage() {
-        return SkStringPrintf("img_%d", fImageCount++);
+        return SkStringPrintf("img_%u", fImageCount++);
     }
 
-    SkString addColorFilter() { return SkStringPrintf("cfilter_%d", fColorFilterCount++); }
+    SkString addColorFilter() { return SkStringPrintf("cfilter_%u", fColorFilterCount++); }
 
     SkString addPattern() {
-      return SkStringPrintf("pattern_%d", fPatternCount++);
+      return SkStringPrintf("pattern_%u", fPatternCount++);
     }
 
 private:

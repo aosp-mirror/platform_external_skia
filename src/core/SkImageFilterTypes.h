@@ -21,6 +21,7 @@
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
@@ -75,7 +76,7 @@ struct Vector {
     Vector(SkScalar x, SkScalar y) : fX(x), fY(y) {}
     explicit Vector(const SkVector& v) : fX(v.fX), fY(v.fY) {}
 
-    bool isFinite() const { return SkScalarsAreFinite(fX, fY); }
+    bool isFinite() const { return SkIsFinite(fX, fY); }
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -879,7 +880,8 @@ private:
     enum class BoundsScope : int {
         kDeferred,        // The bounds analysis won't be used for any rendering yet
         kCanDrawDirectly, // The rendering may draw the image directly if analysis allows it
-        kShaderOnly       // The rendering will always use a filling shader, e.g. drawPaint()
+        kShaderOnly,      // The rendering will always use a filling shader, e.g. drawPaint()
+        kRescale          // The rendering is controlled by rescaling logic, so ignores decal size
     };
 
     // Determine what effects are visible based on the target 'dstBounds' and extra transform that
@@ -916,7 +918,6 @@ private:
     FilterResult rescale(const Context& ctx,
                          const LayerSpace<SkSize>& scale,
                          bool enforceDecal) const;
-
     // Draw directly to the device, which draws the same image as produced by resolve() but can be
     // useful if multiple operations need to be performed on the canvas.
     //

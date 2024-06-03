@@ -144,12 +144,19 @@ protected:
         for (SkScalar textSize : kTextSizes) {
             font.setSize(textSize);
             font.getMetrics(&metrics);
+            font.setHinting(SkFontHinting::kNone);
             SkScalar y_shift = -(metrics.fAscent + metrics.fDescent + metrics.fLeading) * 1.2;
             y += y_shift;
             paint.setColor(*paint_color_iterator);
             int x = 0;
             // Perform simple line breaking to fit more glyphs into the GM canvas.
             for (size_t i = 0; i < fCodepoints.size(); ++i) {
+                SkScalar glyphAdvance = font.measureText(
+                        &fCodepoints[i], sizeof(uint32_t), SkTextEncoding::kUTF32, nullptr);
+                if (0 < x && getISize().width() - xTranslate < x + glyphAdvance) {
+                    y += y_shift;
+                    x = 0;
+                }
                 canvas->drawSimpleText(&fCodepoints[i],
                                        sizeof(uint32_t),
                                        SkTextEncoding::kUTF32,
@@ -157,14 +164,7 @@ protected:
                                        y,
                                        font,
                                        paint);
-                SkScalar glyphAdvance = font.measureText(
-                        &fCodepoints[i], sizeof(uint32_t), SkTextEncoding::kUTF32, nullptr);
-                if (x + glyphAdvance < getISize().width() - xTranslate) {
-                    x += glyphAdvance + glyphAdvance * 0.05f;
-                } else {
-                    y += y_shift;
-                    x = 0;
-                }
+                x += glyphAdvance + glyphAdvance * 0.05f;
             }
             paint_color_iterator++;
         }

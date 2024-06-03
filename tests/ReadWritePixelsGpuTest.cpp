@@ -93,6 +93,7 @@ static constexpr int min_rgb_channel_bits(SkColorType ct) {
         case kBGR_101010x_SkColorType:        return 10;
         case kBGR_101010x_XR_SkColorType:     return 10;
         case kRGBA_10x6_SkColorType:          return 10;
+        case kBGRA_10101010_XR_SkColorType:   return 10;
         case kGray_8_SkColorType:             return 8;   // counting gray as "rgb"
         case kRGBA_F16Norm_SkColorType:       return 10;  // just counting the mantissa
         case kRGBA_F16_SkColorType:           return 10;  // just counting the mantissa
@@ -124,6 +125,7 @@ static constexpr int alpha_channel_bits(SkColorType ct) {
         case kBGR_101010x_SkColorType:        return 0;
         case kBGR_101010x_XR_SkColorType:     return 0;
         case kRGBA_10x6_SkColorType:          return 10;
+        case kBGRA_10101010_XR_SkColorType:   return 10;
         case kGray_8_SkColorType:             return 0;
         case kRGBA_F16Norm_SkColorType:       return 10;  // just counting the mantissa
         case kRGBA_F16_SkColorType:           return 10;  // just counting the mantissa
@@ -371,17 +373,17 @@ static void gpu_read_pixels_test_driver(skiatest::Reporter* reporter,
                 numer += 1;
             }
             int rgbBits = std::min({min_rgb_channel_bits(readCT), min_rgb_channel_bits(srcCT), 8});
-            float tol = numer / (1 << rgbBits);
+            float tol = (rgbBits == 0) ? 1.f : numer / ((1 << rgbBits) - 1);
             // Swiftshader is producing alpha errors with 16-bit UNORM. We choose to always allow
             // a small tolerance:
-            float alphaTol = 1.f / (1 << 10);
+            float alphaTol = 1.f / ((1 << 10) - 1);
             if (readAT != kOpaque_SkAlphaType && srcAT != kOpaque_SkAlphaType) {
                 // Alpha can also get squashed down to 8 bits going through an intermediate
                 // color format.
                 const int alphaBits = std::min({alpha_channel_bits(readCT),
                                                 alpha_channel_bits(srcCT),
                                                 8});
-                alphaTol = 2.f / (1 << alphaBits);
+                alphaTol = (alphaBits == 0) ? 1.f : 2.f / ((1 << alphaBits) - 1);
             }
 
             const float tols[4] = {tol, tol, tol, alphaTol};
@@ -666,7 +668,7 @@ static void async_callback(void* c, std::unique_ptr<const SkImage::AsyncReadResu
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixels,
                                        reporter,
                                        ctxInfo,
-                                       CtsEnforcement::kApiLevel_T) {
+                                       CtsEnforcement::kApiLevel_V) {
     using Surface = sk_sp<SkSurface>;
     auto reader = std::function<GpuReadSrcFn<Surface>>(
             [](const Surface& surface, const SkIPoint& offset, const SkPixmap& pixels) {
@@ -795,7 +797,7 @@ static void image_async_read_pixels(GrRenderable renderable,
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels_NonRenderable_TopLeft,
                                        reporter,
                                        ctxInfo,
-                                       CtsEnforcement::kApiLevel_T) {
+                                       CtsEnforcement::kApiLevel_V) {
     image_async_read_pixels(GrRenderable::kNo, GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
                             reporter, ctxInfo);
 }
@@ -803,7 +805,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels_NonRenderable_TopLef
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels_NonRenderable_BottomLeft,
                                        reporter,
                                        ctxInfo,
-                                       CtsEnforcement::kApiLevel_T) {
+                                       CtsEnforcement::kApiLevel_V) {
     image_async_read_pixels(GrRenderable::kNo, GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin,
                             reporter, ctxInfo);
 }
@@ -811,7 +813,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels_NonRenderable_Bottom
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels_Renderable_TopLeft,
                                        reporter,
                                        ctxInfo,
-                                       CtsEnforcement::kApiLevel_T) {
+                                       CtsEnforcement::kApiLevel_V) {
     image_async_read_pixels(GrRenderable::kYes, GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
                             reporter, ctxInfo);
 }
@@ -819,7 +821,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels_Renderable_TopLeft,
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels_Renderable_BottomLeft,
                                        reporter,
                                        ctxInfo,
-                                       CtsEnforcement::kApiLevel_T) {
+                                       CtsEnforcement::kApiLevel_V) {
     image_async_read_pixels(GrRenderable::kYes, GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin,
                             reporter, ctxInfo);
 }
@@ -1037,7 +1039,7 @@ static void gpu_write_pixels_test_driver(skiatest::Reporter* reporter,
         // Sometimes wider types go through 8bit unorm intermediates because of API
         // restrictions.
         int rgbBits = std::min({min_rgb_channel_bits(writeCT), min_rgb_channel_bits(dstCT), 8});
-        float tol = 2.f/(1 << rgbBits);
+        float tol = (rgbBits == 0) ? 1.f : 2.f / ((1 << rgbBits) - 1);
         float alphaTol = 0;
         if (writeAT != kOpaque_SkAlphaType && dstAT != kOpaque_SkAlphaType) {
             // Alpha can also get squashed down to 8 bits going through an intermediate
@@ -1045,7 +1047,7 @@ static void gpu_write_pixels_test_driver(skiatest::Reporter* reporter,
             const int alphaBits = std::min({alpha_channel_bits(writeCT),
                                             alpha_channel_bits(dstCT),
                                             8});
-            alphaTol = 2.f/(1 << alphaBits);
+            alphaTol = (alphaBits == 0) ? 1.f : 2.f / ((1 << alphaBits) - 1);
         }
 
         const float tols[4] = {tol, tol, tol, alphaTol};

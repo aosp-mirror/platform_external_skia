@@ -3,10 +3,6 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
-#ifndef SKSL_ENABLE_TRACING
-#define SKSL_ENABLE_TRACING
-#endif
-
 #ifndef SK_ASSUME_GL
 #define SK_ASSUME_GL 1
 #endif

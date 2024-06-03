@@ -7,6 +7,7 @@
 
 #include "src/gpu/graphite/dawn/DawnTexture.h"
 
+#include "include/core/SkTraceMemoryDump.h"
 #include "include/gpu/MutableTextureState.h"
 #include "include/gpu/graphite/dawn/DawnTypes.h"
 #include "include/private/gpu/graphite/DawnTypesPriv.h"
@@ -17,39 +18,6 @@
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
 
 namespace skgpu::graphite {
-namespace {
-
-const char* texture_info_to_label(const TextureInfo& info,
-                                  const DawnTextureSpec& dawnSpec) {
-#ifdef SK_DEBUG
-    if (dawnSpec.fUsage & wgpu::TextureUsage::RenderAttachment) {
-        if (DawnFormatIsDepthOrStencil(dawnSpec.fFormat)) {
-            return "DepthStencil";
-        } else {
-            if (info.numSamples() > 1) {
-                if (dawnSpec.fUsage & wgpu::TextureUsage::TextureBinding) {
-                    return "MSAA SampledTexture-ColorAttachment";
-                } else {
-                    return "MSAA ColorAttachment";
-                }
-            } else {
-                if (dawnSpec.fUsage & wgpu::TextureUsage::TextureBinding) {
-                    return "SampledTexture-ColorAttachment";
-                } else {
-                    return "ColorAttachment";
-                }
-            }
-        }
-    } else {
-        SkASSERT(dawnSpec.fUsage & wgpu::TextureUsage::TextureBinding);
-        return "SampledTexture";
-    }
-#else
-    return nullptr;
-#endif
-}
-
-}
 
 wgpu::Texture DawnTexture::MakeDawnTexture(const DawnSharedContext* sharedContext,
                                            SkISize dimensions,
@@ -83,7 +51,6 @@ wgpu::Texture DawnTexture::MakeDawnTexture(const DawnSharedContext* sharedContex
     }
 
     wgpu::TextureDescriptor desc;
-    desc.label                      = texture_info_to_label(info, dawnSpec);
     desc.usage                      = dawnSpec.fUsage;
     desc.dimension                  = wgpu::TextureDimension::e2D;
     desc.size.width                 = dimensions.width();
@@ -111,7 +78,12 @@ DawnTexture::DawnTexture(const DawnSharedContext* sharedContext,
                          wgpu::TextureView renderTextureView,
                          Ownership ownership,
                          skgpu::Budgeted budgeted)
-        : Texture(sharedContext, dimensions, info, /*mutableState=*/nullptr, ownership, budgeted)
+        : Texture(sharedContext,
+                  dimensions,
+                  info,
+                  /*mutableState=*/nullptr,
+                  ownership,
+                  budgeted)
         , fTexture(std::move(texture))
         , fSampleTextureView(std::move(sampleTextureView))
         , fRenderTextureView(std::move(renderTextureView)) {}
@@ -121,13 +93,16 @@ std::pair<wgpu::TextureView, wgpu::TextureView> DawnTexture::CreateTextureViews(
         const wgpu::Texture& texture, const TextureInfo& info) {
     const auto aspect = info.dawnTextureSpec().fAspect;
     if (aspect == wgpu::TextureAspect::All) {
-        wgpu::TextureView sampleTextureView = texture.CreateView();
+        wgpu::TextureViewDescriptor viewDesc = {};
+        viewDesc.dimension = wgpu::TextureViewDimension::e2D;
+        viewDesc.baseArrayLayer = info.dawnTextureSpec().fSlice;
+        viewDesc.arrayLayerCount = 1;
+        wgpu::TextureView sampleTextureView = texture.CreateView(&viewDesc);
         wgpu::TextureView renderTextureView;
         if (info.mipmapped() == Mipmapped::kYes) {
-            wgpu::TextureViewDescriptor renderViewDesc = {};
-            renderViewDesc.baseMipLevel = 0;
-            renderViewDesc.mipLevelCount = 1;
-            renderTextureView = texture.CreateView(&renderViewDesc);
+            viewDesc.baseMipLevel = 0;
+            viewDesc.mipLevelCount = 1;
+            renderTextureView = texture.CreateView(&viewDesc);
         } else {
             renderTextureView = sampleTextureView;
         }
@@ -144,7 +119,10 @@ std::pair<wgpu::TextureView, wgpu::TextureView> DawnTexture::CreateTextureViews(
     wgpu::TextureView planeTextureView;
     wgpu::TextureViewDescriptor planeViewDesc = {};
     planeViewDesc.format = info.dawnTextureSpec().fViewFormat;
+    planeViewDesc.dimension = wgpu::TextureViewDimension::e2D;
     planeViewDesc.aspect = aspect;
+    planeViewDesc.baseArrayLayer = info.dawnTextureSpec().fSlice;
+    planeViewDesc.arrayLayerCount = 1;
     planeTextureView = texture.CreateView(&planeViewDesc);
     return {planeTextureView, planeTextureView};
 #endif
@@ -217,6 +195,26 @@ void DawnTexture::freeGpuData() {
     fTexture = nullptr;
     fSampleTextureView = nullptr;
     fRenderTextureView = nullptr;
+}
+
+void DawnTexture::setBackendLabel(char const* label) {
+    if (!sharedContext()->caps()->setBackendLabels()) {
+        return;
+    }
+    SkASSERT(label);
+    // Wrapped texture views won't have an associated texture here.
+    if (fTexture) {
+        fTexture.SetLabel(label);
+    }
+    // But we always have the texture views available.
+    SkASSERT(fSampleTextureView);
+    SkASSERT(fRenderTextureView);
+    if (fSampleTextureView.Get() == fRenderTextureView.Get()) {
+        fSampleTextureView.SetLabel(SkStringPrintf("%s_%s", label, "_TextureView").c_str());
+    } else {
+        fSampleTextureView.SetLabel(SkStringPrintf("%s_%s", label, "_SampleTextureView").c_str());
+        fRenderTextureView.SetLabel(SkStringPrintf("%s_%s", label, "_RenderTextureView").c_str());
+    }
 }
 
 } // namespace skgpu::graphite

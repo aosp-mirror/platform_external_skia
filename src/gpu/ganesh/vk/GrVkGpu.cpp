@@ -21,6 +21,7 @@
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkMipmap.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/DataUtils.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
 #include "src/gpu/ganesh/GrDataUtils.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
@@ -49,13 +50,16 @@
 #include "src/gpu/ganesh/vk/GrVkSemaphore.h"
 #include "src/gpu/ganesh/vk/GrVkTexture.h"
 #include "src/gpu/ganesh/vk/GrVkTextureRenderTarget.h"
-#include "src/gpu/vk/VulkanAMDMemoryAllocator.h"
 #include "src/gpu/vk/VulkanInterface.h"
 #include "src/gpu/vk/VulkanMemory.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
 
 #include "include/gpu/vk/VulkanTypes.h"
 #include "include/private/gpu/vk/SkiaVulkan.h"
+
+#if defined(SK_USE_VMA)
+#include "src/gpu/vk/VulkanAMDMemoryAllocator.h"
+#endif
 
 using namespace skia_private;
 
@@ -186,6 +190,7 @@ std::unique_ptr<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
     }
 
     sk_sp<skgpu::VulkanMemoryAllocator> memoryAllocator = backendContext.fMemoryAllocator;
+#if defined(SK_USE_VMA)
     if (!memoryAllocator) {
         // We were not given a memory allocator at creation
         memoryAllocator = skgpu::VulkanAMDMemoryAllocator::Make(backendContext.fInstance,
@@ -194,8 +199,9 @@ std::unique_ptr<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
                                                                 physDevVersion,
                                                                 backendContext.fVkExtensions,
                                                                 interface.get(),
-                                                                /*=threadSafe=*/false);
+                                                                skgpu::ThreadSafe::kNo);
     }
+#endif
     if (!memoryAllocator) {
         SkDEBUGFAIL("No supplied vulkan memory allocator and unable to create one internally.");
         return nullptr;
@@ -402,7 +408,7 @@ bool GrVkGpu::submitCommandBuffer(SyncQueue sync) {
     SkASSERT(!fCachedOpsRenderPass || !fCachedOpsRenderPass->isActive());
 
     if (!this->currentCommandBuffer()->hasWork() && kForce_SyncQueue != sync &&
-        !fSemaphoresToSignal.size() && !fSemaphoresToWaitOn.size()) {
+        fSemaphoresToSignal.empty() && fSemaphoresToWaitOn.empty()) {
         // We may have added finished procs during the flush call. Since there is no actual work
         // we are not submitting the command buffer and may never come back around to submit it.
         // Thus we call all current finished procs manually, since the work has technically
@@ -933,7 +939,7 @@ static size_t fill_in_compressed_regions(GrStagingBufferManager* stagingBufferMa
         VkBufferImageCopy& region = regions->push_back();
         memset(&region, 0, sizeof(VkBufferImageCopy));
         region.bufferOffset = slice->fOffset + (*individualMipOffsets)[i];
-        SkISize revisedDimensions = GrCompressedDimensions(compression, dimensions);
+        SkISize revisedDimensions = skgpu::CompressedDimensions(compression, dimensions);
         region.bufferRowLength = revisedDimensions.width();
         region.bufferImageHeight = revisedDimensions.height();
         region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, SkToU32(i), 0, 1};

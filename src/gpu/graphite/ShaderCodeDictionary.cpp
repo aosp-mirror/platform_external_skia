@@ -39,7 +39,40 @@ static constexpr char kRuntimeShaderName[] = "RuntimeEffect";
 
 static_assert(static_cast<int>(BuiltInCodeSnippetID::kLast) < kSkiaBuiltInReservedCnt);
 
+// The toLinearSrgb and fromLinearSrgb RuntimeEffect intrinsics need to be able to map to and
+// from the dst color space and linearSRGB. These are the 10 uniforms needed to allow that.
+// These boil down to two copies of the kColorSpaceTransformUniforms uniforms. The first set
+// for mapping to LinearSRGB and the second set for mapping from LinearSRGB.
+static constexpr Uniform kRuntimeEffectColorSpaceTransformUniforms[] = {
+        // to LinearSRGB
+        { "flags_toLinear",          SkSLType::kInt },
+        { "srcKind_toLinear",        SkSLType::kInt },
+        { "gamutTransform_toLinear", SkSLType::kHalf3x3 },
+        { "dstKind_toLinear",        SkSLType::kInt },
+        { "csXformCoeffs_toLinear",  SkSLType::kHalf4x4 },
+        // from LinearSRGB
+        { "flags_fromLinear",          SkSLType::kInt },
+        { "srcKind_fromLinear",        SkSLType::kInt },
+        { "gamutTransform_fromLinear", SkSLType::kHalf3x3 },
+        { "dstKind_fromLinear",        SkSLType::kInt },
+        { "csXformCoeffs_fromLinear",  SkSLType::kHalf4x4 },
+};
+
 namespace {
+
+const char* get_known_rte_name(StableKey key) {
+    switch (key) {
+#define M(type) case StableKey::k##type : return "KnownRuntimeEffect_" #type;
+#define M1(type)
+#define M2(type, initializer) case StableKey::k##type : return "KnownRuntimeEffect_" #type;
+        SK_ALL_STABLEKEYS(M, M1, M2)
+#undef M2
+#undef M1
+#undef M
+    }
+
+    SkUNREACHABLE;
+}
 
 std::string get_mangled_name(const std::string& baseName, int manglingSuffix) {
     return baseName + "_" + std::to_string(manglingSuffix);
@@ -730,8 +763,6 @@ static constexpr int kEightStopGradient = 8;
 static constexpr Uniform kLinearGradientUniforms4[] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat4 },
-        { "point0",      SkSLType::kFloat2 },
-        { "point1",      SkSLType::kFloat2 },
         { "tilemode",    SkSLType::kInt },
         { "colorSpace",  SkSLType::kInt },
         { "doUnPremul",  SkSLType::kInt },
@@ -739,15 +770,11 @@ static constexpr Uniform kLinearGradientUniforms4[] = {
 static constexpr Uniform kLinearGradientUniforms8[] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat4, 2 },
-        { "point0",      SkSLType::kFloat2 },
-        { "point1",      SkSLType::kFloat2 },
         { "tilemode",    SkSLType::kInt },
         { "colorSpace",  SkSLType::kInt },
         { "doUnPremul",  SkSLType::kInt },
 };
 static constexpr Uniform kLinearGradientUniformsTexture[] = {
-        { "point0",      SkSLType::kFloat2 },
-        { "point1",      SkSLType::kFloat2 },
         { "numStops",    SkSLType::kInt },
         { "tilemode",    SkSLType::kInt },
         { "colorSpace",  SkSLType::kInt },
@@ -761,8 +788,6 @@ static constexpr TextureAndSampler kTextureGradientTexturesAndSamplers[] = {
 static constexpr Uniform kRadialGradientUniforms4[] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat4 },
-        { "center",      SkSLType::kFloat2 },
-        { "radius",      SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
         { "colorSpace",  SkSLType::kInt },
         { "doUnPremul",  SkSLType::kInt },
@@ -770,15 +795,11 @@ static constexpr Uniform kRadialGradientUniforms4[] = {
 static constexpr Uniform kRadialGradientUniforms8[] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat4, 2 },
-        { "center",      SkSLType::kFloat2 },
-        { "radius",      SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
         { "colorSpace",  SkSLType::kInt },
         { "doUnPremul",  SkSLType::kInt },
 };
 static constexpr Uniform kRadialGradientUniformsTexture[] = {
-        { "center",      SkSLType::kFloat2 },
-        { "radius",      SkSLType::kFloat },
         { "numStops",    SkSLType::kInt },
         { "tilemode",    SkSLType::kInt },
         { "colorSpace",  SkSLType::kInt },
@@ -788,7 +809,6 @@ static constexpr Uniform kRadialGradientUniformsTexture[] = {
 static constexpr Uniform kSweepGradientUniforms4[] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat4 },
-        { "center",      SkSLType::kFloat2 },
         { "bias",        SkSLType::kFloat },
         { "scale",       SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
@@ -798,7 +818,6 @@ static constexpr Uniform kSweepGradientUniforms4[] = {
 static constexpr Uniform kSweepGradientUniforms8[] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat4, 2 },
-        { "center",      SkSLType::kFloat2 },
         { "bias",        SkSLType::kFloat },
         { "scale",       SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
@@ -806,7 +825,6 @@ static constexpr Uniform kSweepGradientUniforms8[] = {
         { "doUnPremul",  SkSLType::kInt },
 };
 static constexpr Uniform kSweepGradientUniformsTexture[] = {
-        { "center",      SkSLType::kFloat2 },
         { "bias",        SkSLType::kFloat },
         { "scale",       SkSLType::kFloat },
         { "numStops",    SkSLType::kInt },
@@ -818,10 +836,10 @@ static constexpr Uniform kSweepGradientUniformsTexture[] = {
 static constexpr Uniform kConicalGradientUniforms4[] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat4 },
-        { "point0",      SkSLType::kFloat2 },
-        { "point1",      SkSLType::kFloat2 },
         { "radius0",     SkSLType::kFloat },
-        { "radius1",     SkSLType::kFloat },
+        { "dRadius",     SkSLType::kFloat },
+        { "a",           SkSLType::kFloat },
+        { "invA",        SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
         { "colorSpace",  SkSLType::kInt },
         { "doUnPremul",  SkSLType::kInt },
@@ -829,19 +847,19 @@ static constexpr Uniform kConicalGradientUniforms4[] = {
 static constexpr Uniform kConicalGradientUniforms8[] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat4, 2 },
-        { "point0",      SkSLType::kFloat2 },
-        { "point1",      SkSLType::kFloat2 },
         { "radius0",     SkSLType::kFloat },
-        { "radius1",     SkSLType::kFloat },
+        { "dRadius",     SkSLType::kFloat },
+        { "a",           SkSLType::kFloat },
+        { "invA",        SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
         { "colorSpace",  SkSLType::kInt },
         { "doUnPremul",  SkSLType::kInt },
 };
 static constexpr Uniform kConicalGradientUniformsTexture[] = {
-        { "point0",      SkSLType::kFloat2 },
-        { "point1",      SkSLType::kFloat2 },
         { "radius0",     SkSLType::kFloat },
-        { "radius1",     SkSLType::kFloat },
+        { "dRadius",     SkSLType::kFloat },
+        { "a",           SkSLType::kFloat },
+        { "invA",        SkSLType::kFloat },
         { "numStops",    SkSLType::kInt },
         { "tilemode",    SkSLType::kInt },
         { "colorSpace",  SkSLType::kInt },
@@ -984,27 +1002,25 @@ static constexpr char kHWImageShaderName[] = "sk_hw_image_shader";
 //--------------------------------------------------------------------------------------------------
 
 static constexpr Uniform kYUVImageShaderUniforms[] = {
-        { "invImgSize",            SkSLType::kFloat2 },
+        { "invImgSizeY",           SkSLType::kFloat2 },
+        { "invImgSizeUV",          SkSLType::kFloat2 },  // Relative to Y's texel space
         { "subset",                SkSLType::kFloat4 },
+        { "linearFilterUVInset",   SkSLType::kFloat2 },
         { "tilemodeX",             SkSLType::kInt },
         { "tilemodeY",             SkSLType::kInt },
-        { "filterMode",            SkSLType::kInt },
+        { "filterModeY",           SkSLType::kInt },
+        { "filterModeUV",          SkSLType::kInt },
         { "channelSelectY",        SkSLType::kHalf4 },
         { "channelSelectU",        SkSLType::kHalf4 },
         { "channelSelectV",        SkSLType::kHalf4 },
         { "channelSelectA",        SkSLType::kHalf4 },
         { "yuvToRGBMatrix",        SkSLType::kHalf3x3 },
         { "yuvToRGBTranslate",     SkSLType::kFloat3 },
-        // The next 5 uniforms are for the color space transformation
-        { "csXformFlags",          SkSLType::kInt },
-        { "csXformSrcKind",        SkSLType::kInt },
-        { "csXformGamutTransform", SkSLType::kHalf3x3 },
-        { "csXformDstKind",        SkSLType::kInt },
-        { "csXformCoeffs",         SkSLType::kHalf4x4 },
 };
 
 static constexpr Uniform kCubicYUVImageShaderUniforms[] = {
-        { "invImgSize",            SkSLType::kFloat2 },
+        { "invImgSizeY",           SkSLType::kFloat2 },
+        { "invImgSizeUV",          SkSLType::kFloat2 },  // Relative to Y's texel space
         { "subset",                SkSLType::kFloat4 },
         { "tilemodeX",             SkSLType::kInt },
         { "tilemodeY",             SkSLType::kInt },
@@ -1015,12 +1031,6 @@ static constexpr Uniform kCubicYUVImageShaderUniforms[] = {
         { "channelSelectA",        SkSLType::kHalf4 },
         { "yuvToRGBMatrix",        SkSLType::kHalf3x3 },
         { "yuvToRGBTranslate",     SkSLType::kFloat3 },
-        // The next 5 uniforms are for the color space transformation
-        { "csXformFlags",          SkSLType::kInt },
-        { "csXformSrcKind",        SkSLType::kInt },
-        { "csXformGamutTransform", SkSLType::kHalf3x3 },
-        { "csXformDstKind",        SkSLType::kInt },
-        { "csXformCoeffs",         SkSLType::kHalf4x4 },
 };
 
 static constexpr TextureAndSampler kYUVISTexturesAndSamplers[] = {
@@ -1151,10 +1161,12 @@ class GraphitePipelineCallbacks : public SkSL::PipelineStage::Callbacks {
 public:
     GraphitePipelineCallbacks(const ShaderInfo& shaderInfo,
                               const ShaderNode* node,
-                              std::string* preamble)
+                              std::string* preamble,
+                              const SkRuntimeEffect* effect)
             : fShaderInfo(shaderInfo)
             , fNode(node)
-            , fPreamble(preamble) {}
+            , fPreamble(preamble)
+            , fEffect(effect) {}
 
     std::string declareUniform(const SkSL::VarDeclaration* decl) override {
         std::string result = get_mangled_name(std::string(decl->var()->name()), fNode->keyIndex());
@@ -1206,12 +1218,30 @@ public:
     }
 
     std::string toLinearSrgb(std::string color) override {
-        // TODO(skia:13508): implement to-linear-SRGB child effect
-        return color;
+        if (!SkRuntimeEffectPriv::UsesColorTransform(fEffect)) {
+            return color;
+        }
+
+        color = SkSL::String::printf("(%s).rgb1", color.c_str());
+        std::string helper = get_mangled_name("toLinearSRGB", fNode->keyIndex());
+        std::string xformedColor = SkSL::String::printf("%s(%s)",
+                                    helper.c_str(),
+                                    color.c_str());
+        return SkSL::String::printf("(%s).rgb", xformedColor.c_str());
     }
+
+
     std::string fromLinearSrgb(std::string color) override {
-        // TODO(skia:13508): implement from-linear-SRGB child effect
-        return color;
+        if (!SkRuntimeEffectPriv::UsesColorTransform(fEffect)) {
+            return color;
+        }
+
+        color = SkSL::String::printf("(%s).rgb1", color.c_str());
+        std::string helper = get_mangled_name("fromLinearSRGB", fNode->keyIndex());
+        std::string xformedColor = SkSL::String::printf("%s(%s)",
+                                                        helper.c_str(),
+                                                        color.c_str());
+        return SkSL::String::printf("(%s).rgb", xformedColor.c_str());
     }
 
     std::string getMangledName(const char* name) override {
@@ -1222,6 +1252,7 @@ private:
     const ShaderInfo& fShaderInfo;
     const ShaderNode* fNode;
     std::string* fPreamble;
+    const SkRuntimeEffect* fEffect;
 };
 
 std::string GenerateRuntimeShaderPreamble(const ShaderInfo& shaderInfo,
@@ -1240,7 +1271,42 @@ std::string GenerateRuntimeShaderPreamble(const ShaderInfo& shaderInfo,
     const SkSL::Program& program = SkRuntimeEffectPriv::Program(*effect);
 
     std::string preamble;
-    GraphitePipelineCallbacks callbacks{shaderInfo, node, &preamble};
+    if (SkRuntimeEffectPriv::UsesColorTransform(effect)) {
+        SkSL::String::appendf(
+                &preamble,
+                "half4 %s(half4 inColor) {"
+                    "return sk_color_space_transform(inColor, %s, %s, %s, %s, %s);"
+                "}",
+                get_mangled_name("toLinearSRGB", node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[0],
+                                         node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[1],
+                                         node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[2],
+                                         node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[3],
+                                         node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[4],
+                                         node->keyIndex()).c_str());
+        SkSL::String::appendf(
+                &preamble,
+                "half4 %s(half4 inColor) {"
+                    "return sk_color_space_transform(inColor, %s, %s, %s, %s, %s);"
+                "}",
+                get_mangled_name("fromLinearSRGB", node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[5],
+                                         node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[6],
+                                         node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[7],
+                                         node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[8],
+                                         node->keyIndex()).c_str(),
+                get_mangled_uniform_name(shaderInfo, kRuntimeEffectColorSpaceTransformUniforms[9],
+                                         node->keyIndex()).c_str());
+    }
+
+    GraphitePipelineCallbacks callbacks{shaderInfo, node, &preamble, effect};
     SkSL::PipelineStage::ConvertProgram(program, "coords", "inColor", "destColor", &callbacks);
     return preamble;
 }
@@ -1380,6 +1446,10 @@ bool ShaderCodeDictionary::isValidID(int snippetID) const {
 
     return false;
 }
+
+void ShaderCodeDictionary::dump(UniquePaintParamsID id) const {
+    this->lookup(id).dump(this, id);
+}
 #endif
 
 #if defined(GRAPHITE_TEST_UTILS)
@@ -1449,9 +1519,19 @@ SkSpan<const Uniform> ShaderCodeDictionary::convertUniforms(const SkRuntimeEffec
     using rteUniform = SkRuntimeEffect::Uniform;
     SkSpan<const rteUniform> uniforms = effect->uniforms();
 
+    int numBaseUniforms = uniforms.size();
+    int xtraUniforms = 0;
+    if (SkRuntimeEffectPriv::UsesColorTransform(effect)) {
+        xtraUniforms += std::size(kRuntimeEffectColorSpaceTransformUniforms);
+    }
+
     // Convert the SkRuntimeEffect::Uniform array into its Uniform equivalent.
-    int numUniforms = uniforms.size();
+    int numUniforms = numBaseUniforms + xtraUniforms;
     Uniform* uniformArray = fArena.makeInitializedArray<Uniform>(numUniforms, [&](int index) {
+        if (index >= numBaseUniforms) {
+            return kRuntimeEffectColorSpaceTransformUniforms[index - numBaseUniforms];
+        }
+
         const rteUniform* u;
         u = &uniforms[index];
 
@@ -1487,12 +1567,13 @@ int ShaderCodeDictionary::findOrCreateRuntimeEffectSnippet(const SkRuntimeEffect
         int index = stableKey - kSkiaKnownRuntimeEffectsStart;
 
         if (!fKnownRuntimeEffectCodeSnippets[index].fExpressionGenerator) {
+            const char* name = get_known_rte_name(static_cast<StableKey>(stableKey));
             fKnownRuntimeEffectCodeSnippets[index] = ShaderSnippet(
-                    "KnownRuntimeEffect",
+                    name,
                     this->convertUniforms(effect),
                     snippetFlags,
                     /* texturesAndSamplers= */ {},
-                    "KnownRuntimeEffect",
+                    name,
                     GenerateRuntimeShaderExpression,
                     GenerateRuntimeShaderPreamble,
                     (int)effect->children().size());

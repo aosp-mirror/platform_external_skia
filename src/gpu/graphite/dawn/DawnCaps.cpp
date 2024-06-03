@@ -9,13 +9,15 @@
 
 #include <algorithm>
 
+#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/graphite/ContextOptions.h"
 #include "include/gpu/graphite/TextureInfo.h"
 #include "include/gpu/graphite/dawn/DawnBackendContext.h"
-#include "src/gpu/graphite/AttachmentTypes.h"
 #include "src/gpu/graphite/ComputePipelineDesc.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/GraphiteResourceKey.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
+#include "src/gpu/graphite/ResourceTypes.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
 #include "src/gpu/graphite/dawn/DawnUtilsPriv.h"
@@ -42,8 +44,12 @@ static constexpr wgpu::TextureFormat kFormats[skgpu::graphite::DawnCaps::kFormat
     wgpu::TextureFormat::RG16Float,
 
     wgpu::TextureFormat::Stencil8,
+    wgpu::TextureFormat::Depth16Unorm,
     wgpu::TextureFormat::Depth32Float,
     wgpu::TextureFormat::Depth24PlusStencil8,
+
+    wgpu::TextureFormat::BC1RGBAUnorm,
+    wgpu::TextureFormat::ETC2RGB8Unorm,
 
     wgpu::TextureFormat::Undefined,
 };
@@ -60,7 +66,7 @@ bool IsMultiplanarFormat(wgpu::TextureFormat format) {
     }
 }
 #endif
-}
+}  // anonymous namespace
 
 namespace skgpu::graphite {
 
@@ -215,6 +221,41 @@ TextureInfo DawnCaps::getTextureInfoForSampledCopy(const TextureInfo& textureInf
     return info;
 }
 
+namespace {
+wgpu::TextureFormat format_from_compression(SkTextureCompressionType compression) {
+    switch (compression) {
+        case SkTextureCompressionType::kETC2_RGB8_UNORM:
+            return wgpu::TextureFormat::ETC2RGB8Unorm;
+        case SkTextureCompressionType::kBC1_RGBA8_UNORM:
+            return wgpu::TextureFormat::BC1RGBAUnorm;
+        default:
+            return wgpu::TextureFormat::Undefined;
+    }
+}
+}
+
+TextureInfo DawnCaps::getDefaultCompressedTextureInfo(SkTextureCompressionType compression,
+                                                      Mipmapped mipmapped,
+                                                      Protected) const {
+    wgpu::TextureUsage usage = wgpu::TextureUsage::TextureBinding |
+                               wgpu::TextureUsage::CopyDst |
+                               wgpu::TextureUsage::CopySrc;
+
+    wgpu::TextureFormat format = format_from_compression(compression);
+    if (format == wgpu::TextureFormat::Undefined) {
+        return {};
+    }
+
+    DawnTextureInfo info;
+    info.fSampleCount = 1;
+    info.fMipmapped = mipmapped;
+    info.fFormat = format;
+    info.fViewFormat = format;
+    info.fUsage = usage;
+
+    return info;
+}
+
 TextureInfo DawnCaps::getDefaultMSAATextureInfo(const TextureInfo& singleSampledInfo,
                                                 Discardable discardable) const {
     if (fDefaultMSAASamples <= 1) {
@@ -229,11 +270,10 @@ TextureInfo DawnCaps::getDefaultMSAATextureInfo(const TextureInfo& singleSampled
     info.fViewFormat = singleSpec.fFormat;
     info.fUsage       = wgpu::TextureUsage::RenderAttachment;
 
-#if !defined(__EMSCRIPTEN__)
-    if (fTransientAttachmentSupport && discardable == Discardable::kYes) {
-        info.fUsage |= wgpu::TextureUsage::TransientAttachment;
+    if (fSupportedTransientAttachmentUsage != wgpu::TextureUsage::None &&
+        discardable == Discardable::kYes) {
+        info.fUsage |= fSupportedTransientAttachmentUsage;
     }
-#endif
 
     return info;
 }
@@ -249,11 +289,9 @@ TextureInfo DawnCaps::getDefaultDepthStencilTextureInfo(
     info.fViewFormat = info.fFormat;
     info.fUsage       = wgpu::TextureUsage::RenderAttachment;
 
-#if !defined(__EMSCRIPTEN__)
-    if (fTransientAttachmentSupport) {
-        info.fUsage |= wgpu::TextureUsage::TransientAttachment;
+    if (fSupportedTransientAttachmentUsage != wgpu::TextureUsage::None) {
+        info.fUsage |= fSupportedTransientAttachmentUsage;
     }
-#endif
 
     return info;
 }
@@ -404,7 +442,6 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
 #endif
 
     fDrawBufferCanBeMapped = false;
-    fBufferMapsAreAsync = true;
 
     fComputeSupport = true;
 
@@ -415,16 +452,26 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
     fDrawBufferCanBeMappedForReadback = false;
 #endif
 
-#if !defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__)
+    // For wasm, we use async map.
+    fBufferMapsAreAsync = true;
+#else
+    // For Dawn native, we use direct mapping.
+    fBufferMapsAreAsync = false;
     fDrawBufferCanBeMapped =
             backendContext.fDevice.HasFeature(wgpu::FeatureName::BufferMapExtendedUsages);
 
     fMSAARenderToSingleSampledSupport =
             backendContext.fDevice.HasFeature(wgpu::FeatureName::MSAARenderToSingleSampled);
 
-    fTransientAttachmentSupport =
-            backendContext.fDevice.HasFeature(wgpu::FeatureName::TransientAttachments);
+    if (backendContext.fDevice.HasFeature(wgpu::FeatureName::TransientAttachments)) {
+        fSupportedTransientAttachmentUsage = wgpu::TextureUsage::TransientAttachment;
+    }
+    if (backendContext.fDevice.HasFeature(wgpu::FeatureName::DawnLoadResolveTexture)) {
+        fSupportedResolveTextureLoadOp = wgpu::LoadOp::ExpandResolveTexture;
+    }
 #endif
+
     if (!backendContext.fTick) {
         fAllowCpuSync = false;
         // This seems paradoxical. However, if we use the async pipeline creation methods (e.g
@@ -437,6 +484,8 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
         // The implementation busy waits after popping.
         fAllowScopedErrorChecks = false;
     }
+
+    fFullCompressedUploadSizeMustAlignToBlockDims = true;
 }
 
 void DawnCaps::initShaderCaps(const wgpu::Device& device) {
@@ -483,11 +532,17 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
         }
     }
 
-    // TODO(crbug.com/dawn/1856): Support storage binding for compute shader in Dawn.
     // Format: R8Unorm
     {
         info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::R8Unorm)];
+#if !defined(__EMSCRIPTEN__)
+        info->fFlags = FormatInfo::kAllFlags;
+        if (!device.HasFeature(wgpu::FeatureName::R8UnormStorage)) {
+            info->fFlags &= ~FormatInfo::kStorage_Flag;
+        }
+#else
         info->fFlags = FormatInfo::kAllFlags & ~FormatInfo::kStorage_Flag;
+#endif
         info->fColorTypeInfoCount = 3;
         info->fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info->fColorTypeInfoCount);
         int ctIdx = 0;
@@ -515,12 +570,12 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
     }
 
 #if !defined(__EMSCRIPTEN__)
-    const bool supportNorm16 = device.HasFeature(wgpu::FeatureName::Norm16TextureFormats);
+    const bool supportUnorm16 = device.HasFeature(wgpu::FeatureName::Unorm16TextureFormats);
     // TODO(crbug.com/dawn/1856): Support storage binding for compute shader in Dawn.
     // Format: R16Unorm
     {
         info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::R16Unorm)];
-        if (supportNorm16) {
+        if (supportUnorm16) {
             info->fFlags = FormatInfo::kAllFlags & ~FormatInfo::kStorage_Flag;
             info->fColorTypeInfoCount = 1;
             info->fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info->fColorTypeInfoCount);
@@ -611,7 +666,7 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
     // Format: RG16Unorm
     {
         info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::RG16Unorm)];
-        if (supportNorm16) {
+        if (supportUnorm16) {
             info->fFlags = FormatInfo::kAllFlags;
             info->fColorTypeInfoCount = 1;
             info->fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info->fColorTypeInfoCount);
@@ -656,6 +711,40 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
         }
     }
 
+    // Format: ETC2RGB8Unorm
+    {
+        if (device.HasFeature(wgpu::FeatureName::TextureCompressionETC2)) {
+            info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::ETC2RGB8Unorm)];
+            info->fFlags = FormatInfo::kTexturable_Flag;
+            info->fColorTypeInfoCount = 1;
+            info->fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info->fColorTypeInfoCount);
+            int ctIdx = 0;
+            // Format: ETC2RGB8Unorm, Surface: kRGB_888x
+            {
+                auto& ctInfo = info->fColorTypeInfos[ctIdx++];
+                ctInfo.fColorType = kRGB_888x_SkColorType;
+                ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
+            }
+        }
+    }
+
+    // Format: BC1RGBAUnorm
+    {
+        if (device.HasFeature(wgpu::FeatureName::TextureCompressionBC)) {
+            info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::BC1RGBAUnorm)];
+            info->fFlags = FormatInfo::kTexturable_Flag;
+            info->fColorTypeInfoCount = 1;
+            info->fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info->fColorTypeInfoCount);
+            int ctIdx = 0;
+            // Format: BC1RGBAUnorm, Surface: kRGBA_8888
+            {
+                auto& ctInfo = info->fColorTypeInfos[ctIdx++];
+                ctInfo.fColorType = kRGBA_8888_SkColorType;
+                ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
+            }
+        }
+    }
+
     /*
      * Non-color formats
      */
@@ -663,6 +752,13 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
     // Format: Stencil8
     {
         info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::Stencil8)];
+        info->fFlags = FormatInfo::kMSAA_Flag;
+        info->fColorTypeInfoCount = 0;
+    }
+
+    // Format: Depth16UNorm
+    {
+        info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::Depth16Unorm)];
         info->fFlags = FormatInfo::kMSAA_Flag;
         info->fColorTypeInfoCount = 0;
     }
@@ -734,23 +830,6 @@ void DawnCaps::setColorType(SkColorType colorType,
                             std::initializer_list<wgpu::TextureFormat> formats) {
     static_assert(std::size(kFormats) == kFormatCnt,
                   "Size is not same for DawnCaps::fFormatTable and kFormats");
-#ifdef SK_DEBUG
-    for (size_t i = 0; i < std::size(fFormatTable); ++i) {
-        const auto& formatInfo = fFormatTable[i];
-        for (int j = 0; j < formatInfo.fColorTypeInfoCount; ++j) {
-            const auto& ctInfo = formatInfo.fColorTypeInfos[j];
-            if (ctInfo.fColorType == colorType) {
-                bool found = false;
-                for (auto it = formats.begin(); it != formats.end(); ++it) {
-                    if (kFormats[i] == *it) {
-                        found = true;
-                    }
-                }
-                SkASSERT(found);
-            }
-        }
-    }
-#endif
     int idx = static_cast<int>(colorType);
     for (auto it = formats.begin(); it != formats.end(); ++it) {
         const auto& info = this->getFormatInfo(*it);
@@ -763,17 +842,36 @@ void DawnCaps::setColorType(SkColorType colorType,
     }
 }
 
-uint64_t DawnCaps::getRenderPassDescKey(const RenderPassDesc& renderPassDesc) const {
+uint64_t DawnCaps::getRenderPassDescKeyForPipeline(const RenderPassDesc& renderPassDesc) const {
     DawnTextureInfo colorInfo, depthStencilInfo;
     renderPassDesc.fColorAttachment.fTextureInfo.getDawnTextureInfo(&colorInfo);
     renderPassDesc.fDepthStencilAttachment.fTextureInfo.getDawnTextureInfo(&depthStencilInfo);
     SkASSERT(static_cast<uint32_t>(colorInfo.getViewFormat()) <= 0xffff &&
-             static_cast<uint32_t>(depthStencilInfo.getViewFormat()) <= 0xffff);
-    uint32_t colorAttachmentKey =
-            static_cast<uint32_t>(colorInfo.getViewFormat()) << 16 | colorInfo.fSampleCount;
+             static_cast<uint32_t>(depthStencilInfo.getViewFormat()) <= 0xffff &&
+             colorInfo.fSampleCount < 0x7fff);
+
+    // Note: if Dawn supports ExpandResolveTexture load op and the render pass uses it to load
+    // the resolve texture, a render pipeline will need to be created with
+    // wgpu::ColorTargetStateExpandResolveTextureDawn chained struct in order to be compatible.
+    // Hence a render pipeline created for a render pass using ExpandResolveTexture load op will
+    // be different from the one created for a render pass not using that load op.
+    // So we need to include a bit flag to differentiate the two kinds of pipelines.
+    // Also avoid returning a cached pipeline that is not compatible with the render pass using
+    // ExpandResolveTexture load op and vice versa.
+    const bool shouldIncludeLoadResolveAttachmentBit = this->resolveTextureLoadOp().has_value();
+    uint32_t loadResolveAttachmentKey = 0;
+    if (shouldIncludeLoadResolveAttachmentBit &&
+        renderPassDesc.fColorResolveAttachment.fTextureInfo.isValid() &&
+        renderPassDesc.fColorResolveAttachment.fLoadOp == LoadOp::kLoad) {
+        loadResolveAttachmentKey = 1;
+    }
+
+    uint32_t colorAttachmentKey = static_cast<uint32_t>(colorInfo.getViewFormat()) << 16 |
+                                  colorInfo.fSampleCount << 1 | loadResolveAttachmentKey;
+
     uint32_t dsAttachmentKey = static_cast<uint32_t>(depthStencilInfo.getViewFormat()) << 16 |
                                depthStencilInfo.fSampleCount;
-    return (((uint64_t) colorAttachmentKey) << 32) | dsAttachmentKey;
+    return (((uint64_t)colorAttachmentKey) << 32) | dsAttachmentKey;
 }
 
 UniqueKey DawnCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipelineDesc,
@@ -787,8 +885,8 @@ UniqueKey DawnCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeline
         builder[0] = pipelineDesc.renderStepID();
         builder[1] = pipelineDesc.paintParamsID().asUInt();
 
-        // add RenderPassDesc key
-        uint64_t renderPassKey = this->getRenderPassDescKey(renderPassDesc);
+        // Add RenderPassDesc key.
+        uint64_t renderPassKey = this->getRenderPassDescKeyForPipeline(renderPassDesc);
         builder[2] = renderPassKey & 0xFFFFFFFF;
         builder[3] = (renderPassKey >> 32) & 0xFFFFFFFF;
         builder[4] = renderPassDesc.fWriteSwizzle.asKey();
