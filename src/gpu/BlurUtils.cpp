@@ -252,12 +252,10 @@ const SkRuntimeEffect* GetBlur2DEffect(const SkISize& radii) {
 ///////////////////////////////////////////////////////////////////////////////
 
 // TODO: it seems like there should be some synergy with SkBlurMask::ComputeBlurProfile
-// TODO: maybe cache this on the cpu side?
-SkBitmap CreateIntegralTable(float sixSigma) {
+SkBitmap CreateIntegralTable(int width) {
     SkBitmap table;
 
-    int width = ComputeIntegralTableWidth(sixSigma);
-    if (width == 0) {
+    if (width <= 0) {
         return table;
     }
 
@@ -550,7 +548,8 @@ SkBitmap CreateRRectBlurMask(const SkRRect& rrectToDraw, const SkISize& dimensio
     std::unique_ptr<float[]> kernel(new float[kernelSize]);
     skgpu::Compute1DBlurKernel(sigma, radius, SkSpan<float>(kernel.get(), kernelSize));
 
-    SkBitmap integral = CreateIntegralTable(6.0f * sigma);
+    const int tableWidth = ComputeIntegralTableWidth(6.0f * sigma);
+    SkBitmap integral = CreateIntegralTable(tableWidth);
     if (integral.empty()) {
         return {};
     }

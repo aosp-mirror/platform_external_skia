@@ -9,10 +9,13 @@
 #define skgpu_VulkanAMDMemoryAllocator_DEFINED
 
 #include "include/gpu/vk/VulkanMemoryAllocator.h"
-
-#if defined(SK_USE_VMA)
 #include "src/gpu/vk/vulkanmemoryallocator/VulkanMemoryAllocatorWrapper.h"
-#endif
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/vk/VulkanTypes.h"
+#include "include/private/gpu/vk/SkiaVulkan.h"
+
+#include <cstdint>
+#include <utility>
 
 namespace skgpu {
 
@@ -23,20 +26,6 @@ enum class ThreadSafe : bool {
     kNo = false,
     kYes = true,
 };
-
-#if !defined(SK_USE_VMA)
-class VulkanAMDMemoryAllocator {
-public:
-    static sk_sp<VulkanMemoryAllocator> Make(VkInstance instance,
-                                             VkPhysicalDevice physicalDevice,
-                                             VkDevice device,
-                                             uint32_t physicalDeviceVersion,
-                                             const VulkanExtensions* extensions,
-                                             const VulkanInterface* interface,
-                                             ThreadSafe);
-};
-
-#else
 
 class VulkanAMDMemoryAllocator : public VulkanMemoryAllocator {
 public:
@@ -77,8 +66,6 @@ private:
 
     VmaAllocator fAllocator;
 };
-
-#endif // SK_USE_VMA
 
 } // namespace skgpu
 
