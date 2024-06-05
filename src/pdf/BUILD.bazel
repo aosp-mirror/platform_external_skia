@@ -1,5 +1,9 @@
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_deps", "skia_filegroup", "split_srcs_and_hdrs")
 load("//bazel:flags.bzl", "bool_flag", "selects")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "generate_cpp_files_for_headers", "skia_cc_deps", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
+
+package(
+    default_applicable_licenses = ["//:license"],
+)
 
 licenses(["notice"])
 
@@ -11,8 +15,6 @@ PDF_FILES = [
     "SkClusterator.h",
     "SkDeflate.cpp",
     "SkDeflate.h",
-    "SkJpegInfo.cpp",
-    "SkJpegInfo.h",
     "SkKeyedImage.cpp",
     "SkKeyedImage.h",
     "SkPDFBitmap.cpp",
@@ -57,14 +59,26 @@ PDF_FILES = [
 ]
 
 split_srcs_and_hdrs(
-    name = "pdf",
+    name = "_pdf",
     files = PDF_FILES,
+)
+
+#TODO: remove after Chromium no longer references this.
+skia_filegroup(
+    name = "jpeg_info_libjpeg",
+    srcs = ["SkJpegInfo_libjpegturbo.cpp"],
+)
+
+#TODO: remove after Chromium no longer references this.
+skia_filegroup(
+    name = "jpeg_info_none",
+    srcs = ["SkJpegInfo_none.cpp"],
 )
 
 skia_filegroup(
     name = "srcs",
     srcs = [
-        ":pdf_srcs",
+        ":_pdf_srcs",
     ],
     visibility = ["//src:__pkg__"],
 )
@@ -72,7 +86,7 @@ skia_filegroup(
 skia_filegroup(
     name = "private_hdrs",
     srcs = [
-        ":pdf_hdrs",
+        ":_pdf_hdrs",
     ],
     visibility = ["//src:__pkg__"],
 )
@@ -88,14 +102,6 @@ bool_flag(
 )
 
 selects.config_setting_group(
-    name = "uses_jpeg",
-    match_any = [
-        "//src/encode:jpeg_encode_codec",
-        "//src/codec:jpeg_decode_codec",
-    ],
-)
-
-selects.config_setting_group(
     name = "uses_harfbuzz",
     match_all = [
         "//bazel/common_config_settings:use_icu_true",
@@ -104,16 +110,59 @@ selects.config_setting_group(
     ],
 )
 
-# TODO(kjlubick) sfntly support
+# TODO(kjlubick) delete after pdf backend is modularized
+skia_cc_library(
+    name = "legacy_harfbuzz",
+    deps = ["@harfbuzz"],
+)
 
 skia_cc_deps(
     name = "deps",
     visibility = ["//src:__pkg__"],
-    deps = ["@zlib_skia//:zlib"] + select({
-        ":uses_jpeg": ["@libjpeg_turbo"],
-        "//conditions:default": [],
-    }) + select({
-        ":uses_harfbuzz": ["@harfbuzz"],
+    deps = [
+        "@zlib_skia//:zlib",
+        #"//src/codec:jpeg_decode",
+        #"//src/encode:jpeg_encode",
+    ] + select({
+        ":uses_harfbuzz": [":legacy_harfbuzz"],
         "//conditions:default": [],
     }),
+)
+
+generate_cpp_files_for_headers(
+    name = "headers_to_compile",
+    headers = [
+        "SkBitmapKey.h",
+        "SkPDFDocumentPriv.h",
+        "SkPDFUnion.h",
+        "SkUUID.h",
+    ],
+)
+
+skia_cc_library(
+    name = "pdf",
+    srcs = [
+        ":_pdf_hdrs",
+        ":_pdf_srcs",
+    ],
+    hdrs = [
+        "//include/docs:pdf_hdrs",
+    ],
+    local_defines = ["SK_PDF_USE_HARFBUZZ_SUBSET"],
+    visibility = ["//:__pkg__"],
+    deps = [
+        "//:core",
+        "//:jpeg_decode_codec",
+        "//:jpeg_encode_codec",
+        "//:pathops",
+        "//src/core:core_priv",
+        "//src/utils:clip_stack_utils",
+        "//src/utils:float_to_decimal",
+        "@zlib_skia//:zlib",
+    ] +
+    # We have this harfbuzz dependency all by itself because we need to turn this into a
+    # select statement when rolling into G3.
+    [
+        "@harfbuzz",
+    ],
 )

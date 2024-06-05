@@ -11,21 +11,16 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSurfaceProps.h"
+#include "include/private/base/SkTArray.h"
 
-#include "src/gpu/graphite/AttachmentTypes.h"
 #include "src/gpu/graphite/DrawList.h"
 #include "src/gpu/graphite/DrawOrder.h"
 #include "src/gpu/graphite/DrawTypes.h"
-#include "src/gpu/graphite/UploadTask.h"
+#include "src/gpu/graphite/ResourceTypes.h"
+#include "src/gpu/graphite/TextureProxyView.h"
+#include "src/gpu/graphite/task/UploadTask.h"
 
 #include <vector>
-
-#ifdef SK_ENABLE_PIET_GPU
-#include "src/gpu/graphite/PietRenderTask.h"
-namespace skgpu::piet {
-class Scene;
-}
-#endif
 
 class SkPixmap;
 
@@ -35,12 +30,12 @@ class Geometry;
 class Recorder;
 class Transform;
 
-class AtlasManager;
 class Caps;
-class DrawPass;
+class ComputePathAtlas;
+class DrawTask;
+class PathAtlas;
 class Task;
 class TextureProxy;
-class TextureProxyView;
 
 /**
  * DrawContext records draw commands into a specific Surface, via a general task graph
@@ -48,7 +43,8 @@ class TextureProxyView;
  */
 class DrawContext final : public SkRefCnt {
 public:
-    static sk_sp<DrawContext> Make(sk_sp<TextureProxy> target,
+    static sk_sp<DrawContext> Make(const Caps* caps,
+                                   sk_sp<TextureProxy> target,
                                    SkISize deviceSize,
                                    const SkColorInfo&,
                                    const SkSurfaceProps&);
@@ -59,14 +55,17 @@ public:
     const SkColorInfo& colorInfo() const { return fImageInfo.colorInfo(); }
     TextureProxy* target()                { return fTarget.get(); }
     const TextureProxy* target()    const { return fTarget.get(); }
+    sk_sp<TextureProxy> refTarget() const { return fTarget; }
 
-    TextureProxyView readSurfaceView(const Caps*);
+    // May be null if the target is not texturable.
+    const TextureProxyView& readSurfaceView() const { return fReadView; }
 
     const SkSurfaceProps& surfaceProps() const { return fSurfaceProps; }
 
-    int pendingDrawCount() const { return fPendingDraws->drawCount(); }
+    int pendingRenderSteps() const { return fPendingDraws->renderStepCount(); }
 
     void clear(const SkColor4f& clearColor);
+    void discard();
 
     void recordDraw(const Renderer* renderer,
                     const Transform& localToDevice,
@@ -76,7 +75,6 @@ public:
                     const PaintParams* paint,
                     const StrokeStyle* stroke);
 
-    bool recordTextUploads(AtlasManager*);
     bool recordUpload(Recorder* recorder,
                       sk_sp<TextureProxy> targetProxy,
                       const SkColorInfo& srcColorInfo,
@@ -85,78 +83,61 @@ public:
                       const SkIRect& dstRect,
                       std::unique_ptr<ConditionalUploadContext>);
 
-#ifdef SK_ENABLE_PIET_GPU
-    bool recordPietSceneRender(Recorder* recorder,
-                               sk_sp<TextureProxy> targetProxy,
-                               sk_sp<const skgpu::piet::Scene> pietScene);
-#endif
+    // Add a Task that will be executed *before* any of the pending draws and uploads are
+    // executed as part of the next flush(). Dependency
+    void recordDependency(sk_sp<Task>);
 
-    // Ends the current DrawList being accumulated by the SDC, converting it into an optimized and
-    // immutable DrawPass. The DrawPass will be ordered after any other snapped DrawPasses or
-    // appended DrawPasses from a child SDC. A new DrawList is started to record subsequent drawing
-    // operations.
-    //
-    // TBD - Should this take a special occluder list to filter the DrawList?
-    // TBD - should this also return the task so the caller can point to it with its own
-    // dependencies? Or will that be mostly automatic based on draws and proxy refs?
-    void snapDrawPass(Recorder*);
+    // Returns the transient path atlas that uses compute to accumulate coverage masks for atlas
+    // draws recorded to this SDC. The atlas gets created lazily upon request. Returns nullptr
+    // if compute path generation is not supported.
+    PathAtlas* getComputePathAtlas(Recorder*);
 
-    // TBD: snapRenderPassTask() might not need to be public, and could be spec'ed to require that
-    // snapDrawPass() must have been called first. A lot of it will depend on how the task graph is
-    // managed.
+    // Moves all accumulated pending recorded operations (draws and uploads), and any other
+    // dependent tasks into the DrawTask currently being built.
+    void flush(Recorder*);
 
-    // Ends the current DrawList if needed, as in 'snapDrawPass', and moves the new DrawPass and all
-    // prior accumulated DrawPasses into a RenderPassTask that can be drawn and depended on. The
-    // caller is responsible for configuring the returned Tasks's dependencies.
-    //
-    // Returns null if there are no pending commands or draw passes to move into a task.
-    sk_sp<Task> snapRenderPassTask(Recorder*);
-
-    // Ends the current UploadList if needed, and moves the accumulated Uploads into an UploadTask
-    // that can be drawn and depended on. The caller is responsible for configuring the returned
-    // Tasks's dependencies.
-    //
-    // Returns null if there are no pending uploads to move into a task.
-    //
-    // TODO: see if we can merge transfers into this
-    sk_sp<Task> snapUploadTask(Recorder*);
-
-#ifdef SK_ENABLE_PIET_GPU
-    sk_sp<Task> snapPietRenderTask(Recorder*);
-#endif
+    // Flushes (if needed) and completes the current DrawTask, returning it to the caller.
+    // Subsequent recorded operations will be added to a new DrawTask.
+    sk_sp<Task> snapDrawTask(Recorder*);
 
 private:
-    DrawContext(sk_sp<TextureProxy>, const SkImageInfo&, const SkSurfaceProps&);
+    DrawContext(const Caps*, sk_sp<TextureProxy>, const SkImageInfo&, const SkSurfaceProps&);
 
     sk_sp<TextureProxy> fTarget;
+    TextureProxyView fReadView;
     SkImageInfo fImageInfo;
     const SkSurfaceProps fSurfaceProps;
 
-    // Stores the most immediately recorded draws into the SDC's surface. This list is mutable and
-    // can be appended to, or have its commands rewritten if they are inlined into a parent SDC.
+    // The in-progress DrawTask that will be snapped and returned when some external requirement
+    // must depend on the contents of this DrawContext's target. As higher-level Skia operations
+    // are recorded, it can be necessary to flush pending draws and uploads into the task list.
+    // This provides a place to reset scratch textures or buffers as their previous state will have
+    // been consumed by the flushed tasks rendering to this DrawContext's target.
+    sk_sp<DrawTask> fCurrentDrawTask;
+
+    // Stores the most immediately recorded draws and uploads into the DrawContext's target. These
+    // are collected outside of the DrawTask so that encoder switches can be minimized when
+    // flushing.
     std::unique_ptr<DrawList> fPendingDraws;
+    std::unique_ptr<UploadList> fPendingUploads;
     // Load and store information for the current pending draws.
     LoadOp fPendingLoadOp = LoadOp::kLoad;
     StoreOp fPendingStoreOp = StoreOp::kStore;
     std::array<float, 4> fPendingClearColor = { 0, 0, 0, 0 };
 
-    // Stores previously snapped DrawPasses of this DC, or inlined child DCs whose content
-    // couldn't have been copied directly to fPendingDraws. While each DrawPass is immutable, the
-    // list of DrawPasses is not final until there is an external dependency on the SDC's content
-    // that requires it to be resolved as its own render pass (vs. inlining the SDC's passes into a
-    // parent's render pass).
-    // TODO: It will be easier to debug/understand the DrawPass structure of a context if
-    // consecutive DrawPasses to the same target are stored in a DrawPassChain. A DrawContext with
-    // multiple DrawPassChains is then clearly accumulating subpasses across multiple targets.
-    std::vector<std::unique_ptr<DrawPass>> fDrawPasses;
-
-    // Stores the most immediately recorded uploads into Textures. This list is mutable and
-    // can be appended to, or have its commands rewritten if they are inlined into a parent DC.
-    std::unique_ptr<UploadList> fPendingUploads;
-
-#ifdef SK_ENABLE_PIET_GPU
-    std::vector<PietRenderInstance> fPendingPietRenders;
-#endif
+    // Accumulates atlas coverage masks generated by compute dispatches that are required by one or
+    // more entries in `fPendingDraws`. When pending draws are snapped into a new DrawPass, a
+    // compute dispatch group gets recorded which schedules the accumulated masks to get drawn into
+    // an atlas texture. The accumulated masks are then cleared which frees up the atlas for
+    // future draws.
+    //
+    // TODO: Currently every PathAtlas contains a single texture. If multiple snapped draw
+    // passes resulted in multiple ComputePathAtlas dispatch groups, the later dispatches would
+    // overwrite the atlas texture since all compute tasks are scheduled before render tasks. This
+    // is currently not an issue since there is only one DrawPass per flush but we may want to
+    // either support one atlas texture per DrawPass or record the dispatches once per
+    // RenderPassTask rather than DrawPass.
+    std::unique_ptr<ComputePathAtlas> fComputePathAtlas;
 };
 
 } // namespace skgpu::graphite

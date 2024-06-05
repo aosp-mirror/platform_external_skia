@@ -4,15 +4,26 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 #include "src/gpu/ganesh/GrTextureResolveRenderTask.h"
 
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/base/SkAssert.h"
+#include "src/gpu/ganesh/GrDrawingManager.h"
 #include "src/gpu/ganesh/GrGpu.h"
-#include "src/gpu/ganesh/GrMemoryPool.h"
 #include "src/gpu/ganesh/GrOpFlushState.h"
-#include "src/gpu/ganesh/GrRenderTarget.h"
+#include "src/gpu/ganesh/GrRenderTargetProxy.h"
 #include "src/gpu/ganesh/GrResourceAllocator.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
 #include "src/gpu/ganesh/GrTexture.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+#include "src/gpu/ganesh/GrTextureResolveManager.h"
+
+#include <algorithm>
+#include <cstddef>
+#include <utility>
+
+class GrRenderTarget;
 
 void GrTextureResolveRenderTask::addProxy(GrDrawingManager* drawingMgr,
                                           sk_sp<GrSurfaceProxy> proxyRef,
@@ -50,7 +61,7 @@ void GrTextureResolveRenderTask::addProxy(GrDrawingManager* drawingMgr,
 
     if (GrSurfaceProxy::ResolveFlags::kMipMaps & newFlags) {
         GrTextureProxy* textureProxy = proxy->asTextureProxy();
-        SkASSERT(GrMipmapped::kYes == textureProxy->mipmapped());
+        SkASSERT(skgpu::Mipmapped::kYes == textureProxy->mipmapped());
         SkASSERT(textureProxy->mipmapsAreDirty());
         textureProxy->markMipmapsClean();
     }
@@ -60,11 +71,8 @@ void GrTextureResolveRenderTask::addProxy(GrDrawingManager* drawingMgr,
     if (newProxy) {
         // Add the proxy as a dependency: We will read the existing contents of this texture while
         // generating mipmap levels and/or resolving MSAA.
-        this->addDependency(drawingMgr,
-                            proxy,
-                            GrMipmapped::kNo,
-                            GrTextureResolveManager(nullptr),
-                            caps);
+        this->addDependency(
+                drawingMgr, proxy, skgpu::Mipmapped::kNo, GrTextureResolveManager(nullptr), caps);
         this->addTarget(drawingMgr, GrSurfaceProxyView(std::move(proxyRef)));
     }
 }
@@ -76,7 +84,8 @@ void GrTextureResolveRenderTask::gatherProxyIntervals(GrResourceAllocator* alloc
     auto fakeOp = alloc->curOp();
     SkASSERT(fResolves.size() == this->numTargets());
     for (const sk_sp<GrSurfaceProxy>& target : fTargets) {
-        alloc->addInterval(target.get(), fakeOp, fakeOp, GrResourceAllocator::ActualUse::kYes);
+        alloc->addInterval(target.get(), fakeOp, fakeOp, GrResourceAllocator::ActualUse::kYes,
+                           GrResourceAllocator::AllowRecycling::kYes);
     }
     alloc->incOps();
 }
@@ -114,7 +123,7 @@ bool GrTextureResolveRenderTask::onExecute(GrOpFlushState* flushState) {
 void GrTextureResolveRenderTask::visitProxies_debugOnly(const GrVisitProxyFunc&) const {}
 #endif
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 GrSurfaceProxy::ResolveFlags
 GrTextureResolveRenderTask::flagsForProxy(sk_sp<GrSurfaceProxy> proxy) const {
     if (auto found = std::find(fTargets.begin(), fTargets.end(), proxy);

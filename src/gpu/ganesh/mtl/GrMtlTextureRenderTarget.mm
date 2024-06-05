@@ -4,11 +4,12 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "src/gpu/ganesh/mtl/GrMtlTextureRenderTarget.h"
 
+#include "include/gpu/ganesh/mtl/GrMtlBackendSurface.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrResourceProvider.h"
 #include "src/gpu/ganesh/mtl/GrMtlGpu.h"
-#include "src/gpu/ganesh/mtl/GrMtlTextureRenderTarget.h"
 #include "src/gpu/ganesh/mtl/GrMtlUtil.h"
 
 #if !__has_feature(objc_arc)
@@ -52,9 +53,12 @@ bool create_rt_attachments(GrMtlGpu* gpu, SkISize dimensions, MTLPixelFormat for
                            sk_sp<GrMtlAttachment>* resolveAttachment) {
     if (sampleCnt > 1) {
         auto rp = gpu->getContext()->priv().resourceProvider();
-        sk_sp<GrAttachment> msaaAttachment = rp->makeMSAAAttachment(
-                dimensions, GrBackendFormat::MakeMtl(format), sampleCnt, GrProtected::kNo,
-                GrMemoryless::kNo);
+        sk_sp<GrAttachment> msaaAttachment =
+                rp->makeMSAAAttachment(dimensions,
+                                       GrBackendFormats::MakeMtl(format),
+                                       sampleCnt,
+                                       GrProtected::kNo,
+                                       GrMemoryless::kNo);
         if (!msaaAttachment) {
             return false;
         }
@@ -82,7 +86,7 @@ sk_sp<GrMtlTextureRenderTarget> GrMtlTextureRenderTarget::MakeNewTextureRenderTa
     if (!textureAttachment) {
         return nullptr;
     }
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         SkASSERT((MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget) &
                  textureAttachment->mtlTexture().usage);
     }
@@ -108,7 +112,7 @@ sk_sp<GrMtlTextureRenderTarget> GrMtlTextureRenderTarget::MakeWrappedTextureRend
         id<MTLTexture> texture,
         GrWrapCacheable cacheable) {
     SkASSERT(nil != texture);
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         SkASSERT((MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget) & texture.usage);
     }
     GrMipmapStatus mipmapStatus = texture.mipmapLevelCount > 1
@@ -154,8 +158,10 @@ size_t GrMtlTextureRenderTarget::onGpuMemorySize() const {
     if (this->numSamples() > 1) {
         // Msaa attachment should have a valid size
         SkASSERT(this->colorAttachment()->gpuMemorySize() ==
-                 GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),
-                                        this->numSamples(), GrMipmapped::kNo));
+                 GrSurface::ComputeSize(this->backendFormat(),
+                                        this->dimensions(),
+                                        this->numSamples(),
+                                        skgpu::Mipmapped::kNo));
     }
 #endif
     return GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),

@@ -10,6 +10,7 @@
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkRectPriv.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrPipeline.h"
 #include "src/gpu/ganesh/mock/GrMockOpTarget.h"
 #include "src/gpu/ganesh/tessellate/PathTessellator.h"
 #include "src/gpu/ganesh/tessellate/StrokeTessellator.h"
@@ -17,9 +18,10 @@
 #include "src/gpu/tessellate/MiddleOutPolygonTriangulator.h"
 #include "src/gpu/tessellate/WangsFormula.h"
 #include "tools/ToolUtils.h"
+
 #include <vector>
 
-namespace skgpu::v1 {
+namespace skgpu::ganesh {
 
 // This is the number of cubics in desk_chalkboard.skp. (There are no quadratics in the chalkboard.)
 constexpr static int kNumCubicsInChalkboard = 47182;
@@ -92,7 +94,7 @@ public:
     }
 
     const char* onGetName() override { return fName.c_str(); }
-    bool isSuitableFor(Backend backend) final { return backend == kNonRendering_Backend; }
+    bool isSuitableFor(Backend backend) final { return backend == Backend::kNonRendering; }
 
 protected:
     void onDelayedSetup() override {
@@ -322,7 +324,7 @@ public:
 
 private:
     const char* onGetName() override { return fName.c_str(); }
-    bool isSuitableFor(Backend backend) final { return backend == kNonRendering_Backend; }
+    bool isSuitableFor(Backend backend) final { return backend == Backend::kNonRendering; }
 
     void onDelayedSetup() override {
         fTarget = std::make_unique<GrMockOpTarget>(make_mock_context());
@@ -378,4 +380,4 @@ DEF_BENCH(return new TessPrepareBench(
         "GrStrokeFixedCountTessellator_motionmark");
 )
 
-}  // namespace skgpu::v1
+}  // namespace skgpu::ganesh

@@ -8,7 +8,20 @@
 #ifndef GrMockRenderTask_DEFINED
 #define GrMockRenderTask_DEFINED
 
+#include "include/core/SkRefCnt.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrRenderTask.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+
+#include <utility>
+
+class GrOpFlushState;
+class GrRecordingContext;
+class GrResourceAllocator;
+struct SkIRect;
 
 class GrMockRenderTask final : public GrRenderTask {
 public:
@@ -37,12 +50,12 @@ public:
     }
     bool onExecute(GrOpFlushState*) override { return true; }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     const char* name() const final { return "Mock"; }
 #endif
 
 private:
-    SkTArray<sk_sp<GrSurfaceProxy>> fUsed;
+    skia_private::TArray<sk_sp<GrSurfaceProxy>> fUsed;
 };
 
 #endif

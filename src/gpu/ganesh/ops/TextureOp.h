@@ -22,18 +22,25 @@ class GrTextureProxy;
 struct GrTextureSetEntry;
 struct SkRect;
 class SkMatrix;
+class GrQuad;
 
-namespace skgpu::v1 {
+namespace skgpu::ganesh {
 class SurfaceDrawContext;
 }
 
 namespace skgpu::ganesh {
 
+/**
+ * Tests if filtering will have any effect in the drawing of the 'srcQuad' to the 'dstquad'.
+ * We return false when filtering has no impact drawing operations as they are effectively blits.
+ */
+std::tuple<bool /* filter */, bool /* mipmap */> FilterAndMipmapHaveNoEffect(const GrQuad& srcQuad,
+                                                                             const GrQuad& dstQuad);
+
 class SurfaceDrawContext;
 
 class TextureOp {
 public:
-
     /**
      * Controls whether saturate() is called after the texture is color-converted to ensure all
      * color values are in 0..1 range.
@@ -67,7 +74,7 @@ public:
     // Automatically falls back to using one FillRectOp per entry if dynamic states are not
     // supported, or if the blend mode is not src-over. 'cnt' is the size of the entry array.
     // 'proxyCnt' <= 'cnt' and represents the number of proxy switches within the array.
-    static void AddTextureSetOps(skgpu::v1::SurfaceDrawContext*,
+    static void AddTextureSetOps(skgpu::ganesh::SurfaceDrawContext*,
                                  const GrClip*,
                                  GrRecordingContext*,
                                  GrTextureSetEntry[],
@@ -82,7 +89,7 @@ public:
                                  const SkMatrix& viewMatrix,
                                  sk_sp<GrColorSpaceXform> textureXform);
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     static uint32_t ClassID();
 #endif
 

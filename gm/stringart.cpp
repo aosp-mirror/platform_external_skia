@@ -32,14 +32,9 @@ public:
     StringArtGM() : fNumSteps(kMaxNumSteps) {}
 
 protected:
+    SkString getName() const override { return SkString("stringart"); }
 
-    SkString onShortName() override {
-        return SkString("stringart");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(kWidth, kHeight);
-    }
+    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
 
     void onDraw(SkCanvas* canvas) override {
         SkScalar angle = kAngle*SK_ScalarPI + SkScalarHalf(SK_ScalarPI);
@@ -89,75 +84,3 @@ private:
 };
 
 DEF_GM( return new StringArtGM; )
-
-/////////////////////////////////////////////////////////////////////////////////////////////////
-
-#if 0
-#include "modules/skottie/include/Skottie.h"
-
-class SkottieGM : public skiagm::GM {
-    enum {
-        kWidth = 800,
-        kHeight = 600,
-    };
-
-    enum {
-        N = 100,
-    };
-    skottie::Animation* fAnims[N];
-    SkRect              fRects[N];
-    SkScalar            fDur;
-
-public:
-    SkottieGM() {
-        sk_bzero(fAnims, sizeof(fAnims));
-    }
-    ~SkottieGM() override {
-        for (auto anim : fAnims) {
-            SkSafeUnref(anim);
-        }
-    }
-
-protected:
-
-    SkString onShortName() override { return SkString("skottie"); }
-
-    SkISize onISize() override { return SkISize::Make(kWidth, kHeight); }
-
-    void init() {
-        SkRandom rand;
-        auto data = SkData::MakeFromFileName("/Users/reed/Downloads/maps_pinlet.json");
-   //     for (;;) skottie::Animation::Make((const char*)data->data(), data->size());
-        for (int i = 0; i < N; ++i) {
-            fAnims[i] = skottie::Animation::Make((const char*)data->data(), data->size()).release();
-            SkScalar x = rand.nextF() * kWidth;
-            SkScalar y = rand.nextF() * kHeight;
-            fRects[i].setXYWH(x, y, 400, 400);
-        }
-        fDur = fAnims[0]->duration();
-    }
-
-    void onDraw(SkCanvas* canvas) override {
-        if (!fAnims[0]) {
-            this->init();
-        }
-        canvas->drawColor(0xFFBBBBBB);
-        for (int i = 0; i < N; ++i) {
-            fAnims[0]->render(canvas, &fRects[i]);
-        }
-    }
-
-    bool onAnimate(double nanos) override {
-        SkScalar time = (float)(fmod(1e-9 * nanos, fDur) / fDur);
-        for (auto anim : fAnims) {
-            anim->seek(time);
-        }
-        return true;
-    }
-
-private:
-    using INHERITED = GM;
-};
-DEF_GM( return new SkottieGM; )
-#endif
-

@@ -4,9 +4,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
-#include "include/private/base/SkTPin.h"
 #include "modules/svg/include/SkSVGGradient.h"
+
+#include "include/core/SkTileMode.h"
+#include "include/private/base/SkTPin.h"
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGStop.h"
 #include "modules/svg/include/SkSVGValue.h"
@@ -29,16 +30,12 @@ void SkSVGGradient::collectColorStops(const SkSVGRenderContext& ctx,
     // Used to resolve percentage offsets.
     const SkSVGLengthContext ltx(SkSize::Make(1, 1));
 
-    for (const auto& child : fChildren) {
-        if (child->tag() != SkSVGTag::kStop) {
-            continue;
-        }
-
-        const auto& stop = static_cast<const SkSVGStop&>(*child);
-        colors->push_back(this->resolveStopColor(ctx, stop));
-        pos->push_back(SkTPin(ltx.resolve(stop.getOffset(), SkSVGLengthContext::LengthType::kOther),
-                              0.f, 1.f));
-    }
+    this->forEachChild<SkSVGStop>([&](const SkSVGStop* stop) {
+        colors->push_back(this->resolveStopColor(ctx, *stop));
+        pos->push_back(
+            SkTPin(ltx.resolve(stop->getOffset(), SkSVGLengthContext::LengthType::kOther),
+                   0.f, 1.f));
+    });
 
     SkASSERT(colors->size() == pos->size());
 
@@ -63,7 +60,7 @@ SkColor4f SkSVGGradient::resolveStopColor(const SkSVGRenderContext& ctx,
 
     const auto color = SkColor4f::FromColor(ctx.resolveSvgColor(*stopColor));
 
-    return { color.fR, color.fG, color.fB, *stopOpacity };
+    return { color.fR, color.fG, color.fB, *stopOpacity * color.fA };
 }
 
 bool SkSVGGradient::onAsPaint(const SkSVGRenderContext& ctx, SkPaint* paint) const {

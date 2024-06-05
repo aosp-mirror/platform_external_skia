@@ -3,24 +3,24 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
-#ifndef SKSL_ENABLE_TRACING
-#define SKSL_ENABLE_TRACING
-#endif
-
 #ifndef SK_ANDROID_FRAMEWORK_USE_PERFETTO
 #define SK_ANDROID_FRAMEWORK_USE_PERFETTO
 #endif
 
+#ifndef SK_CODEC_DECODES_BMP
+#define SK_CODEC_DECODES_BMP
+#endif
+
+#ifndef SK_CODEC_DECODES_WBMP
+#define SK_CODEC_DECODES_WBMP
+#endif
+
+#ifndef SK_ENABLE_AVX512_OPTS
+#define SK_ENABLE_AVX512_OPTS
+#endif
+
 #ifndef SK_ENABLE_PRECOMPILE
 #define SK_ENABLE_PRECOMPILE
-#endif
-
-#ifndef SK_ENABLE_SKSL
-#define SK_ENABLE_SKSL
-#endif
-
-#ifndef SK_ENCODE_PNG
-#define SK_ENCODE_PNG
 #endif
 
 #ifndef SK_GAMMA_APPLY_TO_A8
@@ -35,8 +35,8 @@
 #define SK_GL
 #endif
 
-#ifndef SK_HAS_ANDROID_CODEC
-#define SK_HAS_ANDROID_CODEC
+#ifndef SK_GRAPHITE
+#define SK_GRAPHITE
 #endif
 
 #ifndef SK_IN_RENDERENGINE

@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -30,6 +34,7 @@ SFNT_FILES = [
     "SkOTTable_name.cpp",
     "SkOTTable_name.h",
     "SkOTTable_post.h",
+    "SkOTTable_sbix.h",
     "SkOTUtils.cpp",
     "SkOTUtils.h",
     "SkPanose.h",
@@ -45,11 +50,31 @@ split_srcs_and_hdrs(
 skia_filegroup(
     name = "srcs",
     srcs = [":sfnt_srcs"],
-    visibility = ["//src:__pkg__"],
+    visibility = [
+        "//src:__pkg__",
+    ],
 )
 
 skia_filegroup(
     name = "private_hdrs",
     srcs = [":sfnt_hdrs"],
-    visibility = ["//src:__pkg__"],
+    visibility = [
+        "//src:__pkg__",
+    ],
+)
+
+alias(
+    name = "core_priv_hdrs",
+    actual = ":private_hdrs",
+    visibility = [
+        "//src/core:__pkg__",
+    ],
+)
+
+alias(
+    name = "core_srcs",
+    actual = ":srcs",
+    visibility = [
+        "//src/core:__pkg__",
+    ],
 )

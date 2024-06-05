@@ -14,7 +14,6 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/pathops/SkPathOps.h"
 #include <tuple>
 
 namespace {
@@ -333,13 +332,9 @@ protected:
         }
     }
 
-    SkString onShortName() override {
-        return SkString("smallpaths");
-    }
+    SkString getName() const override { return SkString("smallpaths"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(640, 512);
-    }
+    SkISize getISize() override { return SkISize::Make(640, 512); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;

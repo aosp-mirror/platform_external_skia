@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkArc.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkClipOp.h"
 #include "include/core/SkColor.h"
@@ -61,7 +62,7 @@ bool GrStyledShape::testingOnly_isNonVolatilePath() const {
     return fShape.isPath() && !fShape.path().isVolatile();
 }
 
-using Key = SkTArray<uint32_t>;
+using Key = TArray<uint32_t>;
 
 static bool make_key(Key* key, const GrStyledShape& shape) {
     int size = shape.unstyledKeySize();
@@ -91,7 +92,7 @@ static bool test_bounds_by_rasterizing(const SkPath& path, const SkRect& bounds)
     static constexpr int kTol = 2;
     static_assert(kRes % 4 == 0);
     SkImageInfo info = SkImageInfo::MakeA8(kRes, kRes);
-    sk_sp<SkSurface> surface = SkSurface::MakeRaster(info);
+    sk_sp<SkSurface> surface = SkSurfaces::Raster(info);
     surface->getCanvas()->clear(0x0);
     SkRect clip = SkRect::MakeXYWH(kRes/4, kRes/4, kRes/2, kRes/2);
     SkMatrix matrix = SkMatrix::RectToRect(bounds, clip);
@@ -424,20 +425,16 @@ private:
 
 class ArcGeo : public Geo {
 public:
-    ArcGeo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle, bool useCenter)
-            : fOval(oval)
-            , fStartAngle(startAngle)
-            , fSweepAngle(sweepAngle)
-            , fUseCenter(useCenter) {}
+    ArcGeo(const SkArc& arc) : fArc(arc) {}
 
     SkPath path() const override {
         SkPath path;
-        SkPathPriv::CreateDrawArcPath(&path, fOval, fStartAngle, fSweepAngle, fUseCenter, false);
+        SkPathPriv::CreateDrawArcPath(&path, fArc, false);
         return path;
     }
 
     GrStyledShape makeShape(const SkPaint& paint) const override {
-        return GrStyledShape::MakeArc(fOval, fStartAngle, fSweepAngle, fUseCenter, GrStyle(paint));
+        return GrStyledShape::MakeArc(fArc, GrStyle(paint));
     }
 
     // GrStyledShape specializes when created from arc params but it doesn't recognize arcs from
@@ -445,10 +442,7 @@ public:
     bool isNonPath(const SkPaint& paint) const override { return false; }
 
 private:
-    SkRect fOval;
-    SkScalar fStartAngle;
-    SkScalar fSweepAngle;
-    bool fUseCenter;
+    SkArc fArc;
 };
 
 class PathGeo : public Geo {
@@ -2167,8 +2161,8 @@ DEF_TEST(GrStyledShape_short_path_keys, r) {
 }
 
 DEF_TEST(GrStyledShape, reporter) {
-    SkTArray<std::unique_ptr<Geo>> geos;
-    SkTArray<std::unique_ptr<RRectPathGeo>> rrectPathGeos;
+    TArray<std::unique_ptr<Geo>> geos;
+    TArray<std::unique_ptr<RRectPathGeo>> rrectPathGeos;
 
     for (auto r : { SkRect::MakeWH(10, 20),
                     SkRect::MakeWH(-10, -20),
@@ -2201,8 +2195,10 @@ DEF_TEST(GrStyledShape, reporter) {
     }
 
     // Arcs
-    geos.emplace_back(new ArcGeo(SkRect::MakeWH(200, 100), 12.f, 110.f, false));
-    geos.emplace_back(new ArcGeo(SkRect::MakeWH(200, 100), 12.f, 110.f, true));
+    geos.emplace_back(
+            new ArcGeo(SkArc::Make(SkRect::MakeWH(200, 100), 12.f, 110.f, SkArc::Type::kArc)));
+    geos.emplace_back(
+            new ArcGeo(SkArc::Make(SkRect::MakeWH(200, 100), 12.f, 110.f, SkArc::Type::kWedge)));
 
     {
         SkPath openRectPath;
@@ -2318,7 +2314,7 @@ DEF_TEST(GrStyledShape_arcs, reporter) {
     static constexpr SkScalar kIntervals[] = {1, 2};
     auto dash = SkDashPathEffect::Make(kIntervals, std::size(kIntervals), 1.5f);
 
-    SkTArray<GrStyle> styles;
+    TArray<GrStyle> styles;
     styles.push_back(GrStyle::SimpleFill());
     styles.push_back(GrStyle::SimpleHairline());
     styles.push_back(GrStyle(roundStroke, nullptr));
@@ -2328,8 +2324,10 @@ DEF_TEST(GrStyledShape_arcs, reporter) {
 
     for (const auto& style : styles) {
         // An empty rect never draws anything according to SkCanvas::drawArc() docs.
-        TestCase emptyArc(GrStyledShape::MakeArc(SkRect::MakeEmpty(), 0, 90.f, false, style),
-                                                 reporter);
+        TestCase emptyArc(
+                GrStyledShape::MakeArc(SkArc::Make(SkRect::MakeEmpty(), 0, 90.f, SkArc::Type::kArc),
+                                       style),
+                reporter);
         TestCase emptyPath(reporter, SkPath(), style);
         emptyArc.compare(reporter, emptyPath, TestCase::kAllSame_ComparisonExpecation);
 
@@ -2337,15 +2335,27 @@ DEF_TEST(GrStyledShape_arcs, reporter) {
         static constexpr SkRect kOval2{50, 0, 100, 50};
         // Test that swapping starting and ending angle doesn't change the shape unless the arc
         // has a path effect. Also test that different ovals produce different shapes.
-        TestCase arc1CW(GrStyledShape::MakeArc(kOval1, 0, 90.f, false, style), reporter);
-        TestCase arc1CCW(GrStyledShape::MakeArc(kOval1, 90.f, -90.f, false, style), reporter);
+        TestCase arc1CW(
+                GrStyledShape::MakeArc(SkArc::Make(kOval1, 0, 90.f, SkArc::Type::kArc), style),
+                reporter);
+        TestCase arc1CCW(
+                GrStyledShape::MakeArc(SkArc::Make(kOval1, 90.f, -90.f, SkArc::Type::kArc), style),
+                reporter);
 
-        TestCase arc1CWWithCenter(GrStyledShape::MakeArc(kOval1, 0, 90.f, true, style), reporter);
-        TestCase arc1CCWWithCenter(GrStyledShape::MakeArc(kOval1, 90.f, -90.f, true, style),
-                                   reporter);
+        TestCase arc1CWWithCenter(
+                GrStyledShape::MakeArc(SkArc::Make(kOval1, 0, 90.f, SkArc::Type::kWedge), style),
+                reporter);
+        TestCase arc1CCWWithCenter(
+                GrStyledShape::MakeArc(SkArc::Make(kOval1, 90.f, -90.f, SkArc::Type::kWedge),
+                                       style),
+                reporter);
 
-        TestCase arc2CW(GrStyledShape::MakeArc(kOval2, 0, 90.f, false, style), reporter);
-        TestCase arc2CWWithCenter(GrStyledShape::MakeArc(kOval2, 0, 90.f, true, style), reporter);
+        TestCase arc2CW(
+                GrStyledShape::MakeArc(SkArc::Make(kOval2, 0, 90.f, SkArc::Type::kArc), style),
+                reporter);
+        TestCase arc2CWWithCenter(
+                GrStyledShape::MakeArc(SkArc::Make(kOval2, 0, 90.f, SkArc::Type::kWedge), style),
+                reporter);
 
         auto reversedExepectations = style.hasPathEffect()
                                              ? TestCase::kAllDifferent_ComparisonExpecation
@@ -2358,13 +2368,19 @@ DEF_TEST(GrStyledShape_arcs, reporter) {
                                  TestCase::kAllDifferent_ComparisonExpecation);
 
         // Test that two arcs that start at the same angle but specified differently are equivalent.
-        TestCase arc3A(GrStyledShape::MakeArc(kOval1, 224.f, 73.f, false, style), reporter);
-        TestCase arc3B(GrStyledShape::MakeArc(kOval1, 224.f - 360.f, 73.f, false, style), reporter);
+        TestCase arc3A(
+                GrStyledShape::MakeArc(SkArc::Make(kOval1, 224.f, 73.f, SkArc::Type::kArc), style),
+                reporter);
+        TestCase arc3B(GrStyledShape::MakeArc(
+                               SkArc::Make(kOval1, 224.f - 360.f, 73.f, SkArc::Type::kArc), style),
+                       reporter);
         arc3A.compare(reporter, arc3B, TestCase::kAllDifferent_ComparisonExpecation);
 
         // Test that an arc that traverses the entire oval (and then some) is equivalent to the
         // oval itself unless there is a path effect.
-        TestCase ovalArc(GrStyledShape::MakeArc(kOval1, 150.f, -790.f, false, style), reporter);
+        TestCase ovalArc(GrStyledShape::MakeArc(
+                                 SkArc::Make(kOval1, 150.f, -790.f, SkArc::Type::kArc), style),
+                         reporter);
         TestCase oval(GrStyledShape(SkRRect::MakeOval(kOval1)), reporter);
         auto ovalExpectations = style.hasPathEffect() ? TestCase::kAllDifferent_ComparisonExpecation
                                                       : TestCase::kAllSame_ComparisonExpecation;
@@ -2375,8 +2391,10 @@ DEF_TEST(GrStyledShape_arcs, reporter) {
 
         // If the the arc starts/ends at the center then it is then equivalent to the oval only for
         // simple fills.
-        TestCase ovalArcWithCenter(GrStyledShape::MakeArc(kOval1, 304.f, 1225.f, true, style),
-                                   reporter);
+        TestCase ovalArcWithCenter(
+                GrStyledShape::MakeArc(SkArc::Make(kOval1, 304.f, 1225.f, SkArc::Type::kWedge),
+                                       style),
+                reporter);
         ovalExpectations = style.isSimpleFill() ? TestCase::kAllSame_ComparisonExpecation
                                                 : TestCase::kAllDifferent_ComparisonExpecation;
         ovalArcWithCenter.compare(reporter, oval, ovalExpectations);

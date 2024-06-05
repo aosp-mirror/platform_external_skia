@@ -5,149 +5,83 @@
  * found in the LICENSE file.
  */
 
+#include "src/gpu/graphite/SpecialImage_Graphite.h"
+
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
 #include "src/core/SkSpecialImage.h"
-#include "src/core/SkSpecialSurface.h"
+#include "src/gpu/graphite/Device.h"
 #include "src/gpu/graphite/Image_Graphite.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
-#include "src/shaders/SkImageShader.h"
+#include "src/gpu/graphite/TextureUtils.h"
 
 namespace skgpu::graphite {
 
-class SkSpecialImage_Graphite final : public SkSpecialImage {
+class SpecialImage final : public SkSpecialImage {
 public:
-    SkSpecialImage_Graphite(Recorder* recorder,
-                            const SkIRect& subset,
-                            uint32_t uniqueID,
-                            TextureProxyView view,
-                            const SkColorInfo& colorInfo,
-                            const SkSurfaceProps& props)
-            : SkSpecialImage(subset, uniqueID, colorInfo, props)
-            , fRecorder(recorder)
-            , fTextureProxyView(std::move(view)) {
+    SpecialImage(const SkIRect& subset, sk_sp<SkImage> image, const SkSurfaceProps& props)
+            : SkSpecialImage(subset, image->uniqueID(), image->imageInfo().colorInfo(), props)
+            , fImage(std::move(image)) {
+        SkASSERT(as_IB(fImage)->isGraphiteBacked());
     }
 
     size_t getSize() const override {
-        // TODO: return VRAM size here
-        return 0;
+        return fImage->textureSize();
     }
 
-    void onDraw(SkCanvas* canvas,
-                SkScalar x, SkScalar y,
-                const SkSamplingOptions& sampling,
-                const SkPaint* paint) const override {
-        SkRect dst = SkRect::MakeXYWH(x, y,
-                                      this->subset().width(), this->subset().height());
+    bool isGraphiteBacked() const override { return true; }
 
-        sk_sp<SkImage> img = sk_sp<SkImage>(new skgpu::graphite::Image(this->uniqueID(),
-                                                                       fTextureProxyView,
-                                                                       this->colorInfo()));
-
-        canvas->drawImageRect(img, SkRect::Make(this->subset()), dst,
-                              sampling, paint, SkCanvas::kStrict_SrcRectConstraint);
+    SkISize backingStoreDimensions() const override {
+        return fImage->dimensions();
     }
 
-#if defined(SK_GANESH)
-    GrSurfaceProxyView onView(GrRecordingContext*) const override {
-        // To get here we would have to be requesting a Ganesh resource from a Graphite-backed
-        // special image. That should never happen.
-        SkASSERT(false);
-        return {};
-    }
-#endif
-
-    TextureProxyView onTextureProxyView() const override { return fTextureProxyView; }
-
-    bool onGetROPixels(SkBitmap* dst) const override {
-        // This should never be called: All GPU image filters are implemented entirely on the GPU,
-        // so we never perform read-back.
-        // TODO: re-enabled this assert once Graphite has image filter support. Right now image
-        // filters will fallback to the raster backend in Graphite.
-        //SkASSERT(false);
-        return false;
+    sk_sp<SkSpecialImage> onMakeBackingStoreSubset(const SkIRect& subset) const override {
+        SkASSERT(fImage->bounds().contains(subset));
+        return sk_make_sp<skgpu::graphite::SpecialImage>(subset, fImage, this->props());
     }
 
-    sk_sp<SkSpecialSurface> onMakeSurface(SkColorType colorType,
-                                          const SkColorSpace* colorSpace,
-                                          const SkISize& size,
-                                          SkAlphaType at,
-                                          const SkSurfaceProps& props) const override {
-        SkASSERT(fRecorder);
-
-        SkImageInfo ii = SkImageInfo::Make(size, colorType, at, sk_ref_sp(colorSpace));
-
-        return SkSpecialSurface::MakeGraphite(fRecorder, ii, props);
-    }
-
-    sk_sp<SkSpecialImage> onMakeSubset(const SkIRect& subset) const override {
-        return SkSpecialImage::MakeGraphite(fRecorder,
-                                            subset,
-                                            this->uniqueID(),
-                                            fTextureProxyView,
-                                            this->colorInfo(),
-                                            this->props());
-    }
-
-    sk_sp<SkImage> onAsImage(const SkIRect* subset) const override {
-        if (subset) {
-            // TODO: fill this in
-            return nullptr;
-        }
-
-        return sk_make_sp<Image>(this->uniqueID(), fTextureProxyView, this->colorInfo());
-    }
-
-    sk_sp<SkShader> onAsShader(SkTileMode tileMode,
-                               const SkSamplingOptions& sampling,
-                               const SkMatrix& lm) const override {
-        // The special image's logical (0,0) is at its subset's topLeft() so we need to account for
-        // that in the local matrix used when sampling.
-        SkMatrix subsetOrigin = SkMatrix::Translate(-this->subset().topLeft());
-        subsetOrigin.postConcat(lm);
-        // However, we don't need to modify the subset itself since that is defined with respect to
-        // the base image, and the local matrix is applied before any tiling/clamping.
-        const SkRect subset = SkRect::Make(this->subset());
-
-        // asImage() w/o a subset makes no copy; create the SkImageShader directly to remember the
-        // subset used to access the image.
-        return SkImageShader::MakeSubset(this->asImage(), subset, tileMode, tileMode,
-                                         sampling, &subsetOrigin);
-    }
-
-    sk_sp<SkSurface> onMakeTightSurface(SkColorType colorType,
-                                        const SkColorSpace* colorSpace,
-                                        const SkISize& size,
-                                        SkAlphaType at) const override {
-        // TODO (michaelludwig): Why does this ignore colorType but onMakeSurface doesn't ignore it?
-        //    Once makeTightSurface() goes away, should this type overriding behavior be moved into
-        //    onMakeSurface() or is this unnecessary?
-        colorType = colorSpace && colorSpace->gammaIsLinear() ? kRGBA_F16_SkColorType
-                                                              : kRGBA_8888_SkColorType;
-        SkImageInfo info = SkImageInfo::Make(size, colorType, at, sk_ref_sp(colorSpace));
-        // The user never gets a direct ref to this surface (nor its snapped image) so it must be
-        // budgeted
-        return Surface::MakeGraphite(fRecorder, info, skgpu::Budgeted::kYes);
-    }
+    sk_sp<SkImage> asImage() const override { return fImage; }
 
 private:
-    Recorder*        fRecorder;
-    TextureProxyView fTextureProxyView;
+    // TODO(b/299474380): SkSpecialImage is intended to go away in favor of just using SkImages
+    // and tracking the intended srcRect explicitly in skif::FilterResult. Since Graphite tracks
+    // device-linked textures via Images, the graphite special image just wraps an image.
+    sk_sp<SkImage> fImage;
 };
 
 } // namespace skgpu::graphite
 
-sk_sp<SkSpecialImage> SkSpecialImage::MakeGraphite(skgpu::graphite::Recorder* recorder,
-                                                   const SkIRect& subset,
-                                                   uint32_t uniqueID,
-                                                   skgpu::graphite::TextureProxyView view,
-                                                   const SkColorInfo& colorInfo,
-                                                   const SkSurfaceProps& props) {
-    if (!recorder || !view) {
+namespace SkSpecialImages {
+
+sk_sp<SkSpecialImage> MakeGraphite(skgpu::graphite::Recorder* recorder,
+                                   const SkIRect& subset,
+                                   sk_sp<SkImage> image,
+                                   const SkSurfaceProps& props) {
+    // 'recorder' can be null if we're wrapping a graphite-backed image since there's no work that
+    // needs to be added. This can happen when snapping a special image from a Device that's been
+    // marked as immutable and abandoned its recorder.
+    if (!image || subset.isEmpty()) {
         return nullptr;
     }
 
-    SkASSERT(RectFits(subset, view.width(), view.height()));
-    return sk_make_sp<skgpu::graphite::SkSpecialImage_Graphite>(recorder, subset, uniqueID,
-                                                                std::move(view), colorInfo, props);
+    SkASSERT(image->bounds().contains(subset));
+
+    // Use the Recorder's client ImageProvider to convert to a graphite-backed image when
+    // possible, but this does not necessarily mean the provider will produce a valid image.
+    if (!as_IB(image)->isGraphiteBacked()) {
+        if (!recorder) {
+            return nullptr;
+        }
+        auto [graphiteImage, _] =
+                skgpu::graphite::GetGraphiteBacked(recorder, image.get(), {});
+        if (!graphiteImage) {
+            return nullptr;
+        }
+
+        image = graphiteImage;
+    }
+
+    return sk_make_sp<skgpu::graphite::SpecialImage>(subset, std::move(image), props);
 }
+
+}  // namespace SkSpecialImages

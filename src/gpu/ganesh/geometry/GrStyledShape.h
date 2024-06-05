@@ -9,15 +9,25 @@
 #define GrStyledShape_DEFINED
 
 #include "include/core/SkPath.h"
+#include "include/core/SkPathTypes.h"
 #include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/private/base/SkAssert.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkTLazy.h"
+#include "src/core/SkPathEnums.h"
 #include "src/core/SkPathPriv.h"
 #include "src/gpu/ganesh/GrStyle.h"
 #include "src/gpu/ganesh/geometry/GrShape.h"
-#include <new>
 
+#include <cstdint>
+
+struct SkArc;
 class SkIDChangeListener;
+class SkPaint;
+struct SkPoint;
 
 /**
  * Represents a geometric shape (rrect or path) and the GrStyle that it should be rendered with.
@@ -77,11 +87,8 @@ public:
 
     GrStyledShape(const SkRRect& rrect, const GrStyle& style,
                   DoSimplify doSimplify = DoSimplify::kYes)
-            : fShape(rrect), fStyle(style) {
-        if (doSimplify == DoSimplify::kYes) {
-            this->simplify();
-        }
-    }
+            // Preserve legacy indices (6 for CW), see SkPathBuilder::addRRect().
+            : GrStyledShape(rrect, SkPathDirection::kCW, 6, false, style, doSimplify) {}
 
     GrStyledShape(const SkRRect& rrect, SkPathDirection dir, unsigned start, bool inverted,
                   const GrStyle& style, DoSimplify doSimplify = DoSimplify::kYes)
@@ -104,8 +111,8 @@ public:
 
     GrStyledShape(const GrStyledShape&);
 
-    static GrStyledShape MakeArc(const SkRect& oval, SkScalar startAngleDegrees,
-                                 SkScalar sweepAngleDegrees, bool useCenter, const GrStyle& style,
+    static GrStyledShape MakeArc(const SkArc& arc,
+                                 const GrStyle& style,
                                  DoSimplify = DoSimplify::kYes);
 
     GrStyledShape& operator=(const GrStyledShape& that);

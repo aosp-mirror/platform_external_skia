@@ -5,165 +5,225 @@
  * found in the LICENSE file.
  */
 
+#include "src/effects/imagefilters/SkMatrixConvolutionImageFilter.h"
+
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
-#include "include/core/SkColor.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkFlattenable.h"
+#include "include/core/SkImage.h"
 #include "include/core/SkImageFilter.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkM44.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
+#include "include/effects/SkRuntimeEffect.h"
 #include "include/private/base/SkMath.h"
-#include "include/private/base/SkTPin.h"
+#include "include/private/base/SkSpan_impl.h"
+#include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTemplates.h"
+#include "src/base/SkSafeMath.h"
+#include "src/core/SkImageFilterTypes.h"
 #include "src/core/SkImageFilter_Base.h"
+#include "src/core/SkKnownRuntimeEffects.h"
+#include "src/core/SkPicturePriv.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkSpecialImage.h"
+#include "src/core/SkRectPriv.h"
 #include "src/core/SkWriteBuffer.h"
 
 #include <cstdint>
 #include <cstring>
-#include <memory>
+#include <optional>
 #include <utility>
-class SkMatrix;
-
-#if defined(SK_GANESH)
-#include "include/gpu/GrRecordingContext.h"
-#include "src/gpu/ganesh/GrFragmentProcessor.h"
-#include "src/gpu/ganesh/GrRecordingContextPriv.h"
-#include "src/gpu/ganesh/GrSurfaceProxy.h"
-#include "src/gpu/ganesh/GrSurfaceProxyView.h"
-#include "src/gpu/ganesh/SkGr.h"
-#include "src/gpu/ganesh/effects/GrMatrixConvolutionEffect.h"
-#endif
 
 using namespace skia_private;
+using namespace MatrixConvolutionImageFilter;
 
 namespace {
+
+static_assert(kLargeKernelSize % 4 == 0, "Must be a multiple of 4");
+static_assert(kSmallKernelSize <= kLargeKernelSize, "Small kernel size must be <= max size");
+// The uniform array storing the kernel is packed into half4's so that we don't waste space
+// forcing array elements out to 16-byte alignment when using std140.
+static_assert(kMaxUniformKernelSize % 4 == 0, "Must be a multiple of 4");
+
+SkBitmap create_kernel_bitmap(const SkISize& kernelSize, const float* kernel,
+                              float* innerGain, float* innerBias);
 
 class SkMatrixConvolutionImageFilter final : public SkImageFilter_Base {
 public:
     SkMatrixConvolutionImageFilter(const SkISize& kernelSize, const SkScalar* kernel,
                                    SkScalar gain, SkScalar bias, const SkIPoint& kernelOffset,
-                                   SkTileMode tileMode, bool convolveAlpha,
-                                   sk_sp<SkImageFilter> input, const SkRect* cropRect)
-            : INHERITED(&input, 1, cropRect)
+                                   bool convolveAlpha, sk_sp<SkImageFilter> const* input)
+            : SkImageFilter_Base(input, 1)
+            , fKernel(kernel, kernelSize.width() * kernelSize.height())
             , fKernelSize(kernelSize)
+            , fKernelOffset({kernelOffset.fX, kernelOffset.fY})
             , fGain(gain)
             , fBias(bias)
-            , fKernelOffset(kernelOffset)
-            , fTileMode(tileMode)
             , fConvolveAlpha(convolveAlpha) {
-        size_t size = (size_t) sk_64_mul(fKernelSize.width(), fKernelSize.height());
-        fKernel = new SkScalar[size];
-        memcpy(fKernel, kernel, size * sizeof(SkScalar));
+        // The public factory should have ensured these before creating this object.
+        SkASSERT(SkSafeMath::Mul(kernelSize.fWidth, kernelSize.fHeight) <= kLargeKernelSize);
         SkASSERT(kernelSize.fWidth >= 1 && kernelSize.fHeight >= 1);
         SkASSERT(kernelOffset.fX >= 0 && kernelOffset.fX < kernelSize.fWidth);
         SkASSERT(kernelOffset.fY >= 0 && kernelOffset.fY < kernelSize.fHeight);
+
+        // Does nothing for small kernels, otherwise encodes kernel into an A8 image.
+        fKernelBitmap = create_kernel_bitmap(kernelSize, kernel, &fInnerGain, &fInnerBias);
     }
 
-    ~SkMatrixConvolutionImageFilter() override {
-        delete[] fKernel;
-    }
+    SkRect computeFastBounds(const SkRect& bounds) const override;
 
 protected:
-
     void flatten(SkWriteBuffer&) const override;
-
-    sk_sp<SkSpecialImage> onFilterImage(const Context&, SkIPoint* offset) const override;
-    SkIRect onFilterNodeBounds(const SkIRect&, const SkMatrix& ctm,
-                               MapDirection, const SkIRect* inputRect) const override;
-    bool onAffectsTransparentBlack() const override;
 
 private:
     friend void ::SkRegisterMatrixConvolutionImageFilterFlattenable();
     SK_FLATTENABLE_HOOKS(SkMatrixConvolutionImageFilter)
 
-    SkISize     fKernelSize;
-    SkScalar*   fKernel;
-    SkScalar    fGain;
-    SkScalar    fBias;
-    SkIPoint    fKernelOffset;
-    SkTileMode  fTileMode;
-    bool        fConvolveAlpha;
+    bool onAffectsTransparentBlack() const override {
+        // affectsTransparentBlack() is conflated with "canComputeFastBounds" and MatrixConvolution
+        // is unique in that it might not produce unbounded output, but we can't calculate the
+        // fast bounds because the kernel is applied in device space and no transform is provided
+        // with that API.
+        // TODO(skbug.com/14617): Accept a matrix in computeFastBounds() so that we can handle the
+        // layer-space kernel case.
 
-    template <class PixelFetcher, bool convolveAlpha>
-    void filterPixels(const SkBitmap& src,
-                      SkBitmap* result,
-                      SkIVector& offset,
-                      SkIRect rect,
-                      const SkIRect& bounds) const;
-    template <class PixelFetcher>
-    void filterPixels(const SkBitmap& src,
-                      SkBitmap* result,
-                      SkIVector& offset,
-                      const SkIRect& rect,
-                      const SkIRect& bounds) const;
-    void filterInteriorPixels(const SkBitmap& src,
-                              SkBitmap* result,
-                              SkIVector& offset,
-                              const SkIRect& rect,
-                              const SkIRect& bounds) const;
-    void filterBorderPixels(const SkBitmap& src,
-                            SkBitmap* result,
-                            SkIVector& offset,
-                            const SkIRect& rect,
-                            const SkIRect& bounds) const;
-
-    using INHERITED = SkImageFilter_Base;
-};
-
-class UncheckedPixelFetcher {
-public:
-    static inline SkPMColor fetch(const SkBitmap& src, int x, int y, const SkIRect& bounds) {
-        return *src.getAddr32(x, y);
+        // That issue aside, a matrix convolution can affect transparent black when it has a
+        // non-zero bias and convolves alpha (if it doesn't convolve the alpha channel then the bias
+        // applied to RGB doesn't matter for transparent black pixels).
+        // NOTE: The crop image filters that wrap the matrix convolution to apply tile modes will
+        // reset this property when possible.
+        return true;
     }
+
+    skif::FilterResult onFilterImage(const skif::Context& context) const override;
+
+    skif::LayerSpace<SkIRect> onGetInputLayerBounds(
+            const skif::Mapping& mapping,
+            const skif::LayerSpace<SkIRect>& desiredOutput,
+            std::optional<skif::LayerSpace<SkIRect>> contentBounds) const override;
+
+    std::optional<skif::LayerSpace<SkIRect>> onGetOutputLayerBounds(
+            const skif::Mapping& mapping,
+            std::optional<skif::LayerSpace<SkIRect>> contentBounds) const override;
+
+    // Helper functions to adjust 'bounds' by the kernel size and offset, either for what would be
+    // sampled when covering 'bounds', or what could produce values when applied to 'bounds'.
+    skif::LayerSpace<SkIRect> boundsSampledByKernel(const skif::LayerSpace<SkIRect>& bounds) const;
+    skif::LayerSpace<SkIRect> boundsAffectedByKernel(const skif::LayerSpace<SkIRect>& bounds) const;
+
+    sk_sp<SkShader> createShader(const skif::Context& ctx, sk_sp<SkShader> input) const;
+
+    // Original kernel data, preserved for serialization even if it was encoded into fKernelBitmap
+    TArray<float> fKernel;
+
+    // Unlike the majority of image filters, the kernel is applied as-is to the layer-space pixels.
+    // This means that the kernel size and offset are always in the layer coordinate system.
+    skif::LayerSpace<SkISize>  fKernelSize;
+    skif::LayerSpace<skif::IVector> fKernelOffset;
+
+    float fGain;
+    float fBias; // NOTE: This is assumed to be in [0-255] for historical reasons
+    bool  fConvolveAlpha;
+
+    // Derived from fKernel when larger than what we will upload as uniforms; fInnerBias and
+    // fInnerGain  reconstruct the original coefficient from unorm8 data as (a+innerBias)*innerGain
+    // Since these are derived, they are not serialized.
+    SkBitmap fKernelBitmap;
+    float fInnerBias;
+    float fInnerGain;
 };
 
-class ClampPixelFetcher {
-public:
-    static inline SkPMColor fetch(const SkBitmap& src, int x, int y, const SkIRect& bounds) {
-        x = SkTPin(x, bounds.fLeft, bounds.fRight - 1);
-        y = SkTPin(y, bounds.fTop, bounds.fBottom - 1);
-        return *src.getAddr32(x, y);
+// LayerSpace doesn't have a clean type to represent 4 separate edge deltas, but the result
+// is a valid layer-space rectangle, so just go back to the underlying SkIRect temporarily.
+skif::LayerSpace<SkIRect> adjust(const skif::LayerSpace<SkIRect>& rect,
+                                 int dl, int dt, int dr, int db) {
+    SkIRect adjusted = SkIRect(rect);
+    adjusted.adjust(dl, dt, dr, db);
+    return skif::LayerSpace<SkIRect>(adjusted);
+}
+
+std::pair<int, SkKnownRuntimeEffects::StableKey> quantize_by_kernel_size(int kernelSize) {
+    if (kernelSize < kMaxUniformKernelSize) {
+        return { kMaxUniformKernelSize, SkKnownRuntimeEffects::StableKey::kMatrixConvUniforms };
+    } else if (kernelSize <= kSmallKernelSize) {
+        return { kSmallKernelSize, SkKnownRuntimeEffects::StableKey::kMatrixConvTexSm };
     }
-};
 
-class RepeatPixelFetcher {
-public:
-    static inline SkPMColor fetch(const SkBitmap& src, int x, int y, const SkIRect& bounds) {
-        x = (x - bounds.left()) % bounds.width() + bounds.left();
-        y = (y - bounds.top()) % bounds.height() + bounds.top();
-        if (x < bounds.left()) {
-            x += bounds.width();
+    return { kLargeKernelSize, SkKnownRuntimeEffects::StableKey::kMatrixConvTexLg };
+}
+
+SkBitmap create_kernel_bitmap(const SkISize& kernelSize, const float* kernel,
+                              float* innerGain, float* innerBias) {
+    int length = kernelSize.fWidth * kernelSize.fHeight;
+    auto [quantizedKernelSize, key] = quantize_by_kernel_size(length);
+    if (key == SkKnownRuntimeEffects::StableKey::kMatrixConvUniforms) {
+        // No bitmap is needed to store the kernel on the GPU
+        *innerGain = 1.f;
+        *innerBias = 0.f;
+        return {};
+    }
+
+
+    // The convolution kernel is "big". The SVG spec has no upper limit on what's supported so
+    // store the kernel in a SkBitmap that will be uploaded to a data texture. We could
+    // implement a more straight forward evaluation loop for the CPU backend, but kernels of
+    // this size are already going to be very slow so we accept the extra indirection to
+    // keep the code paths consolidated.
+    //
+    // We store the data in A8 for universal support, but this requires normalizing the values
+    // and adding an extra inner bias operation to the shader. We could store values in A16 or
+    // A32 for improved accuracy but that would require querying GPU capabilities, which
+    // prevents creating the bitmap once during initialization. Even on the GPU, kernels larger
+    // than 5x5 quickly exceed realtime capabilities, so the loss of precision isn't a great
+    // concern either.
+    float min = kernel[0];
+    float max = kernel[0];
+    for (int i = 1; i < length; ++i) {
+        if (kernel[i] < min) {
+            min = kernel[i];
         }
-        if (y < bounds.top()) {
-            y += bounds.height();
-        }
-        return *src.getAddr32(x, y);
-    }
-};
-
-class ClampToBlackPixelFetcher {
-public:
-    static inline SkPMColor fetch(const SkBitmap& src, int x, int y, const SkIRect& bounds) {
-        if (x < bounds.fLeft || x >= bounds.fRight || y < bounds.fTop || y >= bounds.fBottom) {
-            return 0;
-        } else {
-            return *src.getAddr32(x, y);
+        if (kernel[i] > max) {
+            max = kernel[i];
         }
     }
-};
 
-} // end namespace
+    *innerGain = max - min;
+    *innerBias = min;
+    // Treat a near-0 gain (i.e. box blur) as 1 and let innerBias move everything to final value.
+    if (SkScalarNearlyZero(*innerGain)) {
+        *innerGain = 1.f;
+    }
+
+    SkBitmap kernelBM;
+    if (!kernelBM.tryAllocPixels(SkImageInfo::Make({ quantizedKernelSize, 1 },
+                                                   kAlpha_8_SkColorType,
+                                                   kPremul_SkAlphaType))) {
+        // OOM so return an empty bitmap, which will be detected later on in onFilterImage().
+        return {};
+    }
+
+    for (int i = 0; i < length; ++i) {
+        *kernelBM.getAddr8(i, 0) = SkScalarRoundToInt(255 * (kernel[i] - min) / *innerGain);
+    }
+    for (int i = length; i < quantizedKernelSize; ++i) {
+        *kernelBM.getAddr8(i, 0) = 0;
+    }
+
+    kernelBM.setImmutable();
+    return kernelBM;
+}
+
+} // anonymous namespace
 
 sk_sp<SkImageFilter> SkImageFilters::MatrixConvolution(const SkISize& kernelSize,
                                                        const SkScalar kernel[],
@@ -174,14 +234,10 @@ sk_sp<SkImageFilter> SkImageFilters::MatrixConvolution(const SkISize& kernelSize
                                                        bool convolveAlpha,
                                                        sk_sp<SkImageFilter> input,
                                                        const CropRect& cropRect) {
-    // We need to be able to read at most SK_MaxS32 bytes, so divide that
-    // by the size of a scalar to know how many scalars we can read.
-    static constexpr int32_t kMaxKernelSize = SK_MaxS32 / sizeof(SkScalar);
-
     if (kernelSize.width() < 1 || kernelSize.height() < 1) {
         return nullptr;
     }
-    if (kMaxKernelSize / kernelSize.fWidth < kernelSize.fHeight) {
+    if (SkSafeMath::Mul(kernelSize.width(), kernelSize.height()) > kLargeKernelSize) {
         return nullptr;
     }
     if (!kernel) {
@@ -191,9 +247,23 @@ sk_sp<SkImageFilter> SkImageFilters::MatrixConvolution(const SkISize& kernelSize
         (kernelOffset.fY < 0) || (kernelOffset.fY >= kernelSize.fHeight)) {
         return nullptr;
     }
-    return sk_sp<SkImageFilter>(new SkMatrixConvolutionImageFilter(
-            kernelSize, kernel, gain, bias, kernelOffset, tileMode, convolveAlpha,
-            std::move(input), cropRect));
+
+    // The 'tileMode' behavior is not well-defined if there is no crop, so we only apply it if
+    // there is a provided 'cropRect'.
+    sk_sp<SkImageFilter> filter = std::move(input);
+    if (cropRect && tileMode != SkTileMode::kDecal) {
+        // Historically the input image was restricted to the cropRect when tiling was not kDecal
+        // so that the kernel evaluated the tiled edge conditions, while a kDecal crop only affected
+        // the output.
+        filter = SkImageFilters::Crop(*cropRect, tileMode, std::move(filter));
+    }
+    filter = sk_sp<SkImageFilter>(new SkMatrixConvolutionImageFilter(
+            kernelSize, kernel, gain, bias, kernelOffset, convolveAlpha, &filter));
+    if (cropRect) {
+        // But regardless of the tileMode, the output is decal cropped.
+        filter = SkImageFilters::Crop(*cropRect, SkTileMode::kDecal, std::move(filter));
+    }
+    return filter;
 }
 
 void SkRegisterMatrixConvolutionImageFilterFlattenable() {
@@ -228,302 +298,160 @@ sk_sp<SkFlattenable> SkMatrixConvolutionImageFilter::CreateProc(SkReadBuffer& bu
     kernelOffset.fX = buffer.readInt();
     kernelOffset.fY = buffer.readInt();
 
-    SkTileMode tileMode = buffer.read32LE(SkTileMode::kLastTileMode);
+    SkTileMode tileMode = SkTileMode::kDecal;
+    if (buffer.isVersionLT(SkPicturePriv::kConvolutionImageFilterTilingUpdate)) {
+        tileMode = buffer.read32LE(SkTileMode::kLastTileMode);
+    } // else SkCropImageFilter handles the tile mode (if any)
+
     bool convolveAlpha = buffer.readBool();
 
     if (!buffer.isValid()) {
         return nullptr;
     }
+    // NOTE: For SKPs with version >= kConvolutionImageFilterTilingUpdate, tileMode will be kDecal
+    // and common.cropRect() will be null (so the factory also ignores tileMode). Any
+    // cropping/tiling will have been handled by the deserialized input/output Crop image filters.
     return SkImageFilters::MatrixConvolution(
                 kernelSize, kernel.get(), gain, bias, kernelOffset, tileMode,
                 convolveAlpha, common.getInput(0), common.cropRect());
 }
 
 void SkMatrixConvolutionImageFilter::flatten(SkWriteBuffer& buffer) const {
-    this->INHERITED::flatten(buffer);
-    buffer.writeInt(fKernelSize.fWidth);
-    buffer.writeInt(fKernelSize.fHeight);
-    buffer.writeScalarArray(fKernel, fKernelSize.fWidth * fKernelSize.fHeight);
+    this->SkImageFilter_Base::flatten(buffer);
+    buffer.writeInt(fKernelSize.width());
+    buffer.writeInt(fKernelSize.height());
+    buffer.writeScalarArray(fKernel.data(), fKernel.size());
     buffer.writeScalar(fGain);
     buffer.writeScalar(fBias);
-    buffer.writeInt(fKernelOffset.fX);
-    buffer.writeInt(fKernelOffset.fY);
-    buffer.writeInt((int) fTileMode);
+    buffer.writeInt(fKernelOffset.x());
+    buffer.writeInt(fKernelOffset.y());
     buffer.writeBool(fConvolveAlpha);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template<class PixelFetcher, bool convolveAlpha>
-void SkMatrixConvolutionImageFilter::filterPixels(const SkBitmap& src,
-                                                  SkBitmap* result,
-                                                  SkIVector& offset,
-                                                  SkIRect rect,
-                                                  const SkIRect& bounds) const {
-    if (!rect.intersect(bounds)) {
-        return;
-    }
-    for (int y = rect.fTop; y < rect.fBottom; ++y) {
-        SkPMColor* dptr = result->getAddr32(rect.fLeft - offset.fX, y - offset.fY);
-        for (int x = rect.fLeft; x < rect.fRight; ++x) {
-            SkScalar sumA = 0, sumR = 0, sumG = 0, sumB = 0;
-            for (int cy = 0; cy < fKernelSize.fHeight; cy++) {
-                for (int cx = 0; cx < fKernelSize.fWidth; cx++) {
-                    SkPMColor s = PixelFetcher::fetch(src,
-                                                      x + cx - fKernelOffset.fX,
-                                                      y + cy - fKernelOffset.fY,
-                                                      bounds);
-                    SkScalar k = fKernel[cy * fKernelSize.fWidth + cx];
-                    if (convolveAlpha) {
-                        sumA += SkGetPackedA32(s) * k;
-                    }
-                    sumR += SkGetPackedR32(s) * k;
-                    sumG += SkGetPackedG32(s) * k;
-                    sumB += SkGetPackedB32(s) * k;
-                }
-            }
-            int a = convolveAlpha
-                  ? SkTPin(SkScalarFloorToInt(sumA * fGain + fBias), 0, 255)
-                  : 255;
-            int r = SkTPin(SkScalarFloorToInt(sumR * fGain + fBias), 0, a);
-            int g = SkTPin(SkScalarFloorToInt(sumG * fGain + fBias), 0, a);
-            int b = SkTPin(SkScalarFloorToInt(sumB * fGain + fBias), 0, a);
-            if (!convolveAlpha) {
-                a = SkGetPackedA32(PixelFetcher::fetch(src, x, y, bounds));
-                *dptr++ = SkPreMultiplyARGB(a, r, g, b);
-            } else {
-                *dptr++ = SkPackARGB32(a, r, g, b);
-            }
-        }
-    }
+skif::LayerSpace<SkIRect> SkMatrixConvolutionImageFilter::boundsSampledByKernel(
+        const skif::LayerSpace<SkIRect>& bounds) const {
+    return adjust(bounds,
+                  -fKernelOffset.x(),
+                  -fKernelOffset.y(),
+                  fKernelSize.width() - fKernelOffset.x() - 1,
+                  fKernelSize.height() - fKernelOffset.y() - 1);
 }
 
-template<class PixelFetcher>
-void SkMatrixConvolutionImageFilter::filterPixels(const SkBitmap& src,
-                                                  SkBitmap* result,
-                                                  SkIVector& offset,
-                                                  const SkIRect& rect,
-                                                  const SkIRect& bounds) const {
-    if (fConvolveAlpha) {
-        filterPixels<PixelFetcher, true>(src, result, offset, rect, bounds);
-    } else {
-        filterPixels<PixelFetcher, false>(src, result, offset, rect, bounds);
-    }
+skif::LayerSpace<SkIRect> SkMatrixConvolutionImageFilter::boundsAffectedByKernel(
+        const skif::LayerSpace<SkIRect>& bounds) const {
+    return adjust(bounds,
+                  fKernelOffset.x() - fKernelSize.width() + 1,
+                  fKernelOffset.y() - fKernelSize.height() + 1,
+                  fKernelOffset.x(),
+                  fKernelOffset.y());
 }
 
-void SkMatrixConvolutionImageFilter::filterInteriorPixels(const SkBitmap& src,
-                                                          SkBitmap* result,
-                                                          SkIVector& offset,
-                                                          const SkIRect& rect,
-                                                          const SkIRect& bounds) const {
-    switch (fTileMode) {
-        case SkTileMode::kMirror:
-            // TODO (michaelludwig) - Implement mirror tiling, treat as repeat for now.
-        case SkTileMode::kRepeat:
-            // In repeat mode, we still need to wrap the samples around the src
-            filterPixels<RepeatPixelFetcher>(src, result, offset, rect, bounds);
-            break;
-        case SkTileMode::kClamp:
-            // Fall through
-        case SkTileMode::kDecal:
-            filterPixels<UncheckedPixelFetcher>(src, result, offset, rect, bounds);
-            break;
-    }
-}
 
-void SkMatrixConvolutionImageFilter::filterBorderPixels(const SkBitmap& src,
-                                                        SkBitmap* result,
-                                                        SkIVector& offset,
-                                                        const SkIRect& rect,
-                                                        const SkIRect& srcBounds) const {
-    switch (fTileMode) {
-        case SkTileMode::kClamp:
-            filterPixels<ClampPixelFetcher>(src, result, offset, rect, srcBounds);
-            break;
-        case SkTileMode::kMirror:
-            // TODO (michaelludwig) - Implement mirror tiling, treat as repeat for now.
-        case SkTileMode::kRepeat:
-            filterPixels<RepeatPixelFetcher>(src, result, offset, rect, srcBounds);
-            break;
-        case SkTileMode::kDecal:
-            filterPixels<ClampToBlackPixelFetcher>(src, result, offset, rect, srcBounds);
-            break;
-    }
-}
 
-sk_sp<SkSpecialImage> SkMatrixConvolutionImageFilter::onFilterImage(const Context& ctx,
-                                                                    SkIPoint* offset) const {
-    SkIPoint inputOffset = SkIPoint::Make(0, 0);
-    sk_sp<SkSpecialImage> input(this->filterInput(0, ctx, &inputOffset));
-    if (!input) {
-        return nullptr;
+sk_sp<SkShader> SkMatrixConvolutionImageFilter::createShader(const skif::Context& ctx,
+                                                             sk_sp<SkShader> input) const {
+    const int kernelLength = fKernelSize.width() * fKernelSize.height();
+    auto [_, key] = quantize_by_kernel_size(kernelLength);
+    const bool useTextureShader = (key != SkKnownRuntimeEffects::StableKey::kMatrixConvUniforms);
+    if (useTextureShader && fKernelBitmap.empty()) {
+        return nullptr; // No actual kernel data to work with from a prior OOM
     }
 
-    SkIRect dstBounds;
-    input = this->applyCropRectAndPad(this->mapContext(ctx), input.get(), &inputOffset, &dstBounds);
-    if (!input) {
-        return nullptr;
-    }
+    const SkRuntimeEffect* matrixConvEffect = GetKnownRuntimeEffect(key);
 
-    const SkIRect originalSrcBounds = SkIRect::MakeXYWH(inputOffset.fX, inputOffset.fY,
-                                                        input->width(), input->height());
+    SkRuntimeShaderBuilder builder(sk_ref_sp(matrixConvEffect));
+    builder.child("child") = std::move(input);
 
-    SkIRect srcBounds = this->onFilterNodeBounds(dstBounds, ctx.ctm(), kReverse_MapDirection,
-                                                 &originalSrcBounds);
-
-    if (SkTileMode::kRepeat == fTileMode || SkTileMode::kMirror == fTileMode) {
-        srcBounds = DetermineRepeatedSrcBound(srcBounds, fKernelOffset,
-                                              fKernelSize, originalSrcBounds);
-    } else {
-        if (!srcBounds.intersect(dstBounds)) {
+    if (useTextureShader) {
+        sk_sp<SkImage> cachedKernel = ctx.backend()->getCachedBitmap(fKernelBitmap);
+        if (!cachedKernel) {
             return nullptr;
         }
+        builder.child("kernel") = cachedKernel->makeRawShader(SkFilterMode::kNearest);
+        builder.uniform("innerGainAndBias") = SkV2{fInnerGain, fInnerBias};
+    } else {
+        float paddedKernel[kMaxUniformKernelSize];
+        memcpy(paddedKernel, fKernel.data(), kernelLength*sizeof(float));
+        memset(paddedKernel+kernelLength, 0, (kMaxUniformKernelSize - kernelLength)*sizeof(float));
+
+        builder.uniform("kernel").set(paddedKernel, kMaxUniformKernelSize);
     }
 
-#if defined(SK_GANESH)
-    if (ctx.gpuBacked()) {
-        auto context = ctx.getContext();
+    builder.uniform("size") = SkISize(fKernelSize);
+    builder.uniform("offset") = skif::IVector(fKernelOffset);
+    // Scale the user-provided bias by 1/255 to match the [0,1] color channel range
+    builder.uniform("gainAndBias") = SkV2{fGain, fBias / 255.f};
+    builder.uniform("convolveAlpha") = fConvolveAlpha ? 1 : 0;
 
-        // Ensure the input is in the destination color space. Typically applyCropRect will have
-        // called pad_image to account for our dilation of bounds, so the result will already be
-        // moved to the destination color space. If a filter DAG avoids that, then we use this
-        // fall-back, which saves us from having to do the xform during the filter itself.
-        input = ImageToColorSpace(input.get(), ctx.colorType(), ctx.colorSpace(),
-                                  ctx.surfaceProps());
+    return builder.makeShader();
+}
 
-        GrSurfaceProxyView inputView = input->view(context);
-        SkASSERT(inputView.asTextureProxy());
+skif::FilterResult SkMatrixConvolutionImageFilter::onFilterImage(
+        const skif::Context& context) const {
+    using ShaderFlags = skif::FilterResult::ShaderFlags;
 
-        const auto isProtected = inputView.proxy()->isProtected();
-        const auto origin = inputView.origin();
+    skif::LayerSpace<SkIRect> requiredInput = this->boundsSampledByKernel(context.desiredOutput());
+    skif::FilterResult childOutput =
+            this->getChildOutput(0, context.withNewDesiredOutput(requiredInput));
 
-        offset->fX = dstBounds.left();
-        offset->fY = dstBounds.top();
-        dstBounds.offset(-inputOffset);
-        srcBounds.offset(-inputOffset);
-        // Map srcBounds from input's logical image domain to that of the proxy
-        srcBounds.offset(input->subset().x(), input->subset().y());
-
-        auto fp = GrMatrixConvolutionEffect::Make(context,
-                                                  std::move(inputView),
-                                                  srcBounds,
-                                                  fKernelSize,
-                                                  fKernel,
-                                                  fGain,
-                                                  fBias,
-                                                  fKernelOffset,
-                                                  SkTileModeToWrapMode(fTileMode),
-                                                  fConvolveAlpha,
-                                                  *ctx.getContext()->priv().caps());
-        if (!fp) {
-            return nullptr;
+    skif::LayerSpace<SkIRect> outputBounds;
+    if (fConvolveAlpha && fBias != 0.f) {
+        // The convolution will produce a non-trivial value for every pixel so fill desired output.
+        outputBounds = context.desiredOutput();
+    } else {
+        // Calculate the possible extent of the convolution given what was actually produced by the
+        // child filter and then intersect that with the desired output.
+        outputBounds = this->boundsAffectedByKernel(childOutput.layerBounds());
+        if (!outputBounds.intersect(context.desiredOutput())) {
+            return {};
         }
-
-        // FIXME (michaelludwig) - Clean this up as part of the imagefilter refactor, some filters
-        // instead require a coord transform on the FP. At very least, be consistent, at best make
-        // it so that filter impls don't need to worry about the subset origin.
-
-        // Must also map the dstBounds since it is used as the src rect in DrawWithFP when
-        // evaluating the FP, and the dst rect just uses the size of dstBounds.
-        dstBounds.offset(input->subset().x(), input->subset().y());
-        return DrawWithFP(context, std::move(fp), dstBounds, ctx.colorType(), ctx.colorSpace(),
-                          ctx.surfaceProps(), origin, isProtected);
-    }
-#endif
-
-    SkBitmap inputBM;
-    if (!input->getROPixels(&inputBM)) {
-        return nullptr;
     }
 
-    if (inputBM.colorType() != kN32_SkColorType) {
-        return nullptr;
-    }
-
-    if (!fConvolveAlpha && !inputBM.isOpaque()) {
-        // This leaves the bitmap tagged as premul, which seems weird to me,
-        // but is consistent with old behavior.
-        inputBM.readPixels(inputBM.info().makeAlphaType(kUnpremul_SkAlphaType),
-                           inputBM.getPixels(), inputBM.rowBytes(), 0,0);
-    }
-
-    if (!inputBM.getPixels()) {
-        return nullptr;
-    }
-
-    const SkImageInfo info = SkImageInfo::MakeN32(dstBounds.width(), dstBounds.height(),
-                                                  inputBM.alphaType());
-
-    SkBitmap dst;
-    if (!dst.tryAllocPixels(info)) {
-        return nullptr;
-    }
-
-    offset->fX = dstBounds.fLeft;
-    offset->fY = dstBounds.fTop;
-    dstBounds.offset(-inputOffset);
-    srcBounds.offset(-inputOffset);
-
-    SkIRect interior;
-    if (SkTileMode::kRepeat == fTileMode || SkTileMode::kMirror == fTileMode) {
-        // In repeat mode, the filterPixels calls will wrap around
-        // so we just need to render 'dstBounds'
-        interior = dstBounds;
-    } else {
-        interior = SkIRect::MakeXYWH(dstBounds.left() + fKernelOffset.fX,
-                                     dstBounds.top() + fKernelOffset.fY,
-                                     dstBounds.width() - fKernelSize.fWidth + 1,
-                                     dstBounds.height() - fKernelSize.fHeight + 1);
-    }
-
-    SkIRect top = SkIRect::MakeLTRB(dstBounds.left(), dstBounds.top(),
-                                    dstBounds.right(), interior.top());
-    SkIRect bottom = SkIRect::MakeLTRB(dstBounds.left(), interior.bottom(),
-                                       dstBounds.right(), dstBounds.bottom());
-    SkIRect left = SkIRect::MakeLTRB(dstBounds.left(), interior.top(),
-                                     interior.left(), interior.bottom());
-    SkIRect right = SkIRect::MakeLTRB(interior.right(), interior.top(),
-                                      dstBounds.right(), interior.bottom());
-
-    SkIVector dstContentOffset = { offset->fX - inputOffset.fX, offset->fY - inputOffset.fY };
-
-    this->filterBorderPixels(inputBM, &dst, dstContentOffset, top, srcBounds);
-    this->filterBorderPixels(inputBM, &dst, dstContentOffset, left, srcBounds);
-    this->filterInteriorPixels(inputBM, &dst, dstContentOffset, interior, srcBounds);
-    this->filterBorderPixels(inputBM, &dst, dstContentOffset, right, srcBounds);
-    this->filterBorderPixels(inputBM, &dst, dstContentOffset, bottom, srcBounds);
-
-    return SkSpecialImage::MakeFromRaster(SkIRect::MakeWH(dstBounds.width(), dstBounds.height()),
-                                          dst, ctx.surfaceProps());
+    skif::FilterResult::Builder builder{context};
+    builder.add(childOutput,
+                this->boundsSampledByKernel(outputBounds),
+                ShaderFlags::kSampledRepeatedly);
+    return builder.eval([&](SkSpan<sk_sp<SkShader>> inputs) {
+        return this->createShader(context, inputs[0]);
+    }, outputBounds);
 }
 
-SkIRect SkMatrixConvolutionImageFilter::onFilterNodeBounds(
-        const SkIRect& src, const SkMatrix& ctm, MapDirection dir, const SkIRect* inputRect) const {
-    if (kReverse_MapDirection == dir && inputRect &&
-        (SkTileMode::kRepeat == fTileMode || SkTileMode::kMirror == fTileMode)) {
-        SkASSERT(inputRect);
-        return DetermineRepeatedSrcBound(src, fKernelOffset, fKernelSize, *inputRect);
-    }
-
-    SkIRect dst = src;
-    int w = fKernelSize.width() - 1, h = fKernelSize.height() - 1;
-
-    if (kReverse_MapDirection == dir) {
-        dst.adjust(-fKernelOffset.fX, -fKernelOffset.fY,
-                   w - fKernelOffset.fX, h - fKernelOffset.fY);
-    } else {
-        dst.adjust(fKernelOffset.fX - w, fKernelOffset.fY - h, fKernelOffset.fX, fKernelOffset.fY);
-    }
-    return dst;
+skif::LayerSpace<SkIRect> SkMatrixConvolutionImageFilter::onGetInputLayerBounds(
+        const skif::Mapping& mapping,
+        const skif::LayerSpace<SkIRect>& desiredOutput,
+        std::optional<skif::LayerSpace<SkIRect>> contentBounds) const {
+    // Adjust the desired output bounds by the kernel size to avoid evaluating edge conditions, and
+    // then recurse to the child filter.
+    skif::LayerSpace<SkIRect> requiredInput = this->boundsSampledByKernel(desiredOutput);
+    return this->getChildInputLayerBounds(0, mapping, requiredInput, contentBounds);
 }
 
-bool SkMatrixConvolutionImageFilter::onAffectsTransparentBlack() const {
-    // It seems that the only rational way for repeat sample mode to work is if the caller
-    // explicitly restricts the input in which case the input range is explicitly known and
-    // specified.
-    // TODO: is seems that this should be true for clamp mode too.
+std::optional<skif::LayerSpace<SkIRect>> SkMatrixConvolutionImageFilter::onGetOutputLayerBounds(
+        const skif::Mapping& mapping,
+        std::optional<skif::LayerSpace<SkIRect>> contentBounds) const {
+    if (fConvolveAlpha && fBias != 0.f) {
+        // Applying the kernel as a convolution to fully transparent black will result in 0 for
+        // each channel, unless the bias itself shifts this "zero-point". However, when the alpha
+        // channel is not convolved, the original a=0 is preserved and producing a premul color
+        // discards the non-zero bias. Convolving the alpha channel and a non-zero bias can mean
+        // the transparent black pixels outside of any input image become non-transparent black.
+        return skif::LayerSpace<SkIRect>::Unbounded();
+    }
 
-    // For the other modes, because the kernel is applied in device-space, we have no idea what
-    // pixels it will affect in object-space.
-    return SkTileMode::kRepeat != fTileMode && SkTileMode::kMirror != fTileMode;
+    // Otherwise apply the kernel to the output bounds of the child filter.
+    auto outputBounds = this->getChildOutputLayerBounds(0, mapping, contentBounds);
+    if (outputBounds) {
+        return this->boundsAffectedByKernel(*outputBounds);
+    } else {
+        return skif::LayerSpace<SkIRect>::Unbounded();
+    }
+}
+
+SkRect SkMatrixConvolutionImageFilter::computeFastBounds(const SkRect& bounds) const {
+    // See onAffectsTransparentBlack(), but without knowing the local-to-device transform, we don't
+    // know how many pixels will be sampled by the kernel. Return unbounded to match the
+    // expectations of an image filter that "affects" transparent black.
+    return SkRectPriv::MakeLargeS32();
 }

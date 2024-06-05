@@ -11,6 +11,7 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkYUVAPixmaps.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
 
 static SkYUVColorSpace get_yuvspace(AVColorSpace space) {
     // this is pretty incomplete -- TODO: look to convert more AVColorSpaces
@@ -55,7 +56,7 @@ static skcms_TransferFunction compute_transfer(AVColorTransferCharacteristic t) 
     }
 
     skcms_TransferFunction linear_to_encoded = {
-        av->gamma, sk_float_pow(av->alpha, 1/av->gamma), 0, av->delta, av->beta, 1 - av->alpha, 0,
+        av->gamma, std::pow(av->alpha, 1/av->gamma), 0, av->delta, av->beta, 1 - av->alpha, 0,
     };
     skcms_TransferFunction encoded_to_linear;
     bool success = skcms_TransferFunction_invert(&linear_to_encoded, &encoded_to_linear);
@@ -179,8 +180,8 @@ static sk_sp<SkImage> make_yuv_420(GrRecordingContext* rContext,
     pixmaps[2].reset(SkImageInfo::MakeA8(w, h), data[2], strides[2]);
     auto yuvaPixmaps = SkYUVAPixmaps::FromExternalPixmaps(yuvaInfo, pixmaps);
 
-    return SkImage::MakeFromYUVAPixmaps(
-            rContext, yuvaPixmaps, GrMipmapped::kNo, false, std::move(cs));
+    return SkImages::TextureFromYUVAPixmaps(
+            rContext, yuvaPixmaps, skgpu::Mipmapped::kNo, false, std::move(cs));
 }
 
 // Init with illegal values, so our first compare will fail, forcing us to compute
@@ -253,7 +254,7 @@ sk_sp<SkImage> SkVideoDecoder::convertFrame(const AVFrame* frame) {
 
     bm.setImmutable();
 
-    return SkImage::MakeFromBitmap(bm);
+    return SkImages::RasterFromBitmap(bm);
 }
 
 sk_sp<SkImage> SkVideoDecoder::nextImage(double* timeStamp) {

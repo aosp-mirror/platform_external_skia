@@ -15,6 +15,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 #include <initializer_list>
@@ -79,7 +80,7 @@ static void test_mac_fonts(SkCanvas* canvas, SkScalar size, SkScalar xpos) {
 
     for (SkColorType ct : {kRGBA_8888_SkColorType, kGray_8_SkColorType, kAlpha_8_SkColorType}) {
         SkImageInfo ii = SkImageInfo::Make(w, h, ct, kPremul_SkAlphaType);
-        auto surf = SkSurface::MakeRaster(ii);
+        auto surf = SkSurfaces::Raster(ii);
         SkPixmap pm;
         surf->peekPixels(&pm);
         CGContextRef ctx = make_cg_ctx(pm);
@@ -113,9 +114,9 @@ protected:
         return DrawResult::kOk;
     }
 
-    SkISize onISize() override { return { 1024, 768 }; }
+    SkISize getISize() override { return {1024, 768}; }
 
-    SkString onShortName() override { return SkString("macaatest"); }
+    SkString getName() const override { return SkString("macaatest"); }
 
     bool onChar(SkUnichar uni) override {
         switch (uni) {
@@ -147,8 +148,11 @@ DEF_SIMPLE_GM(macaa_colors, canvas, 800, 500) {
     const char str[] = "Hamburgefons";
     const size_t len = strlen(str);
 
-    SkFont font;
-    font.setTypeface(SkTypeface::MakeFromName("Times", SkFontStyle()));
+    sk_sp<SkTypeface> face = ToolUtils::CreateTestTypeface("Times", SkFontStyle());
+    if (!face) {
+        face = ToolUtils::DefaultPortableTypeface();
+    }
+    SkFont font(face, 12);
 
     for (size_t i = 0; i < std::size(colors); i += 2) {
         canvas->save();

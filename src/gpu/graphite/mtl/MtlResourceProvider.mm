@@ -9,14 +9,17 @@
 
 #include "include/gpu/ShaderErrorHandler.h"
 #include "include/gpu/graphite/BackendTexture.h"
-#include "include/private/SkSLProgramKind.h"
+#include "src/sksl/SkSLProgramKind.h"
 
 #include "src/core/SkSLTypeShared.h"
 #include "src/gpu/Blend.h"
+#include "src/gpu/PipelineUtils.h"
+#include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/ComputePipelineDesc.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GlobalCache.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/compute/ComputeStep.h"
@@ -24,19 +27,24 @@
 #include "src/gpu/graphite/mtl/MtlCommandBuffer.h"
 #include "src/gpu/graphite/mtl/MtlComputePipeline.h"
 #include "src/gpu/graphite/mtl/MtlGraphicsPipeline.h"
+#include "src/gpu/graphite/mtl/MtlGraphiteUtilsPriv.h"
 #include "src/gpu/graphite/mtl/MtlSampler.h"
 #include "src/gpu/graphite/mtl/MtlSharedContext.h"
 #include "src/gpu/graphite/mtl/MtlTexture.h"
-#include "src/gpu/graphite/mtl/MtlUtilsPriv.h"
+#include "src/gpu/mtl/MtlUtilsPriv.h"
+#include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/ir/SkSLProgram.h"
 
 #import <Metal/Metal.h>
 
 namespace skgpu::graphite {
 
 MtlResourceProvider::MtlResourceProvider(SharedContext* sharedContext,
-                                         SingleOwner* singleOwner)
-        : ResourceProvider(sharedContext, singleOwner) {}
+                                         SingleOwner* singleOwner,
+                                         uint32_t recorderID,
+                                         size_t resourceBudget)
+        : ResourceProvider(sharedContext, singleOwner, recorderID, resourceBudget) {}
 
 const MtlSharedContext* MtlResourceProvider::mtlSharedContext() {
     return static_cast<const MtlSharedContext*>(fSharedContext);
@@ -73,14 +81,17 @@ sk_sp<MtlGraphicsPipeline> MtlResourceProvider::findOrCreateLoadMSAAPipeline(
         )";
 
         auto mtlLibrary = MtlCompileShaderLibrary(this->mtlSharedContext(),
+                                                  "LoadMSAAFromResolve",
                                                   kLoadMSAAShaderText,
                                                   fSharedContext->caps()->shaderErrorHandler());
-
         BlendInfo noBlend{}; // default is equivalent to kSrc blending
         sk_cfp<id<MTLDepthStencilState>> ignoreDS =
                 this->findOrCreateCompatibleDepthStencilState({});
+
+        std::string pipelineLabel = "LoadMSAAFromResolve + ";
+        pipelineLabel += renderPassDesc.toString().c_str();
         pipeline = MtlGraphicsPipeline::Make(this->mtlSharedContext(),
-                                             "LoadMSAAFromResolve",
+                                             pipelineLabel,
                                              {mtlLibrary.get(), "vertexMain"},
                                              /*vertexAttrs=*/{},
                                              /*instanceAttrs=*/{},
@@ -88,7 +99,8 @@ sk_sp<MtlGraphicsPipeline> MtlResourceProvider::findOrCreateLoadMSAAPipeline(
                                              std::move(ignoreDS),
                                              /*stencilRefValue=*/0,
                                              noBlend,
-                                             renderPassDesc);
+                                             renderPassDesc,
+                                             /*pipelineInfo=*/nullptr);
         if (pipeline) {
             fLoadMSAAPipelines.set(renderPassKey, pipeline);
         }
@@ -102,60 +114,77 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
         const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc) {
     std::string vsMSL, fsMSL;
-    SkSL::Program::Inputs vsInputs, fsInputs;
+    SkSL::Program::Interface vsInterface, fsInterface;
     SkSL::ProgramSettings settings;
 
     settings.fForceNoRTFlip = true;
 
-    auto skslCompiler = this->skslCompiler();
+    SkSL::Compiler skslCompiler;
     ShaderErrorHandler* errorHandler = fSharedContext->caps()->shaderErrorHandler();
 
     const RenderStep* step =
             fSharedContext->rendererProvider()->lookup(pipelineDesc.renderStepID());
+    const bool useStorageBuffers = fSharedContext->caps()->storageBufferPreferred();
 
-    bool useShadingSsboIndex =
-            fSharedContext->caps()->storageBufferPreferred() && step->performsShading();
-
-    const FragSkSLInfo fsSkSLInfo = GetSkSLFS(fSharedContext->caps()->resourceBindingRequirements(),
-                                              fSharedContext->shaderCodeDictionary(),
-                                              runtimeDict,
-                                              step,
-                                              pipelineDesc.paintParamsID(),
-                                              useShadingSsboIndex);
-    const std::string& fsSkSL = fsSkSLInfo.fSkSL;
+    UniquePaintParamsID paintID = pipelineDesc.paintParamsID();
+    FragSkSLInfo fsSkSLInfo = BuildFragmentSkSL(fSharedContext->caps(),
+                                                fSharedContext->shaderCodeDictionary(),
+                                                runtimeDict,
+                                                step,
+                                                paintID,
+                                                useStorageBuffers,
+                                                renderPassDesc.fWriteSwizzle);
+    std::string& fsSkSL = fsSkSLInfo.fSkSL;
     const BlendInfo& blendInfo = fsSkSLInfo.fBlendInfo;
     const bool localCoordsNeeded = fsSkSLInfo.fRequiresLocalCoords;
-    if (!SkSLToMSL(skslCompiler,
+    if (!SkSLToMSL(fSharedContext->caps()->shaderCaps(),
                    fsSkSL,
                    SkSL::ProgramKind::kGraphiteFragment,
                    settings,
                    &fsMSL,
-                   &fsInputs,
+                   &fsInterface,
                    errorHandler)) {
         return nullptr;
     }
 
-    if (!SkSLToMSL(skslCompiler,
-                   GetSkSLVS(fSharedContext->caps()->resourceBindingRequirements(),
-                             step,
-                             useShadingSsboIndex,
-                             localCoordsNeeded),
+    VertSkSLInfo vsSkSLInfo = BuildVertexSkSL(fSharedContext->caps()->resourceBindingRequirements(),
+                                              step,
+                                              useStorageBuffers,
+                                              localCoordsNeeded);
+    const std::string& vsSkSL = vsSkSLInfo.fSkSL;
+    if (!SkSLToMSL(fSharedContext->caps()->shaderCaps(),
+                   vsSkSL,
                    SkSL::ProgramKind::kGraphiteVertex,
                    settings,
                    &vsMSL,
-                   &vsInputs,
+                   &vsInterface,
                    errorHandler)) {
         return nullptr;
     }
 
-    auto vsLibrary = MtlCompileShaderLibrary(this->mtlSharedContext(), vsMSL, errorHandler);
-    auto fsLibrary = MtlCompileShaderLibrary(this->mtlSharedContext(), fsMSL, errorHandler);
+    auto vsLibrary = MtlCompileShaderLibrary(
+            this->mtlSharedContext(), vsSkSLInfo.fLabel, vsMSL, errorHandler);
+    auto fsLibrary = MtlCompileShaderLibrary(
+            this->mtlSharedContext(), fsSkSLInfo.fLabel, fsMSL, errorHandler);
 
     sk_cfp<id<MTLDepthStencilState>> dss =
             this->findOrCreateCompatibleDepthStencilState(step->depthStencilSettings());
 
+#if defined(GRAPHITE_TEST_UTILS)
+    GraphicsPipeline::PipelineInfo pipelineInfo = {pipelineDesc.renderStepID(),
+                                                   pipelineDesc.paintParamsID(),
+                                                   std::move(vsSkSL),
+                                                   std::move(fsSkSL),
+                                                   std::move(vsMSL),
+                                                   std::move(fsMSL) };
+    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = &pipelineInfo;
+#else
+    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = nullptr;
+#endif
+    std::string pipelineLabel =
+            GetPipelineLabel(fSharedContext->shaderCodeDictionary(), renderPassDesc, step, paintID);
     return MtlGraphicsPipeline::Make(this->mtlSharedContext(),
-                                     step->name(),
+                                     pipelineLabel,
                                      {vsLibrary.get(), "vertexMain"},
                                      step->vertexAttributes(),
                                      step->instanceAttributes(),
@@ -163,36 +192,51 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
                                      std::move(dss),
                                      step->depthStencilSettings().fStencilReferenceValue,
                                      blendInfo,
-                                     renderPassDesc);
+                                     renderPassDesc,
+                                     pipelineInfoPtr);
 }
 
 sk_sp<ComputePipeline> MtlResourceProvider::createComputePipeline(
         const ComputePipelineDesc& pipelineDesc) {
-    std::string msl;
-    SkSL::Program::Inputs inputs;
-    SkSL::ProgramSettings settings;
-
-    auto skslCompiler = this->skslCompiler();
+    sk_cfp<id<MTLLibrary>> library;
+    std::string entryPointName;
     ShaderErrorHandler* errorHandler = fSharedContext->caps()->shaderErrorHandler();
+    if (pipelineDesc.computeStep()->supportsNativeShader()) {
+        auto nativeShader = pipelineDesc.computeStep()->nativeShaderSource(
+                ComputeStep::NativeShaderFormat::kMSL);
+        library = MtlCompileShaderLibrary(this->mtlSharedContext(),
+                                          pipelineDesc.computeStep()->name(),
+                                          nativeShader.fSource,
+                                          errorHandler);
+        if (library == nil) {
+            return nullptr;
+        }
+        entryPointName = std::move(nativeShader.fEntryPoint);
+    } else {
+        std::string msl;
+        SkSL::Program::Interface interface;
+        SkSL::ProgramSettings settings;
 
-    auto computeSkSL = pipelineDesc.computeStep()->computeSkSL(
-            fSharedContext->caps()->resourceBindingRequirements(),
-            /*nextBindingIndex=*/0);
-    if (!SkSLToMSL(skslCompiler,
-                   computeSkSL,
-                   SkSL::ProgramKind::kCompute,
-                   settings,
-                   &msl,
-                   &inputs,
-                   errorHandler)) {
-        return nullptr;
+        SkSL::Compiler skslCompiler;
+        std::string sksl = BuildComputeSkSL(fSharedContext->caps(), pipelineDesc.computeStep());
+        if (!SkSLToMSL(fSharedContext->caps()->shaderCaps(),
+                       sksl,
+                       SkSL::ProgramKind::kCompute,
+                       settings,
+                       &msl,
+                       &interface,
+                       errorHandler)) {
+            return nullptr;
+        }
+        library = MtlCompileShaderLibrary(this->mtlSharedContext(),
+                                          pipelineDesc.computeStep()->name(),
+                                          msl,
+                                          errorHandler);
+        entryPointName = "computeMain";
     }
-
-    auto library = MtlCompileShaderLibrary(this->mtlSharedContext(), msl, errorHandler);
-
     return MtlComputePipeline::Make(this->mtlSharedContext(),
                                     pipelineDesc.computeStep()->name(),
-                                    {library.get(), "computeMain"});
+                                    {library.get(), std::move(entryPointName)});
 }
 
 sk_sp<Texture> MtlResourceProvider::createTexture(SkISize dimensions,
@@ -201,28 +245,27 @@ sk_sp<Texture> MtlResourceProvider::createTexture(SkISize dimensions,
     return MtlTexture::Make(this->mtlSharedContext(), dimensions, info, budgeted);
 }
 
-sk_sp<Texture> MtlResourceProvider::createWrappedTexture(const BackendTexture& texture) {
-    MtlHandle mtlHandleTexture = texture.getMtlTexture();
+sk_sp<Texture> MtlResourceProvider::onCreateWrappedTexture(const BackendTexture& texture) {
+    CFTypeRef mtlHandleTexture = texture.getMtlTexture();
     if (!mtlHandleTexture) {
         return nullptr;
     }
     sk_cfp<id<MTLTexture>> mtlTexture = sk_ret_cfp((id<MTLTexture>)mtlHandleTexture);
-    return MtlTexture::MakeWrapped(this->mtlSharedContext(),
-                                   texture.dimensions(),
-                                   texture.info(),
+    return MtlTexture::MakeWrapped(this->mtlSharedContext(), texture.dimensions(), texture.info(),
                                    std::move(mtlTexture));
 }
 
 sk_sp<Buffer> MtlResourceProvider::createBuffer(size_t size,
                                                 BufferType type,
-                                                PrioritizeGpuReads prioritizeGpuReads) {
-    return MtlBuffer::Make(this->mtlSharedContext(), size, type, prioritizeGpuReads);
+                                                AccessPattern accessPattern) {
+    return MtlBuffer::Make(this->mtlSharedContext(), size, type, accessPattern);
 }
 
-sk_sp<Sampler> MtlResourceProvider::createSampler(const SkSamplingOptions& samplingOptions,
-                                                  SkTileMode xTileMode,
-                                                  SkTileMode yTileMode) {
-    return MtlSampler::Make(this->mtlSharedContext(), samplingOptions, xTileMode, yTileMode);
+sk_sp<Sampler> MtlResourceProvider::createSampler(const SamplerDesc& samplerDesc) {
+    return MtlSampler::Make(this->mtlSharedContext(),
+                            samplerDesc.samplingOptions(),
+                            samplerDesc.tileModeX(),
+                            samplerDesc.tileModeY());
 }
 
 namespace {
@@ -313,12 +356,12 @@ BackendTexture MtlResourceProvider::onCreateBackendTexture(SkISize dimensions,
     if (!texture) {
         return {};
     }
-    return BackendTexture(dimensions, (Handle)texture.release());
+    return BackendTexture(dimensions, (CFTypeRef)texture.release());
 }
 
-void MtlResourceProvider::onDeleteBackendTexture(BackendTexture& texture) {
+void MtlResourceProvider::onDeleteBackendTexture(const BackendTexture& texture) {
     SkASSERT(texture.backend() == BackendApi::kMetal);
-    MtlHandle texHandle = texture.getMtlTexture();
+    CFTypeRef texHandle = texture.getMtlTexture();
     SkCFSafeRelease(texHandle);
 }
 

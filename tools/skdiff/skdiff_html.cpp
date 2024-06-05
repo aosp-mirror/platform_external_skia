@@ -6,7 +6,6 @@
  */
 
 #include "include/core/SkStream.h"
-#include "include/core/SkTime.h"
 #include "tools/skdiff/skdiff.h"
 #include "tools/skdiff/skdiff_html.h"
 
@@ -30,28 +29,10 @@ static void print_table_header(SkFILEWStream* stream,
                                const int colorThreshold,
                                const RecordArray& differences,
                                const SkString &baseDir,
-                               const SkString &comparisonDir,
-                               bool doOutputDate = false) {
+                               const SkString &comparisonDir) {
     stream->writeText("<table>\n");
     stream->writeText("<tr><th>");
     stream->writeText("select image</th>\n<th>");
-    if (doOutputDate) {
-        SkTime::DateTime dt;
-        SkTime::GetDateTime(&dt);
-        stream->writeText("SkDiff run at ");
-        stream->writeDecAsText(dt.fHour);
-        stream->writeText(":");
-        if (dt.fMinute < 10) {
-            stream->writeText("0");
-        }
-        stream->writeDecAsText(dt.fMinute);
-        stream->writeText(":");
-        if (dt.fSecond < 10) {
-            stream->writeText("0");
-        }
-        stream->writeDecAsText(dt.fSecond);
-        stream->writeText("<br>");
-    }
     stream->writeDecAsText(matchCount);
     stream->writeText(" of ");
     stream->writeDecAsText(differences.size());
@@ -266,19 +247,17 @@ void print_diff_page(const int matchCount,
 
     outputStream.writeText(
         "<html>\n<head>\n"
-        "<script src=\"https://ajax.googleapis.com/ajax/"
-        "libs/jquery/1.7.2/jquery.min.js\"></script>\n"
         "<script type=\"text/javascript\">\n"
         "function generateCheckedList() {\n"
-        "var boxes = $(\":checkbox:checked\");\n"
-        "var fileCmdLineString = '';\n"
-        "var fileMultiLineString = '';\n"
-        "for (var i = 0; i < boxes.length; i++) {\n"
-        "fileMultiLineString += boxes[i].name + '<br>';\n"
-        "fileCmdLineString += boxes[i].name + '&nbsp;';\n"
-        "}\n"
-        "$(\"#checkedList\").html(fileCmdLineString + "
-        "'<br><br>' + fileMultiLineString);\n"
+        "    const boxes = document.querySelectorAll('input[type=checkbox]:checked');\n"
+        "    let fileCmdLineString = '';\n"
+        "    let fileMultiLineString = '';\n"
+        "    for (let i = 0; i < boxes.length; i++) {\n"
+        "        fileMultiLineString += boxes[i].name + '<br>';\n"
+        "        fileCmdLineString += boxes[i].name + '&nbsp;';\n"
+        "    }\n"
+        "    const checkedList = document.querySelector('#checkedList');\n"
+        "    checkedList.innerHTML = fileCmdLineString + '<br><br>' + fileMultiLineString;\n"
         "}\n"
         "</script>\n</head>\n<body>\n");
     print_table_header(&outputStream, matchCount, colorThreshold, differences,

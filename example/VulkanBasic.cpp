@@ -14,6 +14,8 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "include/gpu/ganesh/vk/GrVkDirectContext.h"
 #include "include/gpu/vk/GrVkBackendContext.h"
 #include "include/gpu/vk/VulkanExtensions.h"
 #include "tools/gpu/vk/VkTestUtils.h"
@@ -46,7 +48,7 @@ int main(int argc, char** argv) {
     // function as a guide on things to consider when setting up Vulkan for themselves, but they
     // should not depend on that function. We may arbitrarily change it as it is meant only for Skia
     // internal testing. Additionally it may do some odd things that a normal Vulkan user wouldn't
-    // do because it is againt meant for Skia testing.
+    // do because it is only meant for Skia testing.
     {
         PFN_vkGetInstanceProcAddr instProc;
         if (!sk_gpu_test::LoadVkLibraryAndGetProcAddrFuncs(&instProc)) {
@@ -78,7 +80,7 @@ int main(int argc, char** argv) {
     ACQUIRE_INST_VK_PROC(DestroyDevice);
 
     // Create a GrDirectContext with our GrVkBackendContext
-    sk_sp<GrDirectContext> context = GrDirectContext::MakeVulkan(backendContext);
+    sk_sp<GrDirectContext> context = GrDirectContexts::MakeVulkan(backendContext);
     if (!context) {
         fVkDestroyDevice(backendContext.fDevice, nullptr);
         if (debugCallback != VK_NULL_HANDLE) {
@@ -91,11 +93,11 @@ int main(int argc, char** argv) {
     SkImageInfo imageInfo = SkImageInfo::Make(16, 16, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 
     // Create an SkSurface backed by a Vulkan VkImage. Often clients will be getting VkImages from
-    // swapchains. In those cases they should use SkSurface::MakeFromBackendTexture or
-    // SkSurface::MakeFromBackendRenderTarget to wrap those premade VkImages in Skia. See the
+    // swapchains. In those cases they should use SkSurfaces::WrapBackendTexture or
+    // SkSurfaces::WrapBackendRenderTarget to wrap those premade VkImages in Skia. See the
     // HelloWorld example app to see how this is done.
     sk_sp<SkSurface> surface =
-            SkSurface::MakeRenderTarget(context.get(), skgpu::Budgeted::kYes, imageInfo);
+            SkSurfaces::RenderTarget(context.get(), skgpu::Budgeted::kYes, imageInfo);
     if (!surface) {
         context.reset();
         fVkDestroyDevice(backendContext.fDevice, nullptr);
@@ -110,7 +112,7 @@ int main(int argc, char** argv) {
     // After drawing to our surface, we must first flush the recorded work (i.e. convert all our
     // recorded SkCanvas calls into a VkCommandBuffer). Then we call submit to submit our
     // VkCommandBuffers to the gpu queue.
-    surface->flush();
+    context->flush(surface.get());
     context->submit();
 
     surface.reset();

@@ -101,6 +101,7 @@ public:
     // based on what was last set.
     skvx::float2   p0()    const { SkASSERT(this->isLine());  return fRect.topLeft();  }
     skvx::float2   p1()    const { SkASSERT(this->isLine());  return fRect.botRight(); }
+    skvx::float4   line()  const { SkASSERT(this->isLine());  return fRect.ltrb();     }
     const Rect&    rect()  const { SkASSERT(this->isRect());  return fRect;            }
     const SkRRect& rrect() const { SkASSERT(this->isRRect()); return fRRect;           }
     const SkPath&  path()  const { SkASSERT(this->isPath());  return fPath;            }
@@ -149,6 +150,22 @@ public:
         fInverted = false;
     }
 
+    /**
+     * Gets the size of the key for the shape represented by this Shape.
+     * A negative value is returned if the shape has no key (shouldn't be cached).
+     */
+    int keySize() const;
+
+    bool hasKey() const { return this->keySize() >= 0; }
+
+    /**
+     * Writes keySize() bytes into the provided pointer. Assumes that there is enough
+     * space allocated for the key and that keySize() does not return a negative value
+     * for this shape. If includeInverted is false, non-inverted state will be written
+     * into the key regardless of the Shape's state.
+     */
+    void writeKey(uint32_t* key, bool includeInverted) const;
+
 private:
     void setType(Type type) {
         if (this->isPath() && type != Type::kPath) {
@@ -156,6 +173,14 @@ private:
         }
         fType = type;
     }
+
+    /**
+     * Key for the state data in the shape. This includes path fill type,
+     * and any tracked inversion, as well as the class of geometry.
+     * If includeInverted is false, non-inverted state will be written into
+     * the key regardless of the Shape's state.
+     */
+    uint32_t stateKey(bool includeInverted) const;
 
     union {
         Rect    fRect; // p0 = top-left, p1 = bot-right if type is kLine (may be unsorted)

@@ -5,12 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "modules/skottie/src/SkottiePriv.h"
-
 #include "include/core/SkImage.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/private/base/SkAssert.h"
+#include "modules/skottie/include/Skottie.h"
+#include "modules/skottie/include/SlotManager.h"
 #include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottiePriv.h"
+#include "modules/skottie/src/animator/Animator.h"
+#include "modules/skresources/include/SkResources.h"
 #include "modules/sksg/include/SkSGImage.h"
+#include "modules/sksg/include/SkSGRenderNode.h"
 #include "modules/sksg/include/SkSGTransform.h"
+#include "src/core/SkTHash.h"
+#include "src/utils/SkJSON.h"
+
+#include <utility>
 
 namespace skottie {
 namespace internal {
@@ -22,9 +37,13 @@ SkMatrix image_matrix(const ImageAsset::FrameData& frame_data, const SkISize& de
         return SkMatrix::I();
     }
 
-    return frame_data.matrix * SkMatrix::RectToRect(SkRect::Make(frame_data.image->bounds()),
-                                                    SkRect::Make(dest_size),
-                                                    frame_data.scaling);
+    const auto size_fit_matrix = frame_data.scaling == ImageAsset::SizeFit::kNone
+            ? SkMatrix::I()
+            : SkMatrix::RectToRect(SkRect::Make(frame_data.image->bounds()),
+                                   SkRect::Make(dest_size),
+                                   static_cast<SkMatrix::ScaleToFit>(frame_data.scaling));
+
+    return frame_data.matrix * size_fit_matrix;
 }
 
 class FootageAnimator final : public Animator {
@@ -76,10 +95,27 @@ private:
 } // namespace
 
 const AnimationBuilder::FootageAssetInfo*
-AnimationBuilder::loadFootageAsset(const skjson::ObjectValue& jimage) const {
-    const skjson::StringValue* name = jimage["p"];
-    const skjson::StringValue* path = jimage["u"];
-    const skjson::StringValue* id   = jimage["id"];
+AnimationBuilder::loadFootageAsset(const skjson::ObjectValue& defaultJImage) const {
+    const skjson::ObjectValue* jimage = &defaultJImage;
+    const skjson::StringValue* slotID = defaultJImage["sid"];
+    if (slotID) {
+        if (!(fSlotsRoot)) {
+            this->log(Logger::Level::kWarning, nullptr,
+                         "Slotid found but no slots were found in the json. Using default asset.");
+        } else {
+            const skjson::ObjectValue* slot = (*(fSlotsRoot))[slotID->begin()];
+            if (!slot) {
+                this->log(Logger::Level::kWarning, nullptr,
+                             "Specified slotID not found in 'slots'. Using default asset.");
+            } else {
+                jimage = (*slot)["p"];
+            }
+        }
+    }
+
+    const skjson::StringValue* name = (*jimage)["p"];
+    const skjson::StringValue* path = (*jimage)["u"];
+    const skjson::StringValue* id   = (*jimage)["id"];
     if (!name || !path || !id) {
         return nullptr;
     }
@@ -90,14 +126,17 @@ AnimationBuilder::loadFootageAsset(const skjson::ObjectValue& jimage) const {
     }
 
     auto asset = fResourceProvider->loadImageAsset(path->begin(), name->begin(), id->begin());
-    if (!asset) {
+    if (!asset && !slotID) {
         this->log(Logger::Level::kError, nullptr, "Could not load image asset: %s/%s (id: '%s').",
                   path->begin(), name->begin(), id->begin());
         return nullptr;
     }
 
-    const auto size = SkISize::Make(ParseDefault<int>(jimage["w"], 0),
-                                    ParseDefault<int>(jimage["h"], 0));
+    if (slotID) {
+        asset = fSlotManager->trackImageValue(SkString(slotID->begin()), std::move(asset));
+    }
+    const auto size = SkISize::Make(ParseDefault<int>((*jimage)["w"], 0),
+                                    ParseDefault<int>((*jimage)["h"], 0));
     return fImageAssetCache.set(res_id, { std::move(asset), size });
 }
 
@@ -148,7 +187,7 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachFootageAsset(const skjson::Objec
 
     if (!image_transform) {
         // No resize needed.
-        return std::move(image_node);
+        return image_node;
     }
 
     return sksg::TransformEffect::Make(std::move(image_node), std::move(image_transform));

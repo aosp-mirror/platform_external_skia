@@ -57,7 +57,7 @@ GM_LIB="$BUILD_DIR/libgm_wasm.a"
 GN_FONT="skia_enable_fontmgr_custom_directory=false "
 BUILTIN_FONT="$BASE_DIR/fonts/NotoMono-Regular.ttf.cpp"
 # Generate the font's binary file (which is covered by .gitignore)
-python tools/embed_resources.py \
+python3 tools/embed_resources.py \
       --name SK_EMBEDDED_FONTS \
       --input $BASE_DIR/fonts/NotoMono-Regular.ttf \
       --output $BASE_DIR/fonts/NotoMono-Regular.ttf.cpp \
@@ -79,7 +79,7 @@ echo "Compiling bitcode"
   --args="skia_emsdk_dir=\"${EMSDK}\" \
   extra_cflags_cc=[\"-frtti\"] \
   extra_cflags=[\"-sMAIN_MODULE=1\",
-    \"-DSKNX_NO_SIMD\", \"-DSK_DISABLE_AAA\",
+    \"-DSKNX_NO_SIMD\", \"-DSK_FORCE_AAA\",
     \"-DSK_FORCE_8_BYTE_ALIGNMENT\",
     ${GN_GPU_FLAGS}
     ${EXTRA_CFLAGS}
@@ -129,7 +129,7 @@ parse_targets() {
     basename $LIBPATH
   done
 }
-${NINJA} -C ${BUILD_DIR} libskia.a libskshaper.a libskunicode.a \
+${NINJA} -C ${BUILD_DIR} libskia.a libskshaper.a libskunicode_core.a libskunicode_icu.a \
   $(parse_targets $GM_LIB)
 
 echo "Generating final wasm"
@@ -137,18 +137,16 @@ echo "Generating final wasm"
 # Defines for the emscripten compilation step, which builds the tests
 # Aim to match the defines that would be set by gn for the skia compilation step.
 SKIA_DEFINES="
--DSK_DISABLE_AAA \
+-DSK_FORCE_AAA \
 -DSK_FORCE_8_BYTE_ALIGNMENT \
 -DSK_HAS_WUFFS_LIBRARY \
 -DSK_HAS_HEIF_LIBRARY \
--DSK_ENCODE_WEBP \
 -DSK_CODEC_DECODES_WEBP \
--DSK_ENCODE_PNG \
 -DSK_CODEC_DECODES_PNG \
--DSK_ENCODE_JPEG \
 -DSK_CODEC_DECODES_JPEG \
 -DSK_SHAPER_HARFBUZZ_AVAILABLE \
 -DSK_UNICODE_AVAILABLE \
+-DSK_UNICODE_ICU_IMPLEMENTATION \
 -DSK_ENABLE_SVG \
 -DSK_TRIVIAL_ABI=[[clang::trivial_abi]]"
 
@@ -164,20 +162,25 @@ fi
 
 # These gms do not compile or link with the WASM code. Thus, we omit them.
 GLOBIGNORE="gm/compressed_textures.cpp:"\
+"gm/animated_gif.cpp:"\
 "gm/fiddle.cpp:"\
+"gm/fontations.cpp:"\
+"gm/fontations_ft_compare.cpp:"\
 "gm/video_decoder.cpp:"
 
 # These tests do not compile with the WASM code (require other deps).
 GLOBIGNORE+="tests/CodecTest.cpp:"\
+"tests/CodecAnimTest.cpp:"\
 "tests/ColorSpaceTest.cpp:"\
 "tests/DrawOpAtlasTest.cpp:"\
 "tests/EncodeTest.cpp:"\
 "tests/FontMgrAndroidParserTest.cpp:"\
 "tests/FontMgrFontConfigTest.cpp:"\
+"tests/FontationsTest.cpp:"\
+"tests/FontationsFtCompTest.cpp:"\
 "tests/FCITest.cpp:"\
 "tests/JpegGainmapTest.cpp:"\
-"tests/TypefaceMacTest.cpp:"\
-"tests/SkVMTest.cpp:"
+"tests/TypefaceMacTest.cpp:"
 
 # These tests do complex things with TestContexts, which is not easily supported for the WASM
 # test harness. Thus we omit them.
@@ -189,11 +192,10 @@ GLOBIGNORE+="tests/BackendAllocationTest.cpp:"\
 "tests/VkHardwareBufferTest.cpp:"
 
 # All the tests in these files crash.
-GLOBIGNORE+="tests/GrThreadSafeCacheTest.cpp"
+GLOBIGNORE+="tests/GrThreadSafeCacheTest.cpp:"
 
-# These are not tests
-GLOBIGNORE+="tests/BazelNoopRunner.cpp:"\
-"tests/BazelTestRunner.cpp"
+# Bazel-related ignores (test runners, incompatible GMs, etc.).
+GLOBIGNORE+="gm/png_codec.cpp"
 
 # Emscripten prefers that the .a files go last in order, otherwise, it
 # may drop symbols that it incorrectly thinks aren't used. One day,
@@ -216,11 +218,11 @@ EMCC_DEBUG=1 ${EMCXX} \
     $TESTS_TO_BUILD \
     $GM_LIB \
     $BUILD_DIR/libskshaper.a \
-    $BUILD_DIR/libskunicode.a \
+    $BUILD_DIR/libskunicode_core.a \
+    $BUILD_DIR/libskunicode_icu.a \
     $BUILD_DIR/libsvg.a \
     $BUILD_DIR/libskia.a \
     $BUILTIN_FONT \
-    -sLLD_REPORT_UNDEFINED \
     -sALLOW_MEMORY_GROWTH=1 \
     -sEXPORT_NAME="InitWasmGMTests" \
     -sEXPORTED_FUNCTIONS=['_malloc','_free'] \

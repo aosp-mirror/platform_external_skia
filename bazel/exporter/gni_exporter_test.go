@@ -44,10 +44,9 @@ skia_core_sources = [
 ]
 
 skia_core_sources += skia_pathops_sources
-skia_core_sources += skia_skpicture_sources
 
 skia_core_public += skia_pathops_public
-skia_core_public += skia_skpicture_public
+
 `
 
 var exportDescs = []GNIExportDesc{
@@ -263,14 +262,6 @@ func TestGetGNILineVariable_LinesWithVariables_NoMatch(t *testing.T) {
 	test("EmptyString", ``, "")
 }
 
-func TestFoo_DeprecatedFiles_ReturnsTrue(t *testing.T) {
-	assert.True(t, isSourceFileDeprecated("include/core/SkDrawLooper.h"))
-}
-
-func TestFoo_NotDeprecatedFiles_ReturnsFalse(t *testing.T) {
-	assert.False(t, isSourceFileDeprecated("include/core/SkColor.h"))
-}
-
 func TestExtractTopLevelFolder_PathsWithTopDir_ReturnsTopDir(t *testing.T) {
 	test := func(name, input, expected string) {
 		t.Run(name, func(t *testing.T) {
@@ -351,50 +342,6 @@ func TestConvertTargetsToFilePaths_InvalidInput_ReturnsError(t *testing.T) {
 	test("EmptyString", []string{""})
 	test("ValidTargetEmptyString", []string{"//src/include:foo.h", ""})
 	test("EmptyStringValidTarget", []string{"//src/include:foo.h", ""})
-}
-
-func TestFilterDeprecatedFiles_ContainsDeprecatedFiles_DeprecatedFiltered(t *testing.T) {
-	test := func(name string, inputFiles, expected []string) {
-		t.Run(name, func(t *testing.T) {
-			paths := filterDeprecatedFiles(inputFiles)
-			assert.Equal(t, expected, paths)
-		})
-	}
-	test("OneDeprecated",
-		[]string{"include/core/SkDrawLooper.h"},
-		[]string{})
-	test("MultipleDeprecated",
-		[]string{
-			"include/core/SkDrawLooper.h",
-			"include/effects/SkBlurDrawLooper.h"},
-		[]string{})
-	test("FirstDeprecated",
-		[]string{
-			"include/core/SkDrawLooper.h",
-			"not/deprecated/file.h"},
-		[]string{"not/deprecated/file.h"})
-	test("LastDeprecated",
-		[]string{
-			"not/deprecated/file.h",
-			"include/core/SkDrawLooper.h"},
-		[]string{"not/deprecated/file.h"})
-}
-
-func TestFilterDeprecatedFiles_NoDeprecatedFiles_SliceUnchanged(t *testing.T) {
-	test := func(name string, inputFiles, expected []string) {
-		t.Run(name, func(t *testing.T) {
-			paths := filterDeprecatedFiles(inputFiles)
-			assert.Equal(t, expected, paths)
-		})
-	}
-	test("EmptySlice", nil, []string{})
-	test("NoneDeprecated",
-		[]string{
-			"not/deprecated/file.h",
-			"also/not/deprecated/file.h"},
-		[]string{
-			"not/deprecated/file.h",
-			"also/not/deprecated/file.h"})
 }
 
 func TestRemoveDuplicate_ContainsDuplicates_SortedAndDuplicatesRemoved(t *testing.T) {

@@ -4,18 +4,15 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "include/gpu/ganesh/gl/GrGLMakeWebGLInterface.h"
 #include "include/gpu/gl/GrGLAssembleInterface.h"
 #include "include/gpu/gl/GrGLInterface.h"
 
-#include <emscripten/html5.h>
-#include <webgl/webgl1.h>
-#include <webgl/webgl1_ext.h>
-#include <webgl/webgl2.h>
-#include <webgl/webgl2_ext.h>
+#include <GLES3/gl32.h>
 
 static GrGLFuncPtr webgl_get_gl_proc(void* ctx, const char name[]) {
 
-    #define M(X) if (0 == strcmp(#X, name)) { return (GrGLFuncPtr) emscripten_##X; }
+    #define M(X) if (0 == strcmp(#X, name)) { return (GrGLFuncPtr) X; }
     M(glGetString)
     #undef M
 
@@ -28,6 +25,14 @@ static GrGLFuncPtr webgl_get_gl_proc(void* ctx, const char name[]) {
     return nullptr;
 }
 
-sk_sp<const GrGLInterface> GrGLMakeNativeInterface() {
-    return GrGLMakeAssembledInterface(nullptr, webgl_get_gl_proc);
+namespace GrGLInterfaces {
+sk_sp<const GrGLInterface> MakeWebGL() {
+    return GrGLMakeAssembledWebGLInterface(nullptr, webgl_get_gl_proc);
 }
+}  // namespace GrGLInterfaces
+
+#if !defined(SK_DISABLE_LEGACY_GL_MAKE_NATIVE_INTERFACE)
+sk_sp<const GrGLInterface> GrGLMakeNativeInterface() {
+    return GrGLInterfaces::MakeWebGL();
+}
+#endif

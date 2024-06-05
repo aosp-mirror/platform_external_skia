@@ -9,12 +9,16 @@
 #ifndef SkPDFGraphicState_DEFINED
 #define SkPDFGraphicState_DEFINED
 
+#include "include/core/SkScalar.h"
 #include "include/private/base/SkMacros.h"
-#include "src/core/SkOpts.h"
+#include "src/core/SkChecksum.h"
 #include "src/pdf/SkPDFTypes.h"
 
-class SkPaint;
+#include <cstdint>
+#include <cstring>
 
+class SkPDFDocument;
+class SkPaint;
 
 /** \class SkPDFGraphicState
     SkPaint objects roughly correspond to graphic state dictionaries that can
@@ -55,6 +59,8 @@ struct SkPDFStrokeGraphicState {
     uint8_t fPADDING = 0;
     bool operator==(const SkPDFStrokeGraphicState& o) const { return !memcmp(this, &o, sizeof(o)); }
     bool operator!=(const SkPDFStrokeGraphicState& o) const { return !(*this == o); }
+
+    using Hash = SkForceDirectHash<SkPDFStrokeGraphicState>;
 };
 SK_END_REQUIRE_DENSE
 
@@ -65,6 +71,8 @@ struct SkPDFFillGraphicState {
     uint8_t fPADDING[3] = {0, 0, 0};
     bool operator==(const SkPDFFillGraphicState& o) const { return !memcmp(this, &o, sizeof(o)); }
     bool operator!=(const SkPDFFillGraphicState& o) const { return !(*this == o); }
+
+    using Hash = SkForceDirectHash<SkPDFFillGraphicState>;
 };
 SK_END_REQUIRE_DENSE
 

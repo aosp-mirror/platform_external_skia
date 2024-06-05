@@ -6,11 +6,12 @@
  */
 #include "modules/jetski/src/SurfaceThread.h"
 
-#include "tools/window/SkDisplayParams.h"
-#include "tools/window/SkWindowContext.h"
-#include "tools/window/android/SkWindowContextFactory_android.h"
+#include "tools/window/DisplayParams.h"
+#include "tools/window/WindowContext.h"
+#include "tools/window/android/WindowContextFactory_android.h"
 
 #include "include/core/SkCanvas.h"
+#include "include/core/SkPicture.h"
 #include "include/core/SkTypes.h"
 
 SurfaceThread::SurfaceThread() {
@@ -39,8 +40,8 @@ int SurfaceThread::message_callback(int /* fd */, int /* events */, void* data) 
 
     switch (message.fType) {
         case kInitialize: {
-            SkDisplayParams params;
-            auto winctx = window_context_factory::MakeGLForAndroid(message.fNativeWindow, params);
+            skwindow::DisplayParams params;
+            auto winctx = skwindow::MakeGLForAndroid(message.fNativeWindow, params);
             if (!winctx) {
                 break;
             }
@@ -80,10 +81,13 @@ void* SurfaceThread::pthread_main(void* arg) {
                surfaceThread->message_callback, surfaceThread);
 
     while (surfaceThread->fRunning) {
-        const int ident = ALooper_pollAll(0, nullptr, nullptr, nullptr);
+        int ident = 0;
+        while (ident == ALOOPER_POLL_CALLBACK) {
+            ident = ALooper_pollOnce(0, nullptr, nullptr, nullptr);
+        }
 
         if (ident >= 0) {
-            SkDebugf("Unhandled ALooper_pollAll ident=%d !", ident);
+            SkDebugf("Unhandled ALooper_pollOnce ident=%d !", ident);
         }
     }
     return nullptr;

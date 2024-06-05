@@ -5,10 +5,15 @@
  * found in the LICENSE file.
  */
 
+#include "src/pdf/SkPDFFont.h"
+
 #include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
+#include "include/core/SkDrawable.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkFontMetrics.h"
+#include "include/core/SkFontStyle.h"
 #include "include/core/SkFontTypes.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
@@ -22,13 +27,13 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurfaceProps.h"
-#include "include/core/SkTypes.h"
-#include "include/docs/SkPDFDocument.h"
-#include "include/private/SkBitmaskEnum.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
+#include "src/base/SkBitmaskEnum.h"
 #include "src/base/SkUTF.h"
+#include "src/core/SkDevice.h"
 #include "src/core/SkGlyph.h"
-#include "src/core/SkImagePriv.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkScalerContext.h"
 #include "src/core/SkStrike.h"
@@ -37,7 +42,6 @@
 #include "src/pdf/SkPDFBitmap.h"
 #include "src/pdf/SkPDFDevice.h"
 #include "src/pdf/SkPDFDocumentPriv.h"
-#include "src/pdf/SkPDFFont.h"
 #include "src/pdf/SkPDFFormXObject.h"
 #include "src/pdf/SkPDFMakeCIDGlyphWidthsArray.h"
 #include "src/pdf/SkPDFMakeToUnicodeCmap.h"
@@ -46,6 +50,8 @@
 #include "src/pdf/SkPDFUtils.h"
 
 #include <limits.h>
+#include <algorithm>
+#include <cstddef>
 #include <initializer_list>
 #include <memory>
 #include <utility>
@@ -211,7 +217,7 @@ SkPDFFont* SkPDFFont::GetFontResource(SkPDFDocument* doc,
     bool multibyte = SkPDFFont::IsMultiByte(type);
     SkGlyphID subsetCode =
             multibyte ? 0 : first_nonzero_glyph_for_single_byte_encoding(glyph->getGlyphID());
-    uint64_t typefaceID = (static_cast<uint64_t>(SkTypeface::UniqueID(face)) << 16) | subsetCode;
+    uint64_t typefaceID = (static_cast<uint64_t>(face->uniqueID()) << 16) | subsetCode;
 
     if (SkPDFFont* found = doc->fFontMap.find(typefaceID)) {
         SkASSERT(multibyte == found->multiByteGlyphs());
@@ -282,20 +288,6 @@ void SkPDFFont::PopulateCommonFontDescriptor(SkPDFDict* descriptor,
 //  Type0Font
 ///////////////////////////////////////////////////////////////////////////////
 
-// if possible, make no copy.
-static sk_sp<SkData> stream_to_data(std::unique_ptr<SkStreamAsset> stream) {
-    SkASSERT(stream);
-    (void)stream->rewind();
-    SkASSERT(stream->hasLength());
-    size_t size = stream->getLength();
-    if (const void* base = stream->getMemoryBase()) {
-        SkData::ReleaseProc proc =
-            [](const void*, void* ctx) { delete (SkStreamAsset*)ctx; };
-        return SkData::MakeWithProc(base, size, proc, stream.release());
-    }
-    return SkData::MakeFromStream(stream.get(), size);
-}
-
 static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
     const SkAdvancedTypefaceMetrics* metricsPtr =
         SkPDFFont::GetMetrics(font.typeface(), doc);
@@ -320,14 +312,12 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
                  "or kTrueType_Font.\n", face, fontAsset.get());
     } else {
         switch (type) {
-            case SkAdvancedTypefaceMetrics::kTrueType_Font: {
+            case SkAdvancedTypefaceMetrics::kTrueType_Font:
+            case SkAdvancedTypefaceMetrics::kCFF_Font: {
                 if (!SkToBool(metrics.fFlags &
                               SkAdvancedTypefaceMetrics::kNotSubsettable_FontFlag)) {
                     SkASSERT(font.firstGlyphID() == 1);
-                    sk_sp<SkData> subsetFontData = SkPDFSubsetFont(
-                            stream_to_data(std::move(fontAsset)), font.glyphUsage(),
-                            doc->metadata().fSubsetter,
-                            metrics.fFontName.c_str(), ttcIndex);
+                    sk_sp<SkData> subsetFontData = SkPDFSubsetFont(*face, font.glyphUsage());
                     if (subsetFontData) {
                         std::unique_ptr<SkPDFDict> tmp = SkPDFMakeDict();
                         tmp->insertInt("Length1", SkToInt(subsetFontData->size()));
@@ -339,10 +329,6 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
                         break;
                     }
                     // If subsetting fails, fall back to original font data.
-                    fontAsset = face->openStream(&ttcIndex);
-                    SkASSERT(fontAsset);
-                    SkASSERT(fontAsset->getLength() == fontSize);
-                    if (!fontAsset || fontAsset->getLength() == 0) { break; }
                 }
                 std::unique_ptr<SkPDFDict> tmp = SkPDFMakeDict();
                 tmp->insertInt("Length1", fontSize);
@@ -373,6 +359,7 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
             newCIDFont->insertName("Subtype", "CIDFontType0");
             break;
         case SkAdvancedTypefaceMetrics::kTrueType_Font:
+        case SkAdvancedTypefaceMetrics::kCFF_Font:
             newCIDFont->insertName("Subtype", "CIDFontType2");
             newCIDFont->insertName("CIDToGIDMap", "Identity");
             break;
@@ -386,14 +373,15 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
     sysInfo->insertInt("Supplement", 0);
     newCIDFont->insertObject("CIDSystemInfo", std::move(sysInfo));
 
-    SkScalar defaultWidth = 0;
+    // Unfortunately, poppler enforces DW (default width) must be an integer.
+    int32_t defaultWidth = 0;
     {
         std::unique_ptr<SkPDFArray> widths = SkPDFMakeCIDGlyphWidthsArray(
                 *face, font.glyphUsage(), &defaultWidth);
         if (widths && widths->size() > 0) {
             newCIDFont->insertObject("W", std::move(widths));
         }
-        newCIDFont->insertScalar("DW", defaultWidth);
+        newCIDFont->insertInt("DW", defaultWidth);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -481,14 +469,16 @@ static ImageAndOffset to_image(SkGlyphID gid, SkBulkGlyphMetricsAndImages* small
             bm.setImmutable();
             return {bm.asImage(), {bounds.x(), bounds.y()}};
         case SkMask::kA8_Format:
-            bm.installPixels(SkImageInfo::MakeA8(bounds.width(), bounds.height()),
-                             mask.fImage, mask.fRowBytes);
-            return {SkMakeImageFromRasterBitmap(bm, kAlways_SkCopyPixelsMode),
+            return {SkImages::RasterFromData(
+                        SkImageInfo::MakeA8(bounds.width(), bounds.height()),
+                        SkData::MakeWithCopy(mask.fImage, mask.computeTotalImageSize()),
+                        mask.fRowBytes),
                     {bounds.x(), bounds.y()}};
         case SkMask::kARGB32_Format:
-            bm.installPixels(SkImageInfo::MakeN32Premul(bounds.width(), bounds.height()),
-                             mask.fImage, mask.fRowBytes);
-            return {SkMakeImageFromRasterBitmap(bm, kAlways_SkCopyPixelsMode),
+            return {SkImages::RasterFromData(
+                        SkImageInfo::MakeN32Premul(bounds.width(), bounds.height()),
+                        SkData::MakeWithCopy(mask.fImage, mask.computeTotalImageSize()),
+                        mask.fRowBytes),
                     {bounds.x(), bounds.y()}};
         case SkMask::k3D_Format:
         case SkMask::kLCD16_Format:
@@ -507,6 +497,33 @@ static SkPDFIndirectReference type3_descriptor(SkPDFDocument* doc,
 
     SkPDFDict descriptor("FontDescriptor");
     int32_t fontDescriptorFlags = kPdfSymbolic;
+
+    /** PDF32000_2008: FontFamily should be used for Type3 fonts in Tagged PDF documents. */
+    SkString familyName;
+    typeface->getFamilyName(&familyName);
+    if (!familyName.isEmpty()) {
+        descriptor.insertByteString("FontFamily", familyName);
+    }
+
+    /** PDF32000_2008: FontStretch should be used for Type3 fonts in Tagged PDF documents. */
+    static constexpr const char* stretchNames[9] = {
+        "UltraCondensed",
+        "ExtraCondensed",
+        "Condensed",
+        "SemiCondensed",
+        "Normal",
+        "SemiExpanded",
+        "Expanded",
+        "ExtraExpanded",
+        "UltraExpanded",
+    };
+    const char* stretchName = stretchNames[typeface->fontStyle().width() - 1];
+    descriptor.insertName("FontStretch", stretchName);
+
+    /** PDF32000_2008: FontWeight should be used for Type3 fonts in Tagged PDF documents. */
+    int weight = (typeface->fontStyle().weight() + 50) / 100;
+    descriptor.insertInt("FontWeight", SkTPin(weight, 1, 9) * 100);
+
     if (const SkAdvancedTypefaceMetrics* metrics = SkPDFFont::GetMetrics(typeface, doc)) {
         // Type3 FontDescriptor does not require all the same fields.
         descriptor.insertName("FontName", metrics->fPostScriptName);
@@ -538,7 +555,7 @@ SkStrikeSpec make_small_strike(const SkTypeface& typeface) {
     font.setEdging(SkFont::Edging::kAlias);
     return SkStrikeSpec::MakeMask(font,
                                   SkPaint(),
-                                  SkSurfaceProps(0, kUnknown_SkPixelGeometry),
+                                  SkSurfaceProps(),
                                   SkScalerContextFlags::kFakeGammaAndBoostContrast,
                                   SkMatrix::I());
 }
@@ -705,6 +722,7 @@ void SkPDFFont::emitSubset(SkPDFDocument* doc) const {
     switch (fFontType) {
         case SkAdvancedTypefaceMetrics::kType1CID_Font:
         case SkAdvancedTypefaceMetrics::kTrueType_Font:
+        case SkAdvancedTypefaceMetrics::kCFF_Font:
             return emit_subset_type0(*this, doc);
 #ifndef SK_PDF_DO_NOT_SUPPORT_TYPE_1_FONTS
         case SkAdvancedTypefaceMetrics::kType1_Font:

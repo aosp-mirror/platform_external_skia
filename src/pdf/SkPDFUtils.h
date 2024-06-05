@@ -7,19 +7,33 @@
 #ifndef SkPDFUtils_DEFINED
 #define SkPDFUtils_DEFINED
 
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPath.h"
-#include "include/core/SkShader.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkStream.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkDebug.h"
 #include "src/base/SkUTF.h"
 #include "src/base/SkUtils.h"
-#include "src/pdf/SkPDFTypes.h"
 #include "src/shaders/SkShaderBase.h"
 #include "src/utils/SkFloatToDecimal.h"
 
-class SkMatrix;
+#include <cstdint>
+#include <cstring>
+#include <memory>
+
+class SkBitmap;
+class SkImage;
 class SkPDFArray;
+class SkPDFDict;
+class SkPath;
+class SkShader;
+enum class SkBlendMode;
+enum class SkPathFillType;
 struct SkRect;
+
+namespace SkPDF { struct DateTime; }
 
 template <typename T>
 bool SkPackedArrayEqual(T* u, T* v, size_t n) {
@@ -34,11 +48,11 @@ bool SkPackedArrayEqual(T* u, T* v, size_t n) {
 #define PRINT_NOT_IMPL(str)
 #endif
 
-#define NOT_IMPLEMENTED(condition, assert)                         \
+#define NOT_IMPLEMENTED(condition, assertion)                      \
     do {                                                           \
         if ((bool)(condition)) {                                   \
             PRINT_NOT_IMPL("NOT_IMPLEMENTED: " #condition "\n");   \
-            SkDEBUGCODE(SkASSERT(!assert);)                        \
+            SkDEBUGCODE(SkASSERT(!assertion);)                     \
         }                                                          \
     } while (0)
 
@@ -83,7 +97,7 @@ inline void AppendColorComponentF(float value, SkWStream* wStream) {
 
 inline void AppendScalar(SkScalar value, SkWStream* stream) {
     char result[kMaximumSkFloatToDecimalLength];
-    size_t len = SkFloatToDecimal(SkScalarToFloat(value), result);
+    size_t len = SkFloatToDecimal(value, result);
     SkASSERT(len < kMaximumSkFloatToDecimalLength);
     stream->write(result, len);
 }
@@ -132,6 +146,10 @@ void Base85Encode(std::unique_ptr<SkStreamAsset> src, SkDynamicMemoryWStream* ds
 #endif //  SK_PDF_BASE85_BINARY
 
 void AppendTransform(const SkMatrix&, SkWStream*);
+
+// Takes SkTime::GetNSecs() [now] and puts it into the provided struct.
+void GetDateTime(SkPDF::DateTime*);
+
 }  // namespace SkPDFUtils
 
 #endif

@@ -9,7 +9,6 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTextBlob.h"
-#include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
 #include "include/effects/SkGradientShader.h"
 #include "modules/skparagraph/include/Paragraph.h"
@@ -18,18 +17,26 @@
 #include "modules/skparagraph/src/ParagraphImpl.h"
 #include "modules/skparagraph/src/TextLine.h"
 #include "modules/skparagraph/utils/TestFontCollection.h"
+#include "modules/skshaper/utils/FactoryHelpers.h"
 #include "src/base/SkRandom.h"
+#include "src/base/SkTime.h"
 #include "src/base/SkUTF.h"
 #include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/Resources.h"
 #include "tools/flags/CommandLineFlags.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 
 static DEFINE_bool(verboseParagraph, false, "paragraph samples very verbose.");
 
 using namespace skia::textlayout;
 namespace {
+
+static sk_sp<SkUnicode> get_unicode() {
+    auto factory = SkShapers::BestAvailable();
+    return sk_ref_sp<SkUnicode>(factory->getUnicode());
+}
 
 class ParagraphSlide_Base : public ClickHandlerSlide {
 public:
@@ -120,11 +127,11 @@ protected:
         ParagraphStyle paraStyle;
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         for (auto i = 1; i < 5; ++i) {
             defaultStyle.setFontSize(24 * i);
             paraStyle.setTextStyle(defaultStyle);
-            ParagraphBuilderImpl builder(paraStyle, fontCollection);
+            ParagraphBuilderImpl builder(paraStyle, fontCollection, get_unicode());
             std::string name = "Paragraph: " + std::to_string(24 * i);
             builder.addText(name.c_str(), name.length());
             for (auto para : gParagraph) {
@@ -284,8 +291,8 @@ private:
         paraStyle.setTextStyle(defaultStyle);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
-        ParagraphBuilderImpl builder(paraStyle, fontCollection);
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        ParagraphBuilderImpl builder(paraStyle, fontCollection, get_unicode());
 
         const char* text1 = "RaisedButton";
         const char* text2 = "(\n";
@@ -367,7 +374,7 @@ private:
         TextStyle defaultStyle;
         defaultStyle.setFontSize(20);
         paraStyle.setTextStyle(defaultStyle);
-        ParagraphBuilderImpl builder(paraStyle, getFontCollection());
+        ParagraphBuilderImpl builder(paraStyle, getFontCollection(), get_unicode());
 
         SkPaint foreground;
         foreground.setColor(fg);
@@ -413,8 +420,8 @@ private:
         paraStyle.setTextAlign(align);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
-        ParagraphBuilderImpl builder(paraStyle, fontCollection);
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        ParagraphBuilderImpl builder(paraStyle, fontCollection, get_unicode());
         builder.addText(text.c_str(), text.length());
 
         auto paragraph = builder.Build();
@@ -498,8 +505,8 @@ private:
         paraStyle.setTextDirection(RTL ? TextDirection::kRtl : TextDirection::kLtr);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
-        ParagraphBuilderImpl builder(paraStyle, fontCollection);
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        ParagraphBuilderImpl builder(paraStyle, fontCollection, get_unicode());
         if (RTL) {
             builder.addText(mirror(text));
         } else {
@@ -636,7 +643,7 @@ private:
 
         paraStyle.setEllipsis(ellipsis);
 
-        ParagraphBuilderImpl builder(paraStyle, getFontCollection());
+        ParagraphBuilderImpl builder(paraStyle, getFontCollection(), get_unicode());
 
         if (text.empty()) {
             const std::u16string text0 = u"\u202Dabc";
@@ -759,7 +766,7 @@ public:
         const char* logo5 = "Ski";
         const char* logo6 = "a";
         {
-            ParagraphBuilderImpl builder(paraStyle, getFontCollection());
+            ParagraphBuilderImpl builder(paraStyle, getFontCollection(), get_unicode());
 
             builder.pushStyle(style0);
             builder.addText(logo1, strlen(logo1));
@@ -799,31 +806,31 @@ public:
         const char* logo15 = "S";
         const char* logo16 = "S";
         {
-            ParagraphBuilderImpl builder(paraStyle, getFontCollection());
+            ParagraphBuilderImpl builder(paraStyle, getFontCollection(), get_unicode());
 
             builder.pushStyle(style0);
-            builder.addText(logo11, strlen(logo1));
+            builder.addText(logo11, strlen(logo11));
             builder.pop();
             builder.pushStyle(style1);
-            builder.addText(logo12, strlen(logo2));
+            builder.addText(logo12, strlen(logo12));
             builder.pop();
 
             builder.addText("   ", 3);
 
             builder.pushStyle(style0);
-            builder.addText(logo13, strlen(logo3));
+            builder.addText(logo13, strlen(logo13));
             builder.pop();
             builder.pushStyle(style1);
-            builder.addText(logo14, strlen(logo4));
+            builder.addText(logo14, strlen(logo14));
             builder.pop();
 
             builder.addText("   ", 3);
 
             builder.pushStyle(style0);
-            builder.addText(logo15, strlen(logo5));
+            builder.addText(logo15, strlen(logo15));
             builder.pop();
             builder.pushStyle(style1);
-            builder.addText(logo16, strlen(logo6));
+            builder.addText(logo16, strlen(logo16));
             builder.pop();
 
             auto paragraph = builder.Build();
@@ -867,7 +874,7 @@ public:
         textStyle.setFontStyle(SkFontStyle(SkFontStyle::kMedium_Weight, SkFontStyle::kNormal_Width,
                                            SkFontStyle::kUpright_Slant));
 
-        ParagraphBuilderImpl builder(paragraphStyle, getFontCollection());
+        ParagraphBuilderImpl builder(paragraphStyle, getFontCollection(), get_unicode());
         builder.pushStyle(textStyle);
         builder.addText(line, strlen(line));
         builder.pop();
@@ -934,7 +941,7 @@ public:
         textStyle.setFontStyle(SkFontStyle(SkFontStyle::kMedium_Weight, SkFontStyle::kNormal_Width,
                                            SkFontStyle::kUpright_Slant));
 
-        ParagraphBuilderImpl builder(paragraphStyle, getFontCollection());
+        ParagraphBuilderImpl builder(paragraphStyle, getFontCollection(), get_unicode());
         builder.pushStyle(textStyle);
         builder.addText(line, strlen(line));
         builder.pop();
@@ -1006,7 +1013,7 @@ public:
         canvas->drawColor(background);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         const char* text =
@@ -1026,7 +1033,7 @@ public:
         textStyle.setFontStyle(SkFontStyle(SkFontStyle::kMedium_Weight, SkFontStyle::kNormal_Width,
                                            SkFontStyle::kUpright_Slant));
 
-        ParagraphBuilderImpl builder(paragraphStyle, fontCollection);
+        ParagraphBuilderImpl builder(paragraphStyle, fontCollection, get_unicode());
         builder.pushStyle(textStyle);
         builder.addText(text, strlen(text));
         builder.pop();
@@ -1084,12 +1091,12 @@ public:
         const char* text = "English English 字典 字典 😀😃😄 😀😃😄";
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         paragraph_style.turnHintingOff();
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
 
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Roboto"),
@@ -1130,7 +1137,7 @@ public:
         paragraph_style.setTextStyle(text_style);
 
         auto fontCollection = sk_make_sp<TestFontCollection>(GetResourcePath("fonts").c_str(), true, true);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         builder.addText(text, strlen(text));
         auto paragraph = builder.Build();
         paragraph->layout(1000);
@@ -1172,7 +1179,7 @@ public:
             if (hitRects.size() >= 1 && hitRects[0].rect.width() > 0) {
             } else {
                 if (this->isVerbose()) {
-                    SkDebugf("+[%d:%d): Bad\n", query.fX, query.fY);
+                    SkDebugf("+[%u:%u): Bad\n", query.fX, query.fY);
                 }
             }
         }
@@ -1184,7 +1191,7 @@ public:
             if (missRects.empty()) {
             } else {
                 if (this->isVerbose()) {
-                    SkDebugf("-[%d:%d): Bad\n", query.fX, query.fY);
+                    SkDebugf("-[%u:%u): Bad\n", query.fX, query.fY);
                 }
             }
         }
@@ -1209,7 +1216,7 @@ public:
         ParagraphStyle paragraph_style;
         paragraph_style.setStrutStyle(strut_style);
         paragraph_style.setTextStyle(text_style);
-        ParagraphBuilderImpl builder(paragraph_style, getFontCollection());
+        ParagraphBuilderImpl builder(paragraph_style, getFontCollection(), get_unicode());
         builder.addText(text);
         auto paragraph = builder.Build();
         paragraph->layout(1095.000000);
@@ -1244,7 +1251,7 @@ public:
         ParagraphStyle paragraph_style;
         paragraph_style.setTextStyle(text_style);
         paragraph_style.setTextDirection(TextDirection::kRtl);
-        ParagraphBuilderImpl builder(paragraph_style, getFontCollection());
+        ParagraphBuilderImpl builder(paragraph_style, getFontCollection(), get_unicode());
         builder.pushStyle(text_style);
         builder.addText("Hello, wor!\nabcd.");
         auto paragraph = builder.Build();
@@ -1277,7 +1284,7 @@ public:
         fontCollection->addFontFromFile("abc/abc+agrave.ttf", "abc+agrave");
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
 
         text_style.setFontFamilies({SkString("abc"), SkString("abc+grave")});
         text_style.setColor(SK_ColorBLUE);
@@ -1317,9 +1324,9 @@ public:
         paragraph_style.setEllipsis(u"\u2026");
         //auto fontCollection = sk_make_sp<TestFontCollection>(GetResourcePath("fonts").c_str(), false, true);
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
 
         TextStyle text_style;
         text_style.setFontFamilies({SkString(".SF Pro Text")});
@@ -1343,7 +1350,7 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         auto navy = SkColorSetRGB(0, 0, 139);
         auto ltgray = SkColorSetRGB(211, 211, 211);
@@ -1352,7 +1359,7 @@ public:
         //const char* text = ">Sͬ͑̀͐̈͒̈́̋̎ͮͩ̽̓ͬ̂̆̔͗́̓ͣͧ͊ͫ͛̉͌̐̑ͪ͗̚͝҉̴͉͢k̡̊̓ͫͭͩ͂͊ͨͪͬ̑ͫ̍̌̄͛̌̂̑̂̋̊̔ͫ͛̽̑ͨ̍ͭ̓̀ͪͪ̉͐͗̌̓̃̚͟͝҉̢͏̫̞̙͇͖̮͕̗̟͕͇͚̻͈̣̻̪͉̰̲̣̫ͅͅP̴̅̍͒̿͗͗̇ͩ̃͆͌̀̽͏̧̡͕͖̝̖̼̺̰̣̬͔͖͔̼͙̞̦̫͓̘͜a̸̴̸̴̢̢̨̨̫͍͓̥̼̭̼̻̤̯̙̤̻̠͚̍̌͋̂ͦͨ̽̇͌͌͆̀̽̎͒̄ͪ̐ͦ̈ͫ͐͗̓̚̚͜ͅr͐͐ͤͫ̐ͥ͂̈́̿́ͮ̃͗̓̏ͫ̀̿͏̸̵̧́͘̕͟͝͠͞͠҉̷̧͚͢͟a̓̽̎̄͗̔͛̄̐͊͛ͫ͂͌̂̂̈̈̓̔̅̅̄͊̉́ͪ̑̄͆ͬ̍͆ͭ͋̐ͬ͏̷̵̨̢̩̹̖͓̥̳̰͔̱̬͖̙͓̙͇̀̀̕͜͟͟͢͟͜͠͡g̨̅̇ͦ͋̂ͦͨͭ̓͐͆̏̂͛̉ͧ̑ͫ̐̒͛ͫ̍̒͛́̚҉̷̨̛̛̀͜͢͞҉̩̘̲͍͎̯̹̝̭̗̱͇͉̲̱͔̯̠̹̥̻͉̲̜̤̰̪̗̺̖̺r̷͌̓̇̅ͭ̀̐̃̃ͭ͑͗̉̈̇̈́ͥ̓ͣ́ͤ͂ͤ͂̏͌̆̚҉̴̸̧̢̢̛̫͉̦̥̤̙͈͉͈͉͓̙̗̟̳̜͈̗̺̟̠̠͖͓̖̪͕̠̕̕͝ͅả̸̴̡̡̧͠͞͡͞҉̛̕͟͏̷̘̪̱͈̲͉̞̠̞̪̫͎̲̬̖̀̀͟͝͞͞͠p̛͂̈͐̚͠҉̵̸̡̢̢̩̹͙̯͖̙̙̮̥̙͚̠͔̥̭̮̞̣̪̬̥̠̖̝̥̪͎́̀̕͜͡͡ͅͅh̵̷̵̡̛ͤ̂͌̐̓̐̋̋͊̒̆̽́̀̀̀͢͠͞͞҉̷̸̢̕҉͚̯͖̫̜̞̟̠̱͉̝̲̹̼͉̟͉̩̮͔̤͖̞̭̙̹̬ͅ<";
         const char* text = ">S͛ͭ̋͆̈̔̇͗̍͑̎ͪͮͧͣ̽ͫͣ́ͬ̀͌͑͂͗͒̍̔̄ͧ̏̉̌̊̊̿̀̌̃̄͐̓̓̚̚҉̵̡͜͟͝͠͏̸̵̡̧͜҉̷̡͇̜̘̻̺̘̟̝͙̬̘̩͇̭̼̥̖̤̦͎k͉̩̘͚̜̹̗̗͍̤̥̱͉̳͕͖̤̲̣͚̮̞̬̲͍͔̯̻̮̞̭͈̗̫͓̂ͨ̉ͪ̒͋͛̀̍͊ͧ̿̅͆̓̔̔ͬ̇̑̿ͩ͗ͮ̎͌̿̄ͅP̴̵̡̡̛̪͙̼̣̟̩̭̫̱͙̬͔͉͍̘̠͉̦̝̘̥̟̗͖̫̤͕̙̬̦͍̱̖̮̱͑͐̎̃̒͐͋̚͘͞a̶̶̵̵̵̶̶̡̧̢̢̺͔̣͖̭̺͍̤͚̱̜̰̥͕̬̥̲̞̥̘͇͚̺̰͚̪̺͔̤͍̓̿͆̎͋̓ͦ̈́ͦ̌́̄͗̌̓͌̕͜͜͟͢͝͡ŕ͎̝͕͉̻͎̤̭͚̗̳̖̙̘͚̫͖͓͚͉͔͈̟̰̟̬̗͓̟͚̱̕͡ͅͅͅa̸̶̢̛̛̽ͮͩ̅͒ͫ͗͂̎ͦ̈́̓̚͘͜͢͡҉̷̵̶̢̡̜̮̦̜̥̜̯̙͓͔̼̗̻͜͜ͅḡ̢̛͕̗͖̖̤̦̘͔ͨͨ̊͒ͩͭͤ̍̅̃ͪ̋̏̓̍̋͗̋ͨ̏̽̈́̔̀̋̉ͫ̅̂ͭͫ̏͒͋ͥ̚͜r̶̢̧̧̥̤̼̀̂̒ͪ͌̿͌̅͛ͨͪ͒̍ͥ̉ͤ̌̿̆́ͭ͆̃̒ͤ͛̊ͧ̽͘͝͠a̧̢̧̢͑͑̓͑ͮ̃͂̄͛́̈́͋̂͌̽̄͒̔́̇ͨͧͭ͐ͦ̋ͨ̍ͦ̍̋͆̔ͧ͑͋͌̈̓͛͛̚͢͜͜͏̴̢̧̛̳͍̹͚̰̹̻͔p̨̡͆ͦͣ͊̽̔͂̉ͣ̔ͣ̌̌̉̃̋̂͒ͫ̄̎̐͗̉̌̃̽̽́̀̚͘͜͟҉̱͉h̭̮̘̗͔̜̯͔͈̯̺͔̗̣̭͚̱̰̙̼̹͚̣̻̥̲̮͍̤͜͝<";
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         SkPaint paint;
         paint.setColor(ltgray);
         TextStyle text_style;
@@ -1385,7 +1392,7 @@ class Zalgo {
     }
 
 public:
-    std::u16string zalgo(std::string victim) {
+    std::u16string zalgo(const std::string& victim) {
         std::u16string result;
         for (auto& c : victim) {
             result += c;
@@ -1438,7 +1445,7 @@ public:
 
         auto multiplier = 5.67;
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
@@ -1455,7 +1462,7 @@ public:
         if (fRedraw || fRepeat) {
 
             if (fRedraw || fParagraph == nullptr) {
-                ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+                ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
                 builder.pushStyle(text_style);
                 auto utf16text = zalgo.zalgo("SkParagraph");
                 builder.addText(utf16text);
@@ -1510,7 +1517,7 @@ public:
 
         std::u16string text = u"\u0068\u0301\u0350\u0312\u0357\u030C\u0369\u0305\u036C\u0304\u0310\u033F\u0366\u0350\u0343\u0364\u0369\u0311\u0309\u030E\u0365\u031B\u0340\u0337\u0335\u035E\u0334\u0328\u0360\u0360\u0315\u035F\u0340\u0340\u0362\u0360\u0322\u031B\u031B\u0337\u0340\u031E\u031F\u032A\u0331\u0345\u032F\u0332\u032E\u0333\u0353\u0320\u0345\u031C\u031F\u033C\u0325\u0355\u032C\u0325\u033Aa\u0307\u0312\u034B\u0308\u0312\u0346\u0313\u0346\u0304\u0307\u0344\u0305\u0342\u0368\u0346\u036A\u035B\u030F\u0365\u0307\u0340\u0328\u0322\u0361\u0489\u034F\u0328\u0334\u035F\u0335\u0362\u0489\u0360\u0358\u035E\u0360\u035D\u0341\u0337\u0337\u032E\u0326\u032D\u0359\u0318\u033C\u032F\u0333\u035A\u034D\u0319\u031C\u0353\u033C\u0345\u0359\u0331\u033B\u0331\u033C";
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -1536,7 +1543,7 @@ public:
         ParagraphStyle paragraph_style;
         paragraph_style.setEllipsis(u"\u2026");
         paragraph_style.setMaxLines(1);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -1558,7 +1565,7 @@ public:
 
         const char* text =  "Referral Code";
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, getFontCollection());
+        ParagraphBuilderImpl builder(paragraph_style, getFontCollection(), get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Google Sans")});
@@ -1595,7 +1602,7 @@ public:
         ParagraphStyle paragraph_style;
         paragraph_style.setTextDirection(direction ? TextDirection::kLtr : TextDirection::kRtl);
         auto collection = getFontCollection();
-        ParagraphBuilderImpl builder(paragraph_style, collection);
+        ParagraphBuilderImpl builder(paragraph_style, collection, get_unicode());
         collection->getParagraphCache()->reset();
         collection->getParagraphCache()->turnOn(false);
         TextStyle text_style;
@@ -1637,7 +1644,7 @@ public:
         auto draw = [&](SkScalar h, SkScalar v, SkScalar b) {
             text_style.resetShadows();
             text_style.addShadow(TextShadow(SK_ColorBLACK, SkPoint::Make(h, v), b));
-            ParagraphBuilderImpl builder(paragraph_style, getFontCollection());
+            ParagraphBuilderImpl builder(paragraph_style, getFontCollection(), get_unicode());
             builder.pushStyle(text_style);
             builder.addText(text);
             auto paragraph = builder.Build();
@@ -1681,7 +1688,7 @@ public:
         text_style.setFontFamilies({SkString("Google Sans")});
         text_style.setFontSize(24);
         {
-            ParagraphBuilderImpl builder(paragraph_style, getFontCollection());
+            ParagraphBuilderImpl builder(paragraph_style, getFontCollection(), get_unicode());
             builder.pushStyle(text_style);
             builder.addText("Right_to_left:");
             auto paragraph = builder.Build();
@@ -1690,7 +1697,7 @@ public:
         }
         canvas->translate(0, 200);
         {
-            ParagraphBuilderImpl builder(paragraph_style, getFontCollection());
+            ParagraphBuilderImpl builder(paragraph_style, getFontCollection(), get_unicode());
             builder.pushStyle(text_style);
             builder.addText("Right_to_left+");
             auto paragraph = builder.Build();
@@ -1699,7 +1706,7 @@ public:
         }
         canvas->translate(0, 200);
         {
-            ParagraphBuilderImpl builder(paragraph_style, getFontCollection());
+            ParagraphBuilderImpl builder(paragraph_style, getFontCollection(), get_unicode());
             builder.pushStyle(text_style);
             builder.addText("Right_to_left.");
             auto paragraph = builder.Build();
@@ -1750,7 +1757,7 @@ Shell: layout('Go to device settings ￼ and set up a passcode. ￼', 280.000000
         text_style.setFontSize(16);
         PlaceholderStyle placeholder_style;
         {
-            ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
             builder.pushStyle(text_style);
             builder.addText(text1);
             placeholder_style.fHeight = 32;
@@ -1779,7 +1786,7 @@ public:
 
     void draw(SkCanvas* canvas) override {
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         //fontCollection->enableFontFallback();
 
         canvas->clear(SK_ColorWHITE);
@@ -1799,7 +1806,7 @@ public:
         paragraphStyle.setTextStyle(textStyle);
         paragraphStyle.setTextAlign(TextAlign::kLeft);
 
-        ParagraphBuilderImpl builder(paragraphStyle, fontCollection);
+        ParagraphBuilderImpl builder(paragraphStyle, fontCollection, get_unicode());
         builder.addText(u"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam ut dolor ornare, fermentum nibh in, consectetur libero. Ut id semper est. Sed malesuada, est id bibendum egestas, urna risus tristique nibh, euismod interdum risus turpis nec purus. Maecenas dolor nisl, consectetur in vestibulum et, tincidunt id leo. Duis maximus, odio eget tristique commodo, lacus tellus dapibus leo, consequat pellentesque arcu nisi sit amet diam. Quisque euismod venenatis egestas. Mauris posuere volutpat iaculis. Suspendisse finibus tempor urna, dignissim venenatis sapien finibus eget. Donec interdum lacus ac venenatis fringilla. Curabitur eget lacinia augue. Vestibulum eu vulputate odio. Quisque nec imperdiet");
 
         auto paragraph = builder.Build();
@@ -1819,7 +1826,7 @@ public:
 
     void draw(SkCanvas* canvas) override {
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         fontCollection->getParagraphCache()->turnOn(false);
 
@@ -1878,7 +1885,7 @@ public:
             paragraph_style.setTextDirection(td);
             paragraph_style.setTextAlign(ta);
             text_style.setFontSize(20);
-            ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
             text_style.setBackgroundColor(whiteSpaces);
             builder.pushStyle(text_style);
             builder.addText("   ");
@@ -1956,7 +1963,7 @@ public:
         ParagraphStyle paragraph_style;
         paragraph_style.setTextAlign(TextAlign::kJustify);
         auto collection = getFontCollection();
-        ParagraphBuilderImpl builder(paragraph_style, collection);
+        ParagraphBuilderImpl builder(paragraph_style, collection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -1989,7 +1996,7 @@ public:
         auto collection = getFontCollection();
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, collection);
+        ParagraphBuilderImpl builder(paragraph_style, collection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -2054,11 +2061,11 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         //text_style.setFontFamilies({SkString("Noto Color Emoji")});
@@ -2118,11 +2125,11 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -2145,11 +2152,11 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -2181,12 +2188,12 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         paragraph_style.setTextAlign(TextAlign::kJustify);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto"), SkString("Noto Color Emoji")});
@@ -2214,11 +2221,11 @@ public:
         //auto text = "ى،😗😃😄😍بب";
         //auto text1 = "World domination is such an ugly phrase - I prefer to call it world optimisation";
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Noto Color Emoji")});
@@ -2271,12 +2278,12 @@ public:
 
         auto text = u"hzbzzj sjsjjs sjkkahgafa\u09A4\u09A1\u09A4\u09A0\u09A4\u09A0 jsjzjgvsh sjsjsksbsbsjs sjjajajahhav jssjbxx jsisudg \u09AF\u09A0\u09AF\u09A0\u09A4\u09A0\u09A4\u09A0\u09A5 \u062A\u0624\u062A\u064A\u0646\u0646\u064A\u0621\u0646\u0627\u0644\u0631\u0631\u064A\u0644\u0627 \u062A\u062A\u0644\u0649 \u062A\u0627\u0631\u064A\u062E \u062A\u0633\u0628\u0628 \u0624\u062A\u064A\u062A\u0624\u062A\u0624\u062A\u0624\u062A\u0624 dhishsbs \u7238\u7238\u4E0D\u5BF9\u52B2\u5927\u5BB6\u90FD\u597D\u8BB0\u5F97\u8BB0\u5F97hshs\u099B\u09A1\u099B\u09A1\u099A jdjdj jdjdjd dbbdbdbdbddbnd\u09A2\u099B\u09A1\u09A2\u09A3\u099B\u09B0\u099A\u0998\u09A0\u09A0\u09B8\u09AB\u0997\u09A3\u09A4\u099C\u09B0\u09A5\u099B\u099B\u09A5\u09A6\u099D\u09A6\u09B2\u09A5\u09A4\u09A3\u09A2\u0997\u0996\u09A0\u0998\u0999\u09A3\u099A\u09A5\u09A4\u09A3\u062A\u0628\u0646\u064A\u0646 \u09A5\u09A3\u09A3 \u09A4\u0998\u0998\u0998\u099B\u09A4 \u09A4\u09A3 \u09A3\u0998\u09A2\u09A3\u0999\u0648\u064A\u0648\u0621\u062A\u064A\u0632\u0633\u0646\u0632\u0624\u0624\u0645\u0645\u0624\u0648\u0624\u0648\u0648\u064A\u0646\u0624\u0646\u0624\u0646\u0624\u0624 \u09A4\u09A4\u09A2\u09A2\u09A4\u09A4 \u0999\u0998\u0997\u09C1\u099B\u09A5 \u09A4\u0997\u0998\u09A3\u099A\u099C\u09A6\u09A5\u0632\u0624\u0648\u0624\u0648\u0624 \u09A4\u09A4\u09A3\u0998\u09A2\u09A4\u099B\u09A6\u09A5\u09A4\u0999\u0998\u09A3 \u0648\u0624\u0648\u0624\u0648\u0624\u0632\u0624\u0646\u0633\u0643\u0633\u0643\u0628\u0646\u09A4\u09AD\u0996\u0996\u099F\u09C0\u09C1\u099B\u09A6\u09C0\u09C1\u09C2\u09C7\u0648\u0624\u0646\u0621\u0646\u0624\u0646 \u09C7\u09C2\u09C0\u09C2\u099A\u09A3\u09A2\u09A4\u09A5\u09A5\u0632\u064A\u09C7\u09C2\u09C0\u09C2\u099A\u09A3\u09A2\u09AE\u09A4\u09A5\u09A5 \U0001f34d\U0001f955\U0001f4a7\U0001f4a7\U0001f4a6\U0001f32a";
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         //paragraph_style.setTextAlign(TextAlign::kJustify);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto"), SkString("Noto Color Emoji")});
@@ -2292,7 +2299,7 @@ public:
         auto res2 = paragraph->getRectsForRange(359, 360, RectHeightStyle::kTight, RectWidthStyle::kTight);
         auto res3 = paragraph->getRectsForRange(358, 359, RectHeightStyle::kTight, RectWidthStyle::kTight);
 
-        auto draw = [&](std::vector<TextBox> res, SkColor color) {
+        auto draw = [&](const std::vector<TextBox>& res, SkColor color) {
             SkPaint paint;
             paint.setColor(color);
             for (auto& r : res) {
@@ -2325,11 +2332,11 @@ public:
         //"四的 ذخص  ৢঙ";
         //"ذخص  ৢঙ";
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto"), SkString("Noto Serif CJK JP")});
@@ -2354,11 +2361,11 @@ public:
          canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -2403,12 +2410,12 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         paragraph_style.setTextAlign(TextAlign::kLeft);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorDKGRAY);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -2462,12 +2469,12 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         paragraph_style.setTextAlign(TextAlign::kJustify);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -2495,7 +2502,7 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         SkPaint line;
@@ -2507,7 +2514,7 @@ public:
         auto draw = [&](SkColor color, TextHeightBehavior thb) {
             ParagraphStyle paragraph_style;
             paragraph_style.setTextHeightBehavior(thb);
-            ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
             TextStyle text_style;
             text_style.setColor(SK_ColorBLACK);
             SkPaint paint;
@@ -2545,7 +2552,7 @@ public:
         auto fontCollection = sk_make_sp<TestFontCollection>(GetResourcePath("fonts").c_str(), true, true);
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Ahem")});
@@ -2585,14 +2592,14 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         paragraph_style.setTextAlign(TextAlign::kJustify);
         paragraph_style.setEllipsis(u"\u2026");
         paragraph_style.setMaxLines(2);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -2617,13 +2624,13 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         paragraph_style.setMaxLines(7);
         paragraph_style.setEllipsis(u"\u2026");
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto"), SkString("Noto Color Emoji")});
@@ -2659,7 +2666,8 @@ public:
         path += pair.second;
 
         auto data = SkData::MakeFromFileName(path.c_str());
-        font_provider->registerTypeface(SkTypeface::MakeFromData(std::move(data)), family_name);
+        font_provider->registerTypeface(ToolUtils::TestFontMgr()->makeFromData(std::move(data)),
+                                        family_name);
       }
 
       sk_sp<FontCollection> font_collection = sk_make_sp<FontCollection>();
@@ -2675,7 +2683,7 @@ public:
         paragraph_style.setMaxLines(1);
         paragraph_style.setHeight(0);
         paragraph_style.setEllipsis(u"\u2026");
-        ParagraphBuilderImpl builder(paragraph_style, font_collection);
+        ParagraphBuilderImpl builder(paragraph_style, font_collection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto"), SkString("Noto"), SkString("Emoji")});
@@ -2699,14 +2707,14 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
 
         auto column = this->size().width()/3;
         auto draw = [&](SkScalar x) {
-            ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
             TextStyle text_style;
             text_style.setColor(SK_ColorBLACK);
             text_style.setFontFamilies({SkString("Roboto")});
@@ -2736,7 +2744,7 @@ public:
     paint.setColor(SK_ColorRED);
 
     auto fontCollection = sk_make_sp<FontCollection>();
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
 
     TextStyle defaultStyle;
     defaultStyle.setForegroundColor(paint);
@@ -2747,7 +2755,7 @@ public:
     paraStyle.setEllipsis(SkString("..."));
 
     const char* hello = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do";
-    auto builder = ParagraphBuilder::make(paraStyle, fontCollection);
+    auto builder = ParagraphBuilder::make(paraStyle, fontCollection, get_unicode());
     builder->addText(hello, strlen(hello));
 
     auto paragraph = builder->Build();
@@ -2762,7 +2770,7 @@ public:
     paraStyle2.setMaxLines(1);
     paraStyle.setEllipsis(SkString(""));
 
-    auto builder2 = ParagraphBuilder::make(paraStyle, fontCollection);
+    auto builder2 = ParagraphBuilder::make(paraStyle, fontCollection, get_unicode());
     builder2->addText(hello, strlen(hello));
 
     auto paragraph2 = builder2->Build();
@@ -2788,7 +2796,7 @@ public:
         paint.setColor(SK_ColorRED);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
 
         TextStyle defaultStyle;
         defaultStyle.setForegroundColor(paint);
@@ -2797,7 +2805,7 @@ public:
         paraStyle.setTextStyle(defaultStyle);
 
         const char* hello = "👶 487";
-        auto builder = ParagraphBuilder::make(paraStyle, fontCollection);
+        auto builder = ParagraphBuilder::make(paraStyle, fontCollection, get_unicode());
         builder->addText(hello, strlen(hello));
 
         auto paragraph = builder->Build();
@@ -2805,7 +2813,7 @@ public:
         paragraph->paint(canvas, 200, 200);
 
         const char* hello2 = "487";
-        auto builder2 = ParagraphBuilder::make(paraStyle, fontCollection);
+        auto builder2 = ParagraphBuilder::make(paraStyle, fontCollection, get_unicode());
         builder2->addText(hello2, strlen(hello2));
 
         auto paragraph2 = builder2->Build();
@@ -2813,7 +2821,7 @@ public:
         paragraph2->paint(canvas, 200, 300);
 
         const char* hello3 = " 👶 487";
-        auto builder3 = ParagraphBuilder::make(paraStyle, fontCollection);
+        auto builder3 = ParagraphBuilder::make(paraStyle, fontCollection, get_unicode());
         builder3->addText(hello3, strlen(hello3));
 
         auto paragraph3 = builder3->Build();
@@ -2838,7 +2846,7 @@ public:
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto"), SkString("Noto Serif CJK JP")});
         text_style.setFontSize(16);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         builder.pushStyle(text_style);
         builder.addText(text);
         PlaceholderStyle placeholder_style;
@@ -2862,7 +2870,7 @@ public:
         canvas->clear(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
 
         ParagraphStyle paragraph_style;
         TextStyle text_style;
@@ -2873,7 +2881,7 @@ public:
         text_style.setDecorationMode(TextDecorationMode::kGaps);
         text_style.setDecorationColor(SK_ColorRED);
         text_style.setDecoration(TextDecoration::kUnderline);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         builder.pushStyle(text_style);
         builder.addText("\n\n");
         builder.pop();
@@ -2891,7 +2899,7 @@ public:
         canvas->clear(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
@@ -2899,7 +2907,7 @@ public:
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
         text_style.setFontSize(16);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         builder.pushStyle(text_style);
         builder.addText(u"\u0e41\u0e2a\u0e19\u0e2a\u0e31\nabc");
         builder.pop();
@@ -2918,7 +2926,7 @@ public:
         //const char* text = "😀😃😄 ABC 😀😃😄 DEF GHI";
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
 
@@ -2926,7 +2934,7 @@ public:
         const char* text = " 😀 😃";
         ParagraphStyle paragraph_style;
         paragraph_style.turnHintingOff();
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
 
         TextStyle text_style;
         //text_style.setFontFamilies({SkString("sans-serif")});
@@ -2947,7 +2955,7 @@ public:
         const char* text = " 😀 A";
         ParagraphStyle paragraph_style;
         paragraph_style.turnHintingOff();
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
 
         TextStyle text_style;
         //text_style.setFontFamilies({SkString("sans-serif")});
@@ -2978,13 +2986,13 @@ public:
         //const char* text3 = "אאא בבב גגג דדד הההששש תתת";
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         paragraph_style.setTextDirection(TextDirection::kRtl);
         {
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setFontSize(30);
         text_style.setColor(SK_ColorBLACK);
@@ -3000,7 +3008,7 @@ public:
         }
 
         {
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setFontSize(30);
         text_style.setColor(SK_ColorBLACK);
@@ -3032,14 +3040,14 @@ public:
 
         //auto fontCollection = sk_make_sp<FontCollection>();
         auto fontCollection = getFontCollection();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         //fontCollection->disableFontFallback();
 
         ParagraphStyle paragraph_style;
         //paragraph_style.setTextDirection(TextDirection::kRtl);
 
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Noto Naskh Arabic")});
         text_style.setFontSize(36);
@@ -3061,16 +3069,16 @@ public:
         canvas->drawColor(SK_ColorWHITE);
         std::string text("يَهْدِيْكُمُ اللَّهُ وَيُصْلِحُ بَالَكُمُ");
 
-        //auto fontCollection = sk_make_sp<FontCollection>();
-        //fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
-        //fontCollection->enableFontFallback();
+        // auto fontCollection = sk_make_sp<FontCollection>();
+        // fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        // fontCollection->enableFontFallback();
         auto fontCollection = getFontCollection();
         fontCollection->disableFontFallback();
 
         ParagraphStyle paragraph_style;
         paragraph_style.setTextDirection(TextDirection::kRtl);
 
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Noto Naskh Arabic")});
         text_style.setFontSize(64);
@@ -3105,7 +3113,7 @@ public:
         fontCollection->addFontFromFile("music/NotoColorEmoji.ttf", "emoji");
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         //text_style.setFontFamilies({SkString("Noto Naskh Arabic")});
         text_style.setFontFamilies({SkString("roboto"),
@@ -3129,12 +3137,12 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         paragraph_style.setTextDirection(TextDirection::kRtl);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Roboto") });
         text_style.setFontSize(20);
@@ -3164,12 +3172,12 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = getFontCollection();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
 
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Roboto")});
         text_style.setFontSize(40);
@@ -3190,14 +3198,14 @@ public:
     void draw(SkCanvas* canvas) override {
 
         auto fontCollection = getFontCollection();
-        //fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
-        //fontCollection->enableFontFallback();
+        // fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        // fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         text_style.setFontSize(14);
         builder.pushStyle(text_style);
         builder.addText("The quick brown fox ate a hamburgerfons and got sick.");
@@ -3243,7 +3251,7 @@ public:
         text_style.setFontSize(10.0f);
         ParagraphStyle paragraph_style;
         paragraph_style.setTextStyle(text_style);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         builder.pushStyle(text_style);
         builder.addText("    ");
         auto paragraph = builder.Build();
@@ -3269,7 +3277,7 @@ public:
         text_style.setFontSize(12.0f);
         ParagraphStyle paragraph_style;
         paragraph_style.setTextStyle(text_style);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         builder.pushStyle(text_style);
         builder.addText("______________________");
         auto paragraph = builder.Build();
@@ -3293,7 +3301,7 @@ public:
         SkString text("");
         canvas->drawColor(SK_ColorWHITE);
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
 
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
@@ -3303,7 +3311,7 @@ public:
         //text_style.setHeightOverride(true);
         ParagraphStyle paragraph_style;
         paragraph_style.setTextStyle(text_style);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         builder.pushStyle(text_style);
         //builder.addText("helloworld你好");
         builder.addText("你好你好你好你好");
@@ -3354,7 +3362,7 @@ public:
         ParagraphStyle paragraph_style;
         paragraph_style.setTextStyle(text_style);
         paragraph_style.setStrutStyle(strut_style);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
 
         builder.pushStyle(text_style);
         builder.addText("something");
@@ -3380,7 +3388,7 @@ public:
     void draw(SkCanvas* canvas) override {
         canvas->drawColor(SK_ColorWHITE);
         auto fontCollection = getFontCollection();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Google Sans"), SkString("Noto Naskh Arabic")});
@@ -3388,7 +3396,7 @@ public:
         text_style.setColor(SK_ColorBLACK);
         ParagraphStyle paragraph_style;
         paragraph_style.setTextStyle(text_style);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         builder.pushStyle(text_style);
         //builder.addText("ٱلْرَّحْمَـانُ");
         builder.addText("حَاوِلْ نُطْقَ \"كَيْفَ حَالُكَ؟\"");
@@ -3418,7 +3426,7 @@ public:
         paragraph_style.setMaxLines(1);
         paragraph_style.setEllipsis(u"\u2026");
         paragraph_style.setTextStyle(text_style);
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
 
         auto draw = [&](bool fallback, const SkString& font) {
             if(fallback) {
@@ -3426,7 +3434,7 @@ public:
             } else {
                 fontCollection->disableFontFallback();
             }
-            ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
             text_style.setFontFamilies({SkString("abc"), font});
             builder.pushStyle(text_style);
             builder.addText(u"abc \u2026 abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc");
@@ -3449,7 +3457,7 @@ public:
     void draw(SkCanvas* canvas) override {
         canvas->drawColor(SK_ColorWHITE);
         auto fontCollection = getFontCollection();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         ParagraphStyle paragraph_style;
         paragraph_style.setTextDirection(TextDirection::kLtr);
@@ -3486,7 +3494,7 @@ public:
                 strut_style.setStrutEnabled(false);
                 paragraph_style.setStrutStyle(strut_style);
             }
-            ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
             if (test) {
                 if (text[0] == 'u') {
                     text_style1.setDecoration(TextDecoration::kUnderline);
@@ -3541,7 +3549,7 @@ public:
     void draw(SkCanvas* canvas) override {
         canvas->drawColor(SK_ColorWHITE);
         auto fontCollection = getFontCollection();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         ParagraphStyle paragraph_style;
         paragraph_style.setTextDirection(TextDirection::kLtr);
@@ -3571,7 +3579,7 @@ public:
         paragraph_style.setStrutStyle(strut_style);
 
         auto draw = [&](const char* text) {
-            ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
             builder.pushStyle(text_style1);
             builder.addText(text);
             builder.pop();
@@ -3622,7 +3630,7 @@ public:
         const char* logo5 = "google_lo";
         const char* logo6 = "go";
         {
-            ParagraphBuilderImpl builder(paraStyle, getFontCollection());
+            ParagraphBuilderImpl builder(paraStyle, getFontCollection(), get_unicode());
             style0.setDecorationStyle(TextDecorationStyle::kDouble);
             style0.setForegroundColor(SkPaint(SkColors::kBlack));
             style0.setBackgroundColor(SkPaint(SkColors::kLtGray));
@@ -3677,7 +3685,7 @@ public:
         auto collection = getFontCollection();
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, collection);
+        ParagraphBuilderImpl builder(paragraph_style, collection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
@@ -3697,9 +3705,9 @@ public:
         auto width = paragraph->getLongestLine();
         auto height = paragraph->getHeight();
         if (this->isVerbose()) {
-            auto f1Pos = paragraph->getGlyphPositionAtCoordinate(width/6, height/2);
-            auto f2Pos = paragraph->getGlyphPositionAtCoordinate(width/2, height/2);
-            auto iPos = paragraph->getGlyphPositionAtCoordinate(width*5/6, height/2);
+            auto f1Pos = paragraph->getGlyphPositionAtCoordinate(width/3 * 0 + 5, height/2);
+            auto f2Pos = paragraph->getGlyphPositionAtCoordinate(width/3 * 1 + 5, height/2);
+            auto iPos = paragraph->getGlyphPositionAtCoordinate(width/3 * 2 + 5, height/2);
             SkDebugf("%d(%s) %d(%s) %d(%s)\n",
                      f1Pos.position, f1Pos.affinity == Affinity::kUpstream ? "up" : "down",
                      f2Pos.position, f2Pos.affinity == Affinity::kUpstream ? "up" : "down",
@@ -3748,11 +3756,11 @@ public:
         canvas->drawColor(SK_ColorWHITE);
 
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Noto Color Emoji")});
@@ -3832,7 +3840,7 @@ public:
     void draw(SkCanvas* canvas) override {
         canvas->drawColor(SK_ColorWHITE);
         auto fontCollection = getFontCollection();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Noto Naskh Arabic")});
@@ -3841,7 +3849,7 @@ public:
         ParagraphStyle paragraph_style;
         paragraph_style.setTextStyle(text_style);
         paragraph_style.setTextDirection(TextDirection::kRtl);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         text_style.setColor(SK_ColorBLUE);
         builder.pushStyle(text_style);
         builder.addText("ك");
@@ -3908,32 +3916,32 @@ public:
 
         canvas->drawColor(SK_ColorWHITE);
 
-        SkString text(">S͛ͭ̋͆̈̔̇͗̍͑̎ͪͮͧͣ̽ͫͣ́ͬ̀͌͑͂͗͒̍̔̄ͧ̏̉̌̊̊̿̀̌̃̄͐̓̓̚̚҉̵̡͜͟͝͠͏̸̵̡̧͜҉̷̡͇̜̘̻̺̘̟̝͙̬̘̩͇̭̼̥̖̤̦͎k͉̩̘͚̜̹̗̗͍̤̥̱͉̳͕͖̤̲̣͚̮̞̬̲͍͔̯̻̮̞̭͈̗̫͓̂ͨ̉ͪ̒͋͛̀̍͊ͧ̿̅͆̓̔̔ͬ̇̑̿ͩ͗ͮ̎͌̿̄ͅP̴̵̡̡̛̪͙̼̣̟̩̭̫̱͙̬͔͉͍̘̠͉̦̝̘̥̟̗͖̫̤͕̙̬̦͍̱̖̮̱͑͐̎̃̒͐͋̚͘͞a̶̶̵̵̵̶̶̡̧̢̢̺͔̣͖̭̺͍̤͚̱̜̰̥͕̬̥̲̞̥̘͇͚̺̰͚̪̺͔̤͍̓̿͆̎͋̓ͦ̈́ͦ̌́̄͗̌̓͌̕͜͜͟͢͝͡ŕ͎̝͕͉̻͎̤̭͚̗̳̖̙̘͚̫͖͓͚͉͔͈̟̰̟̬̗͓̟͚̱̕͡ͅͅͅa̸̶̢̛̛̽ͮͩ̅͒ͫ͗͂̎ͦ̈́̓̚͘͜͢͡҉̷̵̶̢̡̜̮̦̜̥̜̯̙͓͔̼̗̻͜͜ͅḡ̢̛͕̗͖̖̤̦̘͔ͨͨ̊͒ͩͭͤ̍̅̃ͪ̋̏̓̍̋͗̋ͨ̏̽̈́̔̀̋̉ͫ̅̂ͭͫ̏͒͋ͥ̚͜r̶̢̧̧̥̤̼̀̂̒ͪ͌̿͌̅͛ͨͪ͒̍ͥ̉ͤ̌̿̆́ͭ͆̃̒ͤ͛̊ͧ̽͘͝͠a̧̢̧̢͑͑̓͑ͮ̃͂̄͛́̈́͋̂͌̽̄͒̔́̇ͨͧͭ͐ͦ̋ͨ̍ͦ̍̋͆̔ͧ͑͋͌̈̓͛͛̚͢͜͜͏̴̢̧̛̳͍̹͚̰̹̻͔p̨̡͆ͦͣ͊̽̔͂̉ͣ̔ͣ̌̌̉̃̋̂͒ͫ̄̎̐͗̉̌̃̽̽́̀̚͘͜͟҉̱͉h̭̮̘̗͔̜̯͔͈̯̺͔̗̣̭͚̱̰̙̼̹͚̣̻̥̲̮͍̤͜͝<");
-        auto K = text.find("k");
-        auto P = text.find("P");
-        auto h = text.find("h");
+        std::u16string text = u">S͛ͭ̋͆̈̔̇͗̍͑̎ͪͮͧͣ̽ͫͣ́ͬ̀͌͑͂͗͒̍̔̄ͧ̏̉̌̊̊̿̀̌̃̄͐̓̓̚̚҉̵̡͜͟͝͠͏̸̵̡̧͜҉̷̡͇̜̘̻̺̘̟̝͙̬̘̩͇̭̼̥̖̤̦͎k͉̩̘͚̜̹̗̗͍̤̥̱͉̳͕͖̤̲̣͚̮̞̬̲͍͔̯̻̮̞̭͈̗̫͓̂ͨ̉ͪ̒͋͛̀̍͊ͧ̿̅͆̓̔̔ͬ̇̑̿ͩ͗ͮ̎͌̿̄ͅP̴̵̡̡̛̪͙̼̣̟̩̭̫̱͙̬͔͉͍̘̠͉̦̝̘̥̟̗͖̫̤͕̙̬̦͍̱̖̮̱͑͐̎̃̒͐͋̚͘͞a̶̶̵̵̵̶̶̡̧̢̢̺͔̣͖̭̺͍̤͚̱̜̰̥͕̬̥̲̞̥̘͇͚̺̰͚̪̺͔̤͍̓̿͆̎͋̓ͦ̈́ͦ̌́̄͗̌̓͌̕͜͜͟͢͝͡ŕ͎̝͕͉̻͎̤̭͚̗̳̖̙̘͚̫͖͓͚͉͔͈̟̰̟̬̗͓̟͚̱̕͡ͅͅͅa̸̶̢̛̛̽ͮͩ̅͒ͫ͗͂̎ͦ̈́̓̚͘͜͢͡҉̷̵̶̢̡̜̮̦̜̥̜̯̙͓͔̼̗̻͜͜ͅḡ̢̛͕̗͖̖̤̦̘͔ͨͨ̊͒ͩͭͤ̍̅̃ͪ̋̏̓̍̋͗̋ͨ̏̽̈́̔̀̋̉ͫ̅̂ͭͫ̏͒͋ͥ̚͜r̶̢̧̧̥̤̼̀̂̒ͪ͌̿͌̅͛ͨͪ͒̍ͥ̉ͤ̌̿̆́ͭ͆̃̒ͤ͛̊ͧ̽͘͝͠a̧̢̧̢͑͑̓͑ͮ̃͂̄͛́̈́͋̂͌̽̄͒̔́̇ͨͧͭ͐ͦ̋ͨ̍ͦ̍̋͆̔ͧ͑͋͌̈̓͛͛̚͢͜͜͏̴̢̧̛̳͍̹͚̰̹̻͔p̨̡͆ͦͣ͊̽̔͂̉ͣ̔ͣ̌̌̉̃̋̂͒ͫ̄̎̐͗̉̌̃̽̽́̀̚͘͜͟҉̱͉h̭̮̘̗͔̜̯͔͈̯̺͔̗̣̭͚̱̰̙̼̹͚̣̻̥̲̮͍̤͜͝<";
+        auto K = text.find(u"k");
+        auto P = text.find(u"P");
+        auto h = text.find(u"h");
         auto fontCollection = sk_make_sp<FontCollection>();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         ParagraphStyle paragraph_style;
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Roboto")});
         text_style.setFontSize(20);
         text_style.setColor(SK_ColorRED);
         builder.pushStyle(text_style);
-        builder.addText(text.data(), K + 3);
+        builder.addText(std::u16string(text.data(), K + 3));
         text_style.setColor(SK_ColorBLUE);
         text_style.setBackgroundColor(SkPaint(SkColors::kYellow));
         builder.pushStyle(text_style);
-        builder.addText(text.data() + K + 3, P - K - 3 + 6);
+        builder.addText(std::u16string(text.data() + K + 3, P - K - 3 + 6));
         text_style.setColor(SK_ColorGREEN);
         builder.pushStyle(text_style);
-        builder.addText(text.data() + P + 6, h - P - 6);
+        builder.addText(std::u16string(text.data() + P + 6, h - P - 6));
         text_style.setColor(SK_ColorBLACK);
         text_style.setBackgroundColor(SkPaint(SkColors::kLtGray));
         builder.pushStyle(text_style);
-        builder.addText(text.data() + h, text.size() - h);
+        builder.addText(std::u16string(text.data() + h, text.size() - h));
         auto paragraph = builder.Build();
         paragraph->layout(this->size().width());
         paragraph->paint(canvas, 0, 0);
@@ -3943,37 +3951,38 @@ public:
                                                   RectWidthStyle::kTight);
             TextBox rectSK(SkRect::MakeEmpty(), TextDirection::kLtr);
             if (resSK.empty()) {
-                SkDebugf("resSK is empty\n");
+                SkDebugf("rectSk is empty\n");
             } else {
                 rectSK = resSK[0];
-                SkDebugf("rectSK: [%f:%f] %s\n", rectSK.rect.fLeft, rectSK.rect.fRight,
+                SkDebugf("rectSk: [%f:%f] %s\n", rectSK.rect.fLeft, rectSK.rect.fRight,
                                              rectSK.direction == TextDirection::kRtl ? "rtl" : "ltr");
             }
 
-            auto resKP = paragraph->getRectsForRange(1, 2, RectHeightStyle::kTight,
+            auto resKP = paragraph->getRectsForRange(K, P, RectHeightStyle::kTight,
                                                   RectWidthStyle::kTight);
             TextBox rectKP(SkRect::MakeEmpty(), TextDirection::kLtr);
             if (resKP.empty()) {
-                SkDebugf("resKP is empty\n");
+                SkDebugf("rectkP is empty\n");
             } else {
                 rectKP = resKP[0];
-                SkDebugf("f2: [%f:%f] %s\n", rectKP.rect.fLeft, rectKP.rect.fRight,
+                SkDebugf("rectkP: [%f:%f] %s\n", rectKP.rect.fLeft, rectKP.rect.fRight,
                                              rectKP.direction == TextDirection::kRtl ? "rtl" : "ltr");
             }
 
-            auto resPh = paragraph->getRectsForRange(2, 3, RectHeightStyle::kTight,
+            auto resPh = paragraph->getRectsForRange(P, h, RectHeightStyle::kTight,
                                                   RectWidthStyle::kTight);
             TextBox rectPh(SkRect::MakeEmpty(), TextDirection::kLtr);
             if (resPh.empty()) {
-                SkDebugf("resPh is empty\n");
+                SkDebugf("rectPh is empty\n");
             } else {
                 rectPh = resPh[0];
-                SkDebugf("i:  [%f:%f] %s\n", rectPh.rect.fLeft, rectPh.rect.fRight,
-                                             rectPh.direction == TextDirection::kRtl ? "rtl" : "ltr");
+                SkDebugf("rectPh:  [%f:%f] %s\n", rectPh.rect.fLeft, rectPh.rect.fRight,
+                                                  rectPh.direction == TextDirection::kRtl ? "rtl" : "ltr");
             }
             auto posK = paragraph->getGlyphPositionAtCoordinate(rectSK.rect.center().fX, height/2);
             auto posP = paragraph->getGlyphPositionAtCoordinate(rectKP.rect.center().fX, height/2);
             auto posH = paragraph->getGlyphPositionAtCoordinate(rectPh.rect.center().fX, height/2);
+
             SkDebugf("%d(%s) %d(%s) %d(%s)\n",
                      posK.position, posK.affinity == Affinity::kUpstream ? "up" : "down",
                      posP.position, posP.affinity == Affinity::kUpstream ? "up" : "down",
@@ -3988,7 +3997,7 @@ public:
     void draw(SkCanvas* canvas) override {
         canvas->drawColor(SK_ColorWHITE);
         auto fontCollection = getFontCollection();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Noto Naskh Arabic")});
@@ -3997,7 +4006,7 @@ public:
         ParagraphStyle paragraph_style;
         paragraph_style.setTextStyle(text_style);
         paragraph_style.setTextDirection(TextDirection::kRtl);
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
         text_style.setColor(SK_ColorRED);
         builder.pushStyle(text_style);
         builder.addText(u"\u062c\u064e\u0627\u0653");
@@ -4010,13 +4019,13 @@ public:
     }
 };
 
-class ParagraphSlideLast : public ParagraphSlide_Base {
+class ParagraphSlideMixedTextDirection : public ParagraphSlide_Base {
 public:
-    ParagraphSlideLast() { fName = "ParagraphSlideLast"; }
+    ParagraphSlideMixedTextDirection() { fName = "ParagraphSlideMixedTextDirection"; }
     void draw(SkCanvas* canvas) override {
         canvas->drawColor(SK_ColorWHITE);
         auto fontCollection = getFontCollection();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
         fontCollection->enableFontFallback();
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Noto Naskh Arabic")});
@@ -4026,10 +4035,10 @@ public:
         paragraph_style.setTextStyle(text_style);
         paragraph_style.setTextAlign(TextAlign::kStart);
         paragraph_style.setEllipsis(u"\u2026");
-        auto draw = [&](std::u16string text, size_t lines, TextDirection dir) {
+        auto draw = [&](const std::u16string& text, size_t lines, TextDirection dir) {
             paragraph_style.setMaxLines(lines);
             paragraph_style.setTextDirection(dir);
-            ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
             builder.pushStyle(text_style);
             builder.addText(text);
             auto paragraph = builder.Build();
@@ -4044,6 +4053,352 @@ public:
         draw(u"تظاهرات و(defalt RTL) تجمعات اعتراضی در سراسر کشور ۲۳ مهر", 2, TextDirection::kRtl);
     }
 };
+
+class ParagraphSlideGetPath : public ParagraphSlide_Base {
+public:
+    ParagraphSlideGetPath() { fName = "ParagraphSlideGetPath"; }
+    void draw(SkCanvas* canvas) override {
+        canvas->drawColor(SK_ColorWHITE);
+        auto fontCollection = getFontCollection();
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        fontCollection->enableFontFallback();
+        TextStyle text_style;
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(50);
+        text_style.setColor(SK_ColorBLACK);
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextStyle(text_style);
+        paragraph_style.setTextAlign(TextAlign::kStart);
+
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+        builder.pushStyle(text_style);
+        builder.addText("Multi lined sticky notes drawn as paths");
+        auto paragraph = builder.Build();
+        paragraph->layout(this->size().width());
+
+        auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+        SkPath fullPath;
+        SkScalar height = 0;
+        for (auto& line : impl->lines()) {
+            line.ensureTextBlobCachePopulated();
+            for (auto& rec : line.fTextBlobCache) {
+                auto paths = Paragraph::GetPath(rec.fBlob.get());
+                paths.offset(0, height);
+                fullPath.addPath(paths);
+                height += line.height();
+            }
+        }
+        SkRect rect = SkRect::MakeXYWH(100, 100 + paragraph->getHeight(), this->size().width(), paragraph->getHeight());
+        SkPaint paint;
+        paint.setShader(setgrad(rect, SK_ColorBLUE, SK_ColorLTGRAY));
+        canvas->drawPath(fullPath, paint);
+    }
+};
+
+class ParagraphSlideExperiment : public ParagraphSlide_Base {
+public:
+    ParagraphSlideExperiment() { fName = "ParagraphSlideExperiment"; }
+    void draw(SkCanvas* canvas) override {
+        canvas->drawColor(SK_ColorWHITE);
+        auto fontCollection = getFontCollection();
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        fontCollection->disableFontFallback();
+        TextStyle text_style;
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(50);
+        text_style.setColor(SK_ColorBLACK);
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextStyle(text_style);
+        paragraph_style.setTextAlign(TextAlign::kStart);
+
+        {
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+            builder.pushStyle(text_style);
+            builder.addText("Sticky notes\non multple lines\nwith bounds around glyphs");
+            auto paragraph = builder.Build();
+            paragraph->layout(this->size().width());
+            paragraph->paint(canvas, 0, 0);
+            paragraph->extendedVisit([&](int, const skia::textlayout::Paragraph::ExtendedVisitorInfo* info) {
+                if (!info) {
+                    return;
+                }
+                SkPaint paint;
+                paint.setStyle(SkPaint::kStroke_Style);
+                paint.setAntiAlias(true);
+                paint.setStrokeWidth(1);
+                for (auto i = 0; i < info->count; ++i) {
+                    paint.setColor(SK_ColorDKGRAY);
+                    SkRect rect(info->bounds[i]);
+                    rect.offset(info->positions[i]);
+                    rect.offset(info->origin);
+                    canvas->drawRect(rect, paint);
+                }
+            });
+            canvas->translate(0, paragraph->getHeight() + 20);
+        }
+
+        {
+          ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+          builder.pushStyle(text_style);
+          builder.addText("Sticky notes with glyphs changing position");
+          auto paragraph = builder.Build();
+          paragraph->layout(this->size().width());
+          paragraph->paint(canvas, 0, 0);
+          paragraph->extendedVisit([&](int, const skia::textlayout::Paragraph::ExtendedVisitorInfo* info) {
+              if (!info) {
+                  return;
+              }
+              SkScalar offset = 0;
+              for (auto i = 0; i < info->count; ++i) {
+                  info->positions[i].fY += offset;
+                  if (i % 3 == 0) {
+                      offset = 20;
+                  } else if (i % 3 == 1) {
+                      offset = -20;
+                  } else {
+                      offset = 0;
+                  }
+              }
+          });
+          paragraph->paint(canvas, 0, 0);
+          canvas->translate(0, paragraph->getHeight() + 40);
+        }
+
+        {
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+            builder.pushStyle(text_style);
+            builder.addText("Multi 😀 lined sticky notes drawn as paths");
+            auto paragraph = builder.Build();
+            paragraph->layout(300);
+            SkPaint paint;
+            std::vector<LineMetrics> metrics;
+            paragraph->getLineMetrics(metrics);
+            SkScalar height = 0;
+            for (size_t lineNum = 0; lineNum < paragraph->lineNumber(); ++lineNum) {
+                SkPath paths;
+                paragraph->getPath(lineNum, &paths);
+                auto& line = metrics[lineNum];
+                SkRect rect = SkRect::MakeXYWH(line.fLeft, height, line.fWidth, line.fHeight);
+                height += line.fHeight;
+                paint.setShader(setgrad(rect, SK_ColorBLUE, SK_ColorLTGRAY));
+                canvas->drawPath(paths, paint);
+            }
+        }
+    }
+};
+
+class ParagraphSlideGlyphs : public ParagraphSlide_Base {
+public:
+    ParagraphSlideGlyphs() { fName = "ParagraphSlideGlyphs"; }
+    void draw(SkCanvas* canvas) override {
+
+        canvas->drawColor(SK_ColorWHITE);
+        const char* text1 = "World    domination is     such an ugly phrase - I     prefer to call it    world optimisation";
+        const char* text2 =
+                "左線読設重説切abc後碁給能上目秘使約。満毎冠行   来昼本可   def   必図将発確年。今属場育"
+                "図情闘陰野高備込制詩西校客。審対江置講今固残必託地集済決維駆年策。立得庭"
+                "際輝求佐抗蒼提夜合逃表。注統天言件自謙雅載報紙喪。作画稿愛器灯女書利変探"
+                "訃第金線朝開化建。子戦年帝励害表月幕株漠新期刊人秘。図的海力生禁挙保天戦"
+                "聞条年所在口。";
+        const char* text3 = "من أسر وإعلان الخاصّة وهولندا،, عل def    قائمة الضغوط بالمabcطالبة تلك. الصفحة "
+            "بمباركة التقليدية قام عن. تصفح";
+        auto fontCollection = sk_make_sp<FontCollection>();
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        fontCollection->enableFontFallback();
+
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextAlign(TextAlign::kJustify);
+
+        auto draw = [&](const char* text, TextDirection textDirection) {
+            paragraph_style.setTextDirection(textDirection);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+            TextStyle text_style;
+            text_style.setFontFamilies({SkString("Katibeh"), SkString("Roboto"), SkString("Source Han Serif CN")});
+            text_style.setFontSize(40);
+            text_style.setColor(SK_ColorBLACK);
+            builder.pushStyle(text_style);
+            builder.addText(text);
+
+            auto paragraph = builder.Build();
+            paragraph->layout(this->size().width()); // 497
+            paragraph->paint(canvas, 0, 0);
+            canvas->translate(0, paragraph->getHeight() + 20);
+        };
+
+        draw(text1, TextDirection::kLtr);
+        draw(text2, TextDirection::kLtr);
+        draw(text3, TextDirection::kLtr);
+    }
+};
+
+
+class ParagraphSlideEllipsisInRTL : public ParagraphSlide_Base {
+public:
+    ParagraphSlideEllipsisInRTL() { fName = "ParagraphSlideEllipsisInRTL"; }
+    void draw(SkCanvas* canvas) override {
+        canvas->drawColor(SK_ColorWHITE);
+        auto fontCollection = getFontCollection();
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        fontCollection->enableFontFallback();
+        TextStyle text_style;
+        text_style.setFontFamilies({SkString("Noto Naskh Arabic")});
+        text_style.setFontSize(100);
+        text_style.setColor(SK_ColorBLACK);
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextStyle(text_style);
+        paragraph_style.setTextAlign(TextAlign::kStart);
+        paragraph_style.setEllipsis(u"\u2026");
+        auto draw = [&](const std::u16string& text) {
+            paragraph_style.setMaxLines(1);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+            builder.pushStyle(text_style);
+            builder.addText(text);
+            auto paragraph = builder.Build();
+            paragraph->layout(this->size().width());
+            paragraph->paint(canvas, 0, 0);
+            canvas->translate(0, paragraph->getHeight() + 10);
+        };
+
+        draw(u"你abcdefsdasdsasas");
+        draw(u"한111111111111111111");
+        draw(u"abcdefsdasds1112222");
+    }
+};
+
+class ParagraphSlideEmojiSequence : public ParagraphSlide_Base {
+public:
+    ParagraphSlideEmojiSequence() { fName = "ParagraphSlideEmojiSequence"; }
+    void draw(SkCanvas* canvas) override {
+        canvas->drawColor(SK_ColorWHITE);
+        auto fontCollection = sk_make_sp<FontCollection>();
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr(), std::vector<SkString>());
+        fontCollection->enableFontFallback();
+        TextStyle text_style;
+        text_style.setFontFamilies({SkString("")});
+        text_style.setFontSize(20);
+        text_style.setColor(SK_ColorBLACK);
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextStyle(text_style);
+
+        auto test = [&](const char* text) {
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+            builder.pushStyle(text_style);
+            builder.addText(text);
+            auto paragraph = builder.Build();
+            paragraph->layout(this->size().width());
+            paragraph->paint(canvas, 0, 0);
+            if ((false)) {
+                SkDebugf("Paragraph '%s'\n", text);
+                auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+                for (auto& run: impl->runs()) {
+                    SkString ff;
+                    run.font().getTypeface()->getFamilyName(&ff);
+                    SkDebugf("'%s': [%zu:%zu)\n", ff.c_str(), run.textRange().start, run.textRange().end);
+                }
+            }
+        };
+        test("2nd");
+        canvas->translate(0, 50);
+        test("99");
+        canvas->translate(0, 50);
+        test("999");
+        canvas->translate(0, 50);
+        /*
+        test("🆗");
+        canvas->translate(0, 50);
+        test("0️⃣");
+        canvas->translate(0, 50);
+        test("0️⃣🆗");
+        canvas->translate(0, 50);
+        test("0");
+        canvas->translate(0, 50);
+        test("0️");
+        canvas->translate(0, 50);
+        test("♻️");
+        canvas->translate(0, 50);
+        test("󠁢󠁳󠁣󠁴󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿♻️");
+        */
+    }
+};
+
+class ParagraphSlideWordSpacing : public ParagraphSlide_Base {
+public:
+    ParagraphSlideWordSpacing() { fName = "ParagraphWordSpacing"; }
+
+    void draw(SkCanvas* canvas) override {
+        canvas->drawColor(SK_ColorWHITE);
+
+        auto fontCollection = sk_make_sp<FontCollection>();
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
+        fontCollection->enableFontFallback();
+
+        ParagraphStyle paragraph_style;
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        text_style.setFontFamilies({});
+        text_style.setFontSize(20.0);
+
+        auto draw = [&](TextDirection direction, SkScalar spacing, const char* text) {
+            paragraph_style.setTextDirection(direction);
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+            text_style.setWordSpacing(spacing);
+            builder.pushStyle(text_style);
+            builder.addText(text);
+            builder.pop();
+            auto paragraph = builder.Build();
+            paragraph->layout(this->size().width());
+            paragraph->paint(canvas, 0, 0);
+            canvas->translate(0, paragraph->getHeight() + 20);
+        };
+
+        draw(TextDirection::kLtr, 20, "Lorem ipsum dolor sit amet");
+        draw(TextDirection::kRtl, 20, "Lorem ipsum dolor sit amet");
+
+        draw(TextDirection::kLtr, 20, "טקסט ללא רווח בין מילים");
+        draw(TextDirection::kRtl, 20, "טקסט ללא רווח בין מילים");
+
+        draw(TextDirection::kLtr, 20, "نص مع عدم وجود مسافات بين الكلمات");
+        draw(TextDirection::kRtl, 20, "نص مع عدم وجود مسافات بين الكلمات");
+    }
+};
+
+class ParagraphSlideLast : public ParagraphSlide_Base {
+public:
+    ParagraphSlideLast() { fName = "ParagraphSlideLast"; }
+    void draw(SkCanvas* canvas) override {
+        canvas->drawColor(SK_ColorWHITE);
+        auto fontCollection = sk_make_sp<FontCollection>();
+        fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr(), std::vector<SkString>());
+        fontCollection->enableFontFallback();
+        TextStyle text_style;
+        text_style.setFontFamilies({SkString("Roboto"), SkString("Noto Color Emoji")});
+        text_style.setFontSize(20);
+        text_style.setColor(SK_ColorBLACK);
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextStyle(text_style);
+
+        auto test = [&](const char* text) {
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+            builder.pushStyle(text_style);
+            builder.addText(text);
+            auto paragraph = builder.Build();
+            paragraph->layout(this->size().width());
+            paragraph->paint(canvas, 0, 0);
+            if ((false)) {
+                SkDebugf("Paragraph '%s'\n", text);
+                auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+                for (auto& run: impl->runs()) {
+                    SkString ff;
+                    run.font().getTypeface()->getFamilyName(&ff);
+                    SkDebugf("'%s': [%zu:%zu)\n", ff.c_str(), run.textRange().start, run.textRange().end);
+                }
+            }
+        };
+
+        test("​🇳​🇩🇮🇩⃢");
+    }
+};
+
 }  // namespace
 
 //////////////////////////////////////////////////////////////////////////////
@@ -4117,5 +4472,11 @@ DEF_SLIDE(return new ParagraphSlide_MultiStyle_EmojiFamily();)
 DEF_SLIDE(return new ParagraphSlide_MultiStyle_Arabic1();)
 DEF_SLIDE(return new ParagraphSlide_MultiStyle_Zalgo();)
 DEF_SLIDE(return new ParagraphSlide_MultiStyle_Arabic2();)
+DEF_SLIDE(return new ParagraphSlideMixedTextDirection();)
+DEF_SLIDE(return new ParagraphSlideGetPath();)
+DEF_SLIDE(return new ParagraphSlideExperiment();)
+DEF_SLIDE(return new ParagraphSlideGlyphs();)
+DEF_SLIDE(return new ParagraphSlideEllipsisInRTL();)
+DEF_SLIDE(return new ParagraphSlideEmojiSequence();)
+DEF_SLIDE(return new ParagraphSlideWordSpacing();)
 DEF_SLIDE(return new ParagraphSlideLast();)
-

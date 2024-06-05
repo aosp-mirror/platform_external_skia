@@ -6,6 +6,7 @@
  */
 
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/mtl/GrMtlBackendSurface.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/mtl/GrMtlCaps.h"
 #include "tests/Test.h"
@@ -18,34 +19,32 @@ using sk_gpu_test::ManagedBackendTexture;
 // In BackendAllocationTest.cpp
 void test_wrapping(GrDirectContext*,
                    skiatest::Reporter*,
-                   std::function<sk_sp<ManagedBackendTexture>(GrDirectContext*,
-                                                              GrMipmapped,
-                                                              GrRenderable)> create,
+                   const std::function<sk_sp<ManagedBackendTexture>(
+                           GrDirectContext*, skgpu::Mipmapped, GrRenderable)>& create,
                    GrColorType,
-                   GrMipmapped,
+                   skgpu::Mipmapped,
                    GrRenderable);
 
-void test_color_init(GrDirectContext*,
-                     skiatest::Reporter*,
-                     std::function<sk_sp<ManagedBackendTexture>(GrDirectContext*,
-                                                                const SkColor4f&,
-                                                                GrMipmapped,
-                                                                GrRenderable)> create,
-                     GrColorType,
-                     const SkColor4f&,
-                     GrMipmapped,
-                     GrRenderable);
+void test_color_init(
+        GrDirectContext*,
+        skiatest::Reporter*,
+        const std::function<sk_sp<ManagedBackendTexture>(
+                GrDirectContext*, const SkColor4f&, skgpu::Mipmapped, GrRenderable)>& create,
+        GrColorType,
+        const SkColor4f&,
+        skgpu::Mipmapped,
+        GrRenderable);
 
 void test_pixmap_init(GrDirectContext*,
                       skiatest::Reporter*,
-                      std::function<sk_sp<ManagedBackendTexture>(GrDirectContext*,
-                                                                 const SkPixmap srcData[],
-                                                                 int numLevels,
-                                                                 GrSurfaceOrigin,
-                                                                 GrRenderable)> create,
+                      const std::function<sk_sp<ManagedBackendTexture>(GrDirectContext*,
+                                                                       const SkPixmap srcData[],
+                                                                       int numLevels,
+                                                                       GrSurfaceOrigin,
+                                                                       GrRenderable)>& create,
                       SkColorType,
                       GrSurfaceOrigin,
-                      GrMipmapped,
+                      skgpu::Mipmapped,
                       GrRenderable);
 
 DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
@@ -99,7 +98,7 @@ DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
     };
 
     for (auto combo : combinations) {
-        GrBackendFormat format = GrBackendFormat::MakeMtl(combo.fFormat);
+        GrBackendFormat format = GrBackendFormats::MakeMtl(combo.fFormat);
 
         if (!mtlCaps->isFormatTexturable(combo.fFormat)) {
             continue;
@@ -110,8 +109,8 @@ DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
             continue;
         }
 
-        for (auto mipmapped : { GrMipmapped::kNo, GrMipmapped::kYes }) {
-            if (GrMipmapped::kYes == mipmapped && !mtlCaps->mipmapSupport()) {
+        for (auto mipmapped : {skgpu::Mipmapped::kNo, skgpu::Mipmapped::kYes}) {
+            if (skgpu::Mipmapped::kYes == mipmapped && !mtlCaps->mipmapSupport()) {
                 continue;
             }
 
@@ -121,14 +120,14 @@ DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
                     // We must also check whether we allow rendering to the format using the
                     // color type.
                     if (!mtlCaps->isFormatAsColorTypeRenderable(
-                            combo.fColorType, GrBackendFormat::MakeMtl(combo.fFormat), 1)) {
+                                combo.fColorType, GrBackendFormats::MakeMtl(combo.fFormat), 1)) {
                         continue;
                     }
                 }
 
                 {
                     auto uninitCreateMtd = [format](GrDirectContext* dContext,
-                                                    GrMipmapped mipmapped,
+                                                    skgpu::Mipmapped mipmapped,
                                                     GrRenderable renderable) {
                         return ManagedBackendTexture::MakeWithoutData(dContext,
                                                                       32, 32,
@@ -168,7 +167,7 @@ DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlBackendAllocationTest, reporter, ctxInfo) {
 
                     auto createWithColorMtd = [format, swizzle](GrDirectContext* dContext,
                                                                 const SkColor4f& color,
-                                                                GrMipmapped mipmapped,
+                                                                skgpu::Mipmapped mipmapped,
                                                                 GrRenderable renderable) {
                         auto swizzledColor = swizzle.applyTo(color);
                         return ManagedBackendTexture::MakeWithData(dContext,

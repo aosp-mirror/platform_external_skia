@@ -37,6 +37,8 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
 
     writer->appendBool("FB Fetch Support", fFBFetchSupport);
     writer->appendBool("Uses precision modifiers", fUsesPrecisionModifiers);
+    writer->appendBool("Can use void-typed expressions in a sequence expression",
+                       fCanUseVoidInSequenceExpressions);
     writer->appendBool("Can use min() and abs() together", fCanUseMinAndAbsTogether);
     writer->appendBool("Can use fract() for negative values", fCanUseFractForNegativeValues);
     writer->appendBool("Must force negated atan param to float", fMustForceNegatedAtanParamToFloat);
@@ -48,7 +50,6 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Must guard division even after explicit zero check",
                        fMustGuardDivisionEvenAfterExplicitZeroCheck);
     writer->appendBool("Can use gl_FragCoord", fCanUseFragCoord);
-    writer->appendBool("Incomplete short int precision", fIncompleteShortIntPrecision);
     writer->appendBool("Add and true to loops workaround", fAddAndTrueToLoopCondition);
     writer->appendBool("Unfold short circuit as ternary", fUnfoldShortCircuitAsTernary);
     writer->appendBool("Emulate abs(int) function", fEmulateAbsIntFunction);
@@ -60,6 +61,8 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
                        fNoDefaultPrecisionForExternalSamplers);
     writer->appendBool("Rewrite matrix-vector multiply", fRewriteMatrixVectorMultiply);
     writer->appendBool("Rewrite matrix equality comparisons", fRewriteMatrixComparisons);
+    writer->appendBool("Rounding fix required for Perlin noise", fPerlinNoiseRoundingFix);
+    writer->appendBool("Must declare fragment front-facing", fMustDeclareFragmentFrontFacing);
     writer->appendBool("Flat interpolation support", fFlatInterpolationSupport);
     writer->appendBool("Prefer flat interpolation", fPreferFlatInterpolation);
     writer->appendBool("No perspective interpolation support", fNoPerspectiveInterpolationSupport);
@@ -72,7 +75,6 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("float == fp32", fFloatIs32Bits);
     writer->appendBool("half == fp32", fHalfIs32Bits);
     writer->appendBool("Has poor fragment precision", fHasLowFragmentPrecision);
-    writer->appendBool("Color space math needs float", fColorSpaceMathNeedsFloat);
     writer->appendBool("Builtin fma() support", fBuiltinFMASupport);
     writer->appendBool("Builtin determinant() support", fBuiltinDeterminantSupport);
 
@@ -88,6 +90,7 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const { }
 
 void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
     if (options.fDisableDriverCorrectnessWorkarounds) {
+        SkASSERT(fCanUseVoidInSequenceExpressions);
         SkASSERT(fCanUseMinAndAbsTogether);
         SkASSERT(fCanUseFractForNegativeValues);
         SkASSERT(!fMustForceNegatedAtanParamToFloat);
@@ -98,7 +101,6 @@ void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(!fMustObfuscateUniformColor);
         SkASSERT(!fMustGuardDivisionEvenAfterExplicitZeroCheck);
         SkASSERT(fCanUseFragCoord);
-        SkASSERT(!fIncompleteShortIntPrecision);
         SkASSERT(!fAddAndTrueToLoopCondition);
         SkASSERT(!fUnfoldShortCircuitAsTernary);
         SkASSERT(!fEmulateAbsIntFunction);
@@ -109,11 +111,13 @@ void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(!fNoDefaultPrecisionForExternalSamplers);
         SkASSERT(!fRewriteMatrixVectorMultiply);
         SkASSERT(!fRewriteMatrixComparisons);
+        SkASSERT(!fPerlinNoiseRoundingFix);
+        SkASSERT(!fMustDeclareFragmentFrontFacing);
     }
     if (options.fReducedShaderVariations) {
         fReducedShaderMode = true;
     }
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     if (options.fSuppressDualSourceBlending) {
         fDualSourceBlendingSupport = false;
     }

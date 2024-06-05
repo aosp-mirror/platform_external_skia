@@ -25,6 +25,7 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 namespace skiagm {
 
@@ -53,15 +54,13 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("lcdblendmodes");
-    }
+    SkString getName() const override { return SkString("lcdblendmodes"); }
 
     void onOnceBeforeDraw() override {
         fCheckerboard = ToolUtils::create_checkerboard_shader(SK_ColorBLACK, SK_ColorWHITE, 4);
     }
 
-    SkISize onISize() override { return SkISize::Make(kWidth, kHeight); }
+    SkISize getISize() override { return SkISize::Make(kWidth, kHeight); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint p;
@@ -130,7 +129,7 @@ protected:
             SkPaint paint;
             paint.setColor(textColor);
             paint.setBlendMode(gModes[m]);
-            SkFont font(ToolUtils::create_portable_typeface(), fTextHeight);
+            SkFont font(ToolUtils::DefaultPortableTypeface(), fTextHeight);
             font.setSubpixel(true);
             font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
             if (useGrad) {

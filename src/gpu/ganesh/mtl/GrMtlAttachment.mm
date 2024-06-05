@@ -9,6 +9,7 @@
 
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/ganesh/mtl/GrMtlBackendSurface.h"
 #include "src/gpu/ganesh/mtl/GrMtlGpu.h"
 #include "src/gpu/ganesh/mtl/GrMtlUtil.h"
 
@@ -24,9 +25,14 @@ GrMtlAttachment::GrMtlAttachment(GrMtlGpu* gpu,
                                  id<MTLTexture> texture,
                                  skgpu::Budgeted budgeted,
                                  std::string_view label)
-        : GrAttachment(gpu, dimensions, supportedUsages, texture.sampleCount,
-                       texture.mipmapLevelCount > 1 ? GrMipmapped::kYes : GrMipmapped::kNo,
-                       GrProtected::kNo, label)
+        : GrAttachment(
+                  gpu,
+                  dimensions,
+                  supportedUsages,
+                  texture.sampleCount,
+                  texture.mipmapLevelCount > 1 ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo,
+                  GrProtected::kNo,
+                  label)
         , fTexture(texture) {
     this->registerWithCache(budgeted);
 }
@@ -37,9 +43,14 @@ GrMtlAttachment::GrMtlAttachment(GrMtlGpu* gpu,
                                  id<MTLTexture> texture,
                                  GrWrapCacheable cacheable,
                                  std::string_view label)
-        : GrAttachment(gpu, dimensions, supportedUsages, texture.sampleCount,
-                       texture.mipmapLevelCount > 1 ? GrMipmapped::kYes : GrMipmapped::kNo,
-                       GrProtected::kNo, label)
+        : GrAttachment(
+                  gpu,
+                  dimensions,
+                  supportedUsages,
+                  texture.sampleCount,
+                  texture.mipmapLevelCount > 1 ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo,
+                  GrProtected::kNo,
+                  label)
         , fTexture(texture) {
     this->registerWithCacheWrapped(cacheable);
 }
@@ -50,7 +61,7 @@ sk_sp<GrMtlAttachment> GrMtlAttachment::MakeStencil(GrMtlGpu* gpu,
                                                     MTLPixelFormat format) {
     int textureUsage = 0;
     int storageMode = 0;
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         textureUsage = MTLTextureUsageRenderTarget;
         storageMode = MTLStorageModePrivate;
     }
@@ -64,7 +75,7 @@ sk_sp<GrMtlAttachment> GrMtlAttachment::MakeMSAA(GrMtlGpu* gpu,
                                                  MTLPixelFormat format) {
     int textureUsage = 0;
     int storageMode = 0;
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         textureUsage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
         storageMode = MTLStorageModePrivate;
     }
@@ -81,14 +92,14 @@ sk_sp<GrMtlAttachment> GrMtlAttachment::MakeTexture(GrMtlGpu* gpu,
                                                     skgpu::Budgeted budgeted) {
     int textureUsage = 0;
     int storageMode = 0;
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         textureUsage = MTLTextureUsageShaderRead;
         storageMode = MTLStorageModePrivate;
     }
     UsageFlags usageFlags = UsageFlags::kTexture;
     if (renderable == GrRenderable::kYes) {
         usageFlags |= UsageFlags::kColorAttachment;
-        if (@available(macOS 10.11, iOS 9.0, *)) {
+        if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
             textureUsage |= MTLTextureUsageRenderTarget;
         }
     }
@@ -115,7 +126,7 @@ sk_sp<GrMtlAttachment> GrMtlAttachment::Make(GrMtlGpu* gpu,
     desc.mipmapLevelCount = mipLevels;
     desc.sampleCount = sampleCnt;
     desc.arrayLength = 1;
-    if (@available(macOS 10.11, iOS 9.0, *)) {
+    if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
         desc.usage = mtlTextureUsage;
         desc.storageMode = (MTLStorageMode)mtlStorageMode;
     }
@@ -166,7 +177,7 @@ GrMtlAttachment::~GrMtlAttachment() {
 }
 
 GrBackendFormat GrMtlAttachment::backendFormat() const {
-    return GrBackendFormat::MakeMtl(SkToU32(fTexture.pixelFormat));
+    return GrBackendFormats::MakeMtl(SkToU32(fTexture.pixelFormat));
 }
 
 void GrMtlAttachment::onRelease() {

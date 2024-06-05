@@ -8,62 +8,59 @@
 #ifndef skiatest_graphite_ContextFactory_DEFINED
 #define skiatest_graphite_ContextFactory_DEFINED
 
-#include <vector>
 #include "include/core/SkRefCnt.h"
+#include "include/gpu/graphite/ContextOptions.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/private/base/SkTArray.h"
+#include "tools/gpu/ContextType.h"
 #include "tools/graphite/GraphiteTestContext.h"
-
-// TODO: This is only included to get access to GrContextFactory::ContextType. We should instead
-// move all of tools/gpu/ into tools/gpu/ganesh and tools/graphite into tools/gpu/graphite. Then in
-// tools gpu we can have files for shared things between ganesh and graphite like ContextType.
-#include "tools/gpu/GrContextFactory.h"
-
-using sk_gpu_test::GrContextFactory;
+#include "tools/graphite/TestOptions.h"
 
 namespace skgpu::graphite {
-    class Context;
+class Context;
 }
 
 namespace skiatest::graphite {
 
+struct ContextInfo {
+    GraphiteTestContext* fTestContext = nullptr;
+    skgpu::graphite::Context* fContext = nullptr;
+};
+
 class ContextFactory {
 public:
-    class ContextInfo {
-    public:
-        ContextInfo() = default;
-        ContextInfo(ContextInfo&& other);
-        ~ContextInfo() = default;
-
-        GrContextFactory::ContextType type() const { return fType; }
-
-        skgpu::graphite::Context* context() const { return fContext.get(); }
-        GraphiteTestContext* testContext() const { return fTestContext.get(); }
-
-    private:
-        friend class ContextFactory; // for ctor
-
-        ContextInfo(GrContextFactory::ContextType type,
-                    std::unique_ptr<GraphiteTestContext> testContext,
-                    std::unique_ptr<skgpu::graphite::Context> context);
-
-        GrContextFactory::ContextType             fType = GrContextFactory::kMock_ContextType;
-        std::unique_ptr<GraphiteTestContext>      fTestContext;
-        std::unique_ptr<skgpu::graphite::Context> fContext;
-    };
-
+    explicit ContextFactory(const TestOptions&);
     ContextFactory() = default;
     ContextFactory(const ContextFactory&) = delete;
     ContextFactory& operator=(const ContextFactory&) = delete;
 
     ~ContextFactory() = default;
 
-    std::tuple<GraphiteTestContext*, skgpu::graphite::Context*> getContextInfo(
-            GrContextFactory::ContextType);
+    ContextInfo getContextInfo(skgpu::ContextType);
 
 private:
-    std::vector<ContextInfo> fContexts;
+    struct OwnedContextInfo {
+        OwnedContextInfo();
+        OwnedContextInfo(skgpu::ContextType,
+                         std::unique_ptr<GraphiteTestContext>,
+                         std::unique_ptr<skgpu::graphite::Context>);
+
+        ~OwnedContextInfo();
+        OwnedContextInfo(OwnedContextInfo&&);
+        OwnedContextInfo& operator=(OwnedContextInfo&&);
+
+        // This holds the same data as ContextInfo, but uses unique_ptr to maintain ownership.
+        skgpu::ContextType fType = skgpu::ContextType::kMock;
+        std::unique_ptr<GraphiteTestContext> fTestContext;
+        std::unique_ptr<skgpu::graphite::Context> fContext;
+    };
+
+    static ContextInfo AsContextInfo(const OwnedContextInfo& ctx);
+
+    skia_private::TArray<OwnedContextInfo> fContexts;
+    const TestOptions fOptions = {};
 };
 
-} // namespace skiatest::graphite
+}  // namespace skiatest::graphite
 
-#endif // skiatest_graphite_ContextFactory_DEFINED
+#endif  // skiatest_graphite_ContextFactory_DEFINED

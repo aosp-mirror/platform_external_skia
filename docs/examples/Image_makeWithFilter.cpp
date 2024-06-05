@@ -1,7 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
-// HASH=85a76163138a2720ac003691d6363938
 REG_FIDDLE(Image_makeWithFilter, 256, 256, false, 5) {
 void draw(SkCanvas* canvas) {
     sk_sp<SkImageFilter> shadowFilter = SkImageFilters::DropShadow(
@@ -12,8 +11,16 @@ void draw(SkCanvas* canvas) {
     clipBounds.outset(60, 60);
     SkIRect outSubset;
     SkIPoint offset;
-    sk_sp<SkImage> filtered(image->makeWithFilter(canvas->recordingContext(), offsetFilter.get(),
-                                                  subset, clipBounds, &outSubset, &offset));
+    sk_sp<SkImage> filtered;
+
+    if (auto rContext = canvas->recordingContext()) {
+        filtered = SkImages::MakeWithFilter(rContext, image, offsetFilter.get(),
+                                            subset, clipBounds, &outSubset, &offset);
+    } else {
+        filtered = SkImages::MakeWithFilter(image, offsetFilter.get(),
+                                            subset, clipBounds, &outSubset, &offset);
+    }
+
     SkPaint paint;
     paint.setAntiAlias(true);
     paint.setStyle(SkPaint::kStroke_Style);

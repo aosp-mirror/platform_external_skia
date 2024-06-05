@@ -5,12 +5,22 @@
  * found in the LICENSE file.
  */
 
+#include "bench/GpuTools.h"
 #include "bench/SKPBench.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrGpu.h"
 #include "tools/flags/CommandLineFlags.h"
 
+#if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/Recorder.h"
+#include "src/gpu/graphite/RecorderPriv.h"
+#endif
+
+using namespace skia_private;
 
 // These CPU tile sizes are not good per se, but they are similar to what Chrome uses.
 static DEFINE_int(CPUbenchTileW, 256, "Tile width  used for CPU SKP playback.");
@@ -63,7 +73,7 @@ void SKPBench::onPerCanvasPreDraw(SkCanvas* canvas) {
     int xTiles = SkScalarCeilToInt(bounds.width()  / SkIntToScalar(tileW));
     int yTiles = SkScalarCeilToInt(bounds.height() / SkIntToScalar(tileH));
 
-    fSurfaces.reserve_back(xTiles * yTiles);
+    fSurfaces.reserve_exact(fSurfaces.size() + (xTiles * yTiles));
     fTileRects.reserve(xTiles * yTiles);
 
     SkImageInfo ii = canvas->imageInfo().makeWH(tileW, tileH);
@@ -100,11 +110,11 @@ void SKPBench::onPerCanvasPostDraw(SkCanvas* canvas) {
 }
 
 bool SKPBench::isSuitableFor(Backend backend) {
-    return backend != kNonRendering_Backend;
+    return backend != Backend::kNonRendering;
 }
 
-SkIPoint SKPBench::onGetSize() {
-    return SkIPoint::Make(fClip.width(), fClip.height());
+SkISize SKPBench::onGetSize() {
+    return SkISize::Make(fClip.width(), fClip.height());
 }
 
 void SKPBench::onDraw(int loops, SkCanvas* canvas) {
@@ -115,12 +125,28 @@ void SKPBench::onDraw(int loops, SkCanvas* canvas) {
             break;
         }
 
+        // Ensure the gpu backends don't combine ops/tasks across draw loops. Also submit each work
+        // to the gpu so we are measuring the cost of gpu submission and not amortizing one
+        // submission across all loops.
         auto direct = canvas->recordingContext() ? canvas->recordingContext()->asDirectContext()
                                                  : nullptr;
-        // Ensure the GrContext doesn't combine ops across draw loops.
         if (direct) {
             direct->flushAndSubmit();
         }
+
+#if defined(SK_GRAPHITE)
+        skgpu::graphite::Recorder* recorder = canvas->recorder();
+        if (recorder) {
+            std::unique_ptr<skgpu::graphite::Recording> recording = recorder->snap();
+            if (recording) {
+                skgpu::graphite::InsertRecordingInfo info;
+                info.fRecording = recording.get();
+                skgpu::graphite::Context* context = recorder->priv().context();
+                context->insertRecording(info);
+                context->submit();
+            }
+        }
+#endif
     }
 }
 
@@ -136,16 +162,15 @@ void SKPBench::drawPicture() {
     }
 
     for (int j = 0; j < fTileRects.size(); ++j) {
-        fSurfaces[j]->flush();
+        skgpu::Flush(fSurfaces[j].get());
     }
 }
 
-#include "src/gpu/ganesh/GrGpu.h"
 static void draw_pic_for_stats(SkCanvas* canvas,
                                GrDirectContext* dContext,
                                const SkPicture* picture,
-                               SkTArray<SkString>* keys,
-                               SkTArray<double>* values) {
+                               TArray<SkString>* keys,
+                               TArray<double>* values) {
     dContext->priv().resetGpuStats();
     dContext->priv().resetContextStats();
     canvas->drawPicture(picture);
@@ -156,7 +181,7 @@ static void draw_pic_for_stats(SkCanvas* canvas,
     dContext->priv().dumpContextStatsKeyValuePairs(keys, values);
 }
 
-void SKPBench::getGpuStats(SkCanvas* canvas, SkTArray<SkString>* keys, SkTArray<double>* values) {
+void SKPBench::getGpuStats(SkCanvas* canvas, TArray<SkString>* keys, TArray<double>* values) {
     // we do a special single draw and then dump the key / value pairs
     auto direct = canvas->recordingContext() ? canvas->recordingContext()->asDirectContext()
                                              : nullptr;

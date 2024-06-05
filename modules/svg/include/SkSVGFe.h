@@ -15,18 +15,20 @@
 class SkImageFilter;
 class SkSVGFilterContext;
 
-class SkSVGFe : public SkSVGHiddenContainer {
+class SK_API SkSVGFe : public SkSVGHiddenContainer {
 public:
     static bool IsFilterEffect(const sk_sp<SkSVGNode>& node) {
         switch (node->tag()) {
             case SkSVGTag::kFeBlend:
             case SkSVGTag::kFeColorMatrix:
+            case SkSVGTag::kFeComponentTransfer:
             case SkSVGTag::kFeComposite:
             case SkSVGTag::kFeDiffuseLighting:
             case SkSVGTag::kFeDisplacementMap:
             case SkSVGTag::kFeFlood:
             case SkSVGTag::kFeGaussianBlur:
             case SkSVGTag::kFeImage:
+            case SkSVGTag::kFeMerge:
             case SkSVGTag::kFeMorphology:
             case SkSVGTag::kFeOffset:
             case SkSVGTag::kFeSpecularLighting:

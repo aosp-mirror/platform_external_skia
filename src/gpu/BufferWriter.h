@@ -8,12 +8,23 @@
 #ifndef skgpu_BufferWriter_DEFINED
 #define skgpu_BufferWriter_DEFINED
 
-#include <type_traits>
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkRect.h"
 #include "include/private/SkColorData.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkRectMemcpy.h"
 #include "src/base/SkVx.h"
 #include "src/core/SkConvertPixels.h"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <type_traits>
+#include <utility>
 
 namespace skgpu {
 
@@ -264,7 +275,7 @@ private:
 
 template <typename T>
 inline VertexWriter& operator<<(VertexWriter& w, const T& val) {
-    static_assert(std::is_pod<T>::value, "");
+    static_assert(std::is_trivially_copyable<T>::value, "");
     w.validate(sizeof(T));
     memcpy(w.fPtr, &val, sizeof(T));
     w = w.makeOffset(sizeof(T));
@@ -273,7 +284,7 @@ inline VertexWriter& operator<<(VertexWriter& w, const T& val) {
 
 template <typename T>
 inline VertexWriter& operator<<(VertexWriter& w, const VertexWriter::Conditional<T>& val) {
-    static_assert(std::is_pod<T>::value, "");
+    static_assert(std::is_trivially_copyable<T>::value, "");
     if (val.fCondition) {
         w << val.fValue;
     }
@@ -288,7 +299,7 @@ inline VertexWriter& operator<<(VertexWriter& w, const VertexWriter::Skip<T>& va
 
 template <typename T>
 inline VertexWriter& operator<<(VertexWriter& w, const VertexWriter::ArrayDesc<T>& array) {
-    static_assert(std::is_pod<T>::value, "");
+    static_assert(std::is_trivially_copyable<T>::value, "");
     w.validate(array.fCount * sizeof(T));
     memcpy(w.fPtr, array.fArray, array.fCount * sizeof(T));
     w = w.makeOffset(sizeof(T) * array.fCount);
@@ -390,6 +401,7 @@ struct IndexWriter : public BufferWriter {
         this->validate(arraySize);
         memcpy(fPtr, array, arraySize);
         fPtr = SkTAddOffset<void>(fPtr, arraySize);
+
     }
 
     friend IndexWriter& operator<<(IndexWriter& w, uint16_t val);
@@ -437,16 +449,16 @@ struct UniformWriter : public BufferWriter {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct UploadWriter : public BufferWriter {
-    UploadWriter() = default;
+struct TextureUploadWriter : public BufferWriter {
+    TextureUploadWriter() = default;
 
-    UploadWriter(void* ptr, size_t size) : BufferWriter(ptr, size) {}
+    TextureUploadWriter(void* ptr, size_t size) : BufferWriter(ptr, size) {}
 
-    UploadWriter(const UploadWriter&) = delete;
-    UploadWriter(UploadWriter&& that) { *this = std::move(that); }
+    TextureUploadWriter(const TextureUploadWriter&) = delete;
+    TextureUploadWriter(TextureUploadWriter&& that) { *this = std::move(that); }
 
-    UploadWriter& operator=(const UploadWriter&) = delete;
-    UploadWriter& operator=(UploadWriter&& that) {
+    TextureUploadWriter& operator=(const TextureUploadWriter&) = delete;
+    TextureUploadWriter& operator=(TextureUploadWriter&& that) {
         BufferWriter::operator=(std::move(that));
         return *this;
     }
@@ -455,7 +467,7 @@ struct UploadWriter : public BufferWriter {
     // `srcRowBytes` wide, and the written block is `dstRowBytes` wide and `rowCount` bytes tall.
     void write(size_t offset, const void* src, size_t srcRowBytes, size_t dstRowBytes,
                size_t trimRowBytes, int rowCount) {
-        this->validate(dstRowBytes * rowCount);
+        this->validate(offset + dstRowBytes * rowCount);
         void* dst = SkTAddOffset<void>(fPtr, offset);
         SkRectMemcpy(dst, dstRowBytes, src, srcRowBytes, trimRowBytes, rowCount);
     }
@@ -464,9 +476,27 @@ struct UploadWriter : public BufferWriter {
                          const SkImageInfo& srcInfo, const void* src, size_t srcRowBytes,
                          const SkImageInfo& dstInfo, size_t dstRowBytes) {
         SkASSERT(srcInfo.width() == dstInfo.width() && srcInfo.height() == dstInfo.height());
-        this->validate(dstRowBytes * dstInfo.height());
+        this->validate(offset + dstRowBytes * dstInfo.height());
         void* dst = SkTAddOffset<void>(fPtr, offset);
         SkAssertResult(SkConvertPixels(dstInfo, dst, dstRowBytes, srcInfo, src, srcRowBytes));
+    }
+
+    // Writes a block of image data to the upload buffer. It converts src data of RGB_888x
+    // colorType into a 3 channel RGB_888 format.
+    void writeRGBFromRGBx(size_t offset, const void* src, size_t srcRowBytes, size_t dstRowBytes,
+                          int rowPixels, int rowCount) {
+        this->validate(offset + dstRowBytes * rowCount);
+        void* dst = SkTAddOffset<void>(fPtr, offset);
+        auto* sRow = reinterpret_cast<const char*>(src);
+        auto* dRow = reinterpret_cast<char*>(dst);
+
+        for (int y = 0; y < rowCount; ++y) {
+            for (int x = 0; x < rowPixels; ++x) {
+                memcpy(dRow + 3*x, sRow+4*x, 3);
+            }
+            sRow += srcRowBytes;
+            dRow += dstRowBytes;
+        }
     }
 };
 

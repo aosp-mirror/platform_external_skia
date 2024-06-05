@@ -14,6 +14,8 @@
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/TextureProxy.h"
 
+enum class SkBackingFit;
+
 namespace skgpu::graphite {
 
 class Recorder;
@@ -25,7 +27,10 @@ public:
     TextureProxyView(sk_sp<TextureProxy> proxy, Swizzle swizzle)
             : fProxy(std::move(proxy)), fSwizzle(swizzle) {}
 
-    // This entry point is used when we don't care about the swizzle.
+    TextureProxyView(sk_sp<TextureProxy> proxy, Swizzle swizzle, Origin origin)
+            : fProxy(std::move(proxy)), fSwizzle(swizzle), fOrigin(origin) {}
+
+    // This entry point is used when we don't care about the swizzle and assume TopLeft origin.
     explicit TextureProxyView(sk_sp<TextureProxy> proxy)
             : fProxy(std::move(proxy)) {}
 
@@ -39,7 +44,8 @@ public:
 
     bool operator==(const TextureProxyView& view) const {
         return fProxy == view.fProxy &&
-               fSwizzle == view.fSwizzle;
+               fSwizzle == view.fSwizzle &&
+               fOrigin == view.fOrigin;
     }
     bool operator!=(const TextureProxyView& other) const { return !(*this == other); }
 
@@ -58,17 +64,24 @@ public:
     sk_sp<TextureProxy> refProxy() const { return fProxy; }
 
     Swizzle swizzle() const { return fSwizzle; }
+    Origin origin() const { return fOrigin; }
 
     void concatSwizzle(Swizzle swizzle) {
         fSwizzle = skgpu::Swizzle::Concat(fSwizzle, swizzle);
     }
 
+    // makeSwizzle returns a new view with 'swizzle' composed on to this view's existing swizzle
     TextureProxyView makeSwizzle(Swizzle swizzle) const & {
-        return {fProxy, Swizzle::Concat(fSwizzle, swizzle)};
+        return {fProxy, Swizzle::Concat(fSwizzle, swizzle), fOrigin};
     }
 
     TextureProxyView makeSwizzle(Swizzle swizzle) && {
-        return {std::move(fProxy), Swizzle::Concat(fSwizzle, swizzle)};
+        return {std::move(fProxy), Swizzle::Concat(fSwizzle, swizzle), fOrigin};
+    }
+
+    // resetSwizzle returns a new view that uses 'swizzle' and disregards this view's prior swizzle.
+    TextureProxyView replaceSwizzle(Swizzle swizzle) const {
+        return {fProxy, swizzle, fOrigin};
     }
 
     void reset() {
@@ -81,15 +94,10 @@ public:
         return std::move(fProxy);
     }
 
-    static TextureProxyView Copy(Recorder*,
-                                 const SkColorInfo& srcColorInfo,
-                                 const TextureProxyView& srcView,
-                                 SkIRect srcRect,
-                                 Mipmapped);
-
 private:
     sk_sp<TextureProxy> fProxy;
     Swizzle fSwizzle;
+    Origin fOrigin = Origin::kTopLeft;
 };
 
 } // namespace skgpu::graphite

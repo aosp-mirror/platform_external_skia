@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -7,6 +11,7 @@ exports_files_legacy()
 ANALYSIS_FILES = [
     "SkSLCanExitWithoutReturningValue.cpp",
     "SkSLCheckProgramStructure.cpp",
+    "SkSLCheckSymbolTableCorrectness.cpp",
     "SkSLFinalizationChecks.cpp",
     "SkSLGetLoopControlFlowInfo.cpp",
     "SkSLGetLoopUnrollInfo.cpp",
@@ -20,6 +25,7 @@ ANALYSIS_FILES = [
     "SkSLProgramUsage.cpp",
     "SkSLProgramUsage.h",
     "SkSLProgramVisitor.h",
+    "SkSLReturnsInputAlpha.cpp",
     "SkSLSwitchCaseContainsExit.cpp",
     "SkSLSymbolTableStackBuilder.cpp",
 ]

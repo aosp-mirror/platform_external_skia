@@ -9,8 +9,8 @@
 
 #include "include/core/SkDrawable.h"
 #include "include/core/SkRect.h"
-#include "include/gpu/GrBackendDrawableInfo.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/vk/GrBackendDrawableInfo.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrOpFlushState.h"
@@ -29,6 +29,8 @@
 #include "src/gpu/ganesh/vk/GrVkResourceProvider.h"
 #include "src/gpu/ganesh/vk/GrVkSemaphore.h"
 #include "src/gpu/ganesh/vk/GrVkTexture.h"
+
+using namespace skia_private;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -348,7 +350,7 @@ bool GrVkOpsRenderPass::set(GrRenderTarget* rt,
                             const GrOpsRenderPass::LoadAndStoreInfo& resolveInfo,
                             GrVkRenderPass::SelfDependencyFlags selfDepFlags,
                             GrVkRenderPass::LoadFromResolve loadFromResolve,
-                            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) {
+                            const TArray<GrSurfaceProxy*, true>& sampledProxies) {
     SkASSERT(!fRenderTarget);
     SkASSERT(fGpu == rt->getContext()->priv().getGpu());
 
@@ -524,7 +526,6 @@ void GrVkOpsRenderPass::onClear(const GrScissorState& scissor, std::array<float,
 
     this->currentCommandBuffer()->clearAttachments(fGpu, 1, &attachment, 1, &clearRect);
     fCurrentCBIsEmpty = false;
-    return;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -744,17 +745,21 @@ void GrVkOpsRenderPass::onBindBuffers(sk_sp<const GrBuffer> indexBuffer,
     // Here our vertex and instance inputs need to match the same 0-based bindings they were
     // assigned in GrVkPipeline. That is, vertex first (if any) followed by instance.
     uint32_t binding = 0;
-    if (auto* gpuVertexBuffer = static_cast<const GrGpuBuffer*>(vertexBuffer.get())) {
+    if (vertexBuffer) {
+        SkDEBUGCODE(auto* gpuVertexBuffer = static_cast<const GrGpuBuffer*>(vertexBuffer.get()));
         SkASSERT(!gpuVertexBuffer->isCpuBuffer());
         SkASSERT(!gpuVertexBuffer->isMapped());
         currCmdBuf->bindInputBuffer(fGpu, binding++, std::move(vertexBuffer));
     }
-    if (auto* gpuInstanceBuffer = static_cast<const GrGpuBuffer*>(instanceBuffer.get())) {
+    if (instanceBuffer) {
+        SkDEBUGCODE(auto* gpuInstanceBuffer =
+                            static_cast<const GrGpuBuffer*>(instanceBuffer.get()));
         SkASSERT(!gpuInstanceBuffer->isCpuBuffer());
         SkASSERT(!gpuInstanceBuffer->isMapped());
         currCmdBuf->bindInputBuffer(fGpu, binding++, std::move(instanceBuffer));
     }
-    if (auto* gpuIndexBuffer = static_cast<const GrGpuBuffer*>(indexBuffer.get())) {
+    if (indexBuffer) {
+        SkDEBUGCODE(auto* gpuIndexBuffer = static_cast<const GrGpuBuffer*>(indexBuffer.get()));
         SkASSERT(!gpuIndexBuffer->isCpuBuffer());
         SkASSERT(!gpuIndexBuffer->isMapped());
         currCmdBuf->bindIndexBuffer(fGpu, std::move(indexBuffer));

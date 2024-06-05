@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -12,10 +16,22 @@ skia_filegroup(
 )
 
 skia_filegroup(
+    name = "multi_picture_document_hdrs",
+    srcs = ["SkMultiPictureDocument.h"],
+    visibility = ["//src/utils:__pkg__"],
+)
+
+skia_filegroup(
     name = "public_hdrs",
-    srcs = select({
+    srcs = [":multi_picture_document_hdrs"] + select({
         "//src/pdf:enable_pdf_backend_true": ["SkPDFDocument.h"],
         "//conditions:default": [],
     }),  # TODO(kjlubick) XPSDocument
     visibility = ["//include:__pkg__"],
+)
+
+skia_filegroup(
+    name = "pdf_hdrs",
+    srcs = ["SkPDFDocument.h"],
+    visibility = ["//src/pdf:__pkg__"],
 )

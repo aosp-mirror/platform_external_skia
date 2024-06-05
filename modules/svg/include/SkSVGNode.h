@@ -27,13 +27,20 @@ enum class SkSVGTag {
     kEllipse,
     kFeBlend,
     kFeColorMatrix,
+    kFeComponentTransfer,
     kFeComposite,
     kFeDiffuseLighting,
     kFeDisplacementMap,
     kFeDistantLight,
     kFeFlood,
+    kFeFuncA,
+    kFeFuncR,
+    kFeFuncG,
+    kFeFuncB,
     kFeGaussianBlur,
     kFeImage,
+    kFeMerge,
+    kFeMergeNode,
     kFeMorphology,
     kFeOffset,
     kFePointLight,
@@ -92,7 +99,7 @@ public:                                                                      \
         }                                                                    \
     }
 
-class SkSVGNode : public SkRefCnt {
+class SK_API SkSVGNode : public SkRefCnt {
 public:
     ~SkSVGNode() override;
 

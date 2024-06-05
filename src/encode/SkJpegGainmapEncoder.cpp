@@ -7,11 +7,10 @@
 
 #include "include/private/SkJpegGainmapEncoder.h"
 
-#ifdef SK_ENCODE_JPEG
-
 #include "include/core/SkBitmap.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkStream.h"
+#include "include/encode/SkEncoder.h"
 #include "include/encode/SkJpegEncoder.h"
 #include "include/private/SkGainmapInfo.h"
 #include "src/codec/SkCodecPriv.h"
@@ -19,37 +18,26 @@
 #include "src/codec/SkJpegMultiPicture.h"
 #include "src/codec/SkJpegPriv.h"
 #include "src/codec/SkJpegSegmentScan.h"
+#include "src/encode/SkJpegEncoderImpl.h"
 
 #include <vector>
 
 static bool is_single_channel(SkColor4f c) { return c.fR == c.fG && c.fG == c.fB; };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// JpegR encoding
-
-bool SkJpegGainmapEncoder::EncodeJpegR(SkWStream* dst,
-                                       const SkPixmap& base,
-                                       const SkJpegEncoder::Options& baseOptions,
-                                       const SkPixmap& gainmap,
-                                       const SkJpegEncoder::Options& gainmapOptions,
-                                       const SkGainmapInfo& gainmapInfo) {
-    return EncodeHDRGM(dst, base, baseOptions, gainmap, gainmapOptions, gainmapInfo);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 // HDRGM encoding
 
 // Generate the XMP metadata for an HDRGM file.
-sk_sp<SkData> get_hdrgm_xmp_data(const SkGainmapInfo& gainmapInfo) {
+sk_sp<SkData> get_gainmap_image_xmp_metadata(const SkGainmapInfo& gainmapInfo) {
     SkDynamicMemoryWStream s;
-    const float kLog2 = sk_float_log(2.f);
-    const SkColor4f gainMapMin = {sk_float_log(gainmapInfo.fGainmapRatioMin.fR) / kLog2,
-                                  sk_float_log(gainmapInfo.fGainmapRatioMin.fG) / kLog2,
-                                  sk_float_log(gainmapInfo.fGainmapRatioMin.fB) / kLog2,
+    const float kLog2 = std::log(2.f);
+    const SkColor4f gainMapMin = {std::log(gainmapInfo.fGainmapRatioMin.fR) / kLog2,
+                                  std::log(gainmapInfo.fGainmapRatioMin.fG) / kLog2,
+                                  std::log(gainmapInfo.fGainmapRatioMin.fB) / kLog2,
                                   1.f};
-    const SkColor4f gainMapMax = {sk_float_log(gainmapInfo.fGainmapRatioMax.fR) / kLog2,
-                                  sk_float_log(gainmapInfo.fGainmapRatioMax.fG) / kLog2,
-                                  sk_float_log(gainmapInfo.fGainmapRatioMax.fB) / kLog2,
+    const SkColor4f gainMapMax = {std::log(gainmapInfo.fGainmapRatioMax.fR) / kLog2,
+                                  std::log(gainmapInfo.fGainmapRatioMax.fG) / kLog2,
+                                  std::log(gainmapInfo.fGainmapRatioMax.fB) / kLog2,
                                   1.f};
     const SkColor4f gamma = {1.f / gainmapInfo.fGainmapGamma.fR,
                              1.f / gainmapInfo.fGainmapGamma.fG,
@@ -109,8 +97,8 @@ sk_sp<SkData> get_hdrgm_xmp_data(const SkGainmapInfo& gainmapInfo) {
     maybe_write_scalar_attr("hdrgm:Gamma", gamma);
     maybe_write_scalar_attr("hdrgm:OffsetSDR", gainmapInfo.fEpsilonSdr);
     maybe_write_scalar_attr("hdrgm:OffsetHDR", gainmapInfo.fEpsilonHdr);
-    write_scalar_attr("hdrgm:HDRCapacityMin", sk_float_log(gainmapInfo.fDisplayRatioSdr) / kLog2);
-    write_scalar_attr("hdrgm:HDRCapacityMax", sk_float_log(gainmapInfo.fDisplayRatioHdr) / kLog2);
+    write_scalar_attr("hdrgm:HDRCapacityMin", std::log(gainmapInfo.fDisplayRatioSdr) / kLog2);
+    write_scalar_attr("hdrgm:HDRCapacityMax", std::log(gainmapInfo.fDisplayRatioHdr) / kLog2);
     switch (gainmapInfo.fBaseImageType) {
         case SkGainmapInfo::BaseImageType::kSDR:
             s.writeText("        hdrgm:BaseRenditionIsHDR=\"False\">\n");
@@ -135,7 +123,7 @@ sk_sp<SkData> get_hdrgm_xmp_data(const SkGainmapInfo& gainmapInfo) {
 }
 
 // Generate the GContainer metadata for an image with a JPEG gainmap.
-static sk_sp<SkData> get_gcontainer_xmp_data(size_t gainmapItemLength) {
+static sk_sp<SkData> get_base_image_xmp_metadata(size_t gainmapItemLength) {
     SkDynamicMemoryWStream s;
     s.writeText(
             "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Adobe XMP Core 5.1.2\">\n"
@@ -169,76 +157,11 @@ static sk_sp<SkData> get_gcontainer_xmp_data(size_t gainmapItemLength) {
     return s.detachAsData();
 }
 
-// Split an SkData into segments.
-std::vector<sk_sp<SkData>> get_hdrgm_image_segments(sk_sp<SkData> image,
-                                                    size_t segmentMaxDataSize) {
-    // Compute the total size of the header to a gainmap image segment (not including the 2 bytes
-    // for the segment size, which the encoder is responsible for writing).
-    constexpr size_t kGainmapHeaderSize = sizeof(kGainmapSig) + 2 * kGainmapMarkerIndexSize;
-
-    // Compute the payload size for each segment.
-    const size_t kGainmapPayloadSize = segmentMaxDataSize - kGainmapHeaderSize;
-
-    // Compute the number of segments we'll need.
-    const size_t segmentCount = (image->size() + kGainmapPayloadSize - 1) / kGainmapPayloadSize;
-    std::vector<sk_sp<SkData>> result;
-    result.reserve(segmentCount);
-
-    // Move |imageData| through |image| until it hits |imageDataEnd|.
-    const uint8_t* imageData = image->bytes();
-    const uint8_t* imageDataEnd = image->bytes() + image->size();
-    while (imageData < imageDataEnd) {
-        SkDynamicMemoryWStream segmentStream;
-
-        // Write the signature.
-        segmentStream.write(kGainmapSig, sizeof(kGainmapSig));
-
-        // Write the segment index as big-endian.
-        size_t segmentIndex = result.size() + 1;
-        uint8_t segmentIndexBytes[2] = {
-                static_cast<uint8_t>(segmentIndex / 256u),
-                static_cast<uint8_t>(segmentIndex % 256u),
-        };
-        segmentStream.write(segmentIndexBytes, sizeof(segmentIndexBytes));
-
-        // Write the segment count as big-endian.
-        uint8_t segmentCountBytes[2] = {
-                static_cast<uint8_t>(segmentCount / 256u),
-                static_cast<uint8_t>(segmentCount % 256u),
-        };
-        segmentStream.write(segmentCountBytes, sizeof(segmentCountBytes));
-
-        // Verify that our header size math is correct.
-        SkASSERT(segmentStream.bytesWritten() == kGainmapHeaderSize);
-
-        // Write the rest of the segment.
-        size_t bytesToWrite =
-                std::min(imageDataEnd - imageData, static_cast<intptr_t>(kGainmapPayloadSize));
-        segmentStream.write(imageData, bytesToWrite);
-        imageData += bytesToWrite;
-
-        // Verify that our data size math is correct.
-        if (segmentIndex == segmentCount) {
-            SkASSERT(segmentStream.bytesWritten() <= segmentMaxDataSize);
-        } else {
-            SkASSERT(segmentStream.bytesWritten() == segmentMaxDataSize);
-        }
-        result.push_back(segmentStream.detachAsData());
-    }
-
-    // Verify that our segment count math was correct.
-    SkASSERT(imageData == imageDataEnd);
-    SkASSERT(result.size() == segmentCount);
-    return result;
-}
-
 static sk_sp<SkData> encode_to_data(const SkPixmap& pm,
                                     const SkJpegEncoder::Options& options,
-                                    SkData* xmpMetadata) {
-    SkJpegEncoder::Options optionsWithXmp = options;
-    optionsWithXmp.xmpMetadata = xmpMetadata;
+                                    const SkJpegMetadataEncoder::SegmentList& metadataSegments) {
     SkDynamicMemoryWStream encodeStream;
-    auto encoder = SkJpegEncoder::Make(&encodeStream, pm, optionsWithXmp);
+    auto encoder = SkJpegEncoderImpl::MakeRGB(&encodeStream, pm, options, metadataSegments);
     if (!encoder || !encoder->encodeRows(pm.height())) {
         return nullptr;
     }
@@ -257,29 +180,72 @@ static sk_sp<SkData> get_mpf_segment(const SkJpegMultiPictureParameters& mpParam
     return s.detachAsData();
 }
 
+static sk_sp<SkData> get_iso_gainmap_segment_params(sk_sp<SkData> data) {
+    SkDynamicMemoryWStream s;
+    s.write(kISOGainmapSig, sizeof(kISOGainmapSig));
+    s.write(data->data(), data->size());
+    return s.detachAsData();
+}
+
 bool SkJpegGainmapEncoder::EncodeHDRGM(SkWStream* dst,
                                        const SkPixmap& base,
                                        const SkJpegEncoder::Options& baseOptions,
                                        const SkPixmap& gainmap,
                                        const SkJpegEncoder::Options& gainmapOptions,
                                        const SkGainmapInfo& gainmapInfo) {
-    // Encode the gainmap image with the HDRGM XMP metadata.
+    bool includeUltraHDRv1 = gainmapInfo.isUltraHDRv1Compatible();
+
+    // Encode the gainmap image.
     sk_sp<SkData> gainmapData;
     {
-        // We will include the HDRGM XMP metadata in the gainmap image.
-        auto hdrgmXmp = get_hdrgm_xmp_data(gainmapInfo);
-        gainmapData = encode_to_data(gainmap, gainmapOptions, hdrgmXmp.get());
+        SkJpegMetadataEncoder::SegmentList metadataSegments;
+
+        // Add XMP metadata.
+        if (includeUltraHDRv1) {
+            SkJpegMetadataEncoder::AppendXMPStandard(
+                    metadataSegments, get_gainmap_image_xmp_metadata(gainmapInfo).get());
+        }
+
+        // Include the ICC profile of the alternate color space, if it is used.
+        if (gainmapInfo.fGainmapMathColorSpace) {
+            SkJpegMetadataEncoder::AppendICC(
+                    metadataSegments, gainmapOptions, gainmapInfo.fGainmapMathColorSpace.get());
+        }
+
+        // Add the ISO 21946-1 metadata.
+        metadataSegments.emplace_back(kISOGainmapMarker,
+                                      get_iso_gainmap_segment_params(gainmapInfo.serialize()));
+
+        // Encode the gainmap image.
+        gainmapData = encode_to_data(gainmap, gainmapOptions, metadataSegments);
         if (!gainmapData) {
             SkCodecPrintf("Failed to encode gainmap image.\n");
             return false;
         }
     }
 
-    // Encode the base image with the Container XMP metadata.
+    // Encode the base image.
     sk_sp<SkData> baseData;
     {
-        auto containerXmp = get_gcontainer_xmp_data(static_cast<int32_t>(gainmapData->size()));
-        baseData = encode_to_data(base, baseOptions, containerXmp.get());
+        SkJpegMetadataEncoder::SegmentList metadataSegments;
+
+        // Include XMP.
+        if (includeUltraHDRv1) {
+            SkJpegMetadataEncoder::AppendXMPStandard(
+                    metadataSegments,
+                    get_base_image_xmp_metadata(static_cast<int32_t>(gainmapData->size())).get());
+        }
+
+        // Include ICC profile metadata.
+        SkJpegMetadataEncoder::AppendICC(metadataSegments, baseOptions, base.colorSpace());
+
+        // Include the ISO 21946-1 version metadata.
+        metadataSegments.emplace_back(
+                kISOGainmapMarker,
+                get_iso_gainmap_segment_params(SkGainmapInfo::SerializeVersion()));
+
+        // Encode the base image.
+        baseData = encode_to_data(base, baseOptions, metadataSegments);
         if (!baseData) {
             SkCodecPrintf("Failed to encode base image.\n");
             return false;
@@ -381,5 +347,3 @@ bool SkJpegGainmapEncoder::MakeMPF(SkWStream* dst, const SkData** images, size_t
     }
     return true;
 }
-
-#endif  // SK_ENCODE_JPEG

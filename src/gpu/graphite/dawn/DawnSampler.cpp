@@ -11,6 +11,8 @@
 #include "src/gpu/graphite/dawn/DawnCaps.h"
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
 
+#include <cfloat>
+
 namespace skgpu::graphite {
 
 namespace {
@@ -25,19 +27,18 @@ wgpu::FilterMode filter_mode_to_dawn_filter_mode(SkFilterMode mode) {
     SkUNREACHABLE;
 }
 
-wgpu::FilterMode mipmap_mode_to_dawn_filter_mode(SkMipmapMode mode) {
+wgpu::MipmapFilterMode mipmap_mode_to_dawn_filter_mode(SkMipmapMode mode) {
     switch (mode) {
         case SkMipmapMode::kNone:
             // Dawn doesn't have none filter mode.
-            return wgpu::FilterMode::Nearest;
+            return wgpu::MipmapFilterMode::Nearest;
         case SkMipmapMode::kNearest:
-            return wgpu::FilterMode::Nearest;
+            return wgpu::MipmapFilterMode::Nearest;
         case SkMipmapMode::kLinear:
-            return wgpu::FilterMode::Linear;
+            return wgpu::MipmapFilterMode::Linear;
     }
     SkUNREACHABLE;
 }
-
 }
 
 DawnSampler::DawnSampler(const DawnSharedContext* sharedContext,
@@ -71,33 +72,26 @@ sk_sp<DawnSampler> DawnSampler::Make(const DawnSharedContext* sharedContext,
     desc.minFilter     = desc.magFilter;
     desc.mipmapFilter  = mipmap_mode_to_dawn_filter_mode(samplingOptions.mipmap);
     desc.lodMinClamp   = 0.0f;
-    desc.lodMaxClamp   = FLT_MAX;
+    if (samplingOptions.mipmap == SkMipmapMode::kNone) {
+        // Disabling mipmap by clamping max lod to first level only.
+        desc.lodMaxClamp = 0.0f;
+    } else {
+        desc.lodMaxClamp = FLT_MAX;
+    }
     desc.maxAnisotropy = 1;
     desc.compare       = wgpu::CompareFunction::Undefined;
 
-#ifdef SK_DEBUG
-    static const char* tileModeLabels[] = {
-        "Clamp",
-        "Repeat",
-        "Mirror",
-        "Decal"
-    };
-    static const char* minMagFilterLabels[] = {
-        "Nearest",
-        "Linear"
-    };
-    static const char* mipFilterLabels[] = {
-        "MipNone",
-        "MipNearest",
-        "MipLinear"
-    };
     std::string label;
-    label.append("X").append(tileModeLabels[static_cast<int>(xTileMode)]);
-    label.append("Y").append(tileModeLabels[static_cast<int>(yTileMode)]);
-    label.append(minMagFilterLabels[static_cast<int>(samplingOptions.filter)]);
-    label.append(mipFilterLabels[static_cast<int>(samplingOptions.mipmap)]);
-    desc.label = label.c_str();
-#endif
+    if (sharedContext->caps()->setBackendLabels()) {
+        static const char* tileModeLabels[] = {"Clamp", "Repeat", "Mirror", "Decal"};
+        static const char* minMagFilterLabels[] = {"Nearest", "Linear"};
+        static const char* mipFilterLabels[] = {"MipNone", "MipNearest", "MipLinear"};
+        label.append("X").append(tileModeLabels[static_cast<int>(xTileMode)]);
+        label.append("Y").append(tileModeLabels[static_cast<int>(yTileMode)]);
+        label.append(minMagFilterLabels[static_cast<int>(samplingOptions.filter)]);
+        label.append(mipFilterLabels[static_cast<int>(samplingOptions.mipmap)]);
+        desc.label = label.c_str();
+    }
 
     auto sampler = sharedContext->device().CreateSampler(&desc);
     if (!sampler) {

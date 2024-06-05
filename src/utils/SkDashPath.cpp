@@ -17,8 +17,9 @@
 #include "include/core/SkStrokeRec.h"
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkAlign.h"
-#include "include/private/base/SkPathEnums.h"
+#include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkTo.h"
+#include "src/core/SkPathEnums.h"
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkPointPriv.h"
 
@@ -252,7 +253,10 @@ public:
         }
 
         fPathLength = pathLength;
-        fTangent.scale(SkScalarInvert(pathLength));
+        fTangent.scale(sk_ieee_float_divide(1.0f, pathLength));
+        if (!SkIsFinite(fTangent.fX, fTangent.fY)) {
+            return false;
+        }
         SkPointPriv::RotateCCW(fTangent, &fNormal);
         fNormal.scale(SkScalarHalf(rec->getWidth()));
 
@@ -262,7 +266,7 @@ public:
 
         SkScalar ptCount = pathLength * intervalCount / (float)intervalLength;
         ptCount = std::min(ptCount, SkDashPath::kMaxDashCount);
-        if (SkScalarIsNaN(ptCount)) {
+        if (SkIsNaN(ptCount)) {
             return false;
         }
         int n = SkScalarCeilToInt(ptCount) << 2;
@@ -481,5 +485,5 @@ bool SkDashPath::ValidDashPath(SkScalar phase, const SkScalar intervals[], int32
         length += intervals[i];
     }
     // watch out for values that might make us go out of bounds
-    return length > 0 && SkScalarIsFinite(phase) && SkScalarIsFinite(length);
+    return length > 0 && SkIsFinite(phase, length);
 }

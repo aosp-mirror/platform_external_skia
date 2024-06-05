@@ -25,84 +25,163 @@ class PrecompileShader;
 // All of these factory functions will be moved elsewhere once the pre-compile API becomes public
 
 //--------------------------------------------------------------------------------------------------
-// This will move to be beside SkShaders in include/core/SkShader.h
-class PrecompileShaders {
-public:
-    //TODO: Add Empty? - see skbug.com/12165
-    static sk_sp<PrecompileShader> Color();
-    static sk_sp<PrecompileShader> Blend(SkSpan<const sk_sp<PrecompileBlender>> blenders,
+namespace PrecompileBlenders {
+
+    // --- This call matches the SkBlenders factory in include/effects/SkBlenders.h
+    SK_API sk_sp<PrecompileBlender> Arithmetic();
+
+    // Note: the other main API SkBlender factories are:
+    //   SkBlender::Mode in include/core/SkBlender.h
+    //   SkRuntimeEffect::makeBlender in include/effects/SkRuntimeEffect.h
+    // Their precompilation correlates are:
+    //   PrecompileBlender::Mode(bm) in src/gpu/graphite/Precompile.h
+    //   MakePrecompileBlender() in src/gpu/graphite/FactoryFunctions.h
+
+} // namespace PrecompileBlenders
+
+//--------------------------------------------------------------------------------------------------
+namespace PrecompileShaders {
+    // --- This block of six matches the SkShaders factories in include/core/SkShader.h
+    SK_API sk_sp<PrecompileShader> Empty();
+    SK_API sk_sp<PrecompileShader> Color();
+    SK_API sk_sp<PrecompileShader> Color(sk_sp<SkColorSpace>);
+    SK_API sk_sp<PrecompileShader> Blend(SkSpan<SkBlendMode> blendModes,
                                          SkSpan<const sk_sp<PrecompileShader>> dsts,
                                          SkSpan<const sk_sp<PrecompileShader>> srcs);
-    static sk_sp<PrecompileShader> Blend(SkSpan<SkBlendMode> blendModes,
+    SK_API sk_sp<PrecompileShader> Blend(SkSpan<const sk_sp<PrecompileBlender>> blenders,
                                          SkSpan<const sk_sp<PrecompileShader>> dsts,
                                          SkSpan<const sk_sp<PrecompileShader>> srcs);
-    // TODO: add an SkShaders::Image to match this and SkImageFilters (skbug.com/13440)
-    static sk_sp<PrecompileShader> Image();
+    SK_API sk_sp<PrecompileShader> CoordClamp(SkSpan<const sk_sp<PrecompileShader>>);
+
+    // --- This block of two matches the SkShaders factories in include/effects/SkPerlinNoiseShader.h
+    SK_API sk_sp<PrecompileShader> MakeFractalNoise();
+    SK_API sk_sp<PrecompileShader> MakeTurbulence();
+
+    // --- This block of two matches the SkShaders factories in include/core/SkImage.h
+    // In the normal Skia API ImageShaders are usually created via a SkImage::makeShader call.
+    // Since the SkImage used to create the ImageShader is unlikely to be present at precompilation
+    // time this entry point allows the equivalent precompilation program structure to be created.
+    SK_API sk_sp<PrecompileShader> Image();
+    // As with the above Image call, raw ImageShaders are usually created via an
+    // SkImage::makeRawShader call. The RawImage call allows the equivalent precompilation
+    // program structure to be created without needing the SkImage.
+    SK_API sk_sp<PrecompileShader> RawImage();
+
+    // ??
+    SK_API sk_sp<PrecompileShader> YUVImage();
 
     // TODO: make SkGradientShader match this convention (skbug.com/13438)
-    static sk_sp<PrecompileShader> LinearGradient();
-    static sk_sp<PrecompileShader> RadialGradient();
-    static sk_sp<PrecompileShader> TwoPointConicalGradient();
-    static sk_sp<PrecompileShader> SweepGradient();
+    // This block of four matches all the entry points in include/effects/SkGradientShader.h
+    SK_API sk_sp<PrecompileShader> LinearGradient();
+    SK_API sk_sp<PrecompileShader> RadialGradient();
+    SK_API sk_sp<PrecompileShader> TwoPointConicalGradient();
+    SK_API sk_sp<PrecompileShader> SweepGradient();
 
-    // TODO: hide these? The issue here is that, in the main Skia API, these are only accessed
-    // via makeWithLocalMatrix and makeWithColorFilter. However, in the combination API, clients
-    // may want to create a set of these (i.e., pass SkSpans to the factory functions vs
-    // just single options).
-    static sk_sp<PrecompileShader> LocalMatrix(sk_sp<PrecompileShader> wrapped);
-    static sk_sp<PrecompileShader> ColorFilter(sk_sp<PrecompileShader>,
-                                               sk_sp<PrecompileColorFilter>);
+    // Normally, SkPicture shaders are only created via SkPicture::makeShader. Since the
+    // SkPicture to be drawn, most likely, won't be available at precompilation time, this
+    // entry point can be used to create a precompilation equivalent.
+    // Note: this will precompile the program that draws the SkPicture. It, obviously, won't
+    // precompile any SkPaints within the SkPicture.
+    //
+    // API Note: At the end of the day this turns into a LMShader wrapping an image shader. The
+    // LMShader has logic to elide itself if the LM is missing or the Identity. Combinatorially,
+    // this yields 6 combinations: 2 from the LM x 3 from the ImageShader. We could try to reduce
+    // that by adding a "passing-non-null-non-Identity-LM-to-SkPicture::makeShader" flag here
+    // in which case we would either add or skip the LMShader. That would be a pretty obscure API
+    // though.
+    SK_API sk_sp<PrecompileShader> Picture();
 
-private:
-    PrecompileShaders() = delete;
-};
+    // Normally, LocalMatrixShaders are only created via SkShader::makeWithLocalMatrix.
+    // However, in the combination API, clients may want to create a set of precompile
+    // LocalMatrixShaders (i.e., pass an SkSpan to the factory function vs just creating a
+    // single option). This entry point allows that use case.
+    // Note: PrecompileShader::makeWithLocalMatrix() can still be used and works as expected.
+    SK_API sk_sp<PrecompileShader> LocalMatrix(SkSpan<const sk_sp<PrecompileShader>> wrapped);
+
+    // Normally, ColorFilterShaders are only created via SkShader::makeWithColorFilter.
+    // However, in the combination API, clients may want to create a set of precompile
+    // ColorFilterShaders (i.e., pass SkSpans to the factory function vs just creating a
+    // single option). This entry point allows that use case.
+    // Note: PrecompileShader::makeWithColorFilter can still be used and works as expected.
+    SK_API sk_sp<PrecompileShader> ColorFilter(
+            SkSpan<const sk_sp<PrecompileShader>> shaders,
+            SkSpan<const sk_sp<PrecompileColorFilter>> colorFilters);
+
+    // Normally, WorkingColorSpaceShaders are only created via SkShader::makeWithWorkingColorSpace.
+    // However, in the combination API, clients may want to create a set of precompile
+    // WorkingColorSpaceShaders (i.e., pass SkSpans to the factory function vs just creating a
+    // single option). This entry point allows that use case.
+    // Note: PrecompileShader::makeWithWorkingColorSpace can still be used and works as expected.
+    SK_API sk_sp<PrecompileShader> WorkingColorSpace(SkSpan<const sk_sp<PrecompileShader>> shaders,
+                                                     SkSpan<const sk_sp<SkColorSpace>> colorSpaces);
+
+} // namespace PrecompileShaders
+
+namespace PrecompileImageFilters {
+    // This is the Precompile correlate to SkImageFilters::ColorFilter.
+    // Note: In order to make analysis tractable we only allow options for the internals of an
+    // ImageFilter but not in the structure of the DAG.
+    // TODO: Should we have a CropRect parameter or force clients to explicitly create
+    // a crop PrecompileImageFilter?
+    SK_API sk_sp<PrecompileImageFilter> ColorFilter(
+            SkSpan<const sk_sp<PrecompileColorFilter>> colorFilterOptions,
+            sk_sp<PrecompileImageFilter> input);
+
+    // This is the Precompile correlate to all of SkImageFilters::
+    //      DistantLitDiffuse,  PointLitDiffuse,  SpotLitDiffuse
+    //      DistantLitSpecular, PointLitSpecular, SpotLitSpecular
+    SK_API sk_sp<PrecompileImageFilter> Lighting(sk_sp<PrecompileImageFilter> input);
+
+    // This is the Precompile correlate to SkImageFilters::Erode and SkImageFilters::Dilate
+    SK_API sk_sp<PrecompileImageFilter> Morphology(sk_sp<PrecompileImageFilter> input);
+
+} // namespace PrecompileImageFilters
 
 //--------------------------------------------------------------------------------------------------
 // Initially this will go next to SkMaskFilter in include/core/SkMaskFilter.h but the
 // SkMaskFilter::MakeBlur factory should be split out or removed. This namespace will follow
 // where ever that factory goes.
-class PrecompileMaskFilters {
-public:
+namespace PrecompileMaskFilters {
     // TODO: change SkMaskFilter::MakeBlur to match this and SkImageFilters::Blur (skbug.com/13441)
-    static sk_sp<PrecompileMaskFilter> Blur();
-
-private:
-    PrecompileMaskFilters() = delete;
-};
+    SK_API sk_sp<PrecompileMaskFilter> Blur();
+} // namespace PrecompileMaskFilters
 
 //--------------------------------------------------------------------------------------------------
 // This will move to be beside SkColorFilters in include/core/SkColorFilter.h
-class PrecompileColorFilters {
-public:
+namespace PrecompileColorFilters {
+    // -- The next 9 entries match those in include/core/SkColorFilter.h
+    SK_API sk_sp<PrecompileColorFilter> Compose(SkSpan<const sk_sp<PrecompileColorFilter>> outer,
+                                                SkSpan<const sk_sp<PrecompileColorFilter>> inner);
+
     // This encompasses both variants of SkColorFilters::Blend
-    static sk_sp<PrecompileColorFilter> Blend();
+    SK_API sk_sp<PrecompileColorFilter> Blend();
 
     // This encompasses both variants of SkColorFilters::Matrix
-    static sk_sp<PrecompileColorFilter> Matrix();
+    SK_API sk_sp<PrecompileColorFilter> Matrix();
 
     // This encompasses both variants of SkColorFilters::HSLAMatrix
-    static sk_sp<PrecompileColorFilter> HSLAMatrix();
+    SK_API sk_sp<PrecompileColorFilter> HSLAMatrix();
 
-    // TODO: Compose, LinearToSRGBGamma/SRGBToLinearGamma, Lerp, Table(ARGB), Lighting
+    SK_API sk_sp<PrecompileColorFilter> LinearToSRGBGamma();
+    SK_API sk_sp<PrecompileColorFilter> SRGBToLinearGamma();
+    SK_API sk_sp<PrecompileColorFilter> Lerp(SkSpan<const sk_sp<PrecompileColorFilter>> dstOptions,
+                                             SkSpan<const sk_sp<PrecompileColorFilter>> srcOptions);
 
-private:
-    PrecompileColorFilters() = delete;
-};
+    // This encompases both variants of SkColorFilters::Table and TableARGB
+    SK_API sk_sp<PrecompileColorFilter> Table();
 
-//--------------------------------------------------------------------------------------------------
-// This will move to be beside SkImageFilters in include/effects/SkImageFilters.h
-class PrecompileImageFilters {
-public:
-    static sk_sp<PrecompileImageFilter> Blur();
-    static sk_sp<PrecompileImageFilter> Image();
-    // TODO: AlphaThreshold, Arithmetic, Blend (2 kinds), ColorFilter, Compose, DisplacementMap,
-    // DropShadow, DropShadowOnly, Magnifier, MatrixConvolution, MatrixTransform, Merge, Offset,
-    // Picture, Runtime, Shader, Tile, Dilate, Erode, DistantLitDiffuse, PointLitDiffuse,
-    // SpotLitDiffuse, DistantLitSpecular, PointLitSpecular, SpotLitSpecular
+    SK_API sk_sp<PrecompileColorFilter> Lighting();
 
-private:
-    PrecompileImageFilters() = delete;
-};
+    // This matches the main API's factory in include/effects/SkHighContrastFilter.h
+    SK_API sk_sp<PrecompileColorFilter> HighContrast();
+
+    // This matches the main API's factory in include/effects/SkLumaColorFilter.h
+    SK_API sk_sp<PrecompileColorFilter> Luma();
+
+    // This matches the main API's factory in include/effects/SkOverdrawColorFilter.h
+    SK_API sk_sp<PrecompileColorFilter> Overdraw();
+
+} // namespace PrecompileColorFilters
 
 //--------------------------------------------------------------------------------------------------
 // Object that allows passing a SkPrecompileShader, SkPrecompileColorFilter or

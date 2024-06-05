@@ -5,11 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include <algorithm>
+#include "tools/viewer/TouchGesture.h"
 
 #include "include/core/SkMatrix.h"
-#include "include/core/SkTime.h"
-#include "tools/viewer/TouchGesture.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "src/base/SkTime.h"
+
+#include <algorithm>
+#include <cmath>
 
 #define DISCRETIZE_TRANSLATE_TO_AVOID_FLICKER   true
 
@@ -67,7 +72,7 @@ bool TouchGesture::FlingState::evaluateMatrix(SkMatrix* matrix) {
     const float MIN_SPEED = 2;
     const float K0 = 5;
     const float K1 = 0.02f;
-    const float speed = fSpeed0 * (sk_float_exp(- K0 * t) - K1);
+    const float speed = fSpeed0 * (std::exp(- K0 * t) - K1);
     if (speed <= MIN_SPEED) {
         fActive = false;
         return false;
@@ -95,8 +100,8 @@ static const float MAX_JITTER_RADIUS = 2;
 
 // if true, then ignore the touch-move, 'cause its probably just jitter
 static bool close_enough_for_jitter(float x0, float y0, float x1, float y1) {
-    return  sk_float_abs(x0 - x1) <= MAX_JITTER_RADIUS &&
-            sk_float_abs(y0 - y1) <= MAX_JITTER_RADIUS;
+    return  std::fabs(x0 - x1) <= MAX_JITTER_RADIUS &&
+            std::fabs(y0 - y1) <= MAX_JITTER_RADIUS;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

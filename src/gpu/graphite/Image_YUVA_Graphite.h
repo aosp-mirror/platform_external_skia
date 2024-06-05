@@ -8,8 +8,11 @@
 #ifndef skgpu_graphite_Image_YUVA_Graphite_DEFINED
 #define skgpu_graphite_Image_YUVA_Graphite_DEFINED
 
+#include "include/core/SkYUVAInfo.h"
 #include "src/gpu/graphite/Image_Base_Graphite.h"
-#include "src/gpu/graphite/YUVATextureProxies.h"
+#include "src/gpu/graphite/TextureProxyView.h"
+
+#include <functional>
 
 namespace skgpu::graphite {
 
@@ -17,40 +20,61 @@ class Recorder;
 
 class Image_YUVA final : public Image_Base {
 public:
-    Image_YUVA(uint32_t uniqueID,
-               YUVATextureProxies proxies,
-               const SkColorInfo&);
+    ~Image_YUVA() override;
 
-    ~Image_YUVA() override {}
+    // Create an Image_YUVA by interpreting the multiple 'planes' using 'yuvaInfo'. If the info
+    // or provided plane proxies do not produce a valid mulitplane image, null is returned.
+    static sk_sp<Image_YUVA> Make(const Caps* caps,
+                                  const SkYUVAInfo& yuvaInfo,
+                                  SkSpan<TextureProxyView> planes,
+                                  sk_sp<SkColorSpace> imageColorSpace);
 
-    bool isYUVA() const override { return true; }
+    // Wraps the Graphite-backed Image planes into a YUV[A] image. The returned image shares
+    // textures as well as any links to Devices that might modify those textures.
+    static sk_sp<Image_YUVA> WrapImages(const Caps* caps,
+                                        const SkYUVAInfo& yuvaInfo,
+                                        SkSpan<const sk_sp<SkImage>> images,
+                                        sk_sp<SkColorSpace> imageColorSpace);
 
-    bool onHasMipmaps() const override {
-        // TODO: Add mipmap support
-        return false;
+    SkImage_Base::Type type() const override { return SkImage_Base::Type::kGraphiteYUVA; }
+
+    size_t textureSize() const override;
+
+    bool onHasMipmaps() const override { return fMipmapped == Mipmapped::kYes; }
+
+    bool onIsProtected() const override { return fProtected == Protected::kYes; }
+
+    sk_sp<SkImage> onReinterpretColorSpace(sk_sp<SkColorSpace>) const override;
+
+    // Returns the proxy view that provides value for the YUVA channel specified by 'channelIndex'.
+    // The view of the returned proxy applies a swizzle to map the relevant data channel into all
+    // slots of the sample value. The alpha proxy may be null.
+    const TextureProxyView& proxyView(int channelIndex) const {
+        SkASSERT(channelIndex >= 0 && channelIndex < SkYUVAInfo::kYUVAChannelCount);
+        return fProxies[channelIndex];
     }
 
-    sk_sp<SkImage> onReinterpretColorSpace(sk_sp<SkColorSpace>) const override {
-        return nullptr;
-    }
+    std::tuple<int, int> uvSubsampleFactors() const { return fUVSubsampleFactors; }
+
+    const SkYUVAInfo& yuvaInfo() const { return fYUVAInfo; }
 
 private:
-    sk_sp<SkImage> onMakeTextureImage(Recorder*, RequiredImageProperties) const override {
-        return nullptr;
-    }
-    using Image_Base::onMakeSubset;
-    sk_sp<SkImage> onMakeSubset(const SkIRect&, Recorder*, RequiredImageProperties) const override {
-        return nullptr;
-    }
-    using Image_Base::onMakeColorTypeAndColorSpace;
-    sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType targetCT,
-                                                sk_sp<SkColorSpace> targetCS,
-                                                Recorder*,
-                                                RequiredImageProperties) const override {
-        return nullptr;
-    }
+    // The proxy views are ordered Y,U,V,A and if the channels are held in the same plane, the
+    // respective proxy views will share the underlying TextureProxy but have the appropriate
+    // swizzle to access the appropriate channel and return it in the R slot.
+    using YUVAProxies = std::array<TextureProxyView, SkYUVAInfo::kYUVAChannelCount>;
 
-    mutable YUVATextureProxies fYUVAProxies;
+    Image_YUVA(const YUVAProxies&,
+               const SkYUVAInfo&,
+               sk_sp<SkColorSpace>);
+
+    YUVAProxies fProxies;
+    SkYUVAInfo fYUVAInfo;
+    std::tuple<int, int> fUVSubsampleFactors;
+
+    // Aggregate mipmap/protected status from the proxies
+    Mipmapped fMipmapped = Mipmapped::kYes;
+    Protected fProtected = Protected::kNo;
 };
 
 } // namespace skgpu::graphite

@@ -6,20 +6,43 @@
  */
 
 #include "include/docs/SkPDFDocument.h"
-#include "src/pdf/SkPDFDocumentPriv.h"
 
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
-#include "include/docs/SkPDFDocument.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkMutex.h"
+#include "include/private/base/SkPoint_impl.h"
+#include "include/private/base/SkSemaphore.h"
+#include "include/private/base/SkSpan_impl.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkThreadAnnotations.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkUTF.h"
+#include "src/core/SkAdvancedTypefaceMetrics.h"
+#include "src/core/SkTHash.h"
+#include "src/pdf/SkBitmapKey.h"
+#include "src/pdf/SkPDFBitmap.h"
 #include "src/pdf/SkPDFDevice.h"
+#include "src/pdf/SkPDFDocumentPriv.h"
 #include "src/pdf/SkPDFFont.h"
 #include "src/pdf/SkPDFGradientShader.h"
 #include "src/pdf/SkPDFGraphicState.h"
+#include "src/pdf/SkPDFMetadata.h"
 #include "src/pdf/SkPDFShader.h"
 #include "src/pdf/SkPDFTag.h"
+#include "src/pdf/SkPDFTypes.h"
 #include "src/pdf/SkPDFUtils.h"
+#include "src/pdf/SkUUID.h"
 
+#include <algorithm>
+#include <atomic>
+#include <cstddef>
+#include <new>
 #include <utility>
 
 // For use in SkCanvas::drawAnnotation
@@ -132,7 +155,7 @@ static void serialize_footer(const SkPDFOffsetMap& offsetMap,
     trailerDict.emitObject(wStream);
     wStream->writeText("\nstartxref\n");
     wStream->writeBigDecAsText(xRefFileOffset);
-    wStream->writeText("\n%%EOF");
+    wStream->writeText("\n%%EOF\n");
 }
 
 static SkPDFIndirectReference generate_page_tree(
@@ -146,7 +169,7 @@ static SkPDFIndirectReference generate_page_tree(
     // into the method, have type "Page" and need a parent pointer. This method
     // builds the tree bottom up, skipping internal nodes that would have only
     // one child.
-    SkASSERT(pages.size() > 0);
+    SkASSERT(!pages.empty());
     struct PageTreeNode {
         std::unique_ptr<SkPDFDict> fNode;
         SkPDFIndirectReference fReservedRef;
@@ -217,7 +240,7 @@ SkPDFDocument::SkPDFDocument(SkWStream* stream,
         fRasterScale        = fMetadata.fRasterDPI / kDpiForRasterScaleOne;
     }
     if (fMetadata.fStructureElementTreeRoot) {
-        fTagTree.init(fMetadata.fStructureElementTreeRoot);
+        fTagTree.init(fMetadata.fStructureElementTreeRoot, fMetadata.fOutline);
     }
     fExecutor = fMetadata.fExecutor;
 }
@@ -361,7 +384,7 @@ void SkPDFDocument::onEndPage() {
     SkSize mediaSize = fPageDevice->imageInfo().dimensions() * fInverseRasterScale;
     std::unique_ptr<SkStreamAsset> pageContent = fPageDevice->content();
     auto resourceDict = fPageDevice->makeResourceDict();
-    SkASSERT(fPageRefs.size() > 0);
+    SkASSERT(!fPageRefs.empty());
     fPageDevice = nullptr;
 
     page->insertObject("Resources", std::move(resourceDict));
@@ -524,14 +547,32 @@ SkPDFIndirectReference SkPDFDocument::getPage(size_t pageIndex) const {
 }
 
 const SkMatrix& SkPDFDocument::currentPageTransform() const {
+    static constexpr const SkMatrix gIdentity;
+    // If not on a page (like when emitting a Type3 glyph) return identity.
+    if (!this->hasCurrentPage()) {
+        return gIdentity;
+    }
     return fPageDevice->initialTransform();
 }
 
-int SkPDFDocument::createMarkIdForNodeId(int nodeId) {
-    return fTagTree.createMarkIdForNodeId(nodeId, SkToUInt(this->currentPageIndex()));
+SkPDFTagTree::Mark SkPDFDocument::createMarkIdForNodeId(int nodeId, SkPoint p) {
+    // If the mark isn't on a page (like when emitting a Type3 glyph)
+    // return a temporary mark not attached to the tag tree, node id, or page.
+    if (!this->hasCurrentPage()) {
+        return SkPDFTagTree::Mark();
+    }
+    return fTagTree.createMarkIdForNodeId(nodeId, SkToUInt(this->currentPageIndex()), p);
+}
+
+void SkPDFDocument::addNodeTitle(int nodeId, SkSpan<const char> title) {
+    fTagTree.addNodeTitle(nodeId, std::move(title));
 }
 
 int SkPDFDocument::createStructParentKeyForNodeId(int nodeId) {
+    // Structure elements are tied to pages, so don't emit one if not on a page.
+    if (!this->hasCurrentPage()) {
+        return -1;
+    }
     return fTagTree.createStructParentKeyForNodeId(nodeId, SkToUInt(this->currentPageIndex()));
 }
 
@@ -594,6 +635,25 @@ void SkPDFDocument::onClose(SkWStream* stream) {
         markInfo->insertBool("Marked", true);
         docCatalog->insertObject("MarkInfo", std::move(markInfo));
         docCatalog->insertRef("StructTreeRoot", root);
+
+        if (SkPDFIndirectReference outline = fTagTree.makeOutline(this)) {
+            docCatalog->insertRef("Outlines", outline);
+        }
+    }
+
+    // If ViewerPreferences DisplayDocTitle isn't set to true, accessibility checks will fail.
+    if (!fMetadata.fTitle.isEmpty()) {
+        auto viewerPrefs = SkPDFMakeDict("ViewerPreferences");
+        viewerPrefs->insertBool("DisplayDocTitle", true);
+        docCatalog->insertObject("ViewerPreferences", std::move(viewerPrefs));
+    }
+
+    SkString lang = fMetadata.fLang;
+    if (lang.isEmpty()) {
+        lang = fTagTree.getRootLanguage();
+    }
+    if (!lang.isEmpty()) {
+        docCatalog->insertTextString("Lang", lang);
     }
 
     auto docCatalogRef = this->emit(*docCatalog);
@@ -638,4 +698,20 @@ sk_sp<SkDocument> SkPDF::MakeDocument(SkWStream* stream, const SkPDF::Metadata& 
         meta.fEncodingQuality = 0;
     }
     return stream ? sk_make_sp<SkPDFDocument>(stream, std::move(meta)) : nullptr;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void SkPDF::DateTime::toISO8601(SkString* dst) const {
+    if (dst) {
+        int timeZoneMinutes = SkToInt(fTimeZoneMinutes);
+        char timezoneSign = timeZoneMinutes >= 0 ? '+' : '-';
+        int timeZoneHours = SkTAbs(timeZoneMinutes) / 60;
+        timeZoneMinutes = SkTAbs(timeZoneMinutes) % 60;
+        dst->printf("%04u-%02u-%02uT%02u:%02u:%02u%c%02d:%02d",
+                    static_cast<unsigned>(fYear), static_cast<unsigned>(fMonth),
+                    static_cast<unsigned>(fDay), static_cast<unsigned>(fHour),
+                    static_cast<unsigned>(fMinute),
+                    static_cast<unsigned>(fSecond), timezoneSign, timeZoneHours,
+                    timeZoneMinutes);
+    }
 }

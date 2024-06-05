@@ -7,9 +7,16 @@
 
 #include "modules/sksg/include/SkSGRenderNode.h"
 
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkImageFilter.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkTo.h"
 #include "modules/sksg/src/SkSGNodePriv.h"
 
 namespace sksg {
@@ -54,7 +61,7 @@ static SkAlpha ScaleAlpha(SkAlpha alpha, float opacity) {
    return SkToU8(sk_float_round2int(alpha * opacity));
 }
 
-static sk_sp<SkShader> LocalShader(const sk_sp<SkShader> shader,
+static sk_sp<SkShader> LocalShader(const sk_sp<SkShader>& shader,
                                    const SkMatrix& base,
                                    const SkMatrix& ctm) {
     // Mask filters / shaders are declared to operate under a specific transform, but due to the

@@ -30,7 +30,6 @@ BUILDER_ROLE_HOUSEKEEPER = 'Housekeeper'
 BUILDER_ROLE_INFRA = 'Infra'
 BUILDER_ROLE_PERF = 'Perf'
 BUILDER_ROLE_TEST = 'Test'
-BUILDER_ROLE_FM = 'FM'
 BUILDER_ROLE_UPLOAD = 'Upload'
 BUILDER_ROLES = (BUILDER_ROLE_BAZELBUILD,
                  BUILDER_ROLE_BAZELTEST,
@@ -42,7 +41,6 @@ BUILDER_ROLES = (BUILDER_ROLE_BAZELBUILD,
                  BUILDER_ROLE_INFRA,
                  BUILDER_ROLE_PERF,
                  BUILDER_ROLE_TEST,
-                 BUILDER_ROLE_FM,
                  BUILDER_ROLE_UPLOAD)
 
 
@@ -60,7 +58,7 @@ def _LoadSchema():
     elif isinstance(obj, tuple):
       return tuple(map(ToStr, obj))
     else:
-      return obj.decode('utf-8')
+      return obj.decode('utf-8')  # pragma: nocover
 
   builder_name_json_filename = os.path.join(
       os.path.dirname(__file__), 'builder_name_schema.json')

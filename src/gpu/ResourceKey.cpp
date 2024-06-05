@@ -5,8 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "src/core/SkOpts.h"
 #include "src/gpu/ResourceKey.h"
+
+#include "src/core/SkChecksum.h"
+
+#include <atomic>
 
 namespace skgpu {
 
@@ -33,7 +36,7 @@ UniqueKey::Domain UniqueKey::GenerateDomain() {
 }
 
 uint32_t ResourceKeyHash(const uint32_t* data, size_t size) {
-    return SkOpts::hash(data, size);
+    return SkChecksum::Hash32(data, size);
 }
 
 } // namespace skgpu

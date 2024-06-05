@@ -13,12 +13,13 @@
 
 class SkSVGLengthContext;
 
-class SkSVGStop : public SkSVGHiddenContainer {
+class SK_API SkSVGStop : public SkSVGHiddenContainer {
 public:
+    static constexpr SkSVGTag tag = SkSVGTag::kStop;
+
     static sk_sp<SkSVGStop> Make() {
         return sk_sp<SkSVGStop>(new SkSVGStop());
     }
-
 
     SVG_ATTR(Offset, SkSVGLength, SkSVGLength(0, SkSVGLength::Unit::kPercentage))
 

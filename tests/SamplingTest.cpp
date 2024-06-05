@@ -7,6 +7,7 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkSurface.h"
@@ -14,7 +15,7 @@
 #include "src/base/SkRandom.h"
 #include "src/core/SkSamplingPriv.h"
 #include "tests/Test.h"
-#include "tools/Resources.h"
+#include "tools/DecodeUtils.h"
 #include "tools/ToolUtils.h"
 
 #include <initializer_list>
@@ -29,8 +30,8 @@ DEF_TEST(sampling_with_identity_matrix, r) {
 
     SkRandom rand;
     for (auto name : names) {
-        auto src = GetResourceAsImage(name);
-        auto surf = SkSurface::MakeRasterN32Premul(src->width(), src->height());
+        auto src = ToolUtils::GetResourceAsImage(name);
+        auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(src->width(), src->height()));
         auto canvas = surf->getCanvas();
 
         auto dotest = [&](const SkSamplingOptions& sampling, bool expect_same) {

@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -11,4 +15,27 @@ skia_filegroup(
         "SkAnimatedImage.h",
     ],
     visibility = ["//include:__pkg__"],
+)
+
+skia_filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "AHardwareBufferUtils.h",
+        "GrAHardwareBufferUtils.h",
+        "SkCanvasAndroid.h",
+        "SkImageAndroid.h",
+        "SkSurfaceAndroid.h",
+    ],
+    visibility = [
+        "//include:__pkg__",
+        "//src/gpu/ganesh:__pkg__",
+    ],
+)
+
+skia_filegroup(
+    name = "animated_image_hdrs",
+    srcs = [
+        "SkAnimatedImage.h",
+    ],
+    visibility = ["//src/android:__pkg__"],
 )

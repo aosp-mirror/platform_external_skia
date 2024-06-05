@@ -15,6 +15,7 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "src/core/SkPaintPriv.h"
+#include "tools/fonts/FontToolUtils.h"
 
 static const int kBmpSize = 24;
 static const int kMaxX = 250;
@@ -98,17 +99,17 @@ static void init_surface(Fuzz* fuzz, sk_sp<SkSurface>* s) {
     uint8_t x, y;
     fuzz->nextRange(&x, 1, kMaxX);
     fuzz->nextRange(&y, 1, kMaxY);
-    *s = SkSurface::MakeRasterN32Premul(x, y);
+    *s = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(x, y));
 
     if (!*s) {
         // Was possibly too big for the memory constrained fuzzing environments
-        *s = SkSurface::MakeNull(x, y);
+        *s = SkSurfaces::Null(x, y);
     }
 }
 
 
 static void fuzz_drawText(Fuzz* fuzz, sk_sp<SkTypeface> typeface) {
-    SkFont font(typeface);
+    SkFont font(std::move(typeface));
     SkPaint p;
     init_paint(fuzz, &p);
     sk_sp<SkSurface> surface;
@@ -289,7 +290,7 @@ DEF_FUZZ(DrawFunctions, fuzz) {
 
     switch(i) {
         case 0: {
-            sk_sp<SkTypeface> f = SkTypeface::MakeDefault();
+            sk_sp<SkTypeface> f = ToolUtils::DefaultPortableTypeface();
             if (f == nullptr) {
               SkDebugf("Could not initialize font.\n");
               fuzz->signalBug();

@@ -1,7 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
-// HASH=dacdebe1355c884ebd3c2ea038cc7a20
 REG_FIDDLE(Picture_serialize, 256, 256, false, 0) {
 void draw(SkCanvas* canvas) {
     SkPictureRecorder recorder;
@@ -11,7 +10,10 @@ void draw(SkCanvas* canvas) {
     paint.setColor(SK_ColorWHITE);
     pictureCanvas->drawRect(SkRect::MakeLTRB(20, 20, 180, 180), paint);
     sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
-    sk_sp<SkData> readableData = picture->serialize();
+    SkSerialProcs sProcs;
+    // One would override serialization behavior for images, typefaces, or even SkPictures
+    // themselves if desired by setting the fields on sProcs.
+    sk_sp<SkData> readableData = picture->serialize(&sProcs);
     sk_sp<SkPicture> copy = SkPicture::MakeFromData(readableData->data(), readableData->size());
     copy->playback(canvas);
 }

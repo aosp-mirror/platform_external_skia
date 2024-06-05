@@ -5,19 +5,17 @@
         "label",
         "config",
         "host"
-      ],
-      "optional_keys": [
-        "cross"
       ]
     },
     "BazelTest": {
       "keys": [
         "task_driver",
-        "config",
+        "label",
+        "build_config",
         "host"
       ],
       "optional_keys": [
-        "cross"
+        "test_config"
       ]
     },
     "Build": {
@@ -91,21 +89,6 @@
       ]
     },
     "Test": {
-      "keys": [
-        "os",
-        "compiler",
-        "model",
-        "cpu_or_gpu",
-        "cpu_or_gpu_value",
-        "arch",
-        "configuration",
-        "test_filter"
-      ],
-      "optional_keys": [
-        "extra_config"
-      ]
-    },
-    "FM": {
       "keys": [
         "os",
         "compiler",

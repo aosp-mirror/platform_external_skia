@@ -16,7 +16,8 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkTileMode.h"
 #include "include/private/SkColorData.h"
-#include "src/core/SkEnumBitMask.h"
+#include "src/base/SkEnumBitMask.h"
+#include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/DrawTypes.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/UniformManager.h"
@@ -25,7 +26,6 @@ class SkArenaAlloc;
 
 namespace skgpu::graphite {
 
-enum class SnippetRequirementFlags : uint32_t;
 class Uniform;
 
 class UniformDataBlock {
@@ -65,10 +65,14 @@ public:
     bool operator!=(const TextureDataBlock& other) const { return !(*this == other);  }
     uint32_t hash() const;
 
-    void add(const SkSamplingOptions& sampling,
+    void add(const Caps* caps,
+             const SkSamplingOptions& sampling,
              const SkTileMode tileModes[2],
              sk_sp<TextureProxy> proxy) {
-        fTextureData.push_back({std::move(proxy), {sampling, {tileModes[0], tileModes[1]}}});
+        // Before relinquishing ownership of the proxy, query Caps to gather any relevant sampler
+        // conversion information for the SamplerDesc.
+        ImmutableSamplerInfo info = caps->getImmutableSamplerInfo(proxy);
+        fTextureData.push_back({std::move(proxy), SamplerDesc{sampling, tileModes, info}});
     }
 
     void reset() {
@@ -90,7 +94,7 @@ private:
 // obviously, vastly complicate uniform accumulation.
 class PipelineDataGatherer {
 public:
-    PipelineDataGatherer(Layout layout);
+    PipelineDataGatherer(const Caps* caps, Layout layout);
 
     void resetWithNewLayout(Layout layout);
 
@@ -100,34 +104,23 @@ public:
     void add(const SkSamplingOptions& sampling,
              const SkTileMode tileModes[2],
              sk_sp<TextureProxy> proxy) {
-        fTextureDataBlock.add(sampling, tileModes, std::move(proxy));
+        fTextureDataBlock.add(fCaps, sampling, tileModes, std::move(proxy));
     }
     bool hasTextures() const { return !fTextureDataBlock.empty(); }
 
-    void addFlags(SkEnumBitMask<SnippetRequirementFlags> flags);
-    bool needsLocalCoords() const;
-
     const TextureDataBlock& textureDataBlock() { return fTextureDataBlock; }
 
-    void write(const SkM44& mat) { fUniformManager.write(mat); }
-    void write(const SkPMColor4f& premulColor) { fUniformManager.write(premulColor); }
-    void write(const SkRect& rect) { fUniformManager.write(rect); }
-    void write(const SkV2& v) { fUniformManager.write(v); }
-    void write(const SkV4& v) { fUniformManager.write(v); }
-    void write(const SkPoint& point) { fUniformManager.write(point); }
-    void write(float f) { fUniformManager.write(f); }
-    void write(int i) { fUniformManager.write(i); }
+    // Mimic the type-safe API available in UniformManager
+    template <typename T> void write(const T& t) { fUniformManager.write(t); }
+    template <typename T> void writeHalf(const T& t) { fUniformManager.writeHalf(t); }
+    template <typename T> void writeArray(SkSpan<const T> t) { fUniformManager.writeArray(t); }
+    template <typename T> void writeHalfArray(SkSpan<const T> t) {
+        fUniformManager.writeHalfArray(t);
+    }
 
+    void write(const Uniform& u, const void* data) { fUniformManager.write(u, data); }
 
-    void write(SkSLType t, const void* data) { fUniformManager.write(t, data); }
-    void write(const Uniform& u, const uint8_t* data) { fUniformManager.write(u, data); }
-
-    void writeArray(SkSpan<const SkColor4f> colors) { fUniformManager.writeArray(colors); }
-    void writeArray(SkSpan<const SkPMColor4f> colors) { fUniformManager.writeArray(colors); }
-    void writeArray(SkSpan<const float> floats) { fUniformManager.writeArray(floats); }
-
-    void writeHalf(const SkMatrix& mat) { fUniformManager.writeHalf(mat); }
-    void writeHalfArray(SkSpan<const float> floats) { fUniformManager.writeHalfArray(floats); }
+    void writePaintColor(const SkPMColor4f& color) { fUniformManager.writePaintColor(color); }
 
     bool hasUniforms() const { return fUniformManager.size(); }
 
@@ -143,9 +136,9 @@ private:
     void doneWithExpectedUniforms() { fUniformManager.doneWithExpectedUniforms(); }
 #endif // SK_DEBUG
 
-    TextureDataBlock                       fTextureDataBlock;
-    UniformManager                         fUniformManager;
-    SkEnumBitMask<SnippetRequirementFlags> fSnippetRequirementFlags;
+    const Caps* const fCaps;
+    TextureDataBlock  fTextureDataBlock;
+    UniformManager    fUniformManager;
 };
 
 #ifdef SK_DEBUG

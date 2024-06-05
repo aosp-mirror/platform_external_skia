@@ -432,7 +432,7 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLESInterface(void *ctx, GrGLGetProc
     }
 
     if (glVer >= GR_GL_VER(3,0)) {
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
         GET_PROC(BeginQuery);
         GET_PROC(DeleteQueries);
         GET_PROC(EndQuery);
@@ -441,7 +441,7 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLESInterface(void *ctx, GrGLGetProc
         GET_PROC(GetQueryiv);
 #endif
     } else if (extensions.has("GL_EXT_occlusion_query_boolean")) {
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
         GET_PROC_SUFFIX(BeginQuery, EXT);
         GET_PROC_SUFFIX(DeleteQueries, EXT);
         GET_PROC_SUFFIX(EndQuery, EXT);
@@ -451,7 +451,17 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLESInterface(void *ctx, GrGLGetProc
 #endif
     }
 
+    if (extensions.has("GL_ARB_invalidate_subdata")) {
+        GET_PROC(InvalidateBufferData);
+        GET_PROC(InvalidateBufferSubData);
+        GET_PROC(InvalidateTexImage);
+        GET_PROC(InvalidateTexSubImage);
+    }
+
     if (glVer >= GR_GL_VER(3,0)) {
+        GET_PROC(InvalidateFramebuffer);
+        GET_PROC(InvalidateSubFramebuffer);
+    } else if (extensions.has("GL_ARB_invalidate_subdata")) {
         GET_PROC(InvalidateFramebuffer);
         GET_PROC(InvalidateSubFramebuffer);
     }
@@ -484,6 +494,6 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLESInterface(void *ctx, GrGLGetProc
     interface->fStandard = kGLES_GrGLStandard;
     interface->fExtensions.swap(&extensions);
 
-    return std::move(interface);
+    return interface;
 }
 #endif

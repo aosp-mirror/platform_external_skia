@@ -7,9 +7,13 @@
 
 #include "modules/skottie/src/animator/Animator.h"
 
+#include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/animator/KeyframeAnimator.h"
+#include "src/utils/SkJSON.h"
+
+#include <utility>
 
 namespace skottie::internal {
 
@@ -40,7 +44,7 @@ void AnimatablePropertyContainer::attachDiscardableAdapter(
         return;
     }
 
-    fAnimators.push_back(child);
+    fAnimators.push_back(std::move(child));
 }
 
 void AnimatablePropertyContainer::shrink_to_fit() {
@@ -52,6 +56,21 @@ bool AnimatablePropertyContainer::bindImpl(const AnimationBuilder& abuilder,
                                            AnimatorBuilder& builder) {
     if (!jprop) {
         return false;
+    }
+
+    if (const skjson::StringValue* jpropSlotID = (*jprop)["sid"] ) {
+        if (!abuilder.getSlotsRoot()) {
+            abuilder.log(Logger::Level::kWarning, jprop,
+                         "Slotid found but no slots were found in the json. Using default values.");
+        } else {
+            const skjson::ObjectValue* slot = (*(abuilder.getSlotsRoot()))[jpropSlotID->begin()];
+            if (!slot) {
+                abuilder.log(Logger::Level::kWarning, jprop,
+                             "Specified slotID not found in 'slots'. Using default values.");
+            } else {
+                jprop = (*slot)["p"];
+            }
+        }
     }
 
     const auto& jpropA = (*jprop)["a"];

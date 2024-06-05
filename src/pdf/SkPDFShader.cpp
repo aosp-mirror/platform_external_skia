@@ -7,21 +7,31 @@
 
 #include "src/pdf/SkPDFShader.h"
 
-#include "include/core/SkData.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
-#include "include/docs/SkPDFDocument.h"
-#include "include/private/base/SkMath.h"
+#include "include/core/SkTileMode.h"
 #include "include/private/base/SkTPin.h"
-#include "include/private/base/SkTemplates.h"
+#include "src/core/SkDevice.h"
+#include "src/core/SkTHash.h"
+#include "src/pdf/SkKeyedImage.h"
 #include "src/pdf/SkPDFDevice.h"
 #include "src/pdf/SkPDFDocumentPriv.h"
-#include "src/pdf/SkPDFFormXObject.h"
 #include "src/pdf/SkPDFGradientShader.h"
-#include "src/pdf/SkPDFGraphicState.h"
-#include "src/pdf/SkPDFResourceDict.h"
 #include "src/pdf/SkPDFUtils.h"
+#include "src/shaders/SkShaderBase.h"
+
+#include <memory>
+#include <utility>
 
 static void draw(SkCanvas* canvas, const SkImage* image, SkColor4f paintColor) {
     SkPaint paint(paintColor);
@@ -287,7 +297,7 @@ static SkPDFIndirectReference make_fallback_shader(SkPDFDocument* doc,
     SkSize scale = {SkIntToScalar(size.width()) / shaderRect.width(),
                     SkIntToScalar(size.height()) / shaderRect.height()};
 
-    auto surface = SkSurface::MakeRasterN32Premul(size.width(), size.height());
+    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(size.width(), size.height()));
     SkASSERT(surface);
     SkCanvas* canvas = surface->getCanvas();
     canvas->clear(SK_ColorTRANSPARENT);

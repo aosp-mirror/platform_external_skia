@@ -9,8 +9,8 @@
 #define SKSL_EXPRESSION
 
 #include "include/core/SkTypes.h"
-#include "include/private/SkSLIRNode.h"
-#include "include/sksl/SkSLPosition.h"
+#include "src/sksl/SkSLPosition.h"
+#include "src/sksl/ir/SkSLIRNode.h"
 #include "src/sksl/ir/SkSLType.h"
 
 #include <cstdint>
@@ -38,16 +38,16 @@ public:
     }
 
     Kind kind() const {
-        return (Kind) fKind;
+        return (Kind)fKind;
     }
 
-    virtual const Type& type() const {
+    const Type& type() const {
         return *fType;
     }
 
     bool isAnyConstructor() const {
         static_assert((int)Kind::kConstructorArray - 1 == (int)Kind::kChildCall);
-        static_assert((int)Kind::kConstructorStruct + 1 == (int)Kind::kFieldAccess);
+        static_assert((int)Kind::kConstructorStruct + 1 == (int)Kind::kEmpty);
         return this->kind() >= Kind::kConstructorArray && this->kind() <= Kind::kConstructorStruct;
     }
 

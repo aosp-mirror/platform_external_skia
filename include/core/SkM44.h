@@ -9,8 +9,12 @@
 #define SkM44_DEFINED
 
 #include "include/core/SkMatrix.h"
-#include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+
+#include <cstring>
+
+struct SkRect;
 
 struct SK_API SkV2 {
     float x, y;
@@ -371,14 +375,14 @@ public:
 
         @return  true if matrix has only finite elements
     */
-    bool isFinite() const { return SkScalarsAreFinite(fMat, 16); }
+    bool isFinite() const { return SkIsFinite(fMat, 16); }
 
     /** If this is invertible, return that in inverse and return true. If it is
      *  not invertible, return false and leave the inverse parameter unchanged.
      */
-    bool SK_WARN_UNUSED_RESULT invert(SkM44* inverse) const;
+    [[nodiscard]] bool invert(SkM44* inverse) const;
 
-    SkM44 SK_WARN_UNUSED_RESULT transpose() const;
+    [[nodiscard]] SkM44 transpose() const;
 
     void dump() const;
 

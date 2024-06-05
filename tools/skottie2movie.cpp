@@ -10,16 +10,28 @@
 #include "include/core/SkGraphics.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
-#include "include/core/SkTime.h"
 #include "include/private/base/SkTPin.h"
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skresources/include/SkResources.h"
+#include "src/base/SkTime.h"
 #include "src/utils/SkOSPath.h"
 
+#include "tools/CodecUtils.h"
 #include "tools/flags/CommandLineFlags.h"
 #include "tools/gpu/GrContextFactory.h"
 
 #include "include/gpu/GrContextOptions.h"
+#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "modules/skshaper/utils/FactoryHelpers.h"
+
+#if defined(SK_BUILD_FOR_MAC) && defined(SK_FONTMGR_CORETEXT_AVAILABLE)
+#include "include/ports/SkFontMgr_mac_ct.h"
+#elif defined(SK_BUILD_FOR_UNIX) && defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
+#include "include/ports/SkFontMgr_fontconfig.h"
+#else
+#include "include/ports/SkFontMgr_empty.h"
+#endif
 
 static DEFINE_string2(input, i, "", "skottie animation to render");
 static DEFINE_string2(output, o, "", "mp4 file to create");
@@ -52,7 +64,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    auto contextType = sk_gpu_test::GrContextFactory::kGL_ContextType;
+    auto contextType = skgpu::ContextType::kGL;
     GrContextOptions grCtxOptions;
     sk_gpu_test::GrContextFactory factory(grCtxOptions);
 
@@ -64,8 +76,23 @@ int main(int argc, char** argv) {
     }
     SkDebugf("assetPath %s\n", assetPath.c_str());
 
+    CodecUtils::RegisterAllAvailable();
+
+    // If necessary, clients should use a font manager that would load fonts from the system.
+#if defined(SK_BUILD_FOR_MAC) && defined(SK_FONTMGR_CORETEXT_AVAILABLE)
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_CoreText(nullptr);
+#elif defined(SK_BUILD_FOR_ANDROID) && defined(SK_FONTMGR_ANDROID_AVAILABLE)
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_Android(nullptr, std::make_unique<SkFontScanner_FreeType>());
+#elif defined(SK_BUILD_FOR_UNIX) && defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_FontConfig(nullptr);
+#else
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_Custom_Empty();
+#endif
+
     auto animation = skottie::Animation::Builder()
         .setResourceProvider(skresources::FileResourceProvider::Make(assetPath))
+        .setTextShapingFactory(SkShapers::BestAvailable())
+        .setFontManager(fontMgr)
         .makeFromFile(FLAGS_input[0]);
     if (!animation) {
         SkDebugf("failed to load %s\n", FLAGS_input[0]);
@@ -110,18 +137,18 @@ int main(int argc, char** argv) {
         if (!surf) {
             if (FLAGS_gpu) {
                 grctx = factory.getContextInfo(contextType).directContext();
-                surf = SkSurface::MakeRenderTarget(grctx,
-                                                   skgpu::Budgeted::kNo,
-                                                   info,
-                                                   0,
-                                                   GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
-                                                   nullptr);
+                surf = SkSurfaces::RenderTarget(grctx,
+                                                skgpu::Budgeted::kNo,
+                                                info,
+                                                0,
+                                                GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
+                                                nullptr);
                 if (!surf) {
                     grctx = nullptr;
                 }
             }
             if (!surf) {
-                surf = SkSurface::MakeRaster(info);
+                surf = SkSurfaces::Raster(info);
             }
             surf->getCanvas()->scale(scale, scale);
         }
@@ -157,7 +184,7 @@ int main(int argc, char** argv) {
 
         if (grctx) {
             // ensure all pending reads are completed
-            grctx->flushAndSubmit(true);
+            grctx->flushAndSubmit(GrSyncCpu::kYes);
         }
         data = encoder.endRecording();
 
