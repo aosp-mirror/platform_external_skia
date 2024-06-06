@@ -4259,7 +4259,7 @@ void WGSLCodeGenerator::writeEnables() {
         this->writeLine("enable chromium_experimental_framebuffer_fetch;");
     }
     if (fProgram.fInterface.fOutputSecondaryColor) {
-        this->writeLine("enable chromium_internal_dual_source_blending;");
+        this->writeLine("enable dual_source_blending;");
     }
 }
 
@@ -4547,7 +4547,7 @@ static bool validate_wgsl(ErrorReporter& reporter, const std::string& wgsl, std:
     // Enable the WGSL optional features that Skia might rely on.
     tint::wgsl::reader::Options options;
     for (auto extension : {tint::wgsl::Extension::kChromiumExperimentalPixelLocal,
-                           tint::wgsl::Extension::kChromiumInternalDualSourceBlending}) {
+                           tint::wgsl::Extension::kDualSourceBlending}) {
         options.allowed_features.extensions.insert(extension);
     }
 
