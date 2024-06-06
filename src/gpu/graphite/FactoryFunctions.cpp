@@ -1169,17 +1169,66 @@ sk_sp<PrecompileShader> PrecompileShadersPriv::Lighting(sk_sp<PrecompileShader> 
 
 //--------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------
-class PrecompileColorFilterImageFilter : public PrecompileImageFilter {
+namespace {
+
+void create_blur_imagefilter_pipelines(const KeyContext& keyContext,
+                                       PipelineDataGatherer* gatherer,
+                                       const PaintOptions::ProcessCombination& processCombination) {
+
+    PaintOptions blurPaintOptions;
+
+    // For blur imagefilters we know we don't have alpha-only textures and don't need cubic
+    // filtering.
+    sk_sp<PrecompileShader> imageShader = PrecompileShadersPriv::Image(
+            PrecompileImageShaderFlags::kExcludeAlpha | PrecompileImageShaderFlags::kExcludeCubic);
+
+    static const SkBlendMode kBlurBlendModes[] = { SkBlendMode::kSrc };
+    blurPaintOptions.setShaders({ PrecompileShadersPriv::Blur(imageShader) });
+    blurPaintOptions.setBlendModes(kBlurBlendModes);
+
+    blurPaintOptions.priv().buildCombinations(keyContext,
+                                              gatherer,
+                                              DrawTypeFlags::kSimpleShape,
+                                              /* withPrimitiveBlender= */ false,
+                                              Coverage::kSingleChannel,
+                                              processCombination);
+}
+
+} // anonymous namespace
+
+class PrecompileBlurImageFilter : public PrecompileImageFilter {
 public:
-    PrecompileColorFilterImageFilter(SkSpan<const sk_sp<PrecompileColorFilter>> colorFilterOptions,
-                                     SkSpan<sk_sp<PrecompileImageFilter>> inputs)
-            : PrecompileImageFilter(std::move(inputs))
-            , fColorFilterOptions(colorFilterOptions.begin(), colorFilterOptions.end()) {
+    PrecompileBlurImageFilter(SkSpan<sk_sp<PrecompileImageFilter>> inputs)
+            : PrecompileImageFilter(std::move(inputs)) {
     }
 
 private:
-    SkSpan<const sk_sp<PrecompileColorFilter>> onColorFilterOptions() const override {
-        return fColorFilterOptions;
+    void onCreatePipelines(
+            const KeyContext& keyContext,
+            PipelineDataGatherer* gatherer,
+            const PaintOptions::ProcessCombination& processCombination) const override {
+
+        create_blur_imagefilter_pipelines(keyContext, gatherer, processCombination);
+    }
+};
+
+sk_sp<PrecompileImageFilter> PrecompileImageFilters::Blur(
+            sk_sp<PrecompileImageFilter> input) {
+    return sk_make_sp<PrecompileBlurImageFilter>(SkSpan(&input, 1));
+}
+
+//--------------------------------------------------------------------------------------------------
+class PrecompileColorFilterImageFilter : public PrecompileImageFilter {
+public:
+    PrecompileColorFilterImageFilter(sk_sp<PrecompileColorFilter> colorFilter,
+                                     sk_sp<PrecompileImageFilter> input)
+            : PrecompileImageFilter(SkSpan(&input, 1))
+            , fColorFilter(std::move(colorFilter)) {
+    }
+
+private:
+    sk_sp<PrecompileColorFilter> isColorFilterNode() const override {
+        return fColorFilter;
     }
 
     void onCreatePipelines(
@@ -1194,7 +1243,7 @@ private:
 
         static const SkBlendMode kBlendModes[] = { SkBlendMode::kDstOut };
         paintOptions.setShaders({ std::move(imageShader) });
-        paintOptions.setColorFilters(fColorFilterOptions);
+        paintOptions.setColorFilters({ fColorFilter });
         paintOptions.setBlendModes(kBlendModes);
 
         paintOptions.priv().buildCombinations(keyContext,
@@ -1205,15 +1254,63 @@ private:
                                               processCombination);
     }
 
-    std::vector<sk_sp<PrecompileColorFilter>> fColorFilterOptions;
+    sk_sp<PrecompileColorFilter> fColorFilter;
 };
 
 sk_sp<PrecompileImageFilter> PrecompileImageFilters::ColorFilter(
-        SkSpan<const sk_sp<PrecompileColorFilter>> colorFilterOptions,
+        sk_sp<PrecompileColorFilter> colorFilter,
         sk_sp<PrecompileImageFilter> input) {
-    // TODO: handle the merging of colorFilters as in SkImageFilters::ColorFilter
-    return sk_make_sp<PrecompileColorFilterImageFilter>(std::move(colorFilterOptions),
-                                                        SkSpan(&input, 1));
+    if (colorFilter && input) {
+        sk_sp<PrecompileColorFilter> inputCF = input->isColorFilterNode();
+        if (inputCF) {
+            colorFilter = colorFilter->makeComposed(std::move(inputCF));
+            input = sk_ref_sp(input->getInput(0));
+        }
+    }
+
+    sk_sp<PrecompileImageFilter> filter = std::move(input);
+    if (colorFilter) {
+        filter = sk_make_sp<PrecompileColorFilterImageFilter>(std::move(colorFilter),
+                                                              std::move(filter));
+    }
+    return filter;
+}
+
+//--------------------------------------------------------------------------------------------------
+class PrecompileDisplacementMapImageFilter : public PrecompileImageFilter {
+public:
+    PrecompileDisplacementMapImageFilter(SkSpan<sk_sp<PrecompileImageFilter>> inputs)
+            : PrecompileImageFilter(std::move(inputs)) {
+    }
+
+private:
+    void onCreatePipelines(
+            const KeyContext& keyContext,
+            PipelineDataGatherer* gatherer,
+            const PaintOptions::ProcessCombination& processCombination) const override {
+
+        PaintOptions displacement;
+
+        // For displacement imagefilters we know we don't have alpha-only textures and don't need
+        // cubic filtering.
+        sk_sp<PrecompileShader> imageShader = PrecompileShadersPriv::Image(
+                PrecompileImageShaderFlags::kExcludeAlpha |
+                PrecompileImageShaderFlags::kExcludeCubic);
+
+        displacement.setShaders({ PrecompileShadersPriv::Displacement(imageShader, imageShader) });
+
+        displacement.priv().buildCombinations(keyContext,
+                                              gatherer,
+                                              DrawTypeFlags::kSimpleShape,
+                                              /* withPrimitiveBlender= */ false,
+                                              Coverage::kSingleChannel,
+                                              processCombination);
+    }
+};
+
+sk_sp<PrecompileImageFilter> PrecompileImageFilters::DisplacementMap(
+            sk_sp<PrecompileImageFilter> input) {
+    return sk_make_sp<PrecompileDisplacementMapImageFilter>(SkSpan(&input, 1));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1248,6 +1345,43 @@ private:
 sk_sp<PrecompileImageFilter> PrecompileImageFilters::Lighting(
             sk_sp<PrecompileImageFilter> input) {
     return sk_make_sp<PrecompileLightingImageFilter>(SkSpan(&input, 1));
+}
+
+//--------------------------------------------------------------------------------------------------
+class PrecompileMatrixConvolutionImageFilter : public PrecompileImageFilter {
+public:
+    PrecompileMatrixConvolutionImageFilter(SkSpan<sk_sp<PrecompileImageFilter>> inputs)
+            : PrecompileImageFilter(std::move(inputs)) {
+    }
+
+private:
+    void onCreatePipelines(
+            const KeyContext& keyContext,
+            PipelineDataGatherer* gatherer,
+            const PaintOptions::ProcessCombination& processCombination) const override {
+
+        PaintOptions matrixConv;
+
+        // For matrix convolution imagefilters we know we don't have alpha-only textures and don't
+        // need cubic filtering.
+        sk_sp<PrecompileShader> imageShader = PrecompileShadersPriv::Image(
+                PrecompileImageShaderFlags::kExcludeAlpha |
+                PrecompileImageShaderFlags::kExcludeCubic);
+
+        matrixConv.setShaders({ PrecompileShadersPriv::MatrixConvolution(imageShader) });
+
+        matrixConv.priv().buildCombinations(keyContext,
+                                            gatherer,
+                                            DrawTypeFlags::kSimpleShape,
+                                            /* withPrimitiveBlender= */ false,
+                                            Coverage::kSingleChannel,
+                                            processCombination);
+    }
+};
+
+sk_sp<PrecompileImageFilter> PrecompileImageFilters::MatrixConvolution(
+            sk_sp<PrecompileImageFilter> input) {
+    return sk_make_sp<PrecompileMatrixConvolutionImageFilter>(SkSpan(&input, 1));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1306,8 +1440,6 @@ sk_sp<PrecompileImageFilter> PrecompileImageFilters::Morphology(
 }
 
 //--------------------------------------------------------------------------------------------------
-// This class doesn't actually add any combinations to a given PaintOptions' combinatorics.
-// Its mere presence triggers the precompilation of the BlurImageFilter's Shaders.
 // TODO(b/342413572): the analytic blurmasks are triggered off of the simple DrawType thus
 // over-generate when a simple draw doesn't have a blur mask.
 class PrecompileBlurMaskFilter : public PrecompileMaskFilter {
@@ -1315,11 +1447,11 @@ public:
     PrecompileBlurMaskFilter() {}
 
 private:
-    void addToKey(const KeyContext& keyContext,
-                  PaintParamsKeyBuilder* builder,
-                  PipelineDataGatherer* gatherer,
-                  int desiredCombination) const override {
-        SkASSERT(desiredCombination == 0);
+    void createPipelines(
+            const KeyContext& keyContext,
+            PipelineDataGatherer* gatherer,
+            const PaintOptions::ProcessCombination& processCombination) const override {
+        create_blur_imagefilter_pipelines(keyContext, gatherer, processCombination);
     }
 };
 
