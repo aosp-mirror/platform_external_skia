@@ -36,12 +36,10 @@ constexpr int kNumSDFAtlasTextures = 4;
 
 }  // namespace
 
-SDFTextRenderStep::SDFTextRenderStep(bool isLCD)
+SDFTextRenderStep::SDFTextRenderStep()
         : RenderStep("SDFTextRenderStep",
-                     isLCD ? "565" : "A8",
-                     isLCD ? Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage |
-                             Flags::kLCDCoverage
-                           : Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage,
+                     "",
+                     Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage,
                      /*uniforms=*/{{"subRunDeviceMatrix", SkSLType::kFloat4x4},
                                    {"deviceToLocal", SkSLType::kFloat4x4},
                                    {"atlasSizeInv", SkSLType::kFloat2},
@@ -60,9 +58,7 @@ SDFTextRenderStep::SDFTextRenderStep(bool isLCD)
                      /*varyings=*/
                      {{"unormTexCoords", SkSLType::kFloat2},
                       {"textureCoords", SkSLType::kFloat2},
-                      {"texIndex", SkSLType::kFloat}}) {
-    // TODO: store if it's A8 and adjust shader
-}
+                      {"texIndex", SkSLType::kFloat}}) {}
 
 SDFTextRenderStep::~SDFTextRenderStep() {}
 
