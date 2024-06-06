@@ -189,6 +189,8 @@ skia_graphite_sources = [
   "$_src/render/MiddleOutFanRenderStep.h",
   "$_src/render/PerEdgeAAQuadRenderStep.cpp",
   "$_src/render/PerEdgeAAQuadRenderStep.h",
+  "$_src/render/SDFTextLCDRenderStep.cpp",
+  "$_src/render/SDFTextLCDRenderStep.h",
   "$_src/render/SDFTextRenderStep.cpp",
   "$_src/render/SDFTextRenderStep.h",
   "$_src/render/TessellateCurvesRenderStep.cpp",
@@ -334,12 +336,12 @@ skia_graphite_vk_sources = [
   "$_src/vk/VulkanResourceProvider.h",
   "$_src/vk/VulkanSampler.cpp",
   "$_src/vk/VulkanSampler.h",
-  "$_src/vk/VulkanSamplerYcbcrConversion.cpp",
-  "$_src/vk/VulkanSamplerYcbcrConversion.h",
   "$_src/vk/VulkanSharedContext.cpp",
   "$_src/vk/VulkanSharedContext.h",
   "$_src/vk/VulkanTexture.cpp",
   "$_src/vk/VulkanTexture.h",
+  "$_src/vk/VulkanYcbcrConversion.cpp",
+  "$_src/vk/VulkanYcbcrConversion.h",
 ]
 
 skia_graphite_vello_sources = [
