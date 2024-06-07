@@ -57,7 +57,7 @@ void VulkanWindowContext::initializeContext() {
     // any config code here (particularly for msaa)?
 
     PFN_vkGetInstanceProcAddr getInstanceProc = fGetInstanceProcAddr;
-    GrVkBackendContext backendContext;
+    skgpu::VulkanBackendContext backendContext;
     skgpu::VulkanExtensions extensions;
     VkPhysicalDeviceFeatures2 features;
     if (!sk_gpu_test::CreateVkBackendContext(getInstanceProc, &backendContext, &extensions,
@@ -93,8 +93,11 @@ void VulkanWindowContext::initializeContext() {
     localGetPhysicalDeviceProperties(backendContext.fPhysicalDevice, &physDeviceProperties);
     uint32_t physDevVersion = physDeviceProperties.apiVersion;
 
-    fInterface.reset(new skgpu::VulkanInterface(backendContext.fGetProc, fInstance, fDevice,
-                                                backendContext.fInstanceVersion, physDevVersion,
+    fInterface.reset(new skgpu::VulkanInterface(backendContext.fGetProc,
+                                                fInstance,
+                                                fDevice,
+                                                backendContext.fMaxAPIVersion,
+                                                physDevVersion,
                                                 &extensions));
 
     GET_PROC(DestroyInstance);
