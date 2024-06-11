@@ -26,9 +26,9 @@
 #include "src/gpu/graphite/vk/VulkanGraphicsPipeline.h"
 #include "src/gpu/graphite/vk/VulkanRenderPass.h"
 #include "src/gpu/graphite/vk/VulkanSampler.h"
-#include "src/gpu/graphite/vk/VulkanSamplerYcbcrConversion.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/gpu/graphite/vk/VulkanTexture.h"
+#include "src/gpu/graphite/vk/VulkanYcbcrConversion.h"
 #include "src/gpu/vk/VulkanMemory.h"
 #include "src/sksl/SkSLCompiler.h"
 
@@ -39,6 +39,8 @@
 
 namespace skgpu::graphite {
 
+constexpr int kMaxNumberOfCachedBufferDescSets = 1024;
+
 VulkanResourceProvider::VulkanResourceProvider(SharedContext* sharedContext,
                                                SingleOwner* singleOwner,
                                                uint32_t recorderID,
@@ -47,8 +49,8 @@ VulkanResourceProvider::VulkanResourceProvider(SharedContext* sharedContext,
                                                sk_sp<Buffer> loadMSAAVertexBuffer)
         : ResourceProvider(sharedContext, singleOwner, recorderID, resourceBudget)
         , fIntrinsicUniformBuffer(std::move(intrinsicConstantUniformBuffer))
-        , fLoadMSAAVertexBuffer(std::move(loadMSAAVertexBuffer)) {
-}
+        , fLoadMSAAVertexBuffer(std::move(loadMSAAVertexBuffer))
+        , fUniformBufferDescSetCache(kMaxNumberOfCachedBufferDescSets) {}
 
 VulkanResourceProvider::~VulkanResourceProvider() {
     if (fPipelineCache != VK_NULL_HANDLE) {
@@ -82,13 +84,22 @@ const VulkanSharedContext* VulkanResourceProvider::vulkanSharedContext() const {
 }
 
 sk_sp<Texture> VulkanResourceProvider::onCreateWrappedTexture(const BackendTexture& texture) {
+    sk_sp<VulkanYcbcrConversion> ycbcrConversion;
+    if (texture.info().vulkanTextureSpec().fYcbcrConversionInfo.isValid()) {
+        ycbcrConversion = this->findOrCreateCompatibleYcbcrConversion(
+                texture.info().vulkanTextureSpec().fYcbcrConversionInfo);
+        if (!ycbcrConversion) {
+            return nullptr;
+        }
+    }
+
     return VulkanTexture::MakeWrapped(this->vulkanSharedContext(),
-                                      this,
                                       texture.dimensions(),
                                       texture.info(),
                                       texture.getMutableState(),
                                       texture.getVkImage(),
-                                      /*alloc=*/{}  /*Skia does not own wrapped texture memory*/);
+                                      /*alloc=*/{}  /*Skia does not own wrapped texture memory*/,
+                                      std::move(ycbcrConversion));
 }
 
 sk_sp<Buffer> VulkanResourceProvider::refIntrinsicConstantBuffer() const {
@@ -120,11 +131,20 @@ sk_sp<ComputePipeline> VulkanResourceProvider::createComputePipeline(const Compu
 sk_sp<Texture> VulkanResourceProvider::createTexture(SkISize size,
                                                      const TextureInfo& info,
                                                      skgpu::Budgeted budgeted) {
+    sk_sp<VulkanYcbcrConversion> ycbcrConversion;
+    if (info.vulkanTextureSpec().fYcbcrConversionInfo.isValid()) {
+        ycbcrConversion = this->findOrCreateCompatibleYcbcrConversion(
+                info.vulkanTextureSpec().fYcbcrConversionInfo);
+        if (!ycbcrConversion) {
+            return nullptr;
+        }
+    }
+
     return VulkanTexture::Make(this->vulkanSharedContext(),
-                               this,
                                size,
                                info,
-                               budgeted);
+                               budgeted,
+                               std::move(ycbcrConversion));
 }
 
 sk_sp<Buffer> VulkanResourceProvider::createBuffer(size_t size,
@@ -134,24 +154,22 @@ sk_sp<Buffer> VulkanResourceProvider::createBuffer(size_t size,
 }
 
 sk_sp<Sampler> VulkanResourceProvider::createSampler(const SamplerDesc& samplerDesc) {
-    sk_sp<VulkanSamplerYcbcrConversion> ycbcrConversion = nullptr;
+    sk_sp<VulkanYcbcrConversion> ycbcrConversion = nullptr;
 
     // Non-zero conversion information means the sampler utilizes a ycbcr conversion.
     bool usesYcbcrConversion = (samplerDesc.desc() >> SamplerDesc::kImmutableSamplerInfoShift) != 0;
     if (usesYcbcrConversion) {
-        GraphiteResourceKey ycbcrKey =
-                VulkanSamplerYcbcrConversion::GetKeyFromSamplerDesc(samplerDesc);
-
+        GraphiteResourceKey ycbcrKey = VulkanYcbcrConversion::GetKeyFromSamplerDesc(samplerDesc);
         if (Resource* resource = fResourceCache->findAndRefResource(ycbcrKey,
                                                                     skgpu::Budgeted::kYes)) {
-            ycbcrConversion = sk_sp<VulkanSamplerYcbcrConversion>(
-                    static_cast<VulkanSamplerYcbcrConversion*>(resource));
+            ycbcrConversion =
+                    sk_sp<VulkanYcbcrConversion>(static_cast<VulkanYcbcrConversion*>(resource));
         } else {
-            ycbcrConversion = VulkanSamplerYcbcrConversion::Make(
+            ycbcrConversion = VulkanYcbcrConversion::Make(
                     this->vulkanSharedContext(),
                     static_cast<uint32_t>(
                             samplerDesc.desc() >> SamplerDesc::kImmutableSamplerInfoShift),
-                    samplerDesc.format());
+                    (uint64_t)(samplerDesc.externalFormatMSBs()) << 32 | samplerDesc.format());
             SkASSERT(ycbcrConversion);
 
             ycbcrConversion->setKey(ycbcrKey);
@@ -276,6 +294,119 @@ sk_sp<VulkanDescriptorSet> VulkanResourceProvider::findOrCreateDescriptorSet(
     return firstDescSet;
 }
 
+namespace {
+UniqueKey make_ubo_bind_group_key(SkSpan<DescriptorData> requestedDescriptors,
+                                  SkSpan<BindUniformBufferInfo> bindUniformBufferInfo) {
+    static const UniqueKey::Domain kBufferBindGroupDomain = UniqueKey::GenerateDomain();
+
+    UniqueKey uniqueKey;
+    {
+        // Each entry in the bind group needs 2 uint32_t in the key:
+        //  - buffer's unique ID: 32 bits.
+        //  - buffer's binding size: 32 bits.
+        // We need total of 3 entries in the uniform buffer bind group.
+        // Unused entries will be assigned zero values.
+        UniqueKey::Builder builder(
+                &uniqueKey, kBufferBindGroupDomain, 6, "GraphicsPipelineBufferDescSet");
+
+        for (uint32_t i = 0; i < VulkanGraphicsPipeline::kNumUniformBuffers; ++i) {
+            builder[2 * i] = 0;
+            builder[2 * i + 1] = 0;
+        }
+
+        for (uint32_t i = 0; i < requestedDescriptors.size(); ++i) {
+            int descriptorBindingIndex = requestedDescriptors[i].fBindingIndex;
+            SkASSERT(SkTo<unsigned long>(descriptorBindingIndex) < bindUniformBufferInfo.size());
+            SkASSERT(SkTo<unsigned long>(descriptorBindingIndex) <
+                     VulkanGraphicsPipeline::kNumUniformBuffers);
+            const auto& bindInfo = bindUniformBufferInfo[descriptorBindingIndex];
+            const VulkanBuffer* boundBuffer = static_cast<const VulkanBuffer*>(bindInfo.fBuffer);
+            SkASSERT(boundBuffer);
+            const uint32_t bindingSize = bindInfo.fBindingSize;
+            builder[2 * descriptorBindingIndex] = boundBuffer->uniqueID().asUInt();
+            builder[2 * descriptorBindingIndex + 1] = bindingSize;
+        }
+
+        builder.finish();
+    }
+
+    return uniqueKey;
+}
+
+void update_uniform_descriptor_set(SkSpan<DescriptorData> requestedDescriptors,
+                                   SkSpan<BindUniformBufferInfo> bindUniformBufferInfo,
+                                   VkDescriptorSet descSet,
+                                   const VulkanSharedContext* sharedContext) {
+    for (size_t i = 0; i < requestedDescriptors.size(); i++) {
+        int descriptorBindingIndex = requestedDescriptors[i].fBindingIndex;
+        SkASSERT(SkTo<unsigned long>(descriptorBindingIndex) < bindUniformBufferInfo.size());
+        const auto& bindInfo = bindUniformBufferInfo[descriptorBindingIndex];
+        if (bindInfo.fBuffer) {
+#if defined(SK_DEBUG)
+            static uint64_t maxUniformBufferRange =
+                    sharedContext->vulkanCaps().maxUniformBufferRange();
+            SkASSERT(bindInfo.fBindingSize <= maxUniformBufferRange);
+#endif
+            VkDescriptorBufferInfo bufferInfo;
+            memset(&bufferInfo, 0, sizeof(VkDescriptorBufferInfo));
+            auto vulkanBuffer = static_cast<const VulkanBuffer*>(bindInfo.fBuffer);
+            bufferInfo.buffer = vulkanBuffer->vkBuffer();
+            bufferInfo.offset = 0; // We always use dynamic ubos so we set the base offset to 0
+            bufferInfo.range = bindInfo.fBindingSize;
+
+            VkWriteDescriptorSet writeInfo;
+            memset(&writeInfo, 0, sizeof(VkWriteDescriptorSet));
+            writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writeInfo.pNext = nullptr;
+            writeInfo.dstSet = descSet;
+            writeInfo.dstBinding = descriptorBindingIndex;
+            writeInfo.dstArrayElement = 0;
+            writeInfo.descriptorCount = requestedDescriptors[i].fCount;
+            writeInfo.descriptorType = DsTypeEnumToVkDs(requestedDescriptors[i].fType);
+            writeInfo.pImageInfo = nullptr;
+            writeInfo.pBufferInfo = &bufferInfo;
+            writeInfo.pTexelBufferView = nullptr;
+
+            // TODO(b/293925059): Migrate to updating all the uniform descriptors with one driver
+            // call. Calling UpdateDescriptorSets once to encapsulate updates to all uniform
+            // descriptors would be ideal, but that led to issues with draws where all the UBOs
+            // within that set would unexpectedly be assigned the same offset. Updating them one at
+            // a time within this loop works in the meantime but is suboptimal.
+            VULKAN_CALL(sharedContext->interface(),
+                        UpdateDescriptorSets(sharedContext->device(),
+                                             /*descriptorWriteCount=*/1,
+                                             &writeInfo,
+                                             /*descriptorCopyCount=*/0,
+                                             /*pDescriptorCopies=*/nullptr));
+        }
+    }
+}
+
+} // anonymous namespace
+
+sk_sp<VulkanDescriptorSet> VulkanResourceProvider::findOrCreateUniformBuffersDescriptorSet(
+        SkSpan<DescriptorData> requestedDescriptors,
+        SkSpan<BindUniformBufferInfo> bindUniformBufferInfo) {
+    SkASSERT(requestedDescriptors.size() <= VulkanGraphicsPipeline::kNumUniformBuffers);
+
+    auto key = make_ubo_bind_group_key(requestedDescriptors, bindUniformBufferInfo);
+    auto* existingDescSet = fUniformBufferDescSetCache.find(key);
+    if (existingDescSet) {
+        return *existingDescSet;
+    }
+    sk_sp<VulkanDescriptorSet> newDS = this->findOrCreateDescriptorSet(requestedDescriptors);
+    if (!newDS) {
+        return nullptr;
+    }
+
+    update_uniform_descriptor_set(requestedDescriptors,
+                                  bindUniformBufferInfo,
+                                  *newDS->descriptorSet(),
+                                  this->vulkanSharedContext());
+    return *fUniformBufferDescSetCache.insert(key, newDS);
+}
+
+
 sk_sp<VulkanRenderPass> VulkanResourceProvider::findOrCreateRenderPassWithKnownKey(
             const RenderPassDesc& renderPassDesc,
             bool compatibleOnly,
@@ -377,22 +508,20 @@ void VulkanResourceProvider::onDeleteBackendTexture(const BackendTexture& textur
     }
 }
 
-sk_sp<VulkanSamplerYcbcrConversion> VulkanResourceProvider::findOrCreateCompatibleYcbcrConversion(
+sk_sp<VulkanYcbcrConversion> VulkanResourceProvider::findOrCreateCompatibleYcbcrConversion(
         const VulkanYcbcrConversionInfo& ycbcrInfo) const {
     if (!ycbcrInfo.isValid()) {
         return nullptr;
     }
-    auto ycbcrConversionKey = VulkanSamplerYcbcrConversion::MakeYcbcrConversionKey(
-            this->vulkanSharedContext(), ycbcrInfo);
+    GraphiteResourceKey ycbcrConversionKey =
+            VulkanYcbcrConversion::MakeYcbcrConversionKey(this->vulkanSharedContext(), ycbcrInfo);
 
     if (Resource* resource = fResourceCache->findAndRefResource(ycbcrConversionKey,
                                                                 skgpu::Budgeted::kYes)) {
-        return sk_sp<VulkanSamplerYcbcrConversion>(
-                static_cast<VulkanSamplerYcbcrConversion*>(resource));
+        return sk_sp<VulkanYcbcrConversion>(static_cast<VulkanYcbcrConversion*>(resource));
     }
 
-    auto ycbcrConversion = VulkanSamplerYcbcrConversion::Make(this->vulkanSharedContext(),
-                                                              ycbcrInfo);
+    auto ycbcrConversion = VulkanYcbcrConversion::Make(this->vulkanSharedContext(), ycbcrInfo);
     if (!ycbcrConversion) {
         return nullptr;
     }
@@ -488,7 +617,10 @@ BackendTexture VulkanResourceProvider::onCreateBackendTexture(AHardwareBuffer* h
 
     // Start to assemble VulkanTextureInfo which is needed later on to create the VkImage but can
     // sooner help us query VulkanCaps for certain format feature support.
-    VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL; // TODO: Query for tiling mode.
+    // TODO: Allow client to pass in tiling mode. For external formats, this is required to be
+    // optimal. For AHB that have a known Vulkan format, we can query VulkanCaps to determine if
+    // optimal is a valid decision given the format features.
+    VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
     VkImageCreateFlags imgCreateflags = isProtectedContent ? VK_IMAGE_CREATE_PROTECTED_BIT : 0;
     VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT;
     // When importing as an external format the image usage can only be VK_IMAGE_USAGE_SAMPLED_BIT.
