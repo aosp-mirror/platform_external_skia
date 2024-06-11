@@ -20,6 +20,7 @@
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrGpu.h"
 #include "tests/CtsEnforcement.h"
@@ -35,7 +36,7 @@ static bool check_read(skiatest::Reporter* reporter, const SkBitmap& bitmap) {
         const uint32_t srcPixel = *bitmap.getAddr32(x, 0);
         if (srcPixel != SK_ColorGREEN) {
             ERRORF(reporter, "Expected color of Green, but got 0x%08x, at pixel (%d, 0).",
-                   x, srcPixel);
+                   srcPixel, x);
             result = false;
         }
     }
@@ -51,13 +52,11 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(OpsTaskFlushCount,
 
     SkImageInfo imageInfo = SkImageInfo::Make(1000, 1, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 
-    sk_sp<SkSurface> surface1 =
-            SkSurface::MakeRenderTarget(context, skgpu::Budgeted::kYes, imageInfo);
+    sk_sp<SkSurface> surface1 = SkSurfaces::RenderTarget(context, skgpu::Budgeted::kYes, imageInfo);
     if (!surface1) {
         return;
     }
-    sk_sp<SkSurface> surface2 =
-            SkSurface::MakeRenderTarget(context, skgpu::Budgeted::kYes, imageInfo);
+    sk_sp<SkSurface> surface2 = SkSurfaces::RenderTarget(context, skgpu::Budgeted::kYes, imageInfo);
     if (!surface2) {
         return;
     }

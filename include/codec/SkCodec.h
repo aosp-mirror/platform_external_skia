@@ -14,6 +14,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
 #include "include/core/SkYUVAPixmaps.h"
 #include "include/private/SkEncodedInfo.h"
@@ -21,11 +22,13 @@
 #include "modules/skcms/skcms.h"
 
 #include <cstddef>
+#include <functional>
 #include <memory>
+#include <optional>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
-class SkAndroidCodec;
 class SkData;
 class SkFrameHolder;
 class SkImage;
@@ -41,10 +44,13 @@ enum class Blend;
 enum class DisposalMethod;
 }
 
-
 namespace DM {
 class CodecSrc;
 } // namespace DM
+
+namespace SkCodecs {
+struct Decoder;
+}
 
 /**
  *  Abstraction layer directly on top of an image codec.
@@ -131,6 +137,8 @@ public:
         /**
          *  If the container format contains both still images and image sequences,
          *  SkCodec should choose one of the still images. This is the default.
+         *  Note that kPreferStillImage may prevent use of the animation features
+         *  if the input is not rewindable.
          */
         kPreferStillImage,
         /**
@@ -175,7 +183,15 @@ public:
      *  SkCodec takes ownership of it, and will delete it when done with it.
      */
     static std::unique_ptr<SkCodec> MakeFromStream(
-            std::unique_ptr<SkStream>, Result* = nullptr,
+            std::unique_ptr<SkStream>,
+            SkSpan<const SkCodecs::Decoder> decoders,
+            Result* = nullptr,
+            SkPngChunkReader* = nullptr,
+            SelectionPolicy selectionPolicy = SelectionPolicy::kPreferStillImage);
+    // deprecated
+    static std::unique_ptr<SkCodec> MakeFromStream(
+            std::unique_ptr<SkStream>,
+            Result* = nullptr,
             SkPngChunkReader* = nullptr,
             SelectionPolicy selectionPolicy = SelectionPolicy::kPreferStillImage);
 
@@ -195,6 +211,10 @@ public:
      *      If the PNG does not contain unknown chunks, the SkPngChunkReader
      *      will not be used or modified.
      */
+    static std::unique_ptr<SkCodec> MakeFromData(sk_sp<SkData>,
+                                                 SkSpan<const SkCodecs::Decoder> decoders,
+                                                 SkPngChunkReader* = nullptr);
+    // deprecated
     static std::unique_ptr<SkCodec> MakeFromData(sk_sp<SkData>, SkPngChunkReader* = nullptr);
 
     virtual ~SkCodec();
@@ -270,6 +290,12 @@ public:
      *  Format of the encoded data.
      */
     SkEncodedImageFormat getEncodedFormat() const { return this->onGetEncodedFormat(); }
+
+    /**
+     *  Return the underlying encoded data stream. This may be nullptr if the original
+     *  stream could not be duplicated.
+     */
+    virtual std::unique_ptr<SkStream> getEncodedData() const;
 
     /**
      *  Whether or not the memory passed to getPixels is zero initialized.
@@ -392,7 +418,8 @@ public:
     }
 
     /**
-     *  Return an image containing the pixels.
+     *  Return an image containing the pixels. If the codec's origin is not "upper left",
+     *  This will rotate the output image accordingly.
      */
     std::tuple<sk_sp<SkImage>, SkCodec::Result> getImage(const SkImageInfo& info,
                                                          const Options* opts = nullptr);
@@ -821,7 +848,7 @@ protected:
      *  This is called by getPixels(), getYUV8Planes(), startIncrementalDecode() and
      *  startScanlineDecode(). Subclasses may call if they need to rewind at another time.
      */
-    bool SK_WARN_UNUSED_RESULT rewindIfNeeded();
+    [[nodiscard]] bool rewindIfNeeded();
 
     /**
      *  Called by rewindIfNeeded, if the stream needed to be rewound.
@@ -917,8 +944,8 @@ private:
     bool fStartedIncrementalDecode = false;
 
     // Allows SkAndroidCodec to call handleFrameIndex (potentially decoding a prior frame and
-    // clearing to transparent) without SkCodec calling it, too.
-    bool fAndroidCodecHandlesFrameIndex = false;
+    // clearing to transparent) without SkCodec itself calling it, too.
+    bool fUsingCallbackForHandleFrameIndex = false;
 
     bool initializeColorXform(const SkImageInfo& dstInfo, SkEncodedInfo::Alpha, bool srcIsOpaque);
 
@@ -942,17 +969,23 @@ private:
         return nullptr;
     }
 
+    // Callback for decoding a prior frame. The `Options::fFrameIndex` is ignored,
+    // being replaced by frameIndex. This allows opts to actually be a subclass of
+    // SkCodec::Options which SkCodec itself does not know how to copy or modify,
+    // but just passes through to the caller (where it can be reinterpret_cast'd).
+    using GetPixelsCallback = std::function<Result(const SkImageInfo&, void* pixels,
+                                                   size_t rowBytes, const Options& opts,
+                                                   int frameIndex)>;
+
     /**
      *  Check for a valid Options.fFrameIndex, and decode prior frames if necessary.
      *
-     *  If androidCodec is not null, that means this SkCodec is owned by an SkAndroidCodec. In that
-     *  case, the Options will be treated as an AndroidOptions, and SkAndroidCodec will be used to
-     *  decode a prior frame, if a prior frame is needed. When such an owned SkCodec calls
-     *  handleFrameIndex, it will immediately return kSuccess, since SkAndroidCodec already handled
-     *  it.
+     * If GetPixelsCallback is not null, it will be used to decode a prior frame instead
+     * of using this SkCodec directly. It may also be used recursively, if that in turn
+     * depends on a prior frame. This is used by SkAndroidCodec.
      */
     Result handleFrameIndex(const SkImageInfo&, void* pixels, size_t rowBytes, const Options&,
-            SkAndroidCodec* androidCodec = nullptr);
+                            GetPixelsCallback = nullptr);
 
     // Methods for scanline decoding.
     virtual Result onStartScanlineDecode(const SkImageInfo& /*dstInfo*/,
@@ -1002,8 +1035,51 @@ private:
     virtual SkSampler* getSampler(bool /*createIfNecessary*/) { return nullptr; }
 
     friend class DM::CodecSrc;  // for fillIncompleteImage
+    friend class PNGCodecGM;    // for fillIncompleteImage
     friend class SkSampledCodec;
     friend class SkIcoCodec;
     friend class SkAndroidCodec; // for fEncodedInfo
+    friend class SkPDFBitmap; // for fEncodedInfo
 };
+
+namespace SkCodecs {
+
+using DecodeContext = void*;
+using IsFormatCallback = bool (*)(const void* data, size_t len);
+using MakeFromStreamCallback = std::unique_ptr<SkCodec> (*)(std::unique_ptr<SkStream>,
+                                                            SkCodec::Result*,
+                                                            DecodeContext);
+
+struct SK_API Decoder {
+    // By convention, we use all lowercase letters and go with the primary filename extension.
+    // For example "png", "jpg", "ico", "webp", etc
+    std::string_view id;
+    IsFormatCallback isFormat;
+    MakeFromStreamCallback makeFromStream;
+};
+
+// Add the decoder to the end of a linked list of decoders, which will be used to identify calls to
+// SkCodec::MakeFromStream. If a decoder with the same id already exists, this new decoder
+// will replace the existing one (in the same position). This is not thread-safe, so make sure all
+// initialization is done before the first call.
+void SK_API Register(Decoder d);
+
+/**
+ *  Return a SkImage produced by the codec, but attempts to defer image allocation until the
+ *  image is actually used/drawn. This deferral allows the system to cache the result, either on the
+ *  CPU or on the GPU, depending on where the image is drawn. If memory is low, the cache may
+ *  be purged, causing the next draw of the image to have to re-decode.
+ *
+ *  If alphaType is nullopt, the image's alpha type will be chosen automatically based on the
+ *  image format. Transparent images will default to kPremul_SkAlphaType. If alphaType contains
+ *  kPremul_SkAlphaType or kUnpremul_SkAlphaType, that alpha type will be used. Forcing opaque
+ *  (passing kOpaque_SkAlphaType) is not allowed, and will return nullptr.
+ *
+ *  @param codec    A non-null codec (e.g. from SkPngDecoder::Decode)
+ *  @return         created SkImage, or nullptr
+ */
+SK_API sk_sp<SkImage> DeferredImage(std::unique_ptr<SkCodec> codec,
+                                    std::optional<SkAlphaType> alphaType = std::nullopt);
+}
+
 #endif // SkCodec_DEFINED

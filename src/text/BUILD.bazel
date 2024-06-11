@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -9,6 +13,7 @@ TEXT_FILES = [
     "GlyphRun.h",
     "StrikeForGPU.cpp",
     "StrikeForGPU.h",
+    "SlugFromBuffer.cpp",
 ]
 
 split_srcs_and_hdrs(
@@ -19,11 +24,31 @@ split_srcs_and_hdrs(
 skia_filegroup(
     name = "srcs",
     srcs = [":text_srcs"],
-    visibility = ["//src:__pkg__"],
+    visibility = [
+        "//src:__pkg__",
+    ],
 )
 
 skia_filegroup(
     name = "private_hdrs",
     srcs = [":text_hdrs"],
-    visibility = ["//src:__pkg__"],
+    visibility = [
+        "//src:__pkg__",
+    ],
+)
+
+alias(
+    name = "core_priv_hdrs",
+    actual = ":private_hdrs",
+    visibility = [
+        "//src/core:__pkg__",
+    ],
+)
+
+alias(
+    name = "core_srcs",
+    actual = ":srcs",
+    visibility = [
+        "//src/core:__pkg__",
+    ],
 )

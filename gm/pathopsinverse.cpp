@@ -57,13 +57,9 @@ protected:
         paint->setColor(color);
     }
 
-    SkString onShortName() override {
-        return SkString("pathopsinverse");
-    }
+    SkString getName() const override { return SkString("pathopsinverse"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(1200, 900);
-    }
+    SkISize getISize() override { return SkISize::Make(1200, 900); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPath one, two;
@@ -119,7 +115,6 @@ DEF_GM( return new PathOpsInverseGM; )
 
 }  // namespace skiagm
 
-#include "include/pathops/SkPathOps.h"
 #include "include/utils/SkParsePath.h"
 
 DEF_SIMPLE_GM(pathops_skbug_10155, canvas, 256, 256) {

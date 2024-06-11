@@ -7,33 +7,49 @@
 
 #include "src/gpu/ganesh/ops/AtlasTextOp.h"
 
-#include "include/core/SkPoint3.h"
-#include "include/core/SkSpan.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "src/base/SkMathPriv.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkTArray.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkMatrixPriv.h"
-#include "src/core/SkMatrixProvider.h"
-#include "src/core/SkStrikeCache.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/gpu/ganesh/GrBufferAllocPool.h"
 #include "src/gpu/ganesh/GrCaps.h"
-#include "src/gpu/ganesh/GrMemoryPool.h"
+#include "src/gpu/ganesh/GrColorSpaceXform.h"
+#include "src/gpu/ganesh/GrGeometryProcessor.h"
+#include "src/gpu/ganesh/GrMeshDrawTarget.h"
 #include "src/gpu/ganesh/GrOpFlushState.h"
-#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrPaint.h"
+#include "src/gpu/ganesh/GrPipeline.h"
+#include "src/gpu/ganesh/GrProcessorAnalysis.h"
 #include "src/gpu/ganesh/GrResourceProvider.h"
-#include "src/gpu/ganesh/SkGr.h"
-#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/GrSamplerState.h"
+#include "src/gpu/ganesh/GrSimpleMesh.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
+#include "src/gpu/ganesh/GrUserStencilSettings.h"
 #include "src/gpu/ganesh/effects/GrBitmapTextGeoProc.h"
 #include "src/gpu/ganesh/effects/GrDistanceFieldGeoProc.h"
+#include "src/gpu/ganesh/ops/GrDrawOp.h"
 #include "src/gpu/ganesh/ops/GrSimpleMeshDrawOpHelper.h"
 #include "src/gpu/ganesh/text/GrAtlasManager.h"
-#include "src/text/GlyphRun.h"
 #include "src/text/gpu/DistanceFieldAdjustTable.h"
+#include "src/text/gpu/GlyphVector.h"
+#include "src/text/gpu/SubRunContainer.h"
 
+#if defined(SK_GAMMA_APPLY_TO_A8)
+#include "include/private/base/SkCPUTypes.h"
+#include "src/core/SkMaskGamma.h"
+#endif
+
+#include <algorithm>
+#include <functional>
 #include <new>
+#include <tuple>
 #include <utility>
 
-#if GR_TEST_UTILS
-#include "src/gpu/ganesh/GrDrawOpTest.h"
-#endif
+struct GrShaderCaps;
 
 using MaskFormat = skgpu::MaskFormat;
 
@@ -70,6 +86,7 @@ AtlasTextOp::AtlasTextOp(MaskType maskType,
                          int glyphCount,
                          SkRect deviceRect,
                          Geometry* geo,
+                         const GrColorInfo& dstColorInfo,
                          GrPaint&& paint)
         : INHERITED{ClassID()}
         , fProcessors(std::move(paint))
@@ -85,6 +102,10 @@ AtlasTextOp::AtlasTextOp(MaskType maskType,
     // We don't have tight bounds on the glyph paths in device space. For the purposes of bounds
     // we treat this as a set of non-AA rects rendered with a texture.
     this->setBounds(deviceRect, HasAABloat::kNo, IsHairline::kNo);
+    if (maskType == MaskType::kColorBitmap) {
+        // We assume that color emoji use the sRGB colorspace
+        fColorSpaceXform = dstColorInfo.refColorSpaceXformFromSRGB();
+    }
 }
 
 AtlasTextOp::AtlasTextOp(MaskType maskType,
@@ -140,7 +161,7 @@ void AtlasTextOp::visitProxies(const GrVisitProxyFunc& func) const {
     fProcessors.visitProxies(func);
 }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 SkString AtlasTextOp::onDumpInfo() const {
     SkString str;
     int i = 0;
@@ -185,7 +206,6 @@ GrProcessorSet::Analysis AtlasTextOp::finalize(const GrCaps& caps,
         case MaskType::kLCDCoverage:
 #if !defined(SK_DISABLE_SDF_TEXT)
         case MaskType::kLCDDistanceField:
-        case MaskType::kLCDBGRDistanceField:
 #endif
             coverage = GrProcessorAnalysisCoverage::kLCD;
             break;
@@ -259,7 +279,8 @@ void AtlasTextOp::onPrepareDraws(GrMeshDrawTarget* target) {
         // color, so we can use the first's without worry.
         flushInfo.fGeometryProcessor = GrBitmapTextGeoProc::Make(
                 target->allocator(), *target->caps().shaderCaps(), fHead->fColor,
-                false, views, numActiveViews, filter, maskFormat, localMatrix, fHasPerspective);
+                /*wideColor=*/false, fColorSpaceXform, views, numActiveViews, filter,
+                maskFormat, localMatrix, fHasPerspective);
     }
 
     const int vertexStride = (int)flushInfo.fGeometryProcessor->vertexStride();
@@ -303,11 +324,19 @@ void AtlasTextOp::onPrepareDraws(GrMeshDrawTarget* target) {
                   (int)subRun.vertexStride(geo->fDrawMatrix), vertexStride);
 
         const int subRunEnd = subRun.glyphCount();
+        auto regenerateDelegate = [&](sktext::gpu::GlyphVector* glyphs,
+                                      int begin,
+                                      int end,
+                                      skgpu::MaskFormat maskFormat,
+                                      int padding) {
+            return glyphs->regenerateAtlasForGanesh(begin, end, maskFormat, padding, target);
+        };
         for (int subRunCursor = 0; subRunCursor < subRunEnd;) {
             // Regenerate the atlas for the remainder of the glyphs in the run, or the remainder
             // of the glyphs to fill the vertex buffer.
             int regenEnd = subRunCursor + std::min(subRunEnd - subRunCursor, quadEnd - quadCursor);
-            auto[ok, glyphsRegenerated] = subRun.regenerateAtlas(subRunCursor, regenEnd, target);
+            auto[ok, glyphsRegenerated] = subRun.regenerateAtlas(subRunCursor, regenEnd,
+                                                                 regenerateDelegate);
             // There was a problem allocating the glyph in the atlas. Bail.
             if (!ok) {
                 return;
@@ -460,26 +489,21 @@ GrOp::CombineResult AtlasTextOp::onCombineIfPossible(GrOp* t, SkArenaAlloc*, con
 }
 
 #if !defined(SK_DISABLE_SDF_TEXT)
-// TODO trying to figure out why lcd is so whack
 GrGeometryProcessor* AtlasTextOp::setupDfProcessor(SkArenaAlloc* arena,
                                                    const GrShaderCaps& caps,
                                                    const SkMatrix& localMatrix,
                                                    const GrSurfaceProxyView* views,
                                                    unsigned int numActiveViews) const {
-    static constexpr int kDistanceAdjustLumShift = 5;
     auto dfAdjustTable = sktext::gpu::DistanceFieldAdjustTable::Get();
 
     // see if we need to create a new effect
     if (this->isLCD()) {
-        float redCorrection = dfAdjustTable->getAdjustment(
-                SkColorGetR(fLuminanceColor) >> kDistanceAdjustLumShift,
-                fUseGammaCorrectDistanceTable);
-        float greenCorrection = dfAdjustTable->getAdjustment(
-                SkColorGetG(fLuminanceColor) >> kDistanceAdjustLumShift,
-                fUseGammaCorrectDistanceTable);
-        float blueCorrection = dfAdjustTable->getAdjustment(
-                SkColorGetB(fLuminanceColor) >> kDistanceAdjustLumShift,
-                fUseGammaCorrectDistanceTable);
+        float redCorrection = dfAdjustTable->getAdjustment(SkColorGetR(fLuminanceColor),
+                                                           fUseGammaCorrectDistanceTable);
+        float greenCorrection = dfAdjustTable->getAdjustment(SkColorGetG(fLuminanceColor),
+                                                             fUseGammaCorrectDistanceTable);
+        float blueCorrection = dfAdjustTable->getAdjustment(SkColorGetB(fLuminanceColor),
+                                                            fUseGammaCorrectDistanceTable);
         GrDistanceFieldLCDTextGeoProc::DistanceAdjust widthAdjust =
                 GrDistanceFieldLCDTextGeoProc::DistanceAdjust::Make(
                         redCorrection, greenCorrection, blueCorrection);
@@ -487,13 +511,11 @@ GrGeometryProcessor* AtlasTextOp::setupDfProcessor(SkArenaAlloc* arena,
                                                    GrSamplerState::Filter::kLinear, widthAdjust,
                                                    fDFGPFlags, localMatrix);
     } else {
-#ifdef SK_GAMMA_APPLY_TO_A8
+#if defined(SK_GAMMA_APPLY_TO_A8)
         float correction = 0;
         if (this->maskType() != MaskType::kAliasedDistanceField) {
-            U8CPU lum = SkColorSpaceLuminance::computeLuminance(SK_GAMMA_EXPONENT,
-                                                                fLuminanceColor);
-            correction = dfAdjustTable->getAdjustment(lum >> kDistanceAdjustLumShift,
-                                                      fUseGammaCorrectDistanceTable);
+            U8CPU lum = SkColorSpaceLuminance::computeLuminance(SK_GAMMA_EXPONENT, fLuminanceColor);
+            correction = dfAdjustTable->getAdjustment(lum, fUseGammaCorrectDistanceTable);
         }
         return GrDistanceFieldA8TextGeoProc::Make(arena, caps, views, numActiveViews,
                                                   GrSamplerState::Filter::kLinear, correction,
@@ -507,75 +529,6 @@ GrGeometryProcessor* AtlasTextOp::setupDfProcessor(SkArenaAlloc* arena,
 }
 #endif // !defined(SK_DISABLE_SDF_TEXT)
 
-#if GR_TEST_UTILS
-GrOp::Owner AtlasTextOp::CreateOpTestingOnly(skgpu::v1::SurfaceDrawContext* sdc,
-                                             const SkPaint& skPaint,
-                                             const SkFont& font,
-                                             const SkMatrixProvider& mtxProvider,
-                                             const char* text,
-                                             int x,
-                                             int y) {
-    size_t textLen = (int)strlen(text);
-
-    SkMatrix drawMatrix(mtxProvider.localToDevice());
-    drawMatrix.preTranslate(x, y);
-    auto drawOrigin = SkPoint::Make(x, y);
-    sktext::GlyphRunBuilder builder;
-    auto glyphRunList = builder.textToGlyphRunList(font, skPaint, text, textLen, drawOrigin);
-    if (glyphRunList.empty()) {
-        return nullptr;
-    }
-
-    auto rContext = sdc->recordingContext();
-    sktext::gpu::SDFTControl control =
-            rContext->priv().getSDFTControl(sdc->surfaceProps().isUseDeviceIndependentFonts());
-
-    SkStrikeDeviceInfo strikeDeviceInfo{sdc->surfaceProps(),
-                                        SkScalerContextFlags::kBoostContrast,
-                                        &control};
-
-    sk_sp<sktext::gpu::TextBlob> blob = sktext::gpu::TextBlob::Make(
-        glyphRunList, skPaint, drawMatrix, strikeDeviceInfo, SkStrikeCache::GlobalStrikeCache());
-
-    const sktext::gpu::AtlasSubRun* subRun = blob->testingOnlyFirstSubRun();
-    if (!subRun) {
-        return nullptr;
-    }
-
-    GrOp::Owner op;
-    std::tie(std::ignore, op) = subRun->makeAtlasTextOp(
-            nullptr, mtxProvider, glyphRunList.origin(), skPaint, blob, sdc);
-    return op;
-}
-#endif
-
 } // namespace skgpu::ganesh
 
-#if GR_TEST_UTILS
-GR_DRAW_OP_TEST_DEFINE(AtlasTextOp) {
-    SkMatrixProvider matrixProvider(GrTest::TestMatrixInvertible(random));
 
-    SkPaint skPaint;
-    skPaint.setColor(random->nextU());
-
-    SkFont font;
-    if (random->nextBool()) {
-        font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
-    } else {
-        font.setEdging(random->nextBool() ? SkFont::Edging::kAntiAlias : SkFont::Edging::kAlias);
-    }
-    font.setSubpixel(random->nextBool());
-
-    const char* text = "The quick brown fox jumps over the lazy dog.";
-
-    // create some random x/y offsets, including negative offsets
-    static const int kMaxTrans = 1024;
-    int xPos = (random->nextU() % 2) * 2 - 1;
-    int yPos = (random->nextU() % 2) * 2 - 1;
-    int xInt = (random->nextU() % kMaxTrans) * xPos;
-    int yInt = (random->nextU() % kMaxTrans) * yPos;
-
-    return skgpu::ganesh::AtlasTextOp::CreateOpTestingOnly(sdc, skPaint, font, matrixProvider,
-                                                           text, xInt, yInt);
-}
-#endif

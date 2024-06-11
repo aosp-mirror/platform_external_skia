@@ -72,7 +72,7 @@ GrVkSampler* GrVkSampler::Create(GrVkGpu* gpu, GrSamplerState samplerState,
     // level mip). If the filters weren't the same we could set min = 0 and max = 0.25 to force
     // the minFilter on mip level 0.
     createInfo.minLod = 0.0f;
-    bool useMipMaps = samplerState.mipmapped() == GrMipmapped::kYes;
+    bool useMipMaps = samplerState.mipmapped() == skgpu::Mipmapped::kYes;
     createInfo.maxLod = !useMipMaps ? 0.0f : 10000.0f;
     createInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
     createInfo.unnormalizedCoordinates = VK_FALSE;
@@ -94,15 +94,21 @@ GrVkSampler* GrVkSampler::Create(GrVkGpu* gpu, GrSamplerState samplerState,
 
         createInfo.pNext = &conversionInfo;
 
+        VkFilter chromaFilter = ycbcrInfo.fChromaFilter;
         VkFormatFeatureFlags flags = ycbcrInfo.fFormatFeatures;
-        if (!SkToBool(flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT)) {
+        if (!SkToBool(flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
             createInfo.magFilter = VK_FILTER_NEAREST;
             createInfo.minFilter = VK_FILTER_NEAREST;
-        } else if (
-                !(flags &
-                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT)) {
-            createInfo.magFilter = ycbcrInfo.fChromaFilter;
-            createInfo.minFilter = ycbcrInfo.fChromaFilter;
+            // This doesn't explicitly do anything itself, but if we don't support separate
+            // reconstruction filters below, then we need the chromaFilter to match the mag/min here
+            // so we set it nearest. Because we don't currently update the VulkanYcbcrConversionInfo
+            // that we're querying here, this logic around the chromaFilter must match the logic in
+            // the SetupSamplerYcbcrConversionInfo helper function.
+            chromaFilter = VK_FILTER_NEAREST;
+        }
+        if (!(flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT)) {
+            createInfo.magFilter = chromaFilter;
+            createInfo.minFilter = chromaFilter;
         }
 
         // Required values when using ycbcr conversion

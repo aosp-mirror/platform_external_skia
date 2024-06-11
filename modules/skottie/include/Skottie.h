@@ -8,30 +8,35 @@
 #ifndef Skottie_DEFINED
 #define Skottie_DEFINED
 
-#include "include/core/SkFontMgr.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "modules/skottie/include/ExternalLayer.h"
-#include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skresources/include/SkResources.h"
 
-#include <memory>
+// TODO(kjlubick) update clients and then remove the following:
+#include "include/core/SkFontMgr.h"  // IWYU pragma: keep
+#include "modules/skottie/include/ExternalLayer.h"  // IWYU pragma: keep
+#include "modules/skottie/include/SkottieProperty.h"  // IWYU pragma: keep
+#include "modules/skottie/include/SlotManager.h"  // IWYU pragma: keep
+
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 class SkCanvas;
-struct SkRect;
 class SkStream;
-
-namespace skjson { class ObjectValue; }
+struct SkRect;
 
 namespace sksg {
 
 class InvalidationController;
-class Scene;
+class RenderNode;
 
 } // namespace sksg
+
+namespace SkShapers { class Factory; }
 
 namespace skottie {
 
@@ -50,7 +55,7 @@ public:
         kError,
     };
 
-    virtual void log(Level, const char message[], const char* json = nullptr);
+    virtual void log(Level, const char message[], const char* json = nullptr) = 0;
 };
 
 // Evaluates AE expressions.
@@ -98,6 +103,8 @@ public:
         };
 
         explicit Builder(uint32_t flags = 0);
+        Builder(const Builder&);
+        Builder(Builder&&);
         ~Builder();
 
         struct Stats {
@@ -156,11 +163,23 @@ public:
         Builder& setExpressionManager(sk_sp<ExpressionManager>);
 
         /**
+         * Registers a factory to be used when shaping text.
+         * If unspecified, text will be shaped with primitive shaping.
+         * See //modules/skshaper/utils/FactoryHelpers.h
+         */
+        Builder& setTextShapingFactory(sk_sp<SkShapers::Factory>);
+
+        /**
          * Animation factories.
          */
         sk_sp<Animation> make(SkStream*);
         sk_sp<Animation> make(const char* data, size_t length);
         sk_sp<Animation> makeFromFile(const char path[]);
+
+        /**
+         * Get handle for SlotManager after animation is built.
+         */
+        const sk_sp<SlotManager>& getSlotManager() const {return fSlotManager;}
 
     private:
         const uint32_t          fFlags;
@@ -172,6 +191,8 @@ public:
         sk_sp<MarkerObserver  >   fMarkerObserver;
         sk_sp<PrecompInterceptor> fPrecompInterceptor;
         sk_sp<ExpressionManager>  fExpressionManager;
+        sk_sp<SkShapers::Factory> fShapingFactory;
+        sk_sp<SlotManager>        fSlotManager;
         Stats                     fStats;
     };
 
@@ -269,12 +290,12 @@ private:
         kRequiresTopLevelIsolation = 1 << 0, // Needs to draw into a layer due to layer blending.
     };
 
-    Animation(std::unique_ptr<sksg::Scene>,
+    Animation(sk_sp<sksg::RenderNode>,
               std::vector<sk_sp<internal::Animator>>&&,
               SkString ver, const SkSize& size,
               double inPoint, double outPoint, double duration, double fps, uint32_t flags);
 
-    const std::unique_ptr<sksg::Scene>           fScene;
+    const sk_sp<sksg::RenderNode>                fSceneRoot;
     const std::vector<sk_sp<internal::Animator>> fAnimators;
     const SkString                               fVersion;
     const SkSize                                 fSize;

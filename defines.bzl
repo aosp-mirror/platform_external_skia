@@ -40,12 +40,6 @@ GENERAL_DEFINES = [
     ],
     "//conditions:default": [],
 }) + select({
-    "//src/sksl:enable_sksl_tracing_true": ["SKSL_ENABLE_TRACING"],
-    "//conditions:default": [],
-}) + select({
-    "//src/sksl:needs_sksl": ["SK_ENABLE_SKSL"],
-    "//conditions:default": [],
-}) + select({
     "//src/pdf:enable_pdf_backend_true": ["SK_SUPPORT_PDF"],
     "//conditions:default": [],
 }) + select({
@@ -54,21 +48,23 @@ GENERAL_DEFINES = [
 }) + select({
     "//src/lazy:enable_discardable_memory_true": ["SK_USE_DISCARDABLE_SCALEDIMAGECACHE"],
     "//src/lazy:enable_discardable_memory_false": [],
+}) + select({
+    "//bazel/common_config_settings:build_for_debugger_true": ["SK_BUILD_FOR_DEBUGGER"],
+    "//conditions:default": [],
 })
 
 GPU_DEFINES = select_multi({
-    "//src/gpu:gl_backend": [
+    "//src/gpu:gl_ganesh": [
         "SK_GL",
         "SK_GANESH",
     ],
-    "//src/gpu:vulkan_backend": [
+    "//src/gpu:vulkan_ganesh": [
         "SK_VULKAN",
         "SK_GANESH",
     ],
-    "//src/gpu:dawn_backend": [
-        "SK_DAWN",
+    "//src/gpu:metal_ganesh": [
+        "SK_METAL",
         "SK_GANESH",
-        "VK_USE_PLATFORM_XCB_KHR",  # TODO(kjlubick) support dawn's dawn_enable_vulkan etc
     ],
 }) + select({
     "//src/gpu:gl_standard": [
@@ -79,7 +75,6 @@ GPU_DEFINES = select_multi({
     ],
     "//src/gpu:webgl_standard": [
         "SK_ASSUME_WEBGL=1",
-        "SK_USE_WEBGL",
     ],
     "//conditions:default": [],
 }) + select({
@@ -89,28 +84,22 @@ GPU_DEFINES = select_multi({
     "//conditions:default": [],
 })
 
-CODEC_DEFINES = [
-    "SK_HAS_ANDROID_CODEC",
-] + select_multi(
-    {
-        "//src/codec:avif_decode_codec": ["SK_CODEC_DECODES_AVIF"],
-        "//src/codec:gif_decode_codec": ["SK_HAS_WUFFS_LIBRARY"],
-        "//src/codec:jpeg_decode_codec": ["SK_CODEC_DECODES_JPEG"],
-        "//src/encode:jpeg_encode_codec": ["SK_ENCODE_JPEG"],
-        "//src/codec:png_decode_codec": ["SK_CODEC_DECODES_PNG"],
-        "//src/encode:png_encode_codec": ["SK_ENCODE_PNG"],
-        "//src/codec:raw_decode_codec": [
-            "SK_CODEC_DECODES_RAW",
-            "SK_CODEC_DECODES_JPEG",
-        ],
-        "//src/codec:webp_decode_codec": ["SK_CODEC_DECODES_WEBP"],
-        "//src/encode:webp_encode_codec": ["SK_ENCODE_WEBP"],
-    },
-)
+CODEC_DEFINES = select_multi({
+    "//src/codec:avif_decode_codec": ["SK_CODEC_DECODES_AVIF"],
+    "//src/codec:gif_decode_codec": ["SK_HAS_WUFFS_LIBRARY", "SK_CODEC_DECODES_GIF"],
+    "//src/codec:jpeg_decode_codec": ["SK_CODEC_DECODES_JPEG"],
+    "//src/codec:png_decode_codec": ["SK_CODEC_DECODES_PNG"],
+    "//src/codec:raw_decode_codec": [
+        "SK_CODEC_DECODES_RAW",
+        "SK_CODEC_DECODES_JPEG",
+    ],
+    "//src/codec:webp_decode_codec": ["SK_CODEC_DECODES_WEBP"],
+})
 
 TYPEFACE_DEFINES = select_multi(
     {
         "//src/ports:uses_freetype": ["SK_TYPEFACE_FACTORY_FREETYPE"],
+        "//src/ports:uses_fontations": ["SK_TYPEFACE_FACTORY_FONTATIONS"],
         #TODO: others when they become available
     },
 )
@@ -119,8 +108,11 @@ PLATFORM_DEFINES = select({
     "//bazel/common_config_settings:cpu_wasm": [
         # working around https://github.com/emscripten-core/emscripten/issues/10072
         "SK_FORCE_8_BYTE_ALIGNMENT",
-        "SK_DISABLE_AAA",  # This saves about 57KB of code size, uncompressed
     ],
+    "//conditions:default": [],
+}) + select({
+    "//bazel/platform:trivial_abi": ["SK_TRIVIAL_ABI=[[clang::trivial_abi]]"],
+    "//bazel/common_config_settings:cpu_wasm": ["SK_TRIVIAL_ABI=[[clang::trivial_abi]]"],
     "//conditions:default": [],
 })
 

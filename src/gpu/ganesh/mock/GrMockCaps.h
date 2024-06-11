@@ -8,9 +8,31 @@
 #ifndef GrMockCaps_DEFINED
 #define GrMockCaps_DEFINED
 
+#include "include/core/SkTextureCompressionType.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrTypes.h"
 #include "include/gpu/mock/GrMockTypes.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkMath.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/Swizzle.h"
 #include "src/gpu/ganesh/GrCaps.h"
-#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/GrProgramDesc.h"
+#include "src/gpu/ganesh/GrShaderCaps.h"
+#include "src/gpu/ganesh/GrSurface.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+class GrProgramInfo;
+class GrRenderTarget;
+namespace GrTest { struct TestFormatColorTypeCombination; }
+struct GrContextOptions;
+struct SkIRect;
 
 class GrMockCaps : public GrCaps {
 public:
@@ -27,6 +49,7 @@ public:
         fMaxPreferredRenderTargetSize = fMaxRenderTargetSize;
         fMaxVertexAttributes = options.fMaxVertexAttributes;
         fSampleLocationsSupport = true;
+        fSupportsProtectedContent = true;
 
         fShaderCaps = std::make_unique<GrShaderCaps>();
         fShaderCaps->fIntegerSupport = options.fIntegerSupport;
@@ -40,8 +63,8 @@ public:
     }
 
     bool isFormatSRGB(const GrBackendFormat& format) const override {
-        SkImage::CompressionType compression = format.asMockCompressionType();
-        if (compression != SkImage::CompressionType::kNone) {
+        SkTextureCompressionType compression = format.asMockCompressionType();
+        if (compression != SkTextureCompressionType::kNone) {
             return false;
         }
 
@@ -50,8 +73,8 @@ public:
     }
 
     bool isFormatTexturable(const GrBackendFormat& format, GrTextureType) const override {
-        SkImage::CompressionType compression = format.asMockCompressionType();
-        if (compression != SkImage::CompressionType::kNone) {
+        SkTextureCompressionType compression = format.asMockCompressionType();
+        if (compression != SkTextureCompressionType::kNone) {
             return fOptions.fCompressedOptions[(int)compression].fTexturable;
         }
 
@@ -75,7 +98,7 @@ public:
     }
 
     bool isFormatRenderable(const GrBackendFormat& format, int sampleCount) const override {
-        if (format.asMockCompressionType() != SkImage::CompressionType::kNone) {
+        if (format.asMockCompressionType() != SkTextureCompressionType::kNone) {
             return false;  // compressed formats are never renderable
         }
 
@@ -86,8 +109,8 @@ public:
 
     int getRenderTargetSampleCount(int requestCount,
                                    const GrBackendFormat& format) const override {
-        SkImage::CompressionType compression = format.asMockCompressionType();
-        if (compression != SkImage::CompressionType::kNone) {
+        SkTextureCompressionType compression = format.asMockCompressionType();
+        if (compression != SkTextureCompressionType::kNone) {
             return 0; // no compressed format is renderable
         }
 
@@ -107,8 +130,8 @@ public:
     }
 
     int maxRenderTargetSampleCount(const GrBackendFormat& format) const override {
-        SkImage::CompressionType compression = format.asMockCompressionType();
-        if (compression != SkImage::CompressionType::kNone) {
+        SkTextureCompressionType compression = format.asMockCompressionType();
+        if (compression != SkTextureCompressionType::kNone) {
             return 0; // no compressed format is renderable
         }
 
@@ -121,11 +144,12 @@ public:
         return {surfaceColorType, 1};
     }
 
-    SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override {
-        return SurfaceReadPixelsSupport::kSupported;
+    SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface* surface) const override {
+        return surface->isProtected() ? SurfaceReadPixelsSupport::kUnsupported
+                                      : SurfaceReadPixelsSupport::kSupported;
     }
 
-    GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override {
+    GrBackendFormat getBackendFormatFromCompressionType(SkTextureCompressionType) const override {
         return {};
     }
 
@@ -140,7 +164,7 @@ public:
                            const GrProgramInfo&,
                            ProgramDescOverrideFlags) const override;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     std::vector<GrTest::TestFormatColorTypeCombination> getTestingCombinations() const override;
 #endif
 
@@ -148,10 +172,13 @@ private:
     bool onSurfaceSupportsWritePixels(const GrSurface*) const override { return true; }
     bool onCanCopySurface(const GrSurfaceProxy* dst, const SkIRect& dstRect,
                           const GrSurfaceProxy* src, const SkIRect& srcRect) const override {
+        if (src->isProtected() == GrProtected::kYes && dst->isProtected() != GrProtected::kYes) {
+            return false;
+        }
         return true;
     }
     GrBackendFormat onGetDefaultBackendFormat(GrColorType ct) const override {
-        return GrBackendFormat::MakeMock(ct, SkImage::CompressionType::kNone);
+        return GrBackendFormat::MakeMock(ct, SkTextureCompressionType::kNone);
     }
 
     bool onAreColorTypeAndFormatCompatible(GrColorType ct,
@@ -160,12 +187,12 @@ private:
             return false;
         }
 
-        SkImage::CompressionType compression = format.asMockCompressionType();
-        if (compression == SkImage::CompressionType::kETC2_RGB8_UNORM ||
-            compression == SkImage::CompressionType::kBC1_RGB8_UNORM) {
+        SkTextureCompressionType compression = format.asMockCompressionType();
+        if (compression == SkTextureCompressionType::kETC2_RGB8_UNORM ||
+            compression == SkTextureCompressionType::kBC1_RGB8_UNORM) {
             return ct == GrColorType::kRGB_888x; // TODO: this may be too restrictive
         }
-        if (compression == SkImage::CompressionType::kBC1_RGBA8_UNORM) {
+        if (compression == SkTextureCompressionType::kBC1_RGBA8_UNORM) {
             return ct == GrColorType::kRGBA_8888;
         }
 

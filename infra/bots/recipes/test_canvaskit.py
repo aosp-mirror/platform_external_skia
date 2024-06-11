@@ -15,7 +15,6 @@ DEPS = [
   'recipe_engine/file',
   'recipe_engine/path',
   'recipe_engine/properties',
-  'recipe_engine/python',
   'recipe_engine/step',
   'gold_upload',
   'run',
@@ -29,7 +28,7 @@ INNER_KARMA_SCRIPT = 'skia/infra/canvaskit/test_canvaskit.sh'
 def RunSteps(api):
   api.vars.setup()
   api.flavor.setup('dm')
-  checkout_root = api.path['start_dir']
+  checkout_root = api.path.start_dir
   out_dir = api.vars.swarming_out_dir
 
   # The karma script is configured to look in ./build/ for

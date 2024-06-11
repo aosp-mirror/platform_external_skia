@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkMutex.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/private/chromium/SkDiscardableMemory.h"
 #include "src/base/SkTInternalLList.h"
 #include "src/lazy/SkDiscardableMemoryPool.h"
@@ -174,7 +174,7 @@ std::unique_ptr<SkDiscardableMemory> DiscardableMemoryPool::make(size_t bytes) {
     fList.addToHead(dm.get());
     fUsed += bytes;
     this->dumpDownTo(fBudget);
-    return std::move(dm);
+    return dm;
 }
 
 void DiscardableMemoryPool::removeFromPool(PoolDiscardableMemory* dm) {

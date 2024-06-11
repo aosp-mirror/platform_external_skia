@@ -26,11 +26,11 @@ class GrBackendFormat;
 class GrCaps;
 class GrResourceProvider;
 class GrSurface;
-enum class GrProtected : bool;
 enum class SkBackingFit;
 struct SkISize;
 namespace skgpu {
 enum class Budgeted : bool;
+enum class Protected : bool;
 }
 
 // GrArenas matches the lifetime of a single frame. It is created and held on the
@@ -133,8 +133,7 @@ public:
 
 protected:
     friend class GrProxyProvider;  // for ctors
-    friend class GrRenderTargetProxyPriv;
-
+    friend class GrVkSecondaryCBDrawContext;  // for ctors
     // Deferred version
     GrRenderTargetProxy(const GrCaps&,
                         const GrBackendFormat&,
@@ -142,7 +141,7 @@ protected:
                         int sampleCount,
                         SkBackingFit,
                         skgpu::Budgeted,
-                        GrProtected,
+                        skgpu::Protected,
                         GrInternalSurfaceFlags,
                         UseAllocator,
                         std::string_view label);
@@ -165,7 +164,7 @@ protected:
                         int sampleCount,
                         SkBackingFit,
                         skgpu::Budgeted,
-                        GrProtected,
+                        skgpu::Protected,
                         GrInternalSurfaceFlags,
                         UseAllocator,
                         WrapsVkSecondaryCB,

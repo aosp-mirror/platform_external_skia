@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -8,7 +12,9 @@ skia_filegroup(
     name = "private_hdrs",
     srcs = [
         "SkiaVulkan.h",
-        "VulkanTypesPriv.h",
     ],
-    visibility = ["//include/private/gpu:__pkg__"],
+    visibility = [
+        "//include/private/gpu:__pkg__",
+        "//src/gpu/ganesh/vk:__pkg__",
+    ],
 )

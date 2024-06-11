@@ -9,7 +9,10 @@
 #define skgpu_tessellate_AffineMatrix_DEFINED
 
 #include "include/core/SkMatrix.h"
-#include "src/gpu/tessellate/Tessellation.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkTypes.h"
+#include "src/base/SkUtils.h"
+#include "src/base/SkVx.h"
 
 namespace skgpu::tess {
 
@@ -41,8 +44,8 @@ public:
     }
 
     SK_ALWAYS_INLINE skvx::float4 map2Points(SkPoint p0, SkPoint p1) const {
-        return this->map2Points(skvx::float4(skvx::bit_pun<skvx::float2>(p0),
-                                             skvx::bit_pun<skvx::float2>(p1)));
+        return this->map2Points(skvx::float4(sk_bit_cast<skvx::float2>(p0),
+                                             sk_bit_cast<skvx::float2>(p1)));
     }
 
     SK_ALWAYS_INLINE skvx::float2 mapPoint(skvx::float2 p) const {
@@ -54,7 +57,7 @@ public:
     }
 
     SK_ALWAYS_INLINE SkPoint mapPoint(SkPoint p) const {
-        return skvx::bit_pun<SkPoint>(this->mapPoint(skvx::bit_pun<skvx::float2>(p)));
+        return sk_bit_cast<SkPoint>(this->mapPoint(sk_bit_cast<skvx::float2>(p)));
     }
 
 private:

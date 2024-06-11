@@ -210,6 +210,20 @@ func (b *taskBuilder) asset(assets ...string) {
 	b.cipd(pkgs...)
 }
 
+// usesCCache adds attributes to tasks which need bazel (via bazelisk).
+func (b *taskBuilder) usesBazel(hostOSArch string) {
+	archToPkg := map[string]string{
+		"linux_x64": "bazelisk_linux_amd64",
+		"mac_x64":   "bazelisk_mac_amd64",
+	}
+	pkg, ok := archToPkg[hostOSArch]
+	if !ok {
+		panic("Unsupported osAndArch for bazelisk: " + hostOSArch)
+	}
+	b.cipd(b.MustGetCipdPackageFromAsset(pkg))
+	b.addToPATH(pkg)
+}
+
 // usesCCache adds attributes to tasks which use ccache.
 func (b *taskBuilder) usesCCache() {
 	b.cache(CACHES_CCACHE...)
@@ -288,6 +302,14 @@ func (b *taskBuilder) usesGSUtil() {
 	b.addToPATH("gsutil/gsutil")
 }
 
+// needsFontsForParagraphTests downloads the skparagraph CIPD package to
+// a subdirectory of the Skia checkout: resources/extra_fonts
+func (b *taskBuilder) needsFontsForParagraphTests() {
+	pkg := b.MustGetCipdPackageFromAsset("skparagraph")
+	pkg.Path = "skia/resources/extra_fonts"
+	b.cipd(pkg)
+}
+
 // recipeProp adds the given recipe property key/value pair. Panics if
 // getRecipeProps() was already called.
 func (b *taskBuilder) recipeProp(key, value string) {
@@ -353,31 +375,18 @@ func (b *taskBuilder) cipdPlatform() string {
 
 // usesPython adds attributes to tasks which use python.
 func (b *taskBuilder) usesPython() {
-	pythonPkgs := removePython2(cipd.PkgsPython[b.cipdPlatform()])
+	pythonPkgs := cipd.PkgsPython[b.cipdPlatform()]
 	b.cipd(pythonPkgs...)
 	b.addToPATH(
 		"cipd_bin_packages/cpython3",
 		"cipd_bin_packages/cpython3/bin",
 	)
 	b.cache(&specs.Cache{
-		Name: "vpython",
-		Path: "cache/vpython",
+		Name: "vpython3",
+		Path: "cache/vpython3",
 	})
-	b.envPrefixes("VPYTHON_VIRTUALENV_ROOT", "cache/vpython")
+	b.envPrefixes("VPYTHON_VIRTUALENV_ROOT", "cache/vpython3")
 	b.env("VPYTHON_LOG_TRACE", "1")
-}
-
-// removePython2 removes all python2 packages from a list of CIPD packages. This can be used to
-// enforce the lack of Python2 dependencies in our tests.
-func removePython2(pyPackages []*cipd.Package) []*cipd.Package {
-	var python3Pkgs []*cipd.Package
-	for _, p := range pyPackages {
-		if strings.HasPrefix(p.Version, "version:2@2.7") {
-			continue
-		}
-		python3Pkgs = append(python3Pkgs, p)
-	}
-	return python3Pkgs
 }
 
 func (b *taskBuilder) usesNode() {

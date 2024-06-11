@@ -18,7 +18,6 @@ DEPS = [
   'recipe_engine/path',
   'recipe_engine/platform',
   'recipe_engine/properties',
-  'recipe_engine/python',
   'recipe_engine/raw_io',
   'recipe_engine/step',
   'gold_upload',
@@ -48,7 +47,7 @@ def test_steps(api):
   use_hash_file = False
   if do_upload:
     host_dm_dir = str(api.flavor.host_dirs.dm_dir)
-    api.flavor.create_clean_host_dir(api.path['start_dir'].join('test'))
+    api.flavor.create_clean_host_dir(api.path.start_dir.join('test'))
     device_dm_dir = str(api.flavor.device_dirs.dm_dir)
     if host_dm_dir != device_dm_dir:
       api.flavor.create_clean_device_dir(device_dm_dir)
@@ -59,42 +58,12 @@ def test_steps(api):
     host_hashes_file = api.vars.tmp_dir.join(hash_filename)
     hashes_file = api.flavor.device_path_join(
         api.flavor.device_dirs.tmp_dir, hash_filename)
+    script = api.gold_upload.resource('get_uninteresting_hashes.py')
     api.run(
-        api.python.inline,
+        api.step,
         'get uninteresting hashes',
-        program="""
-import contextlib
-import math
-import socket
-import sys
-import time
-
-from urllib.request import urlopen
-
-HASHES_URL = sys.argv[1]
-RETRIES = 5
-TIMEOUT = 60
-WAIT_BASE = 15
-
-socket.setdefaulttimeout(TIMEOUT)
-for retry in range(RETRIES):
-  try:
-    with contextlib.closing(
-        urlopen(HASHES_URL, timeout=TIMEOUT)) as w:
-      hashes = w.read().decode('utf-8')
-      with open(sys.argv[2], 'w') as f:
-        f.write(hashes)
-        break
-  except Exception as e:
-    print('Failed to get uninteresting hashes from %s:' % HASHES_URL)
-    print(e)
-    if retry == RETRIES:
-      raise
-    waittime = WAIT_BASE * math.pow(2, retry)
-    print('Retry in %d seconds.' % waittime)
-    time.sleep(waittime)
-        """,
-        args=[api.properties['gold_hashes_url'], host_hashes_file],
+        cmd=['python3', script, api.properties['gold_hashes_url'],
+              host_hashes_file],
         # If this fails, we want to know about it because it means Gold is down
         # and proceeding onwards would take a very long time, but be hard to notice.
         abort_on_failure=True,
@@ -144,6 +113,8 @@ for retry in range(RETRIES):
           api.flavor.device_dirs.resource_dir, 'skottie'),
       api.flavor.device_dirs.lotties_dir,
     ])
+  if 'Fontations' in api.vars.builder_cfg.get('extra_config', []):
+    args.extend(['--fontTestDataPath', api.flavor.device_dirs.fonts_dir])
 
   if use_hash_file:
     args.extend(['--uninterestingHashesFile', hashes_file])
@@ -179,6 +150,7 @@ TEST_BUILDERS = [
   'Test-Android-Clang-Pixel2XL-GPU-Adreno540-arm64-Debug-All-Android',
   'Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Release-All-Lottie',
   'Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE',
+  'Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-Fontations',
 ]
 
 
@@ -214,14 +186,14 @@ def GenTests(api):
       api.test(builder) +
       api.properties(**props) +
       api.path.exists(
-          api.path['start_dir'].join('skia'),
-          api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'skimage', 'VERSION'),
-          api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'skp', 'VERSION'),
-          api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'svg', 'VERSION'),
-          api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
+          api.path.start_dir.join('skia'),
+          api.path.start_dir.join('skia', 'infra', 'bots', 'assets',
+                                  'skimage', 'VERSION'),
+          api.path.start_dir.join('skia', 'infra', 'bots', 'assets',
+                                  'skp', 'VERSION'),
+          api.path.start_dir.join('skia', 'infra', 'bots', 'assets',
+                                  'svg', 'VERSION'),
+          api.path.start_dir.join('tmp', 'uninteresting_hashes.txt')
       ) +
       api.step_data('get swarming bot id',
           stdout=api.raw_io.output('skia-bot-123')) +

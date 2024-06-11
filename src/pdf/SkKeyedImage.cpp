@@ -7,7 +7,13 @@
 
 #include "src/pdf/SkKeyedImage.h"
 
+#include "include/core/SkBitmap.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/private/base/SkAssert.h"
 #include "src/image/SkImage_Base.h"
+
+#include <utility>
 
 SkBitmapKey SkBitmapKeyFromImage(const SkImage* image) {
     if (!image) {
@@ -33,7 +39,7 @@ SkKeyedImage::SkKeyedImage(const SkBitmap& bm) : fImage(bm.asImage()) {
 SkKeyedImage SkKeyedImage::subset(SkIRect subset) const {
     SkKeyedImage img;
     if (fImage && subset.intersect(fImage->bounds())) {
-        img.fImage = fImage->makeSubset(subset);
+        img.fImage = fImage->makeSubset(nullptr, subset);
         if (img.fImage) {
             img.fKey = {subset.makeOffset(fKey.fSubset.topLeft()), fKey.fID};
         }

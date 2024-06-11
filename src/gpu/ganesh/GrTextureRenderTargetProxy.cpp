@@ -4,20 +4,27 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 #include "src/gpu/ganesh/GrTextureRenderTargetProxy.h"
 
+#include "include/core/SkSize.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/ResourceKey.h"
+#include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrRenderTarget.h"
 #include "src/gpu/ganesh/GrSurface.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
 #include "src/gpu/ganesh/GrSurfaceProxyPriv.h"
 #include "src/gpu/ganesh/GrTexture.h"
-#include "src/gpu/ganesh/GrTextureProxyPriv.h"
 
-#ifdef SK_DEBUG
-#include "include/gpu/GrDirectContext.h"
-#include "src/gpu/ganesh/GrDirectContextPriv.h"
-#endif
+#include <utility>
+
+class GrBackendFormat;
+class GrResourceProvider;
 
 // Deferred version
 // This class is virtually derived from GrSurfaceProxy (via both GrTextureProxy and
@@ -26,7 +33,7 @@ GrTextureRenderTargetProxy::GrTextureRenderTargetProxy(const GrCaps& caps,
                                                        const GrBackendFormat& format,
                                                        SkISize dimensions,
                                                        int sampleCnt,
-                                                       GrMipmapped mipmapped,
+                                                       skgpu::Mipmapped mipmapped,
                                                        GrMipmapStatus mipmapStatus,
                                                        SkBackingFit fit,
                                                        skgpu::Budgeted budgeted,
@@ -68,7 +75,7 @@ GrTextureRenderTargetProxy::GrTextureRenderTargetProxy(const GrCaps& caps,
                                                        const GrBackendFormat& format,
                                                        SkISize dimensions,
                                                        int sampleCnt,
-                                                       GrMipmapped mipmapped,
+                                                       skgpu::Mipmapped mipmapped,
                                                        GrMipmapStatus mipmapStatus,
                                                        SkBackingFit fit,
                                                        skgpu::Budgeted budgeted,
@@ -221,8 +228,8 @@ GrSurfaceProxy::LazySurfaceDesc GrTextureRenderTargetProxy::callbackDesc() const
 void GrTextureRenderTargetProxy::onValidateSurface(const GrSurface* surface) {
     // Anything checked here should also be checking the GrTextureProxy version
     SkASSERT(surface->asTexture());
-    SkASSERT(GrMipmapped::kNo == this->proxyMipmapped() ||
-             GrMipmapped::kYes == surface->asTexture()->mipmapped());
+    SkASSERT(skgpu::Mipmapped::kNo == this->proxyMipmapped() ||
+             skgpu::Mipmapped::kYes == surface->asTexture()->mipmapped());
 
     // Anything checked here should also be checking the GrRenderTargetProxy version
     SkASSERT(surface->asRenderTarget());

@@ -7,8 +7,10 @@
 
 #include "include/core/SkM44.h"
 #include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkFloatingPoint.h"
 #include "src/base/SkVx.h"
-
 #include "src/core/SkMatrixInvert.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkPathPriv.h"
@@ -276,7 +278,7 @@ SkM44& SkM44::setRotateUnitSinCos(SkV3 axis, SkScalar sinAngle, SkScalar cosAngl
 
 SkM44& SkM44::setRotate(SkV3 axis, SkScalar radians) {
     SkScalar len = axis.length();
-    if (len > 0 && SkScalarIsFinite(len)) {
+    if (len > 0 && SkIsFinite(len)) {
         this->setRotateUnit(axis * (SK_Scalar1 / len), radians);
     } else {
         this->setIdentity();
@@ -344,7 +346,7 @@ SkM44 SkM44::Perspective(float near, float far, float angle) {
     float denomInv = sk_ieee_float_divide(1, far - near);
     float halfAngle = angle * 0.5f;
     SkASSERT(halfAngle != 0);
-    float cot = sk_ieee_float_divide(1, sk_float_tan(halfAngle));
+    float cot = sk_ieee_float_divide(1, std::tan(halfAngle));
 
     SkM44 m;
     m.setRC(0, 0, cot);

@@ -9,8 +9,10 @@
 #define skgpu_VulkanInterface_DEFINED
 
 #include "include/core/SkRefCnt.h"
-
 #include "include/gpu/vk/VulkanTypes.h"
+#include "include/private/gpu/vk/SkiaVulkan.h"
+
+#include <cstdint>
 
 namespace skgpu {
 
@@ -222,6 +224,9 @@ public:
         // Functions for YCBCRConversion
         VkPtr<PFN_vkCreateSamplerYcbcrConversion> fCreateSamplerYcbcrConversion;
         VkPtr<PFN_vkDestroySamplerYcbcrConversion> fDestroySamplerYcbcrConversion;
+
+        // Functions for VK_EXT_device_fault
+        VkPtr<PFN_vkGetDeviceFaultInfoEXT> fGetDeviceFaultInfo;
 
 #ifdef SK_BUILD_FOR_ANDROID
         // Functions for VK_ANDROID_external_memory_android_hardware_buffer

@@ -9,35 +9,33 @@
 
 #include "include/core/SkData.h"
 #include "include/core/SkStream.h"
+#include "src/base/SkEndian.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkJpegConstants.h"
 #include "src/codec/SkJpegSegmentScan.h"
-#include "src/core/SkEndian.h"
+#include "src/codec/SkTiffUtility.h"
+#include "src/core/SkStreamPriv.h"
 
 #include <cstring>
 
 constexpr size_t kMpEndianSize = 4;
-constexpr uint8_t kMpLittleEndian[kMpEndianSize] = {0x49, 0x49, 0x2A, 0x00};
 constexpr uint8_t kMpBigEndian[kMpEndianSize] = {0x4D, 0x4D, 0x00, 0x2A};
 
-constexpr uint16_t kTypeLong = 0x4;
+constexpr uint16_t kTypeUnsignedLong = 0x4;
 constexpr uint16_t kTypeUndefined = 0x7;
 
-constexpr uint32_t kTagSize = 12;
-constexpr uint32_t kTagSerializedCount = 3;
+constexpr uint32_t kIfdEntrySize = 12;
+constexpr uint32_t kIfdSerializedEntryCount = 3;
 
 constexpr uint16_t kVersionTag = 0xB000;
-constexpr uint16_t kVersionType = kTypeUndefined;
 constexpr uint32_t kVersionCount = 4;
 constexpr size_t kVersionSize = 4;
 constexpr uint8_t kVersionExpected[kVersionSize] = {'0', '1', '0', '0'};
 
 constexpr uint16_t kNumberOfImagesTag = 0xB001;
-constexpr uint16_t kNumberOfImagesType = kTypeLong;
 constexpr uint32_t kNumberOfImagesCount = 1;
 
 constexpr uint16_t kMPEntryTag = 0xB002;
-constexpr uint16_t kMPEntryType = kTypeUndefined;
 constexpr uint32_t kMPEntrySize = 16;
 
 constexpr uint32_t kMPEntryAttributeFormatMask = 0x7000000;
@@ -50,26 +48,6 @@ constexpr uint16_t kIndividualImageUniqueIDTag = 0xB003;
 constexpr uint32_t kIndividualImageUniqueIDSize = 33;
 
 constexpr uint16_t kTotalNumberCapturedFramesTag = 0xB004;
-constexpr uint32_t kTotalNumberCaptureFramesCount = 1;
-
-// Helper macro for SkJpegMultiPictureParameters::Make. Define the indicated variable VAR of type
-// TYPE, and read it from the stream, performing any endian-ness conversions as needed. Also define
-// the variable VAR##Bytes with the raw bytes (with no endian-ness conversion applied). If any
-// errors are encountered, then return nullptr. The last void line is present to suppress unused
-// variable warnings for parameters that we don't use.
-#define DEFINE_AND_READ_UINT(TYPE, VAR)                                                  \
-    TYPE VAR = 0;                                                                        \
-    uint8_t VAR##Bytes[sizeof(TYPE)] = {0};                                              \
-    {                                                                                    \
-        if (!stream->read(VAR##Bytes, sizeof(TYPE))) {                                   \
-            return nullptr;                                                              \
-        }                                                                                \
-        for (size_t VAR##i = 0; VAR##i < sizeof(TYPE); ++VAR##i) {                       \
-            VAR *= 256;                                                                  \
-            VAR += VAR##Bytes[streamIsBigEndian ? VAR##i : (sizeof(TYPE) - VAR##i - 1)]; \
-        }                                                                                \
-    }                                                                                    \
-    (void)VAR
 
 std::unique_ptr<SkJpegMultiPictureParameters> SkJpegMultiPictureParameters::Make(
         const sk_sp<const SkData>& segmentParameters) {
@@ -81,84 +59,70 @@ std::unique_ptr<SkJpegMultiPictureParameters> SkJpegMultiPictureParameters::Make
     if (memcmp(segmentParameters->data(), kMpfSig, sizeof(kMpfSig)) != 0) {
         return nullptr;
     }
-    std::unique_ptr<SkMemoryStream> stream =
-            SkMemoryStream::MakeDirect(segmentParameters->bytes() + sizeof(kMpfSig),
-                                       segmentParameters->size() - sizeof(kMpfSig));
+    auto ifdData = SkData::MakeSubset(
+            segmentParameters.get(), sizeof(kMpfSig), segmentParameters->size() - sizeof(kMpfSig));
+    SkASSERT(ifdData);
 
     // The rest of this function reads the structure described in Figure 6 of CIPA DC-x007-2009.
     // Determine the endianness of the values in the structure. See Figure 5 (MP endian tag
-    // structure).
-    bool streamIsBigEndian = false;
-    {
-        uint8_t endianTag[kMpEndianSize] = {0};
-        if (!stream->read(endianTag, kMpEndianSize)) {
-            SkCodecPrintf("Failed to read MP endian tag.\n");
-            return nullptr;
-        }
-        if (!memcmp(endianTag, kMpBigEndian, kMpEndianSize)) {
-            streamIsBigEndian = true;
-        } else if (!memcmp(endianTag, kMpLittleEndian, kMpEndianSize)) {
-            streamIsBigEndian = false;
-        } else {
-            SkCodecPrintf("MP endian tag was invalid.\n");
-            return nullptr;
-        }
-    }
-
-    // Seek to the Index Image File Directory (Index IFD).
-    DEFINE_AND_READ_UINT(uint32_t, indexIfdOffset);
-    if (stream->getPosition() < indexIfdOffset) {
-        SkCodecPrintf("MP Index IFD offset moves backwards.\n");
+    // structure), and read the Index IFD offset.
+    bool littleEndian = false;
+    uint32_t ifdOffset = 0;
+    if (!SkTiffImageFileDirectory::ParseHeader(ifdData.get(), &littleEndian, &ifdOffset)) {
+        SkCodecPrintf("Failed to parse endian-ness and index IFD offset.\n");
         return nullptr;
     }
-    if (!stream->seek(indexIfdOffset)) {
-        SkCodecPrintf("Failed to seek to MPF IFD.\n");
+
+    // Create the Index Image File Directory (Index IFD).
+    auto ifd = SkTiffImageFileDirectory::MakeFromOffset(ifdData, littleEndian, ifdOffset);
+    if (!ifd) {
+        SkCodecPrintf("Failed to create MP Index IFD offset.\n");
         return nullptr;
     }
 
     // Read the number of tags in the Index IFD. See Table 3 (MP Index IFD Tags) for a description
     // of all possible tags.
-    DEFINE_AND_READ_UINT(uint16_t, tagCount);
+    uint16_t tagCount = ifd->getNumEntries();
 
     // We will extract the number of images from the tags.
     uint32_t numberOfImages = 0;
 
-    // The offset to the MP entries. Zero is an invalid value.
-    uint32_t mpEntryOffset = 0;
+    // The data for the MP entries.
+    sk_sp<SkData> mpEntriesData;
 
     // The MP Index IFD tags shall be specified in the order of their tag IDs (text from
     // section 5.2.3), so keep track of the previous tag id read.
-    uint16_t previousTagId = 0;
-    for (uint16_t tagIndex = 0; tagIndex < tagCount; ++tagIndex) {
-        DEFINE_AND_READ_UINT(uint16_t, tagId);
-        DEFINE_AND_READ_UINT(uint16_t, type);
-        DEFINE_AND_READ_UINT(uint32_t, count);
-        DEFINE_AND_READ_UINT(uint32_t, value);
-
-        if (previousTagId >= tagId) {
+    uint16_t previousTag = 0;
+    for (uint16_t idfEntryIndex = 0; idfEntryIndex < tagCount; ++idfEntryIndex) {
+        uint16_t tag = ifd->getEntryTag(idfEntryIndex);
+        if (previousTag >= tag) {
             SkCodecPrintf("MPF tags not in order.\n");
             return nullptr;
         }
-        previousTagId = tagId;
+        previousTag = tag;
 
-        switch (tagId) {
-            case kVersionTag:
+        switch (tag) {
+            case kVersionTag: {
                 // See 5.2.3.1: MP Format Version.
-                if (memcmp(valueBytes, kVersionExpected, kVersionSize) != 0) {
+                sk_sp<SkData> data = ifd->getEntryUndefinedData(idfEntryIndex);
+                if (!data) {
+                    SkCodecPrintf("Version must be undefined type.\n");
+                    return nullptr;
+                }
+                if (data->size() != kVersionSize) {
+                    SkCodecPrintf("Version must be 4 bytes.\n");
+                    return nullptr;
+                }
+                if (memcmp(data->data(), kVersionExpected, kVersionSize) != 0) {
                     SkCodecPrintf("Version value is not 0100.\n");
                     return nullptr;
                 }
-                if (count != kVersionCount) {
-                    SkCodecPrintf("Version count not 4.\n");
-                    return nullptr;
-                }
                 break;
+            }
             case kNumberOfImagesTag:
                 // See 5.2.3.2: Number of Images.
-                numberOfImages = value;
-                if (type != kTypeLong) {
-                    SkCodecPrintf("Invalid Total Number of Captured Frames type.\n");
-                    return nullptr;
+                if (!ifd->getEntryUnsignedLong(idfEntryIndex, 1, &numberOfImages)) {
+                    SkCodecPrintf("Number of Images was not 1 unsigned long.\n");
                 }
                 if (numberOfImages < 1) {
                     SkCodecPrintf("Invalid number of images.\n");
@@ -167,33 +131,43 @@ std::unique_ptr<SkJpegMultiPictureParameters> SkJpegMultiPictureParameters::Make
                 break;
             case kMPEntryTag: {
                 // See 5.2.3.3: MP Entry.
-                if (count != kMPEntrySize * numberOfImages) {
-                    SkCodecPrintf("Invalid MPEntry count.\n");
+                mpEntriesData = ifd->getEntryUndefinedData(idfEntryIndex);
+                if (!mpEntriesData) {
+                    SkCodecPrintf("MP entries data could not be extracted.\n");
                     return nullptr;
                 }
-                mpEntryOffset = value;
+                if (mpEntriesData->size() != kMPEntrySize * numberOfImages) {
+                    SkCodecPrintf("MP entries data should be %ux%u bytes, was %u.\n",
+                                  kMPEntrySize,
+                                  numberOfImages,
+                                  static_cast<uint32_t>(mpEntriesData->size()));
+                    return nullptr;
+                }
                 break;
             }
-            case kIndividualImageUniqueIDTag:
+            case kIndividualImageUniqueIDTag: {
                 // See 5.2.3.4: Individual Image Unique ID List.
                 // Validate that the count parameter is correct, but do not extract any other
                 // information.
-                if (count != kIndividualImageUniqueIDSize * numberOfImages) {
+                sk_sp<SkData> data = ifd->getEntryUndefinedData(idfEntryIndex);
+                if (!data) {
+                    SkCodecPrintf("Image Unique ID must be undefined type.\n");
+                    return nullptr;
+                }
+                if (data->size() != kIndividualImageUniqueIDSize * numberOfImages) {
                     SkCodecPrintf("Invalid Image Unique ID count.\n");
                     return nullptr;
                 }
                 break;
-            case kTotalNumberCapturedFramesTag:
+            }
+            case kTotalNumberCapturedFramesTag: {
                 // See 5.2.3.5: Total Number of Captured Frames.
-                if (type != kTypeLong) {
-                    SkCodecPrintf("Invalid Total Number of Captured Frames type.\n");
-                    return nullptr;
-                }
-                if (count != kTotalNumberCaptureFramesCount) {
-                    SkCodecPrintf("Invalid Total Number of Captured Frames count.\n");
-                    return nullptr;
+                uint32_t totalNumCapturedFrames = 0;
+                if (!ifd->getEntryUnsignedLong(idfEntryIndex, 1, &totalNumCapturedFrames)) {
+                    SkCodecPrintf("Total Number of Captures Frames was not 1 unsigned long.\n");
                 }
                 break;
+            }
             default:
                 return nullptr;
         }
@@ -202,8 +176,8 @@ std::unique_ptr<SkJpegMultiPictureParameters> SkJpegMultiPictureParameters::Make
         SkCodecPrintf("Number of images must be greater than zero.\n");
         return nullptr;
     }
-    if (!mpEntryOffset) {
-        SkCodecPrintf("MP Entry tag was not present or had invalid offset.\n");
+    if (!mpEntriesData) {
+        SkCodecPrintf("MP Entry data was not present.\n");
         return nullptr;
     }
 
@@ -211,23 +185,15 @@ std::unique_ptr<SkJpegMultiPictureParameters> SkJpegMultiPictureParameters::Make
     auto result = std::make_unique<SkJpegMultiPictureParameters>();
     result->images.resize(numberOfImages);
 
-    // Read the Attribute IFD offset, and verify that it is zero (absent) or greater than our
-    // current offset. We will not read or validate the Attribute IFD.
-    DEFINE_AND_READ_UINT(uint32_t, attributeIfdOffset);
-    if (attributeIfdOffset > 0) {
-        if (stream->getPosition() < attributeIfdOffset) {
-            SkCodecPrintf("MP Attribute IFD offset moves backwards.\n");
-            return nullptr;
-        }
-    }
+    // The next IFD is the Attribute IFD offset. We will not read or validate the Attribute IFD.
 
-    // Read the MP Entries starting at the offset that we read earlier.
-    if (!stream->seek(mpEntryOffset)) {
-        SkCodecPrintf("Failed to seek to MP entries' offset.\n");
-        return nullptr;
-    }
+    // Parse the MP Entries data.
     for (uint32_t i = 0; i < numberOfImages; ++i) {
-        DEFINE_AND_READ_UINT(uint32_t, attribute);
+        const uint8_t* mpEntryData = mpEntriesData->bytes() + kMPEntrySize * i;
+        const uint32_t attribute = get_endian_int(mpEntryData + 0, littleEndian);
+        const uint32_t size = get_endian_int(mpEntryData + 4, littleEndian);
+        const uint32_t dataOffset = get_endian_int(mpEntryData + 8, littleEndian);
+
         const bool isPrimary =
                 (attribute & kMPEntryAttributeTypeMask) == kMPEntryAttributeTypePrimary;
         const bool isJpeg =
@@ -242,15 +208,11 @@ std::unique_ptr<SkJpegMultiPictureParameters> SkJpegMultiPictureParameters::Make
             return nullptr;
         }
 
-        DEFINE_AND_READ_UINT(uint32_t, size);
-        DEFINE_AND_READ_UINT(uint32_t, dataOffset);
         if (i == 0 && dataOffset != 0) {
             SkCodecPrintf("First individual Image offset must be NULL.\n");
             return nullptr;
         }
 
-        DEFINE_AND_READ_UINT(uint16_t, dependentImage1EntryNumber);
-        DEFINE_AND_READ_UINT(uint16_t, dependentImage2EntryNumber);
         result->images[i].dataOffset = dataOffset;
         result->images[i].size = size;
     }
@@ -258,35 +220,17 @@ std::unique_ptr<SkJpegMultiPictureParameters> SkJpegMultiPictureParameters::Make
     return result;
 }
 
-#undef DEFINE_AND_READ_UINT
-
 // Return the number of bytes that will be written by SkJpegMultiPictureParametersSerialize, for a
 // given number of images.
 size_t multi_picture_params_serialized_size(size_t numberOfImages) {
-    return sizeof(kMpfSig) +                 // Signature
-           kMpEndianSize +                   // Endianness
-           sizeof(uint32_t) +                // Index IFD Offset
-           sizeof(uint16_t) +                // Tag count
-           kTagSerializedCount * kTagSize +  // 3 tags at 12 bytes each
-           sizeof(uint32_t) +                // Attribute IFD offset
-           numberOfImages * kMPEntrySize;    // MP Entries for each image
+    return sizeof(kMpfSig) +                           // Signature
+           kMpEndianSize +                             // Endianness
+           sizeof(uint32_t) +                          // Index IFD Offset
+           sizeof(uint16_t) +                          // IFD entry count
+           kIfdSerializedEntryCount * kIfdEntrySize +  // 3 IFD entries at 12 bytes each
+           sizeof(uint32_t) +                          // Attribute IFD offset
+           numberOfImages * kMPEntrySize;              // MP Entries for each image
 }
-
-// Helper macros for SkJpegMultiPictureParameters::serialize. Byte-swap and write the specified
-// value, and return nullptr on failure.
-#define WRITE_UINT16(value)                         \
-    do {                                            \
-        if (!s.write16(SkEndian_SwapBE16(value))) { \
-            return nullptr;                         \
-        }                                           \
-    } while (0)
-
-#define WRITE_UINT32(value)                         \
-    do {                                            \
-        if (!s.write32(SkEndian_SwapBE32(value))) { \
-            return nullptr;                         \
-        }                                           \
-    } while (0)
 
 sk_sp<SkData> SkJpegMultiPictureParameters::serialize() const {
     // Write the MPF signature.
@@ -307,40 +251,40 @@ sk_sp<SkData> SkJpegMultiPictureParameters::serialize() const {
     // Set the Index IFD offset be the position after the endianness value and this offset.
     constexpr uint32_t indexIfdOffset =
             static_cast<uint16_t>(sizeof(kMpBigEndian) + sizeof(uint32_t));
-    WRITE_UINT32(indexIfdOffset);
+    SkWStreamWriteU32BE(&s, indexIfdOffset);
 
     // We will write 3 tags (version, number of images, MP entries).
     constexpr uint32_t numberOfTags = 3;
-    WRITE_UINT16(numberOfTags);
+    SkWStreamWriteU16BE(&s, numberOfTags);
 
     // Write the version tag.
-    WRITE_UINT16(kVersionTag);
-    WRITE_UINT16(kVersionType);
-    WRITE_UINT32(kVersionCount);
+    SkWStreamWriteU16BE(&s, kVersionTag);
+    SkWStreamWriteU16BE(&s, kTypeUndefined);
+    SkWStreamWriteU32BE(&s, kVersionCount);
     if (!s.write(kVersionExpected, kVersionSize)) {
         SkCodecPrintf("Failed to write version.\n");
         return nullptr;
     }
 
     // Write the number of images.
-    WRITE_UINT16(kNumberOfImagesTag);
-    WRITE_UINT16(kNumberOfImagesType);
-    WRITE_UINT32(kNumberOfImagesCount);
-    WRITE_UINT32(numberOfImages);
+    SkWStreamWriteU16BE(&s, kNumberOfImagesTag);
+    SkWStreamWriteU16BE(&s, kTypeUnsignedLong);
+    SkWStreamWriteU32BE(&s, kNumberOfImagesCount);
+    SkWStreamWriteU32BE(&s, numberOfImages);
 
     // Write the MP entries.
-    WRITE_UINT16(kMPEntryTag);
-    WRITE_UINT16(kMPEntryType);
-    WRITE_UINT32(kMPEntrySize * numberOfImages);
+    SkWStreamWriteU16BE(&s, kMPEntryTag);
+    SkWStreamWriteU16BE(&s, kTypeUndefined);
+    SkWStreamWriteU32BE(&s, kMPEntrySize * numberOfImages);
     const uint32_t mpEntryOffset =
             static_cast<uint32_t>(s.bytesWritten() -  // The bytes written so far
                                   sizeof(kMpfSig) +   // Excluding the MPF signature
                                   sizeof(uint32_t) +  // The 4 bytes for this offset
                                   sizeof(uint32_t));  // The 4 bytes for the attribute IFD offset.
-    WRITE_UINT32(mpEntryOffset);
+    SkWStreamWriteU32BE(&s, mpEntryOffset);
 
     // Write the attribute IFD offset (zero because we don't write it).
-    WRITE_UINT32(0);
+    SkWStreamWriteU32BE(&s, 0);
 
     // Write the MP entries.
     for (size_t i = 0; i < images.size(); ++i) {
@@ -351,30 +295,39 @@ sk_sp<SkData> SkJpegMultiPictureParameters::serialize() const {
             attribute |= kMPEntryAttributeTypePrimary;
         }
 
-        WRITE_UINT32(attribute);
-        WRITE_UINT32(image.size);
-        WRITE_UINT32(image.dataOffset);
+        SkWStreamWriteU32BE(&s, attribute);
+        SkWStreamWriteU32BE(&s, image.size);
+        SkWStreamWriteU32BE(&s, image.dataOffset);
         // Dependent image 1 and 2 entries are zero.
-        WRITE_UINT16(0);
-        WRITE_UINT16(0);
+        SkWStreamWriteU16BE(&s, 0);
+        SkWStreamWriteU16BE(&s, 0);
     }
 
     SkASSERT(s.bytesWritten() == multi_picture_params_serialized_size(images.size()));
     return s.detachAsData();
 }
 
-#undef WRITE_UINT16
-#undef WRITE_UINT32
+static size_t mp_header_absolute_offset(size_t mpSegmentOffset) {
+    return mpSegmentOffset +                  // The offset to the segment's marker
+           kJpegMarkerCodeSize +              // The marker itself
+           kJpegSegmentParameterLengthSize +  // The segment parameter length
+           sizeof(kMpfSig);                   // The {'M','P','F',0} signature
+}
 
-size_t SkJpegMultiPictureParameters::GetAbsoluteOffset(uint32_t dataOffset,
-                                                       size_t mpSegmentOffset) {
+size_t SkJpegMultiPictureParameters::GetImageAbsoluteOffset(uint32_t dataOffset,
+                                                            size_t mpSegmentOffset) {
     // The value of zero is used by the primary image.
     if (dataOffset == 0) {
         return 0;
     }
-    return mpSegmentOffset +                  // The offset to the marker
-           kJpegMarkerCodeSize +              // The marker itself
-           kJpegSegmentParameterLengthSize +  // The parameter length
-           sizeof(kMpfSig) +                  // The signature
-           dataOffset;
+    return mp_header_absolute_offset(mpSegmentOffset) + dataOffset;
+}
+
+uint32_t SkJpegMultiPictureParameters::GetImageDataOffset(size_t imageAbsoluteOffset,
+                                                          size_t mpSegmentOffset) {
+    // The value of zero is used by the primary image.
+    if (imageAbsoluteOffset == 0) {
+        return 0;
+    }
+    return static_cast<uint32_t>(imageAbsoluteOffset - mp_header_absolute_offset(mpSegmentOffset));
 }

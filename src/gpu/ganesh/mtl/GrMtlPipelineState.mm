@@ -19,6 +19,7 @@
 #include "src/gpu/ganesh/mtl/GrMtlGpu.h"
 #include "src/gpu/ganesh/mtl/GrMtlRenderCommandEncoder.h"
 #include "src/gpu/ganesh/mtl/GrMtlTexture.h"
+#include "src/sksl/SkSLCompiler.h"
 
 #if !__has_feature(objc_arc)
 #error This file must be compiled with Arc. Use -fobjc-arc flag
@@ -181,7 +182,7 @@ void GrMtlPipelineState::setDepthStencilState(GrMtlRenderCommandEncoder* renderC
             fGpu->resourceProvider().findOrCreateCompatibleDepthStencilState(fStencil, origin);
     if (!fStencil.isDisabled()) {
         if (fStencil.isTwoSided()) {
-            if (@available(macOS 10.11, iOS 9.0, *)) {
+            if (@available(macOS 10.11, iOS 9.0, tvOS 9.0, *)) {
                 renderCmdEncoder->setStencilFrontBackReferenceValues(
                         fStencil.postOriginCCWFace(origin).fRef,
                         fStencil.postOriginCWFace(origin).fRef);

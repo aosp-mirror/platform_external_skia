@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_deps", "skia_filegroup")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -8,7 +12,10 @@ skia_filegroup(
     name = "private_hdrs",
     srcs = [
         "GLTestContext.h",
-    ],
+    ] + select({
+        "@platforms//os:windows": ["//tools/gpu/gl/win:private_hdrs"],
+        "//conditions:default": [],
+    }),
     visibility = ["//tools/gpu:__pkg__"],
 )
 

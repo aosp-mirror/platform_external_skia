@@ -1,7 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
-// HASH=092739b4cd5d732a27c07ced8ef45f01
 REG_FIDDLE(Bitmap_extractAlpha_2, 256, 160, false, 0) {
 void draw(SkCanvas* canvas) {
     auto radiusToSigma = [](SkScalar radius) -> SkScalar {
@@ -18,7 +17,6 @@ void draw(SkCanvas* canvas) {
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(20);
     offscreen.drawCircle(50, 50, 39, paint);
-    offscreen.flush();
     paint.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, radiusToSigma(25)));
     SkIPoint offset;
     bitmap.extractAlpha(&alpha, &paint, &offset);

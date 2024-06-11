@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"go.skia.org/infra/go/skerr"
-	"go.skia.org/infra/go/util"
 	"go.skia.org/skia/bazel/exporter/build_proto/build"
 	"go.skia.org/skia/bazel/exporter/interfaces"
 	"google.golang.org/protobuf/proto"
@@ -64,53 +63,37 @@ type GNIExporter struct {
 	exportGNIDescs []GNIExportDesc       // The rules to export.
 }
 
-// Skia source files which are deprecated. These are omitted from
-// *.gni files during export because the skia.h file is a generated
-// file and it cannot include deprecated files without breaking
-// clients that include it.
-var deprecatedFiles = []string{
-	"include/core/SkDrawLooper.h",
-	"include/effects/SkBlurDrawLooper.h",
-	"include/effects/SkLayerDrawLooper.h",
-}
-
 // The footer written to gn/core.gni.
 const coreGNIFooter = `skia_core_sources += skia_pathops_sources
-skia_core_sources += skia_skpicture_sources
 
 skia_core_public += skia_pathops_public
-skia_core_public += skia_skpicture_public
-# TODO(kjlubick) Move this into Chromium's BUILD.gn file.
-skia_core_public += skia_discardable_memory_chromium
 `
 
 // The footer written to gn/sksl_tests.gni.
 const skslTestsFooter = `sksl_glsl_tests_sources =
     sksl_error_tests + sksl_glsl_tests + sksl_inliner_tests +
-    sksl_folding_tests + sksl_shared_tests +
-    sksl_inverse_hyperbolic_intrinsics_tests
+    sksl_folding_tests + sksl_shared_tests
 
 sksl_glsl_settings_tests_sources = sksl_blend_tests + sksl_settings_tests
 
 sksl_metal_tests_sources =
-    sksl_metal_tests + sksl_blend_tests + sksl_shared_tests +
-    sksl_inverse_hyperbolic_intrinsics_tests
+    sksl_blend_tests + sksl_compute_tests + sksl_metal_tests + sksl_shared_tests
 
 sksl_hlsl_tests_sources = sksl_blend_tests + sksl_shared_tests
 
-sksl_wgsl_tests_sources = sksl_wgsl_tests
+sksl_wgsl_tests_sources =
+    sksl_blend_tests + sksl_compute_tests + sksl_folding_tests +
+    sksl_shared_tests + sksl_wgsl_tests
 
 sksl_spirv_tests_sources =
-    sksl_blend_tests + sksl_shared_tests +
-    sksl_inverse_hyperbolic_intrinsics_tests + sksl_spirv_tests
+    sksl_blend_tests + sksl_compute_tests + sksl_shared_tests + sksl_spirv_tests
 
 sksl_skrp_tests_sources = sksl_folding_tests + sksl_rte_tests + sksl_shared_tests
 
-sksl_skvm_tests_sources = sksl_rte_tests + sksl_rte_error_tests
+sksl_stage_tests_sources =
+    sksl_rte_tests + sksl_mesh_tests + sksl_mesh_error_tests
 
-sksl_stage_tests_sources = sksl_rte_tests
-
-sksl_minify_tests_sources = sksl_rte_tests + sksl_folding_tests`
+sksl_minify_tests_sources = sksl_folding_tests + sksl_mesh_tests + sksl_rte_tests`
 
 // The footer written to modules/skshaper/skshaper.gni.
 const skshaperFooter = `
@@ -121,32 +104,24 @@ declare_args() {
   skia_enable_skshaper_tests = skia_enable_skshaper
 }`
 
-// The footer written to gn/gpu.gni.
-const gpuGNIFooter = `
-# TODO(kjlubick) Update clients to use the individual targets
-# instead of the monolithic ones.
-skia_gpu_sources = skia_gpu_public + skia_gpu_private
-skia_gl_gpu_sources = skia_gpu_gl_public + skia_gpu_gl_private + skia_gpu_chromium_public
-skia_vk_sources = skia_gpu_vk_public + skia_gpu_vk_private +
-                  skia_gpu_vk_chromium_public + skia_gpu_vk_chromium_private
-skia_metal_sources = skia_gpu_metal_public + skia_gpu_metal_private + skia_gpu_metal_cpp
-skia_dawn_sources = skia_gpu_dawn_public + skia_gpu_dawn_private
-`
+const portsFooter = `
+skia_fontations_path_bridge_sources = [
+  "$_src/ports/fontations/src/skpath_bridge.h"
+]
 
-// The footer written to gn/utils.gni.
-const utilsGNIFooter = `
-# TODO(kjlubick) Update pdfium to use the individual target
-# instead of the monolithic ones.
-skia_utils_sources = skia_utils_private + skia_utils_chromium
+skia_fontations_bridge_sources = [
+  "$_src/ports/fontations/src/ffi.rs"
+]
+
+skia_fontations_bridge_root = "$_src/ports/fontations/src/ffi.rs"
 `
 
 // Map of GNI file names to footer text to be appended to the end of the file.
 var footerMap = map[string]string{
 	"gn/core.gni":                   coreGNIFooter,
-	"gn/gpu.gni":                    gpuGNIFooter,
 	"gn/sksl_tests.gni":             skslTestsFooter,
-	"gn/utils.gni":                  utilsGNIFooter,
 	"modules/skshaper/skshaper.gni": skshaperFooter,
+	"gn/ports.gni":                  portsFooter,
 }
 
 // Match variable definition of a list in a *.gni file. For example:
@@ -281,38 +256,38 @@ func fileListContainsOnlyCppHeaderFiles(files []string) bool {
 
 // Write the *.gni file header.
 func writeGNFileHeader(writer interfaces.Writer, gniFile *gniFileContents, pathToWorkspace string) {
-	fmt.Fprintln(writer, "# DO NOT EDIT: This is a generated file.")
-	fmt.Fprintln(writer, "# See //bazel/exporter_tool/README.md for more information.")
+	_, _ = fmt.Fprintln(writer, "# DO NOT EDIT: This is a generated file.")
+	_, _ = fmt.Fprintln(writer, "# See //bazel/exporter_tool/README.md for more information.")
 
-	fmt.Fprintln(writer, "#")
+	_, _ = fmt.Fprintln(writer, "#")
 	if len(gniFile.bazelFiles) > 1 {
 		keys := make([]string, 0, len(gniFile.bazelFiles))
-		fmt.Fprintln(writer, "# The sources of truth are:")
-		for bazelPath, _ := range gniFile.bazelFiles {
+		_, _ = fmt.Fprintln(writer, "# The sources of truth are:")
+		for bazelPath := range gniFile.bazelFiles {
 			keys = append(keys, bazelPath)
 		}
 		sort.Strings(keys)
 		for _, wsPath := range keys {
-			fmt.Fprintf(writer, "#   //%s\n", wsPath)
+			_, _ = fmt.Fprintf(writer, "#   //%s\n", wsPath)
 		}
 	} else {
-		for bazelPath, _ := range gniFile.bazelFiles {
-			fmt.Fprintf(writer, "# The source of truth is //%s\n", bazelPath)
+		for bazelPath := range gniFile.bazelFiles {
+			_, _ = fmt.Fprintf(writer, "# The source of truth is //%s\n", bazelPath)
 		}
 	}
 
-	writer.WriteString("\n")
-	fmt.Fprintln(writer, "# To update this file, run make -C bazel generate_gni")
+	_, _ = writer.WriteString("\n")
+	_, _ = fmt.Fprintln(writer, "# To update this file, run make -C bazel generate_gni")
 
-	writer.WriteString("\n")
+	_, _ = writer.WriteString("\n")
 	if gniFile.hasSrcs {
-		fmt.Fprintf(writer, "_src = get_path_info(\"%s/src\", \"abspath\")\n", pathToWorkspace)
+		_, _ = fmt.Fprintf(writer, "_src = get_path_info(\"%s/src\", \"abspath\")\n", pathToWorkspace)
 	}
 	if gniFile.hasIncludes {
-		fmt.Fprintf(writer, "_include = get_path_info(\"%s/include\", \"abspath\")\n", pathToWorkspace)
+		_, _ = fmt.Fprintf(writer, "_include = get_path_info(\"%s/include\", \"abspath\")\n", pathToWorkspace)
 	}
 	if gniFile.hasModules {
-		fmt.Fprintf(writer, "_modules = get_path_info(\"%s/modules\", \"abspath\")\n", pathToWorkspace)
+		_, _ = fmt.Fprintf(writer, "_modules = get_path_info(\"%s/modules\", \"abspath\")\n", pathToWorkspace)
 	}
 }
 
@@ -369,25 +344,6 @@ func convertTargetsToFilePaths(targets []string) ([]string, error) {
 		paths = append(paths, path)
 	}
 	return paths, nil
-}
-
-// Is the source file deprecated? i.e. should the file be exported to projects
-// generated by this package?
-func isSourceFileDeprecated(workspacePath string) bool {
-	return util.In(workspacePath, deprecatedFiles)
-}
-
-// Filter all deprecated files from the |files| slice, returning a new slice
-// containing no deprecated files. All paths in |files| must be workspace-relative
-// paths.
-func filterDeprecatedFiles(files []string) []string {
-	filtered := make([]string, 0, len(files))
-	for _, path := range files {
-		if !isSourceFileDeprecated(path) {
-			filtered = append(filtered, path)
-		}
-	}
-	return filtered
 }
 
 // Return the top-level component (directory or file) of a relative file path.
@@ -454,7 +410,7 @@ func (c *gniFileContents) merge(other gniFileContents) {
 	if other.hasSrcs {
 		c.hasSrcs = true
 	}
-	for path, _ := range other.bazelFiles {
+	for path := range other.bazelFiles {
 		c.bazelFiles[path] = true
 	}
 	c.data = append(c.data, other.data...)
@@ -495,8 +451,6 @@ func (e *GNIExporter) convertGNIFileList(desc GNIFileListExportDesc, qr *build.Q
 		return gniFileContents{}, skerr.Wrap(err)
 	}
 
-	files = filterDeprecatedFiles(files)
-
 	files, err = addGNIVariablesToWorkspacePaths(files)
 	if err != nil {
 		return gniFileContents{}, skerr.Wrap(err)
@@ -517,20 +471,20 @@ func (e *GNIExporter) convertGNIFileList(desc GNIFileListExportDesc, qr *build.Q
 	var contents bytes.Buffer
 
 	if len(rules) > 1 {
-		fmt.Fprintln(&contents, "# List generated by Bazel rules:")
+		_, _ = fmt.Fprintln(&contents, "# List generated by Bazel rules:")
 		for _, bazelFile := range rules {
-			fmt.Fprintf(&contents, "#  %s\n", bazelFile)
+			_, _ = fmt.Fprintf(&contents, "#  %s\n", bazelFile)
 		}
-	} else {
-		fmt.Fprintf(&contents, "# Generated by Bazel rule %s\n", rules[0])
+	} else if len(rules) > 0 {
+		_, _ = fmt.Fprintf(&contents, "# Generated by Bazel rule %s\n", rules[0])
 	}
-	fmt.Fprintf(&contents, "%s = [\n", desc.Var)
+	_, _ = fmt.Fprintf(&contents, "%s = [\n", desc.Var)
 
 	for _, target := range files {
-		fmt.Fprintf(&contents, "  %q,\n", target)
+		_, _ = fmt.Fprintf(&contents, "  %q,\n", target)
 	}
-	fmt.Fprintln(&contents, "]")
-	fmt.Fprintln(&contents)
+	_, _ = fmt.Fprintln(&contents, "]")
+	_, _ = fmt.Fprintln(&contents)
 	fileContents.data = contents.Bytes()
 
 	return fileContents, nil
@@ -557,7 +511,7 @@ func (e *GNIExporter) exportGNIFile(gniExportDesc GNIExportDesc, qr *build.Query
 
 	pathToWorkspace := getPathToTopDir(gniExportDesc.GNI)
 	writeGNFileHeader(writer, &gniFileContents, pathToWorkspace)
-	writer.WriteString("\n")
+	_, _ = writer.WriteString("\n")
 
 	_, err = writer.Write(gniFileContents.data)
 	if err != nil {
@@ -566,7 +520,7 @@ func (e *GNIExporter) exportGNIFile(gniExportDesc GNIExportDesc, qr *build.Query
 
 	for gniPath, footer := range footerMap {
 		if gniExportDesc.GNI == gniPath {
-			fmt.Fprintln(writer, footer)
+			_, _ = fmt.Fprintln(writer, footer)
 			break
 		}
 	}

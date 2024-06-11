@@ -9,18 +9,18 @@
 #define StrokeTessellator_DEFINED
 
 #include "include/core/SkPath.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkStrokeRec.h"
 #include "include/private/SkColorData.h"
-#include "src/base/SkMathPriv.h"
+#include "src/gpu/ganesh/GrGpuBuffer.h"
 #include "src/gpu/ganesh/GrVertexChunkArray.h"
-#include "src/gpu/tessellate/FixedCountBufferUtils.h"
 #include "src/gpu/tessellate/Tessellation.h"
 
-class GrGpuBuffer;
 class GrMeshDrawTarget;
 class GrOpFlushState;
+class SkMatrix;
 
-namespace skgpu::v1 {
+namespace skgpu::ganesh {
 
 // Prepares GPU data for, and then draws a stroke's tessellated geometry. Renders strokes as
 // fixed-count triangle strip instances. Any extra triangles not needed by the instance are emitted
@@ -63,6 +63,6 @@ protected:
     sk_sp<const GrGpuBuffer> fVertexBufferIfNoIDSupport;
 };
 
-}  // namespace skgpu::v1
+}  // namespace skgpu::ganesh
 
 #endif  // StrokeTessellator_DEFINED

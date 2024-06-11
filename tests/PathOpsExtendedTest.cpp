@@ -20,10 +20,10 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkDebug.h"
-#include "include/private/base/SkFloatBits.h"
 #include "include/private/base/SkMutex.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/utils/SkParsePath.h"
+#include "src/base/SkFloatBits.h"
 #include "src/core/SkPathPriv.h"
 #include "src/pathops/SkPathOpsDebug.h"
 #include "tests/PathOpsDebug.h"
@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 

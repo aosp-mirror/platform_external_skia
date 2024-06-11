@@ -11,7 +11,7 @@
 #include "include/private/base/SkTArray.h"
 #include "modules/svg/include/SkSVGTransformableNode.h"
 
-class SkSVGContainer : public SkSVGTransformableNode {
+class SK_API SkSVGContainer : public SkSVGTransformableNode {
 public:
     void appendChild(sk_sp<SkSVGNode>) override;
 
@@ -26,8 +26,17 @@ protected:
 
     bool hasChildren() const final;
 
-    // TODO: add some sort of child iterator, and hide the container.
-    SkSTArray<1, sk_sp<SkSVGNode>, true> fChildren;
+    template <typename NodeType, typename Func>
+    void forEachChild(Func func) const {
+        for (const auto& child : fChildren) {
+            if (child->tag() == NodeType::tag) {
+                func(static_cast<const NodeType*>(child.get()));
+            }
+        }
+    }
+
+    // TODO: convert remaining direct users to iterators, and make the container private.
+    skia_private::STArray<1, sk_sp<SkSVGNode>, true> fChildren;
 
 private:
     using INHERITED = SkSVGTransformableNode;

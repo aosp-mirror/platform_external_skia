@@ -1,7 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
-// HASH=87f55e62ec4c3535e1a5d0f1415b20c6
 REG_FIDDLE(Canvas_MakeRasterDirectN32, 256, 256, true, 0) {
 void draw(SkCanvas* ) {
     const int width = 3;
@@ -19,7 +18,6 @@ void draw(SkCanvas* ) {
     SkPMColor pmWhite = pixels[0][0];  // the Premultiplied format may vary
     SkPaint paint;  // by default, draws black
     canvas->drawPoint(1, 1, paint);  // draw in the center
-    canvas->flush();  // ensure that pixels is ready to be read
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             SkDebugf("%c", pixels[y][x] == pmWhite ? '-' : 'x');

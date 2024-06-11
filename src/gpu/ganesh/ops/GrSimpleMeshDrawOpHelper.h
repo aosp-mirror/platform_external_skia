@@ -101,7 +101,7 @@ public:
         }
     }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     SkString dumpInfo() const;
 #endif
     GrAAType aaType() const { return static_cast<GrAAType>(fAAType); }
@@ -110,18 +110,17 @@ public:
         fAAType = static_cast<unsigned>(aaType);
     }
 
-    static const GrPipeline* CreatePipeline(
-                                const GrCaps*,
-                                SkArenaAlloc*,
-                                skgpu::Swizzle writeViewSwizzle,
-                                GrAppliedClip&&,
-                                const GrDstProxyView&,
-                                GrProcessorSet&&,
-                                GrPipeline::InputFlags pipelineFlags);
-    static const GrPipeline* CreatePipeline(
-                                GrOpFlushState*,
-                                GrProcessorSet&&,
-                                GrPipeline::InputFlags pipelineFlags);
+    static const GrPipeline* CreatePipeline(const GrCaps*,
+                                            SkArenaAlloc*,
+                                            skgpu::Swizzle writeViewSwizzle,
+                                            GrAppliedClip&&,
+                                            const GrDstProxyView&,
+                                            GrProcessorSet&&,
+                                            GrPipeline::InputFlags pipelineFlags);
+
+    static const GrPipeline* CreatePipeline(GrOpFlushState*,
+                                            GrProcessorSet&&,
+                                            GrPipeline::InputFlags pipelineFlags);
 
     const GrPipeline* createPipeline(GrOpFlushState* flushState);
 
@@ -200,7 +199,7 @@ GrOp::Owner GrOp::MakeWithProcessorSet(
         GrPaint&& paint, Args&&... args) {
     char* bytes = (char*)::operator new(sizeof(Op) + sizeof(GrProcessorSet));
     char* setMem = bytes + sizeof(Op);
-    GrProcessorSet* processorSet = new (setMem)  GrProcessorSet{std::move(paint)};
+    GrProcessorSet* processorSet = new (setMem) GrProcessorSet{std::move(paint)};
     return Owner{new (bytes) Op(processorSet, color, std::forward<Args>(args)...)};
 }
 

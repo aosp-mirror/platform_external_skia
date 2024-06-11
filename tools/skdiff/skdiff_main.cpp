@@ -6,7 +6,6 @@
  */
 #include "include/core/SkBitmap.h"
 #include "include/core/SkData.h"
-#include "include/core/SkImageEncoder.h"
 #include "include/core/SkPixelRef.h"
 #include "include/core/SkStream.h"
 #include "include/private/base/SkTDArray.h"
@@ -18,6 +17,8 @@
 #include "tools/skdiff/skdiff_utils.h"
 
 #include <stdlib.h>
+
+using namespace skia_private;
 
 /**
  * skdiff
@@ -33,7 +34,7 @@
  * Returns zero exit code if all images match across baseDir and comparisonDir.
  */
 
-typedef SkTArray<SkString> StringArray;
+typedef TArray<SkString> StringArray;
 typedef StringArray FileArray;
 
 static void add_unique_basename(StringArray* array, const SkString& filename) {
@@ -133,7 +134,7 @@ struct DiffSummary {
     void print(bool listFilenames, bool failOnResultType[DiffRecord::kResultCount],
                bool failOnStatusType[DiffResource::kStatusCount]
                                     [DiffResource::kStatusCount]) {
-        printf("\ncompared %d file pairs:\n", fNumMatches + fNumMismatches);
+        printf("\ncompared %u file pairs:\n", fNumMatches + fNumMismatches);
         for (int resultInt = 0; resultInt < DiffRecord::kResultCount; ++resultInt) {
             DiffRecord::Result result = static_cast<DiffRecord::Result>(resultInt);
             if (failOnResultType[result]) {
@@ -148,9 +149,9 @@ struct DiffSummary {
             }
         }
         printf("(results marked with [*] will cause nonzero return value)\n");
-        printf("\nnumber of mismatching file pairs: %d\n", fNumMismatches);
+        printf("\nnumber of mismatching file pairs: %u\n", fNumMismatches);
         if (fNumMismatches > 0) {
-            printf("Maximum pixel intensity mismatch %d\n", fMaxMismatchV);
+            printf("Maximum pixel intensity mismatch %u\n", fMaxMismatchV);
             printf("Largest area mismatch was %.2f%% of pixels\n",fMaxMismatchPercent);
         }
     }

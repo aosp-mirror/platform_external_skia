@@ -8,7 +8,6 @@
 #include "bench/Benchmark.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPath.h"
-#include "include/pathops/SkPathOps.h"
 
 class ClipStrategyBench : public Benchmark {
 public:
@@ -65,7 +64,7 @@ protected:
 private:
     template <typename Func>
     void forEachClipCircle(Func&& func) {
-        auto q = static_cast<float>(this->getSize().x()) / (fCount + 1);
+        auto q = static_cast<float>(this->getSize().width()) / (fCount + 1);
         for (size_t i = 1; i <= fCount; ++i) {
             auto x = q * i;
             func(x, x, q / 2);

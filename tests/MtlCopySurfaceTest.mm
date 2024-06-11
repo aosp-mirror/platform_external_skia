@@ -7,19 +7,19 @@
 
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/mtl/GrMtlBackendSurface.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/mtl/GrMtlCaps.h"
 #include "src/gpu/ganesh/mtl/GrMtlGpu.h"
+#include "src/gpu/ganesh/mtl/GrMtlTextureRenderTarget.h"
 #include "tests/Test.h"
 
 #import <Metal/Metal.h>
 #import <MetalKit/MTKView.h>
 
-#include "src/gpu/ganesh/mtl/GrMtlCaps.h"
-#include "src/gpu/ganesh/mtl/GrMtlTextureRenderTarget.h"
-
 DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
-    if (@available(macOS 11.0, iOS 9.0, *)) {
+    if (@available(macOS 11.0, iOS 9.0, tvOS 9.0, *)) {
         static const int kWidth = 1024;
         static const int kHeight = 768;
 
@@ -40,7 +40,7 @@ DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
         // TODO: check multisampled RT as well
         GrMtlTextureInfo fbInfo;
         fbInfo.fTexture.retain((__bridge const void*)(drawable.texture));
-        GrBackendRenderTarget backendRT(kWidth, kHeight, fbInfo);
+        GrBackendRenderTarget backendRT = GrBackendRenderTargets::MakeMtl(kWidth, kHeight, fbInfo);
 
         GrProxyProvider* proxyProvider = context->priv().proxyProvider();
         sk_sp<GrSurfaceProxy> srcProxy = proxyProvider->wrapBackendRenderTarget(backendRT, nullptr);
@@ -48,7 +48,7 @@ DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
         auto dstProxy = GrSurfaceProxy::Copy(context,
                                              srcProxy,
                                              kTopLeft_GrSurfaceOrigin,
-                                             GrMipmapped::kNo,
+                                             skgpu::Mipmapped::kNo,
                                              SkBackingFit::kExact,
                                              skgpu::Budgeted::kYes,
                                              /*label=*/{});
@@ -60,12 +60,17 @@ DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
         }
 
         // Try direct copy via GPU (should fail)
-        GrBackendFormat backendFormat = GrBackendFormat::MakeMtl(drawable.texture.pixelFormat);
+        GrBackendFormat backendFormat = GrBackendFormats::MakeMtl(drawable.texture.pixelFormat);
         GrSurface* src = srcProxy->peekSurface();
-        sk_sp<GrTexture> dst =
-                gpu->createTexture({kWidth, kHeight}, backendFormat, GrTextureType::k2D,
-                                   GrRenderable::kNo, 1, GrMipmapped::kNo, skgpu::Budgeted::kNo,
-                                   GrProtected::kNo, /*label=*/"MtlCopySurfaceTest");
+        sk_sp<GrTexture> dst = gpu->createTexture({kWidth, kHeight},
+                                                  backendFormat,
+                                                  GrTextureType::k2D,
+                                                  GrRenderable::kNo,
+                                                  1,
+                                                  skgpu::Mipmapped::kNo,
+                                                  skgpu::Budgeted::kNo,
+                                                  GrProtected::kNo,
+                                                  /*label=*/"MtlCopySurfaceTest");
 
         bool result = gpu->copySurface(dst.get(),
                                        SkIRect::MakeWH(kWidth, kHeight),

@@ -4,14 +4,19 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 #include "src/gpu/tessellate/FixedCountBufferUtils.h"
 
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkPoint_impl.h"
 #include "include/private/base/SkTArray.h"
 #include "src/base/SkMathPriv.h"
 #include "src/gpu/BufferWriter.h"
 
 #include <array>
+#include <utility>
+
+using namespace skia_private;
 
 namespace skgpu::tess {
 
@@ -22,7 +27,7 @@ void write_curve_index_buffer_base_index(VertexWriter vertexWriter,
                                          uint16_t baseIndex) {
     int triangleCount = bufferSize / (sizeof(uint16_t) * 3);
     SkASSERT(triangleCount >= 1);
-    SkTArray<std::array<uint16_t, 3>> indexData(triangleCount);
+    TArray<std::array<uint16_t, 3>> indexData(triangleCount);
 
     // Connect the vertices with a middle-out triangulation. Refer to InitFixedCountVertexBuffer()
     // for the exact vertex ordering.

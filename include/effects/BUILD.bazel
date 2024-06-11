@@ -1,4 +1,8 @@
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "generate_cpp_files_for_headers", "skia_filegroup")
+
+package(
+    default_applicable_licenses = ["//:license"],
+)
 
 licenses(["notice"])
 
@@ -19,7 +23,6 @@ skia_filegroup(
         "Sk1DPathEffect.h",
         "Sk2DPathEffect.h",
         "SkBlenders.h",
-        "SkBlurDrawLooper.h",
         "SkBlurMaskFilter.h",
         "SkColorMatrix.h",
         "SkColorMatrixFilter.h",
@@ -28,18 +31,53 @@ skia_filegroup(
         "SkDiscretePathEffect.h",
         "SkGradientShader.h",
         "SkHighContrastFilter.h",
-        "SkLayerDrawLooper.h",
         "SkLumaColorFilter.h",
-        "SkOpPathEffect.h",
         "SkOverdrawColorFilter.h",
         "SkPerlinNoiseShader.h",
         "SkRuntimeEffect.h",
         "SkShaderMaskFilter.h",
-        "SkStrokeAndFillPathEffect.h",
-        "SkTableColorFilter.h",
         "SkTableMaskFilter.h",
         "SkTrimPathEffect.h",
         ":public_imagefilters_hdrs",
     ],
-    visibility = ["//include:__pkg__"],
+    visibility = [
+        "//include:__pkg__",
+    ],
+)
+
+skia_filegroup(
+    name = "core_hdrs",
+    srcs = [
+        "Sk1DPathEffect.h",
+        "Sk2DPathEffect.h",
+        "SkBlenders.h",
+        "SkBlurMaskFilter.h",
+        "SkColorMatrix.h",
+        "SkColorMatrixFilter.h",
+        "SkCornerPathEffect.h",
+        "SkDashPathEffect.h",
+        "SkDiscretePathEffect.h",
+        "SkGradientShader.h",
+        "SkHighContrastFilter.h",
+        "SkImageFilters.h",
+        "SkLumaColorFilter.h",
+        "SkOverdrawColorFilter.h",
+        "SkPerlinNoiseShader.h",
+        "SkRuntimeEffect.h",
+        "SkShaderMaskFilter.h",
+        "SkTableMaskFilter.h",
+        "SkTrimPathEffect.h",
+    ],
+    visibility = [
+        "//src/core:__pkg__",
+    ],
+)
+
+generate_cpp_files_for_headers(
+    name = "headers_to_compile",
+    headers = [
+        "SkGradientShader.h",
+        "SkImageFilters.h",
+        "SkPerlinNoiseShader.h",
+    ],
 )

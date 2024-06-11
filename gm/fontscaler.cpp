@@ -14,6 +14,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 
@@ -26,17 +27,12 @@ public:
     }
 
 protected:
+    SkString getName() const override { return SkString("fontscaler"); }
 
-    SkString onShortName() override {
-        return SkString("fontscaler");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(1450, 750);
-    }
+    SkISize getISize() override { return SkISize::Make(1450, 750); }
 
     void onDraw(SkCanvas* canvas) override {
-        SkFont font;
+        SkFont font = ToolUtils::DefaultPortableFont();
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
         //With freetype the default (normal hinting) can be really ugly.
         //Most distros now set slight (vertical hinting only) in any event.

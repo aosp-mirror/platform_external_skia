@@ -13,22 +13,24 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkTypes.h"
 #include "src/core/SkCanvasPriv.h"
+#include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/SurfaceFillContext.h"
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 DEF_SIMPLE_GPU_GM(swizzle, rContext, canvas, 512, 512) {
-    auto sfc = SkCanvasPriv::TopDeviceSurfaceFillContext(canvas);
+    auto sfc = skgpu::ganesh::TopDeviceSurfaceFillContext(canvas);
     if (!sfc) {
         return;
     }
 
     SkBitmap bmp;
-    GetResourceAsBitmap("images/mandrill_512_q075.jpg", &bmp);
-    auto view = std::get<0>(
-            GrMakeCachedBitmapProxyView(rContext, bmp, /*label=*/"Gm_Swizzle", GrMipmapped::kNo));
+    ToolUtils::GetResourceAsBitmap("images/mandrill_512_q075.jpg", &bmp);
+    auto view = std::get<0>(GrMakeCachedBitmapProxyView(
+            rContext, bmp, /*label=*/"Gm_Swizzle", skgpu::Mipmapped::kNo));
     if (!view) {
         return;
     }

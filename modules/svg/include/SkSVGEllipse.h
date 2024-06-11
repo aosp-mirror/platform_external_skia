@@ -13,14 +13,15 @@
 
 struct SkRect;
 
-class SkSVGEllipse final : public SkSVGShape {
+class SK_API SkSVGEllipse final : public SkSVGShape {
 public:
     static sk_sp<SkSVGEllipse> Make() { return sk_sp<SkSVGEllipse>(new SkSVGEllipse()); }
 
     SVG_ATTR(Cx, SkSVGLength, SkSVGLength(0))
     SVG_ATTR(Cy, SkSVGLength, SkSVGLength(0))
-    SVG_ATTR(Rx, SkSVGLength, SkSVGLength(0))
-    SVG_ATTR(Ry, SkSVGLength, SkSVGLength(0))
+
+    SVG_OPTIONAL_ATTR(Rx, SkSVGLength)
+    SVG_OPTIONAL_ATTR(Ry, SkSVGLength)
 
 protected:
     bool parseAndSetAttribute(const char*, const char*) override;

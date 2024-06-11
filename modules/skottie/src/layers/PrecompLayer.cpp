@@ -5,18 +5,34 @@
  * found in the LICENSE file.
  */
 
-#include "modules/skottie/src/SkottiePriv.h"
-
 #include "include/core/SkCanvas.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkPoint_impl.h"
 #include "modules/skottie/include/ExternalLayer.h"
+#include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/src/Composition.h"
 #include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/animator/Animator.h"
+#include "modules/sksg/include/SkSGNode.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
-#include "modules/sksg/include/SkSGScene.h"
 #include "src/base/SkTLazy.h"
 #include "src/utils/SkJSON.h"
+
+#include <cmath>
+#include <utility>
+
+class SkMatrix;
+
+namespace sksg {
+class InvalidationController;
+}
 
 namespace skottie {
 namespace internal {
@@ -159,7 +175,7 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachExternalPrecompLayer(
 
     fCurrentAnimatorScope->push_back(sk_make_sp<AnimatorAdapter>(sg_adapter, fFrameRate));
 
-    return std::move(sg_adapter);
+    return sg_adapter;
 }
 
 sk_sp<sksg::RenderNode> AnimationBuilder::attachPrecompLayer(const skjson::ObjectValue& jlayer,
@@ -176,8 +192,11 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachPrecompLayer(const skjson::Objec
                                        time_remapper;
 
     // Precomp layers are sized explicitly.
-    layer_info->fSize = SkSize::Make(ParseDefault<float>(jlayer["w"], 0.0f),
-                                     ParseDefault<float>(jlayer["h"], 0.0f));
+    auto parse_size = [](const skjson::ObjectValue& jlayer) {
+        return SkSize::Make(ParseDefault<float>(jlayer["w"], 0.0f),
+                            ParseDefault<float>(jlayer["h"], 0.0f));
+    };
+    layer_info->fSize = parse_size(jlayer);
 
     SkTLazy<AutoScope> local_scope;
     if (requires_time_mapping) {
@@ -189,6 +208,12 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachPrecompLayer(const skjson::Objec
     if (!precomp_layer) {
         const ScopedAssetRef precomp_asset(this, jlayer);
         if (precomp_asset) {
+            // Unlike regular precomp layers, glyph precomps don't have an explicit size - they
+            // use the actual asset comp size.
+            if (layer_info->fSize.isEmpty()) {
+                layer_info->fSize = parse_size(*precomp_asset);
+            }
+
             AutoPropertyTracker apt(this, *precomp_asset, PropertyObserver::NodeType::COMPOSITION);
             precomp_layer =
                 CompositionBuilder(*this, layer_info->fSize, *precomp_asset).build(*this);
@@ -201,7 +226,7 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachPrecompLayer(const skjson::Objec
         auto time_mapper = sk_make_sp<CompTimeMapper>(local_scope->release(),
                                                       std::move(time_remapper),
                                                       t_bias,
-                                                      sk_float_isfinite(t_scale) ? t_scale : 0);
+                                                      std::isfinite(t_scale) ? t_scale : 0);
 
         fCurrentAnimatorScope->push_back(std::move(time_mapper));
     }

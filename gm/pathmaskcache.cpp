@@ -18,17 +18,17 @@
 #include "include/private/base/SkTArray.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 
+using namespace skia_private;
+
 /** This tests the GPU backend's caching of path coverage masks */
 class PathMaskCache : public skiagm::GM {
 public:
     PathMaskCache() {}
 
 protected:
-    SkString onShortName() override { return SkString("path_mask_cache"); }
+    SkString getName() const override { return SkString("path_mask_cache"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(650, 950);
-    }
+    SkISize getISize() override { return SkISize::Make(650, 950); }
 
     void onDraw(SkCanvas* canvas) override {
         static constexpr SkScalar kPad = 5.f;
@@ -74,7 +74,7 @@ protected:
         };
 
 
-        SkTArray<SkPath> paths;
+        TArray<SkPath> paths;
         paths.push_back();
         paths.back().moveTo(0.f, 0.f);
         paths.back().lineTo(98.f, 100.f);

@@ -16,6 +16,8 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkTypes.h"
 #include "modules/skresources/include/SkResources.h"
+#include "modules/skshaper/include/SkShaper.h"
+#include "modules/skshaper/include/SkShaper_factory.h"
 #include "modules/svg/include/SkSVGAttribute.h"
 #include "modules/svg/include/SkSVGIDMapper.h"
 #include "src/base/SkTLazy.h"
@@ -24,7 +26,7 @@
 class SkCanvas;
 class SkSVGLength;
 
-class SkSVGLengthContext {
+class SK_API SkSVGLengthContext {
 public:
     SkSVGLengthContext(const SkSize& viewport, SkScalar dpi = 90)
         : fViewport(viewport), fDPI(dpi) {}
@@ -47,18 +49,18 @@ private:
     SkScalar fDPI;
 };
 
-struct SkSVGPresentationContext {
+struct SK_API SkSVGPresentationContext {
     SkSVGPresentationContext();
     SkSVGPresentationContext(const SkSVGPresentationContext&)            = default;
     SkSVGPresentationContext& operator=(const SkSVGPresentationContext&) = default;
 
-    const SkTHashMap<SkString, SkSVGColorType>* fNamedColors = nullptr;
+    const skia_private::THashMap<SkString, SkSVGColorType>* fNamedColors = nullptr;
 
     // Inherited presentation attributes, computed for the current node.
     SkSVGPresentationAttributes fInherited;
 };
 
-class SkSVGRenderContext {
+class SK_API SkSVGRenderContext {
 public:
     // Captures data required for object bounding box resolution.
     struct OBBScope {
@@ -66,10 +68,14 @@ public:
         const SkSVGRenderContext* fCtx;
     };
 
-    SkSVGRenderContext(SkCanvas*, const sk_sp<SkFontMgr>&,
-                       const sk_sp<skresources::ResourceProvider>&, const SkSVGIDMapper&,
-                       const SkSVGLengthContext&, const SkSVGPresentationContext&,
-                       const OBBScope&);
+    SkSVGRenderContext(SkCanvas*,
+                       const sk_sp<SkFontMgr>&,
+                       const sk_sp<skresources::ResourceProvider>&,
+                       const SkSVGIDMapper&,
+                       const SkSVGLengthContext&,
+                       const SkSVGPresentationContext&,
+                       const OBBScope&,
+                       const sk_sp<SkShapers::Factory>&);
     SkSVGRenderContext(const SkSVGRenderContext&);
     SkSVGRenderContext(const SkSVGRenderContext&, SkCanvas*);
     // Establish a new OBB scope.  Normally used when entering a node's render scope.
@@ -138,7 +144,10 @@ public:
     }
 
     sk_sp<SkFontMgr> fontMgr() const {
-        return fFontMgr ? fFontMgr : SkFontMgr::RefDefault();
+        // It is probably an oversight to try to render <text> without having set the SkFontMgr.
+        // We will assert this in debug mode, but fallback to an empty fontmgr in release builds.
+        SkASSERT(fFontMgr);
+        return fFontMgr ? fFontMgr : SkFontMgr::RefEmpty();
     }
 
     // Returns the translate/scale transformation required to map into the current OBB scope,
@@ -151,6 +160,25 @@ public:
     SkRect resolveOBBRect(const SkSVGLength& x, const SkSVGLength& y,
                           const SkSVGLength& w, const SkSVGLength& h,
                           SkSVGObjectBoundingBoxUnits) const;
+
+    std::unique_ptr<SkShaper> makeShaper() const {
+        SkASSERT(fTextShapingFactory);
+        return fTextShapingFactory->makeShaper(this->fontMgr());
+    }
+
+    std::unique_ptr<SkShaper::BiDiRunIterator> makeBidiRunIterator(const char* utf8,
+                                                                   size_t utf8Bytes,
+                                                                   uint8_t bidiLevel) const {
+        SkASSERT(fTextShapingFactory);
+        return fTextShapingFactory->makeBidiRunIterator(utf8, utf8Bytes, bidiLevel);
+    }
+
+    std::unique_ptr<SkShaper::ScriptRunIterator> makeScriptRunIterator(const char* utf8,
+                                                                       size_t utf8Bytes) const {
+        SkASSERT(fTextShapingFactory);
+        constexpr SkFourByteTag unknownScript = SkSetFourByteTag('Z', 'z', 'z', 'z');
+        return fTextShapingFactory->makeScriptRunIterator(utf8, utf8Bytes, unknownScript);
+    }
 
 private:
     // Stack-only
@@ -166,6 +194,7 @@ private:
     SkTLazy<SkPaint> commonPaint(const SkSVGPaint&, float opacity) const;
 
     const sk_sp<SkFontMgr>&                       fFontMgr;
+    const sk_sp<SkShapers::Factory>&              fTextShapingFactory;
     const sk_sp<skresources::ResourceProvider>&   fResourceProvider;
     const SkSVGIDMapper&                          fIDMapper;
     SkTCopyOnFirstWrite<SkSVGLengthContext>       fLengthContext;

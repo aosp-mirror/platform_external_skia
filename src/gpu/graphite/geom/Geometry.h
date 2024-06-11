@@ -10,6 +10,8 @@
 
 #include "include/core/SkVertices.h"
 #include "src/core/SkVerticesPriv.h"
+#include "src/gpu/graphite/geom/AnalyticBlurMask.h"
+#include "src/gpu/graphite/geom/CoverageMaskShape.h"
 #include "src/gpu/graphite/geom/EdgeAAQuad.h"
 #include "src/gpu/graphite/geom/Rect.h"
 #include "src/gpu/graphite/geom/Shape.h"
@@ -24,7 +26,7 @@ namespace skgpu::graphite {
 class Geometry {
 public:
     enum class Type : uint8_t {
-        kEmpty, kShape, kVertices, kSubRun, kEdgeAAQuad
+        kEmpty, kShape, kVertices, kSubRun, kEdgeAAQuad, kCoverageMaskShape, kAnalyticBlur
     };
 
     Geometry() {}
@@ -33,8 +35,10 @@ public:
 
     explicit Geometry(const Shape& shape) { this->setShape(shape); }
     explicit Geometry(const SubRunData& subrun) { this->setSubRun(subrun); }
-    explicit Geometry(sk_sp<SkVertices> vertices) { this->setVertices(vertices); }
+    explicit Geometry(sk_sp<SkVertices> vertices) { this->setVertices(std::move(vertices)); }
     explicit Geometry(const EdgeAAQuad& edgeAAQuad) { this->setEdgeAAQuad(edgeAAQuad); }
+    explicit Geometry(const CoverageMaskShape& mask) { this->setCoverageMaskShape(mask); }
+    explicit Geometry(const AnalyticBlurMask& blur) { this->setAnalyticBlur(blur); }
 
     ~Geometry() { this->setType(Type::kEmpty); }
 
@@ -60,6 +64,14 @@ public:
                     this->setEdgeAAQuad(geom.edgeAAQuad());
                     geom.setType(Type::kEmpty);
                     break;
+                case Type::kCoverageMaskShape:
+                    this->setCoverageMaskShape(geom.coverageMaskShape());
+                    geom.setType(Type::kEmpty);
+                    break;
+                case Type::kAnalyticBlur:
+                    this->setAnalyticBlur(geom.analyticBlurMask());
+                    geom.setType(Type::kEmpty);
+                    break;
             }
         }
         return *this;
@@ -71,6 +83,9 @@ public:
             case Type::kSubRun: this->setSubRun(geom.subRunData()); break;
             case Type::kVertices: this->setVertices(geom.fVertices); break;
             case Type::kEdgeAAQuad: this->setEdgeAAQuad(geom.edgeAAQuad()); break;
+            case Type::kCoverageMaskShape:
+                    this->setCoverageMaskShape(geom.coverageMaskShape()); break;
+            case Type::kAnalyticBlur: this->setAnalyticBlur(geom.analyticBlurMask()); break;
             default: break;
         }
         return *this;
@@ -82,6 +97,8 @@ public:
     bool isVertices() const { return fType == Type::kVertices; }
     bool isSubRun() const { return fType == Type::kSubRun; }
     bool isEdgeAAQuad() const { return fType == Type::kEdgeAAQuad; }
+    bool isCoverageMaskShape() const { return fType == Type::kCoverageMaskShape; }
+    bool isAnalyticBlur() const { return fType == Type::kAnalyticBlur; }
     bool isEmpty() const {
         return fType == (Type::kEmpty) || (this->isShape() && this->shape().isEmpty());
     }
@@ -89,6 +106,12 @@ public:
     const Shape& shape() const { SkASSERT(this->isShape()); return fShape; }
     const SubRunData& subRunData() const { SkASSERT(this->isSubRun()); return fSubRunData; }
     const EdgeAAQuad& edgeAAQuad() const { SkASSERT(this->isEdgeAAQuad()); return fEdgeAAQuad; }
+    const CoverageMaskShape& coverageMaskShape() const {
+        SkASSERT(this->isCoverageMaskShape()); return fCoverageMaskShape;
+    }
+    const AnalyticBlurMask& analyticBlurMask() const {
+        SkASSERT(this->isAnalyticBlur()); return fAnalyticBlurMask;
+    }
     const SkVertices* vertices() const { SkASSERT(this->isVertices()); return fVertices.get(); }
     sk_sp<SkVertices> refVertices() const {
         SkASSERT(this->isVertices());
@@ -129,6 +152,24 @@ public:
         }
     }
 
+    void setCoverageMaskShape(const CoverageMaskShape& maskShape) {
+        if (fType == Type::kCoverageMaskShape) {
+            fCoverageMaskShape = maskShape;
+        } else {
+            this->setType(Type::kCoverageMaskShape);
+            new (&fCoverageMaskShape) CoverageMaskShape(maskShape);
+        }
+    }
+
+    void setAnalyticBlur(const AnalyticBlurMask& blur) {
+        if (fType == Type::kAnalyticBlur) {
+            fAnalyticBlurMask = blur;
+        } else {
+            this->setType(Type::kAnalyticBlur);
+            new (&fAnalyticBlurMask) AnalyticBlurMask(blur);
+        }
+    }
+
     Rect bounds() const {
         switch (fType) {
             case Type::kEmpty: return Rect(0, 0, 0, 0);
@@ -136,6 +177,8 @@ public:
             case Type::kVertices: return fVertices->bounds();
             case Type::kSubRun: return fSubRunData.bounds();
             case Type::kEdgeAAQuad: return fEdgeAAQuad.bounds();
+            case Type::kCoverageMaskShape: return fCoverageMaskShape.bounds();
+            case Type::kAnalyticBlur: return fAnalyticBlurMask.drawBounds();
         }
         SkUNREACHABLE;
     }
@@ -149,6 +192,10 @@ private:
             fSubRunData.~SubRunData();
         } else if (this->isVertices() && type != Type::kVertices) {
             fVertices.~sk_sp<SkVertices>();
+        } else if (this->isCoverageMaskShape() && type != Type::kCoverageMaskShape) {
+            fCoverageMaskShape.~CoverageMaskShape();
+        } else if (this->isAnalyticBlur() && type != Type::kAnalyticBlur) {
+            fAnalyticBlurMask.~AnalyticBlurMask();
         }
         fType = type;
     }
@@ -159,6 +206,8 @@ private:
         SubRunData fSubRunData;
         sk_sp<SkVertices> fVertices;
         EdgeAAQuad fEdgeAAQuad;
+        CoverageMaskShape fCoverageMaskShape;
+        AnalyticBlurMask fAnalyticBlurMask;
     };
 };
 

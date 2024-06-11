@@ -9,6 +9,7 @@
 #define SkFontPriv_DEFINED
 
 #include "include/core/SkFont.h"
+#include "include/core/SkFontTypes.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/base/SkTemplates.h"
@@ -75,9 +76,7 @@ public:
                                                    const SkPoint& textLocation);
 
     static bool IsFinite(const SkFont& font) {
-        return SkScalarIsFinite(font.getSize()) &&
-               SkScalarIsFinite(font.getScaleX()) &&
-               SkScalarIsFinite(font.getSkewX());
+        return SkIsFinite(font.getSize(), font.getScaleX(), font.getSkewX());
     }
 
     // Returns the number of elements (characters or glyphs) in the array.

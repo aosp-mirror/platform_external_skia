@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -11,6 +15,6 @@ skia_filegroup(
     ],
     visibility = [
         "//include:__pkg__",
-        "//src:__pkg__",
+        "//src/pathops:__pkg__",
     ],
 )

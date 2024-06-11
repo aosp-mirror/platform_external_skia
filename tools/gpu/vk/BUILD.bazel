@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_filegroup")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -8,6 +12,8 @@ skia_cc_library(
     name = "testutils",
     srcs = [
         "GrVulkanDefines.h",
+        "VkTestMemoryAllocator.cpp",
+        "VkTestMemoryAllocator.h",
         "VkTestUtils.cpp",
     ],
     hdrs = ["VkTestUtils.h"],
@@ -27,6 +33,7 @@ skia_filegroup(
         "GrVulkanDefines.h",
         "VkTestContext.h",
         "VkTestHelper.h",
+        "VkTestMemoryAllocator.h",
         "VkTestUtils.h",
         "VkYcbcrSamplerHelper.h",
     ],
@@ -38,6 +45,7 @@ skia_filegroup(
     srcs = [
         "VkTestContext.cpp",
         "VkTestHelper.cpp",
+        "VkTestMemoryAllocator.cpp",
         "VkTestUtils.cpp",
         "VkYcbcrSamplerHelper.cpp",
     ],

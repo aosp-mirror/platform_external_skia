@@ -8,13 +8,15 @@
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrImageContextPriv.h"
+#include "src/gpu/ganesh/image/SkImage_GaneshBase.h"
 #include "src/image/SkImage_Base.h"
-#include "src/image/SkImage_GpuBase.h"
 #include "tools/gpu/ProxyUtils.h"
 
 constexpr int kImgWidth  = 16;
@@ -79,7 +81,7 @@ static void create_BC1_block(BC1Block* block, bool transparent) {
 static sk_sp<SkData> make_compressed_data() {
     SkISize dim{ kImgWidth, kImgHeight };
 
-    size_t totalSize = SkCompressedDataSize(SkImage::CompressionType::kBC1_RGB8_UNORM, dim,
+    size_t totalSize = SkCompressedDataSize(SkTextureCompressionType::kBC1_RGB8_UNORM, dim,
                                             nullptr, false);
 
     sk_sp<SkData> tmp = SkData::MakeUninitialized(totalSize);
@@ -102,18 +104,13 @@ static sk_sp<SkData> make_compressed_data() {
 }
 
 static sk_sp<SkImage> data_to_img(GrDirectContext *direct, sk_sp<SkData> data,
-                                  SkImage::CompressionType compression) {
+                                  SkTextureCompressionType compression) {
     if (direct) {
-        return SkImage::MakeTextureFromCompressed(direct, std::move(data),
-                                                  kImgWidth,
-                                                  kImgHeight,
-                                                  compression,
-                                                  GrMipmapped::kNo);
+        return SkImages::TextureFromCompressedTextureData(
+                direct, std::move(data), kImgWidth, kImgHeight, compression, skgpu::Mipmapped::kNo);
     } else {
-        return SkImage::MakeRasterFromCompressed(std::move(data),
-                                                 kImgWidth,
-                                                 kImgHeight,
-                                                 compression);
+        return SkImages::RasterFromCompressedTextureData(
+                std::move(data), kImgWidth, kImgHeight, compression);
     }
 }
 
@@ -167,16 +164,13 @@ public:
     }
 
 protected:
+    SkString getName() const override { return SkString("bc1_transparency"); }
 
-    SkString onShortName() override {
-        return SkString("bc1_transparency");
-    }
-
-    SkISize onISize() override {
+    SkISize getISize() override {
         return SkISize::Make(kImgWidth + 2 * kPad, 2 * kImgHeight + 3 * kPad);
     }
 
-    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg, GraphiteTestContext*) override {
         auto dContext = GrAsDirectContext(canvas->recordingContext());
         if (dContext && dContext->abandoned()) {
             // This isn't a GpuGM so a null 'context' is okay but an abandoned context
@@ -186,9 +180,9 @@ protected:
 
         sk_sp<SkData> bc1Data = make_compressed_data();
 
-        fRGBImage = data_to_img(dContext, bc1Data, SkImage::CompressionType::kBC1_RGB8_UNORM);
+        fRGBImage = data_to_img(dContext, bc1Data, SkTextureCompressionType::kBC1_RGB8_UNORM);
         fRGBAImage = data_to_img(dContext, std::move(bc1Data),
-                                 SkImage::CompressionType::kBC1_RGBA8_UNORM);
+                                 SkTextureCompressionType::kBC1_RGBA8_UNORM);
         if (!fRGBImage || !fRGBAImage) {
             *errorMsg = "Failed to create BC1 images.";
             return DrawResult::kFail;

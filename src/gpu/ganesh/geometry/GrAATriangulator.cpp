@@ -7,13 +7,18 @@
 
 #include "src/gpu/ganesh/geometry/GrAATriangulator.h"
 
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
+#include "include/core/SkPathTypes.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkMath.h"
 #include "src/gpu/BufferWriter.h"
 #include "src/gpu/ganesh/GrEagerVertexAllocator.h"
-#include <queue>
-#include <vector>
-#include <unordered_map>
 
-#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
+#include <cstddef>
+#include <queue>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #if TRIANGULATOR_LOGGING
 #define TESS_LOG SkDebugf
@@ -151,7 +156,7 @@ void GrAATriangulator::removeNonBoundaryEdges(const VertexList& mesh) const {
         }
         Edge* leftEnclosingEdge;
         Edge* rightEnclosingEdge;
-        FindEnclosingEdges(v, &activeEdges, &leftEnclosingEdge, &rightEnclosingEdge);
+        FindEnclosingEdges(*v, activeEdges, &leftEnclosingEdge, &rightEnclosingEdge);
         bool prevFilled = leftEnclosingEdge && this->applyFillType(leftEnclosingEdge->fWinding);
         for (Edge* e = v->fFirstEdgeAbove; e;) {
             Edge* next = e->fNextEdgeAbove;
@@ -321,7 +326,7 @@ bool GrAATriangulator::collapseOverlapRegions(VertexList* mesh, const Comparator
         }
         Edge* leftEnclosingEdge;
         Edge* rightEnclosingEdge;
-        FindEnclosingEdges(v, &activeEdges, &leftEnclosingEdge, &rightEnclosingEdge);
+        FindEnclosingEdges(*v, activeEdges, &leftEnclosingEdge, &rightEnclosingEdge);
         for (Edge* e = v->fLastEdgeAbove; e && e != leftEnclosingEdge;) {
             Edge* prev = e->fPrevEdgeAbove ? e->fPrevEdgeAbove : leftEnclosingEdge;
             activeEdges.remove(e);
@@ -378,12 +383,12 @@ bool GrAATriangulator::collapseOverlapRegions(VertexList* mesh, const Comparator
             prev = e;
         }
     }
-    bool complex = events.size() > 0;
+    bool complex = !events.empty();
 
     TESS_LOG("\ncollapsing overlap regions\n");
     TESS_LOG("skeleton before:\n");
     dump_skel(ssEdges);
-    while (events.size() > 0) {
+    while (!events.empty()) {
         Event* event = events.top();
         events.pop();
         event->apply(mesh, c, &events, this);

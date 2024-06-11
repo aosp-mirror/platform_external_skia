@@ -1,18 +1,24 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
 
 GRADIENT_FILES = [
-    "SkGradientShader.cpp",
-    "SkGradientShaderBase.cpp",
-    "SkGradientShaderBase.h",
+    "SkConicalGradient.cpp",
+    "SkConicalGradient.h",
+    "SkGradientBaseShader.cpp",
+    "SkGradientBaseShader.h",
     "SkLinearGradient.cpp",
     "SkLinearGradient.h",
     "SkRadialGradient.cpp",
+    "SkRadialGradient.h",
     "SkSweepGradient.cpp",
-    "SkTwoPointConicalGradient.cpp",
+    "SkSweepGradient.h",
 ]
 
 split_srcs_and_hdrs(

@@ -7,7 +7,7 @@
 
 #include "src/gpu/graphite/render/TessellateCurvesRenderStep.h"
 
-#include "include/private/SkSLString.h"
+#include "src/sksl/SkSLString.h"
 
 #include "src/gpu/graphite/BufferManager.h"
 #include "src/gpu/graphite/DrawParams.h"
@@ -41,19 +41,19 @@ using Writer = PatchWriter<DynamicInstancesPatchAllocator<FixedCountCurves>,
 
 // The order of the attribute declarations must match the order used by
 // PatchWriter::emitPatchAttribs, i.e.:
-//     join << fanPoint << stroke << color << depth << curveType << ssboIndex
+//     join << fanPoint << stroke << color << depth << curveType << ssboIndices
 static constexpr Attribute kBaseAttributes[] = {
         {"p01", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"p23", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
-        {"ssboIndex", VertexAttribType::kInt, SkSLType::kInt}};
+        {"ssboIndices", VertexAttribType::kUShort2, SkSLType::kUShort2}};
 
 static constexpr Attribute kAttributesWithCurveType[] = {
         {"p01", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"p23", VertexAttribType::kFloat4, SkSLType::kFloat4},
         {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
         {"curveType", VertexAttribType::kFloat, SkSLType::kFloat},
-        {"ssboIndex", VertexAttribType::kInt, SkSLType::kInt}};
+        {"ssboIndices", VertexAttribType::kUShort2, SkSLType::kUShort2}};
 
 static constexpr SkSpan<const Attribute> kAttributes[2] = {kAttributesWithCurveType,
                                                            kBaseAttributes};
@@ -81,11 +81,15 @@ TessellateCurvesRenderStep::TessellateCurvesRenderStep(bool evenOdd,
     // problems, we can modify StaticBufferManager to de-duplicate requests.
     const size_t vertexSize = FixedCountCurves::VertexBufferSize();
     auto vertexData = bufferManager->getVertexWriter(vertexSize, &fVertexBuffer);
-    FixedCountCurves::WriteVertexBuffer(std::move(vertexData), vertexSize);
+    if (vertexData) {
+        FixedCountCurves::WriteVertexBuffer(std::move(vertexData), vertexSize);
+    } // otherwise static buffer creation failed, so do nothing; Context initialization will fail.
 
     const size_t indexSize = FixedCountCurves::IndexBufferSize();
     auto indexData = bufferManager->getIndexWriter(indexSize, &fIndexBuffer);
-    FixedCountCurves::WriteIndexBuffer(std::move(indexData), indexSize);
+    if (indexData) {
+        FixedCountCurves::WriteIndexBuffer(std::move(indexData), indexSize);
+    } // ""
 }
 
 TessellateCurvesRenderStep::~TessellateCurvesRenderStep() {}
@@ -108,7 +112,7 @@ std::string TessellateCurvesRenderStep::vertexSkSL() const {
 
 void TessellateCurvesRenderStep::writeVertices(DrawWriter* dw,
                                                const DrawParams& params,
-                                               int ssboIndex) const {
+                                               skvx::ushort2 ssboIndices) const {
     SkPath path = params.geometry().shape().asPath(); // TODO: Iterate the Shape directly
 
     int patchReserveCount = FixedCountCurves::PreallocCount(path.countVerbs());
@@ -118,13 +122,13 @@ void TessellateCurvesRenderStep::writeVertices(DrawWriter* dw,
                   fIndexBuffer,
                   patchReserveCount};
     writer.updatePaintDepthAttrib(params.order().depthAsFloat());
-    writer.updateSsboIndexAttrib(ssboIndex);
+    writer.updateSsboIndexAttrib(ssboIndices);
 
     // The vector xform approximates how the control points are transformed by the shader to
     // more accurately compute how many *parametric* segments are needed.
     // TODO: This doesn't account for perspective division yet, which will require updating the
     // approximate transform based on each verb's control points' bounding box.
-    SkASSERT(params.transform().type() < Transform::Type::kProjection);
+    SkASSERT(params.transform().type() < Transform::Type::kPerspective);
     writer.setShaderTransform(wangs_formula::VectorXform{params.transform().matrix()},
                               params.transform().maxScaleFactor());
 

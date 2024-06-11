@@ -9,28 +9,23 @@
 #define skgpu_VulkanAMDMemoryAllocator_DEFINED
 
 #include "include/gpu/vk/VulkanMemoryAllocator.h"
+#include "src/gpu/vk/vulkanmemoryallocator/VulkanMemoryAllocatorWrapper.h"
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/vk/VulkanTypes.h"
+#include "include/private/gpu/vk/SkiaVulkan.h"
+
+#include <cstdint>
+#include <utility>
 
 namespace skgpu {
 
 class VulkanExtensions;
 struct VulkanInterface;
 
-#ifndef SK_USE_VMA
-class VulkanAMDMemoryAllocator {
-public:
-    static sk_sp<VulkanMemoryAllocator> Make(VkInstance instance,
-                                             VkPhysicalDevice physicalDevice,
-                                             VkDevice device,
-                                             uint32_t physicalDeviceVersion,
-                                             const VulkanExtensions* extensions,
-                                             sk_sp<const VulkanInterface> interface,
-                                             bool mustUseCoherentHostVisibleMemory,
-                                             bool threadSafe);
+enum class ThreadSafe : bool {
+    kNo = false,
+    kYes = true,
 };
-
-#else
-
-#include "GrVulkanMemoryAllocator.h"
 
 class VulkanAMDMemoryAllocator : public VulkanMemoryAllocator {
 public:
@@ -39,9 +34,8 @@ public:
                                              VkDevice device,
                                              uint32_t physicalDeviceVersion,
                                              const VulkanExtensions* extensions,
-                                             sk_sp<const VulkanInterface> interface,
-                                             bool mustUseCoherentHostVisibleMemory,
-                                             bool threadSafe);
+                                             const VulkanInterface* interface,
+                                             ThreadSafe);
 
     ~VulkanAMDMemoryAllocator() override;
 
@@ -68,23 +62,10 @@ public:
     std::pair<uint64_t, uint64_t> totalAllocatedAndUsedMemory() const override;
 
 private:
-    VulkanAMDMemoryAllocator(VmaAllocator allocator, sk_sp<const VulkanInterface> interface,
-                             bool mustUseCoherentHostVisibleMemory);
+    VulkanAMDMemoryAllocator(VmaAllocator allocator);
 
     VmaAllocator fAllocator;
-
-    // If a future version of the AMD allocator has helper functions for flushing and invalidating
-    // memory, then we won't need to save the VulkanInterface here since we won't need to
-    // make direct vulkan calls.
-    sk_sp<const VulkanInterface> fInterface;
-
-    // For host visible allocations do we require they are coherent or not. All devices are required
-    // to support a host visible and coherent memory type. This is used to work around bugs for
-    // devices that don't handle non coherent memory correctly.
-    bool fMustUseCoherentHostVisibleMemory;
 };
-
-#endif // SK_USE_VMA
 
 } // namespace skgpu
 

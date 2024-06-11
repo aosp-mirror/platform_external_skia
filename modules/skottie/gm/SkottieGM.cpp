@@ -6,14 +6,19 @@
  */
 
 #include "gm/gm.h"
+#include "include/codec/SkCodec.h"
+#include "include/codec/SkGifDecoder.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkFontMgr.h"
 #include "include/core/SkStream.h"
-#include "include/utils/SkAnimCodecPlayer.h"
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/utils/SkottieUtils.h"
 #include "modules/skresources/include/SkResources.h"
+#include "modules/skshaper/include/SkShaper_factory.h"
+#include "modules/skshaper/utils/FactoryHelpers.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <cmath>
 #include <vector>
@@ -26,8 +31,7 @@ static constexpr char kSkottieResource[] = "skottie/skottie_sample_webfont.json"
 // Mock web font loader which serves a single local font (checked in under resources/).
 class FakeWebFontProvider final : public skresources::ResourceProvider {
 public:
-    FakeWebFontProvider()
-        : fTypeface(SkTypeface::MakeFromData(GetResourceAsData(kWebFontResource))) {}
+    FakeWebFontProvider() : fTypeface(ToolUtils::CreateTypefaceFromResource(kWebFontResource)) {}
 
     sk_sp<SkTypeface> loadTypeface(const char[], const char[]) const override {
         return fTypeface;
@@ -44,18 +48,16 @@ private:
 class SkottieWebFontGM : public skiagm::GM {
 public:
 protected:
-    SkString onShortName() override {
-        return SkString("skottie_webfont");
-    }
+    SkString getName() const override { return SkString("skottie_webfont"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(kSize, kSize);
-    }
+    SkISize getISize() override { return SkISize::Make(kSize, kSize); }
 
     void onOnceBeforeDraw() override {
         if (auto stream = GetResourceAsStream(kSkottieResource)) {
             fAnimation = skottie::Animation::Builder()
+                            .setFontManager(ToolUtils::TestFontMgr())
                             .setResourceProvider(sk_make_sp<FakeWebFontProvider>())
+                            .setTextShapingFactory(SkShapers::BestAvailable())
                             .make(stream.get());
         }
     }
@@ -99,19 +101,17 @@ public:
     {}
 
 protected:
-    SkString onShortName() override {
-        return SkStringPrintf("skottie_colorize_%s", fName);
-    }
+    SkString getName() const override { return SkStringPrintf("skottie_colorize_%s", fName); }
 
-    SkISize onISize() override {
-        return SkISize::Make(kSize, kSize);
-    }
+    SkISize getISize() override { return SkISize::Make(kSize, kSize); }
 
     void onOnceBeforeDraw() override {
         if (auto stream = GetResourceAsStream(fResource)) {
             fPropManager = std::make_unique<skottie_utils::CustomPropertyManager>();
             fAnimation   = skottie::Animation::Builder()
+                              .setFontManager(ToolUtils::TestFontMgr())
                               .setPropertyObserver(fPropManager->getPropertyObserver())
+                              .setTextShapingFactory(SkShapers::BestAvailable())
                               .make(stream.get());
             fColorProps  = fPropManager->getColorProps();
             fTextProps   = fPropManager->getTextProps();
@@ -185,13 +185,9 @@ DEF_GM(return new SkottieColorizeGM("text" , "skottie/skottie-text-animator-5.js
 class SkottieMultiFrameGM : public skiagm::GM {
 public:
 protected:
-    SkString onShortName() override {
-        return SkString("skottie_multiframe");
-    }
+    SkString getName() const override { return SkString("skottie_multiframe"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(kSize, kSize);
-    }
+    SkISize getISize() override { return SkISize::Make(kSize, kSize); }
 
     void onOnceBeforeDraw() override {
         if (auto stream = GetResourceAsStream("skottie/skottie_sample_multiframe.json")) {
@@ -228,8 +224,11 @@ private:
     public:
         sk_sp<skresources::ImageAsset> loadImageAsset(const char[], const char[],
                                                       const char[]) const override {
-            return skresources::MultiFrameImageAsset::Make(
-                        GetResourceAsData("images/flightAnim.gif"));
+            sk_sp<SkData> data = GetResourceAsData("images/flightAnim.gif");
+            SkASSERT(data);
+            std::unique_ptr<SkCodec> codec = SkGifDecoder::Decode(data, nullptr);
+            SkASSERT(codec);
+            return skresources::MultiFrameImageAsset::Make(std::move(codec));
         }
     };
 

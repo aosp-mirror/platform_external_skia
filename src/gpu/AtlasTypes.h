@@ -8,21 +8,27 @@
 #ifndef skgpu_AtlasTypes_DEFINED
 #define skgpu_AtlasTypes_DEFINED
 
-#include <array>
-
 #include "include/core/SkColorType.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkTInternalLList.h"
 #include "src/core/SkIPoint16.h"
 #include "src/gpu/RectanizerSkyline.h"
 
+#include <array>
+#include <cstdint>
+#include <cstring>
+#include <utility>
+
 class GrOpFlushState;
+class SkAutoPixmapStorage;
 class TestingUploadTarget;
-namespace skgpu::graphite { class AtlasManager; }
+namespace skgpu::graphite { class RecorderPriv; }
 
 /**
  * This file includes internal types that are used by all of our gpu backends for atlases.
@@ -33,25 +39,25 @@ namespace skgpu {
 struct IRect16 {
     int16_t fLeft, fTop, fRight, fBottom;
 
-    static IRect16 SK_WARN_UNUSED_RESULT MakeEmpty() {
+    [[nodiscard]] static IRect16 MakeEmpty() {
         IRect16 r;
         r.setEmpty();
         return r;
     }
 
-    static IRect16 SK_WARN_UNUSED_RESULT MakeWH(int16_t w, int16_t h) {
+    [[nodiscard]] static IRect16 MakeWH(int16_t w, int16_t h) {
         IRect16 r;
         r.set(0, 0, w, h);
         return r;
     }
 
-    static IRect16 SK_WARN_UNUSED_RESULT MakeXYWH(int16_t x, int16_t y, int16_t w, int16_t h) {
+    [[nodiscard]] static IRect16 MakeXYWH(int16_t x, int16_t y, int16_t w, int16_t h) {
         IRect16 r;
         r.set(x, y, x + w, y + h);
         return r;
     }
 
-    static IRect16 SK_WARN_UNUSED_RESULT Make(const SkIRect& ir) {
+    [[nodiscard]] static IRect16 Make(const SkIRect& ir) {
         IRect16 r;
         r.set(ir);
         return r;
@@ -211,7 +217,7 @@ private:
     // Only these classes get to increment the token counters
     friend class ::GrOpFlushState;
     friend class ::TestingUploadTarget;
-    friend class skgpu::graphite::AtlasManager;
+    friend class skgpu::graphite::RecorderPriv;
 
     // Issues the next token for a draw.
     AtlasToken issueDrawToken() { return ++fCurrentDrawToken; }
@@ -229,8 +235,6 @@ private:
  *
  * In fact PlotLocator is a portion of a glyph image location in the atlas fully specified by:
  *    format/atlasGeneration/page/plot/plotGeneration/rect
- *
- * TODO: Remove the small path renderer's use of the PlotLocator for eviction.
  */
 class PlotLocator {
 public:
@@ -348,7 +352,7 @@ public:
     }
 
 private:
-    PlotLocator fPlotLocator{0, 0, 0};
+    PlotLocator fPlotLocator{AtlasGenerationCounter::kInvalidGeneration, 0, 0};
 
     // The inset padded bounds in the atlas in the lower 13 bits, and page index in bits 13 &
     // 14 of the Us.
@@ -418,7 +422,7 @@ private:
     }
 
     inline static constexpr int kMinItems = 4;
-    SkSTArray<kMinItems, PlotData, true> fPlotsToUpdate;
+    skia_private::STArray<kMinItems, PlotData, true> fPlotsToUpdate;
     // TODO: increase this to uint64_t to allow more plots per page
     uint32_t fPlotAlreadyUpdated[skgpu::PlotLocator::kMaxMultitexturePages];
 };
@@ -450,6 +454,18 @@ public:
     }
     SkDEBUGCODE(size_t bpp() const { return fBytesPerPixel; })
 
+    /**
+     * To add data to the Plot, first call addRect to see if it's possible. If successful,
+     * use the atlasLocator to get a pointer to the location in the atlas via dataAt() and render to
+     * that location, or if you already have data use copySubImage().
+     */
+    bool addRect(int width, int height, AtlasLocator* atlasLocator);
+    void* dataAt(const AtlasLocator& atlasLocator);
+    void copySubImage(const AtlasLocator& atlasLocator, const void* image);
+    // Reset Pixmap to point to backing data for this Plot,
+    // and return render location specified by AtlasLocator but relative to this Plot.
+    SkIPoint prepForRender(const AtlasLocator&, SkAutoPixmapStorage*);
+    // TODO: Utility method for Ganesh, consider removing
     bool addSubImage(int width, int height, const void* image, AtlasLocator* atlasLocator);
 
     /**
@@ -469,8 +485,10 @@ public:
     void incFlushesSinceLastUsed() { fFlushesSinceLastUse++; }
 
     bool needsUpload() { return !fDirtyRect.isEmpty(); }
-    std::pair<const void*, SkIRect> prepareForUpload(bool useCachedUploads);
+    std::pair<const void*, SkIRect> prepareForUpload();
     void resetRects();
+
+    void markFullIfUsed() { fIsFull = !fDirtyRect.isEmpty(); }
 
     /**
      * Create a clone of this plot. The cloned plot will take the place of the current plot in
@@ -513,8 +531,8 @@ private:
     const SkColorType fColorType;
     const size_t fBytesPerPixel;
     SkIRect fDirtyRect;  // area in the Plot that needs to be uploaded
-    SkIRect fCachedRect; // area in the Plot that has already been uploaded
-    SkDEBUGCODE(bool fDirty);
+    bool fIsFull;
+    SkDEBUGCODE(bool fDirty;)
 };
 
 typedef SkTInternalLList<Plot> PlotList;

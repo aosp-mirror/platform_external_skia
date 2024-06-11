@@ -25,16 +25,18 @@
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/private/base/SkFloatBits.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkArenaAlloc.h"
+#include "src/base/SkFloatBits.h"
 #include "src/base/SkRandom.h"
 #include "src/core/SkPathPriv.h"
 #include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrEagerVertexAllocator.h"
+#include "src/gpu/ganesh/GrFPArgs.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrFragmentProcessors.h"
 #include "src/gpu/ganesh/GrPaint.h"
 #include "src/gpu/ganesh/GrStyle.h"
 #include "src/gpu/ganesh/GrUserStencilSettings.h"
@@ -43,10 +45,10 @@
 #include "src/gpu/ganesh/effects/GrPorterDuffXferProcessor.h"
 #include "src/gpu/ganesh/geometry/GrAATriangulator.h"
 #include "src/gpu/ganesh/geometry/GrInnerFanTriangulator.h"
+#include "src/gpu/ganesh/geometry/GrPathUtils.h"
 #include "src/gpu/ganesh/geometry/GrStyledShape.h"
 #include "src/gpu/ganesh/geometry/GrTriangulator.h"
 #include "src/gpu/ganesh/ops/TriangulatingPathRenderer.h"
-#include "src/shaders/SkShaderBase.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
@@ -828,16 +830,17 @@ create_linear_gradient_processor(GrRecordingContext* rContext, const SkMatrix& c
         pts, colors, nullptr, std::size(colors), SkTileMode::kClamp);
     GrColorInfo colorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr);
     SkSurfaceProps props; // default props for testing
-    return as_SB(shader)->asRootFragmentProcessor({rContext, &colorInfo, props}, ctm);
+    return GrFragmentProcessors::Make(
+            shader.get(), {rContext, &colorInfo, props, GrFPArgs::Scope::kDefault}, ctm);
 }
 
 static void test_path(GrRecordingContext* rContext,
-                      skgpu::v1::SurfaceDrawContext* sdc,
+                      skgpu::ganesh::SurfaceDrawContext* sdc,
                       const SkPath& path,
                       const SkMatrix& matrix = SkMatrix::I(),
                       GrAAType aaType = GrAAType::kNone,
                       std::unique_ptr<GrFragmentProcessor> fp = nullptr) {
-    skgpu::v1::TriangulatingPathRenderer pr;
+    skgpu::ganesh::TriangulatingPathRenderer pr;
     pr.setMaxVerbCount(100);
 
     GrPaint paint;
@@ -849,16 +852,16 @@ static void test_path(GrRecordingContext* rContext,
     SkIRect clipConservativeBounds = SkIRect::MakeWH(sdc->width(), sdc->height());
     GrStyle style(SkStrokeRec::kFill_InitStyle);
     GrStyledShape shape(path, style);
-    skgpu::v1::PathRenderer::DrawPathArgs args{rContext,
-                                               std::move(paint),
-                                               &GrUserStencilSettings::kUnused,
-                                               sdc,
-                                               nullptr,
-                                               &clipConservativeBounds,
-                                               &matrix,
-                                               &shape,
-                                               aaType,
-                                               false};
+    skgpu::ganesh::PathRenderer::DrawPathArgs args{rContext,
+                                                   std::move(paint),
+                                                   &GrUserStencilSettings::kUnused,
+                                                   sdc,
+                                                   nullptr,
+                                                   &clipConservativeBounds,
+                                                   &matrix,
+                                                   &shape,
+                                                   aaType,
+                                                   false};
     pr.drawPath(args);
 }
 
@@ -867,10 +870,17 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests,
                                  ctxInfo,
                                  CtsEnforcement::kNever) {
     auto ctx = ctxInfo.directContext();
-    auto sdc = skgpu::v1::SurfaceDrawContext::Make(
-            ctx, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {800, 800},
-            SkSurfaceProps(),/*label=*/{}, 1, GrMipmapped::kNo, GrProtected::kNo,
-            kTopLeft_GrSurfaceOrigin);
+    auto sdc = skgpu::ganesh::SurfaceDrawContext::Make(ctx,
+                                                       GrColorType::kRGBA_8888,
+                                                       nullptr,
+                                                       SkBackingFit::kApprox,
+                                                       {800, 800},
+                                                       SkSurfaceProps(),
+                                                       /*label=*/{},
+                                                       /* sampleCnt= */ 1,
+                                                       skgpu::Mipmapped::kNo,
+                                                       GrProtected::kNo,
+                                                       kTopLeft_GrSurfaceOrigin);
     if (!sdc) {
         return;
     }
@@ -1167,7 +1177,7 @@ DEF_TEST(GrInnerFanTriangulator, r) {
     }
 }
 
-static void test_crbug_1262444(skiatest::Reporter* r) {
+DEF_TEST(Triangulator_Crbug1262444, r) {
     SkPath path;
 
     path.setFillType(SkPathFillType::kWinding);
@@ -1352,8 +1362,112 @@ static void test_crbug_1262444(skiatest::Reporter* r) {
     REPORTER_ASSERT(r, vertexCount == 0);
 }
 
-DEF_TEST(TriangulatorBugs, r) {
-    test_crbug_1262444(r);
+DEF_TEST(Triangulator_Crbug337080025, r) {
+    SkPath path;
+
+    path.setFillType(SkPathFillType::kWinding);
+    path.moveTo(SkBits2Float(0x71ec7478),
+                SkBits2Float(0xe18cc1ac));  // 2.34173646e+30f, -3.24562462e+20f
+    path.lineTo(SkBits2Float(0x71ec7478),
+                SkBits2Float(0xe189ac7b));  // 2.34173646e+30f, -3.17454058e+20f
+    path.lineTo(SkBits2Float(0x71ec7478),
+                SkBits2Float(0x618fd6dd));  // 2.34173646e+30f, 3.31670867e+20f
+    path.lineTo(SkBits2Float(0x71ec7478),
+                SkBits2Float(0x6192ec0e));  // 2.34173646e+30f, 3.38779271e+20f
+    path.conicTo(SkBits2Float(0x71ec7478),
+                 SkBits2Float(0x71ec7478),
+                 SkBits2Float(0xe18cc1ac),
+                 SkBits2Float(0x71ec7478),
+                 SkBits2Float(0x3f3504f3));  // 2.34173646e+30f, 2.34173646e+30f,
+                                             // -3.24562462e+20f, 2.34173646e+30f, 0.707106769f
+    path.conicTo(SkBits2Float(0xf1ec7478),
+                 SkBits2Float(0x71ec7478),
+                 SkBits2Float(0xf1ec7478),
+                 SkBits2Float(0x6192ec0e),
+                 SkBits2Float(0x3f3504f3));  // -2.34173646e+30f, 2.34173646e+30f,
+                                             // -2.34173646e+30f, 3.38779271e+20f, 0.707106769f
+    path.lineTo(SkBits2Float(0xf1ec7478),
+                SkBits2Float(0x618fd6dd));  // -2.34173646e+30f, 3.31670867e+20f
+    path.lineTo(SkBits2Float(0xf1ec7478),
+                SkBits2Float(0xe189ac7b));  // -2.34173646e+30f, -3.17454058e+20f
+    path.lineTo(SkBits2Float(0xf1ec7478),
+                SkBits2Float(0xe18cc1ac));  // -2.34173646e+30f, -3.24562462e+20f
+    path.conicTo(SkBits2Float(0xf1ec7478),
+                 SkBits2Float(0xf1ec7478),
+                 SkBits2Float(0x4e775b1f),
+                 SkBits2Float(0xf1ec7478),
+                 SkBits2Float(0x3f3504f3));  // -2.34173646e+30f, -2.34173646e+30f, 1.03748602e+09f,
+                                             // -2.34173646e+30f, 0.707106769f
+    path.lineTo(SkBits2Float(0x4e775b20),
+                SkBits2Float(0xf1ec7478));  // 1.03748608e+09f, -2.34173646e+30f
+    path.lineTo(SkBits2Float(0x71ec7478),
+                SkBits2Float(0xe18cc1ac));  // 2.34173646e+30f, -3.24562462e+20f
+    path.close();
+    path.moveTo(SkBits2Float(0xf1ec7478),
+                SkBits2Float(0x618cc1ac));  // -2.34173646e+30f, 3.24562462e+20f
+    path.lineTo(SkBits2Float(0x4e775b20),
+                SkBits2Float(0x02230001));  // 1.03748608e+09f, 1.19753498e-37f
+    path.lineTo(SkBits2Float(0x4e775b20),
+                SkBits2Float(0x71ec7478));  // 1.03748608e+09f, 2.34173646e+30f
+    path.lineTo(SkBits2Float(0x4e775b1f),
+                SkBits2Float(0x71ec7478));  // 1.03748602e+09f, 2.34173646e+30f
+    path.lineTo(SkBits2Float(0x4e775b1f), SkBits2Float(0x00000000));  // 1.03748602e+09f, 0
+    path.lineTo(SkBits2Float(0x71ec7478),
+                SkBits2Float(0x618cc1ac));  // 2.34173646e+30f, 3.24562462e+20f
+    path.lineTo(SkBits2Float(0x71ec7478),
+                SkBits2Float(0x618fd6dd));  // 2.34173646e+30f, 3.31670867e+20f
+    path.lineTo(SkBits2Float(0x4c476265), SkBits2Float(0x5ec54c47));  // 52267412, 7.10840809e+18f
+    path.lineTo(SkBits2Float(0x71ec7478),
+                SkBits2Float(0xe189ac7b));  // 2.34173646e+30f, -3.17454058e+20f
+    path.lineTo(SkBits2Float(0x71ec7478),
+                SkBits2Float(0xe186974a));  // 2.34173646e+30f, -3.10345654e+20f
+    path.lineTo(SkBits2Float(0x4e775b20),
+                SkBits2Float(0x5f454c47));  // 1.03748608e+09f, 1.42168162e+19f
+    path.lineTo(SkBits2Float(0xf1ec7478),
+                SkBits2Float(0xe186974a));  // -2.34173646e+30f, -3.10345654e+20f
+    path.lineTo(SkBits2Float(0xf1ec7478),
+                SkBits2Float(0xe189ac7b));  // -2.34173646e+30f, -3.17454058e+20f
+    path.lineTo(SkBits2Float(0x4ef1200d),
+                SkBits2Float(0x5ec54c47));  // 2.02270477e+09f, 7.10840809e+18f
+    path.lineTo(SkBits2Float(0xf1ec7478),
+                SkBits2Float(0x618fd6dd));  // -2.34173646e+30f, 3.31670867e+20f
+    path.lineTo(SkBits2Float(0xf1ec7478),
+                SkBits2Float(0x618cc1ac));  // -2.34173646e+30f, 3.24562462e+20f
+    path.close();
+    path.moveTo(SkBits2Float(0x4e775b20),
+                SkBits2Float(0x02230001));  // 1.03748608e+09f, 1.19753498e-37f
+    path.conicTo(SkBits2Float(0x4ef1200d),
+                 SkBits2Float(0x02230001),
+                 SkBits2Float(0x4ef1200d),
+                 SkBits2Float(0x5ec54c47),
+                 SkBits2Float(0x3f3504f3));  // 2.02270477e+09f, 1.19753498e-37f, 2.02270477e+09f,
+                                             // 7.10840809e+18f, 0.707106769f
+    path.conicTo(SkBits2Float(0x4ef1200d),
+                 SkBits2Float(0x5f454c47),
+                 SkBits2Float(0x4e775b20),
+                 SkBits2Float(0x5f454c47),
+                 SkBits2Float(0x3f3504f3));  // 2.02270477e+09f, 1.42168162e+19f, 1.03748608e+09f,
+                                             // 1.42168162e+19f,0.707106769f
+    path.conicTo(SkBits2Float(0x4c476265),
+                 SkBits2Float(0x5f454c47),
+                 SkBits2Float(0x4c476265),
+                 SkBits2Float(0x5ec54c47),
+                 SkBits2Float(0x3f3504f3));  // 52267412, 1.42168162e+19f, 52267412,
+                                             // 7.10840809e+18f, 0.707106769f
+    path.conicTo(SkBits2Float(0x4c476265),
+                 SkBits2Float(0x02230001),
+                 SkBits2Float(0x4e775b20),
+                 SkBits2Float(0x02230001),
+                 SkBits2Float(0x3f3504f3));  // 52267412, 1.19753498e-37f, 1.03748608e+09f,
+                                             // 1.19753498e-37f, 0.707106769f
+    path.close();
+
+    SkRect clipBounds = SkRect::MakeLTRB(0, 0, 256, 256);
+    SimplerVertexAllocator alloc;
+
+    int vertexCount = GrAATriangulator::PathToAATriangles(
+            path, GrPathUtils::kDefaultTolerance, clipBounds, &alloc);
+    REPORTER_ASSERT(r, vertexCount == 0);
 }
 
 #endif // SK_ENABLE_OPTIMIZE_SIZE

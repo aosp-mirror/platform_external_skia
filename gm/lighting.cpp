@@ -19,6 +19,7 @@
 #include "include/core/SkString.h"
 #include "include/effects/SkImageFilters.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/timer/TimeUtils.h"
 
 #define WIDTH 660
@@ -34,14 +35,9 @@ public:
     }
 
 protected:
+    SkString getName() const override { return SkString("lighting"); }
 
-    SkString onShortName() override {
-        return SkString("lighting");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(WIDTH, HEIGHT);
-    }
+    SkISize getISize() override { return SkISize::Make(WIDTH, HEIGHT); }
 
     void drawClippedBitmap(SkCanvas* canvas, const SkPaint& paint, int x, int y) {
         canvas->save();
@@ -52,7 +48,7 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        fBitmap = ToolUtils::create_string_bitmap(100, 100, 0xFFFFFFFF, 20, 70, 96, "e");
+        fBitmap = ToolUtils::CreateStringBitmap(100, 100, 0xFFFFFFFF, 20, 70, 96, "e");
     }
 
     void onDraw(SkCanvas* canvas) override {

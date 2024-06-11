@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -19,13 +23,8 @@ EFFECTS_FILES = [
     "SkEmbossMaskFilter.cpp",
     "SkEmbossMaskFilter.h",
     "SkHighContrastFilter.cpp",
-    "SkLayerDrawLooper.cpp",
-    "SkLumaColorFilter.cpp",
-    "SkOpPE.h",
-    "SkOpPathEffect.cpp",
-    "SkOverdrawColorFilter.cpp",
-    "SkShaderMaskFilter.cpp",
-    "SkTableColorFilter.cpp",
+    "SkShaderMaskFilterImpl.cpp",
+    "SkShaderMaskFilterImpl.h",
     "SkTableMaskFilter.cpp",
     "SkTrimPE.h",
     "SkTrimPathEffect.cpp",
@@ -40,16 +39,39 @@ skia_filegroup(
     name = "srcs",
     srcs = [
         ":effects_srcs",
+        "//src/effects/colorfilters:srcs",
         "//src/effects/imagefilters:srcs",
     ],
-    visibility = ["//src:__pkg__"],
+    visibility = [
+        "//src:__pkg__",
+        "//src/core:__pkg__",
+    ],
 )
 
 skia_filegroup(
     name = "private_hdrs",
     srcs = [
         ":effects_hdrs",
-        "//src/effects/imagefilters:private_hdrs",
+        "//src/effects/colorfilters:private_hdrs",
     ],
     visibility = ["//src:__pkg__"],
+)
+
+skia_filegroup(
+    name = "core_priv_hdrs",
+    srcs = [
+        ":effects_hdrs",
+        "//src/effects/colorfilters:private_hdrs",
+    ],
+    visibility = ["//src/core:__pkg__"],
+)
+
+skia_filegroup(
+    name = "core_srcs",
+    srcs = [
+        ":effects_srcs",
+        "//src/effects/colorfilters:srcs",
+        "//src/effects/imagefilters:srcs",
+    ],
+    visibility = ["//src/core:__pkg__"],
 )

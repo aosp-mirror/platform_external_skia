@@ -16,10 +16,13 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
 #include "src/core/SkMipmap.h"
 #include "src/core/SkMipmapBuilder.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -28,22 +31,22 @@
 class ShowMipLevels3 : public skiagm::GM {
     sk_sp<SkImage> fImg;
 
-    SkString onShortName() override { return SkString("showmiplevels_explicit"); }
+    SkString getName() const override { return SkString("showmiplevels_explicit"); }
 
-    SkISize onISize() override { return {1130, 970}; }
+    SkISize getISize() override { return {1130, 970}; }
 
     void onOnceBeforeDraw() override {
-        fImg = GetResourceAsImage("images/ship.png");
+        fImg = ToolUtils::GetResourceAsImage("images/ship.png");
         fImg = fImg->makeRasterImage(); // makeWithMips only works on raster for now
 
         const SkColor colors[] = { SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE };
 
         SkMipmapBuilder builder(fImg->imageInfo());
         for (int i = 0; i < builder.countLevels(); ++i) {
-            auto surf = SkSurface::MakeRasterDirect(builder.level(i));
+            auto surf = SkSurfaces::WrapPixels(builder.level(i));
             surf->getCanvas()->drawColor(colors[i % std::size(colors)]);
         }
-        fImg = builder.attachTo(fImg.get());
+        fImg = builder.attachTo(fImg);
     }
 
     DrawResult onDraw(SkCanvas* canvas, SkString*) override {

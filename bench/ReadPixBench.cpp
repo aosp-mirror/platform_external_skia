@@ -6,10 +6,10 @@
  */
 
 #include "bench/Benchmark.h"
+#include "include/codec/SkPixmapUtils.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
-#include "src/codec/SkPixmapUtils.h"
 
 // Time variants of read-pixels
 //  [ colortype ][ alphatype ][ colorspace ]
@@ -81,7 +81,7 @@ protected:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
+        return backend == Backend::kNonRendering;
     }
 
     void onDraw(int loops, SkCanvas*) override {
@@ -120,7 +120,7 @@ protected:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
+        return backend == Backend::kNonRendering;
     }
 
     void onDraw(int loops, SkCanvas*) override {

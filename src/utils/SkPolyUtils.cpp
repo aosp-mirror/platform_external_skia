@@ -11,13 +11,13 @@
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTemplates.h"
-#include "src/base/SkVx.h"
-#include "include/private/base/SkMalloc.h"
 #include "src/base/SkTDPQueue.h"
 #include "src/base/SkTInternalLList.h"
+#include "src/base/SkVx.h"
 #include "src/core/SkPointPriv.h"
 #include "src/core/SkRectPriv.h"
 
@@ -95,7 +95,7 @@ static inline bool outside_interval(SkScalar numer, SkScalar denom, bool denomPo
 
 // special zero-length test when we're using vdotv as a denominator
 static inline bool zero_length(const SkPoint& v, SkScalar vdotv) {
-    return !(SkScalarsAreFinite(v.fX, v.fY) && vdotv);
+    return !(SkIsFinite(v.fX, v.fY) && vdotv);
 }
 
 // Compute the intersection 'p' between segments s0 and s1, if any.
@@ -348,7 +348,7 @@ bool SkInsetConvexPolygon(const SkPoint* inputPolygonVerts, int inputPolygonSize
     }
 
     // can't inset by a negative or non-finite amount
-    if (inset < -SK_ScalarNearlyZero || !SkScalarIsFinite(inset)) {
+    if (inset < -SK_ScalarNearlyZero || !SkIsFinite(inset)) {
         return false;
     }
 
@@ -492,11 +492,11 @@ bool SkComputeRadialSteps(const SkVector& v1, const SkVector& v2, SkScalar offse
     const SkScalar kRecipPixelsPerArcSegment = 0.25f;
 
     SkScalar rCos = v1.dot(v2);
-    if (!SkScalarIsFinite(rCos)) {
+    if (!SkIsFinite(rCos)) {
         return false;
     }
     SkScalar rSin = v1.cross(v2);
-    if (!SkScalarIsFinite(rSin)) {
+    if (!SkIsFinite(rSin)) {
         return false;
     }
     SkScalar theta = SkScalarATan2(rSin, rCos);
@@ -1204,7 +1204,7 @@ bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSiz
         return false;
     }
 
-    if (!SkScalarIsFinite(offset)) {
+    if (!SkIsFinite(offset)) {
         return false;
     }
 
@@ -1279,7 +1279,7 @@ bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSiz
     }
 
     // build initial offset edge list
-    SkSTArray<64, OffsetEdge> edgeData(numEdges);
+    STArray<64, OffsetEdge> edgeData(numEdges);
     OffsetEdge* prevEdge = nullptr;
     for (int currIndex = 0, prevIndex = inputPolygonSize - 1;
          currIndex < inputPolygonSize;
@@ -1527,13 +1527,13 @@ public:
         fNumVerts = 0;
         SkScalar width = bounds.width();
         SkScalar height = bounds.height();
-        if (!SkScalarIsFinite(width) || !SkScalarIsFinite(height)) {
+        if (!SkIsFinite(width, height)) {
             return false;
         }
 
         // We want vertexCount grid cells, roughly distributed to match the bounds ratio
         SkScalar hCount = SkScalarSqrt(sk_ieee_float_divide(vertexCount*width, height));
-        if (!SkScalarIsFinite(hCount)) {
+        if (!SkIsFinite(hCount)) {
             return false;
         }
         fHCount = std::max(std::min(SkScalarRoundToInt(hCount), vertexCount), 1);

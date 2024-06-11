@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -14,6 +18,8 @@ EFFECTS_FILES = [
     "GrBitmapTextGeoProc.h",
     "GrBlendFragmentProcessor.cpp",
     "GrBlendFragmentProcessor.h",
+    "GrColorTableEffect.cpp",
+    "GrColorTableEffect.h",
     "GrConvexPolyEffect.cpp",
     "GrConvexPolyEffect.h",
     "GrCoverageSetOpXP.cpp",
@@ -24,16 +30,14 @@ EFFECTS_FILES = [
     "GrDisableColorXP.h",
     "GrDistanceFieldGeoProc.cpp",
     "GrDistanceFieldGeoProc.h",
-    "GrGaussianConvolutionFragmentProcessor.cpp",
-    "GrGaussianConvolutionFragmentProcessor.h",
-    "GrMatrixConvolutionEffect.cpp",
-    "GrMatrixConvolutionEffect.h",
     "GrMatrixEffect.cpp",
     "GrMatrixEffect.h",
     "GrModulateAtlasCoverageEffect.cpp",
     "GrModulateAtlasCoverageEffect.h",
     "GrOvalEffect.cpp",
     "GrOvalEffect.h",
+    "GrPerlinNoise2Effect.cpp",
+    "GrPerlinNoise2Effect.h",
     "GrPorterDuffXferProcessor.cpp",
     "GrPorterDuffXferProcessor.h",
     "GrRRectEffect.cpp",
