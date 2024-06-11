@@ -5,11 +5,8 @@
  * found in the LICENSE file.
  */
 
-#define SK_OPTS_NS skslc_standalone
-#include "include/core/SkGraphics.h"
 #include "include/core/SkStream.h"
 #include "src/base/SkStringView.h"
-#include "src/core/SkCpu.h"
 #include "src/core/SkOpts.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLFileOutputStream.h"
@@ -558,9 +555,11 @@ static ResultCode process_command(SkSpan<std::string> args) {
         kind = SkSL::ProgramKind::kRuntimeColorFilter;
     } else if (skstd::ends_with(inputPath, ".rts")) {
         kind = SkSL::ProgramKind::kRuntimeShader;
+    } else if (skstd::ends_with(inputPath, ".privrts")) {
+        kind = SkSL::ProgramKind::kPrivateRuntimeShader;
     } else {
         printf("input filename must end in '.vert', '.frag', '.mvert', '.mfrag', '.compute', "
-               "'.rtb', '.rtcf', '.rts' or '.sksl'\n");
+               "'.rtb', '.rtcf', '.rts', '.privrts', or '.sksl'\n");
         return ResultCode::kInputError;
     }
 
