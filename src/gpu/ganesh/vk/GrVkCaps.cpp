@@ -60,8 +60,8 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions,
     fDrawInstancedSupport = true;
 
     fSemaphoreSupport = true;   // always available in Vulkan
-    fFenceSyncSupport = true;   // always available in Vulkan
     fBackendSemaphoreSupport = true;
+    fFinishedProcAsyncCallbackSupport = true;
     fCrossContextTextureSupport = true;
     fHalfFloatVertexAttributeSupport = true;
 
@@ -119,6 +119,7 @@ static FormatCompatibilityClass format_compatibility_class(VkFormat format) {
             return FormatCompatibilityClass::k8_1_1;
 
         case VK_FORMAT_R5G6B5_UNORM_PACK16:
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:
         case VK_FORMAT_R16_SFLOAT:
         case VK_FORMAT_R8G8_UNORM:
         case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
@@ -397,6 +398,10 @@ void GrVkCaps::init(const GrContextOptions& contextOptions,
         fSupportsDRMFormatModifiers = true;
     }
 
+    if (extensions.hasExtension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, 1)) {
+        fSupportsDeviceFaultInfo = true;
+    }
+
     fMaxInputAttachmentDescriptors = properties.limits.maxDescriptorSetInputAttachments;
 
     fMaxSamplerAnisotropy = properties.limits.maxSamplerAnisotropy;
@@ -568,20 +573,6 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     if (properties.vendorID == kGoogle_VkVendor && properties.deviceID == kSwiftshader_DeviceID) {
         fReuseScratchBuffers = false;
     }
-
-#ifdef SK_BUILD_FOR_UNIX
-    if (kIntel_VkVendor == properties.vendorID) {
-        // At least on our linux Debug Intel HD405 bot we are seeing issues doing read pixels with
-        // non-conherent memory. It seems like the device is not properly honoring the
-        // vkInvalidateMappedMemoryRanges calls correctly. Other linux intel devices seem to work
-        // okay. However, since I'm not sure how to target a specific intel devices or driver
-        // version I am going to stop all intel linux from using non-coherent memory. Currently we
-        // are not shipping anything on these platforms and the only real thing that will regress is
-        // read backs. If we find later we do care about this performance we can come back to figure
-        // out how to do a more narrow workaround.
-        fMustUseCoherentHostVisibleMemory = true;
-    }
-#endif
 
     ////////////////////////////////////////////////////////////////////////////
     // GrCaps workarounds
@@ -799,6 +790,7 @@ static constexpr VkFormat kVkFormats[] = {
     VK_FORMAT_R8_UNORM,
     VK_FORMAT_B8G8R8A8_UNORM,
     VK_FORMAT_R5G6B5_UNORM_PACK16,
+    VK_FORMAT_B5G6R5_UNORM_PACK16,
     VK_FORMAT_R16G16B16A16_SFLOAT,
     VK_FORMAT_R16_SFLOAT,
     VK_FORMAT_R8G8B8_UNORM,
@@ -816,6 +808,7 @@ static constexpr VkFormat kVkFormats[] = {
     VK_FORMAT_R16G16_UNORM,
     VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
     VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
+    VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16,
     VK_FORMAT_R16G16B16A16_UNORM,
     VK_FORMAT_R16G16_SFLOAT,
 };
@@ -992,6 +985,34 @@ void GrVkCaps::initFormatTable(const GrContextOptions& contextOptions,
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
+            }
+        }
+    }
+    // Format: VK_FORMAT_B5G6R5_UNORM_PACK16
+    {
+        constexpr VkFormat format = VK_FORMAT_B5G6R5_UNORM_PACK16;
+        auto& info = this->getFormatInfo(format);
+        info.init(contextOptions, interface, physDev, properties, format);
+        if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
+            info.fColorTypeInfoCount = 2;
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
+            int ctIdx = 0;
+            // Format: VK_FORMAT_B5G6R5_UNORM_PACK16, Surface: kRGB_565
+            {
+                constexpr GrColorType ct = GrColorType::kRGB_565;
+                auto& ctInfo = info.fColorTypeInfos[ctIdx++];
+                ctInfo.fColorType = ct;
+                ctInfo.fTransferColorType = ct;
+                ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
+            }
+            // Format: VK_FORMAT_B5G6R5_UNORM_PACK16, Surface: kBGR_565
+            // We need this because there is no kBGR_565_SkColorType.
+            {
+                constexpr GrColorType ct = GrColorType::kBGR_565;
+                auto& ctInfo = info.fColorTypeInfos[ctIdx++];
+                ctInfo.fColorType = ct;
+                ctInfo.fTransferColorType = GrColorType::kRGB_565;
+                ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
             }
         }
     }
@@ -1332,6 +1353,27 @@ void GrVkCaps::initFormatTable(const GrContextOptions& contextOptions,
             }
         }
     }
+    // Format: VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16
+    {
+        constexpr VkFormat format = VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
+        auto& info = this->getFormatInfo(format);
+        if (fSupportsYcbcrConversion) {
+            info.init(contextOptions, interface, physDev, properties, format);
+        }
+        if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
+            info.fColorTypeInfoCount = 1;
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
+            int ctIdx = 0;
+            // Format: VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16, Surface: kRGBA_1010102
+            {
+                constexpr GrColorType ct = GrColorType::kRGBA_1010102;
+                auto& ctInfo = info.fColorTypeInfos[ctIdx++];
+                ctInfo.fColorType = ct;
+                ctInfo.fTransferColorType = ct;
+                ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kWrappedOnly_Flag;
+            }
+        }
+    }
     // Format: VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK
     {
         constexpr VkFormat format = VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
@@ -1365,7 +1407,9 @@ void GrVkCaps::initFormatTable(const GrContextOptions& contextOptions,
     // we use for a given GrcolorType.
 
     this->setColorType(GrColorType::kAlpha_8,          { VK_FORMAT_R8_UNORM });
-    this->setColorType(GrColorType::kBGR_565,          { VK_FORMAT_R5G6B5_UNORM_PACK16 });
+    this->setColorType(GrColorType::kBGR_565,          { VK_FORMAT_R5G6B5_UNORM_PACK16,
+                                                         VK_FORMAT_B5G6R5_UNORM_PACK16 });
+    this->setColorType(GrColorType::kRGB_565,          { VK_FORMAT_B5G6R5_UNORM_PACK16 });
     this->setColorType(GrColorType::kABGR_4444,        { VK_FORMAT_R4G4B4A4_UNORM_PACK16,
                                                          VK_FORMAT_B4G4R4A4_UNORM_PACK16 });
     this->setColorType(GrColorType::kRGBA_8888,        { VK_FORMAT_R8G8B8A8_UNORM });
@@ -2063,6 +2107,7 @@ std::vector<GrTest::TestFormatColorTypeCombination> GrVkCaps::getTestingCombinat
     std::vector<GrTest::TestFormatColorTypeCombination> combos = {
         { GrColorType::kAlpha_8,          GrBackendFormats::MakeVk(VK_FORMAT_R8_UNORM)            },
         { GrColorType::kBGR_565,          GrBackendFormats::MakeVk(VK_FORMAT_R5G6B5_UNORM_PACK16) },
+        { GrColorType::kRGB_565,          GrBackendFormats::MakeVk(VK_FORMAT_B5G6R5_UNORM_PACK16) },
         { GrColorType::kABGR_4444,       GrBackendFormats::MakeVk(VK_FORMAT_R4G4B4A4_UNORM_PACK16)},
         { GrColorType::kABGR_4444,       GrBackendFormats::MakeVk(VK_FORMAT_B4G4R4A4_UNORM_PACK16)},
         { GrColorType::kRGBA_8888,        GrBackendFormats::MakeVk(VK_FORMAT_R8G8B8A8_UNORM)      },

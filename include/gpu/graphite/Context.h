@@ -157,6 +157,12 @@ public:
      */
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
 
+    /**
+     * Returns true if the backend-specific context has gotten into an unrecoverarble, lost state
+     * (e.g. if we've gotten a VK_ERROR_DEVICE_LOST in the Vulkan backend).
+     */
+    bool isDeviceLost() const;
+
     /*
      * Does this context support protected content?
      */
@@ -253,7 +259,6 @@ private:
     std::unique_ptr<ResourceProvider> fResourceProvider;
     std::unique_ptr<QueueManager> fQueueManager;
     std::unique_ptr<ClientMappedBufferManager> fMappedBufferManager;
-    std::unique_ptr<PlotUploadTracker> fPlotUploadTracker;
 
     // In debug builds we guard against improper thread handling. This guard is passed to the
     // ResourceCache for the Context.
