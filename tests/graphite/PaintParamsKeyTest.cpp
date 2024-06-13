@@ -34,6 +34,8 @@
 #include "include/gpu/graphite/Image.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Surface.h"
+#include "include/gpu/graphite/precompile/Precompile.h"
+#include "include/gpu/graphite/precompile/PrecompileBlender.h"
 #include "src/base/SkRandom.h"
 #include "src/core/SkBlenderBase.h"
 #include "src/core/SkColorFilterPriv.h"
@@ -45,10 +47,9 @@
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
-#include "src/gpu/graphite/PaintOptionsPriv.h"
 #include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/PipelineData.h"
-#include "src/gpu/graphite/Precompile.h"
+#include "src/gpu/graphite/PrecompileInternal.h"
 #include "src/gpu/graphite/PublicPrecompile.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
@@ -58,6 +59,7 @@
 #include "src/gpu/graphite/ShaderCodeDictionary.h"
 #include "src/gpu/graphite/UniquePaintParamsID.h"
 #include "src/gpu/graphite/geom/Geometry.h"
+#include "src/gpu/graphite/precompile/PaintOptionsPriv.h"
 #include "src/shaders/SkImageShader.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/FontToolUtils.h"
@@ -825,7 +827,7 @@ std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> combo_blender() {
 
 std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> create_bm_blender(SkRandom* rand,
                                                                         SkBlendMode bm) {
-    return { SkBlender::Mode(bm), PrecompileBlender::Mode(bm) };
+    return { SkBlender::Mode(bm), PrecompileBlenders::Mode(bm) };
 }
 
 std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> create_arithmetic_blender() {
@@ -1928,7 +1930,7 @@ void run_test(skiatest::Reporter* reporter,
                                      precompileKeyContext.dstOffset(),
                                      precompileKeyContext.dstColorInfo());
 
-            paintOptions.setClipShaders({ clipShaderOption });
+            paintOptions.priv().setClipShaders({ clipShaderOption });
 
             std::vector<UniquePaintParamsID> precompileIDs;
             paintOptions.priv().buildCombinations(precompileKeyContext,
