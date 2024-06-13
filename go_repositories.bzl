@@ -265,6 +265,12 @@ def go_repositories():
         sum = "h1:Jv3CGQHp9OjuMBSne1485aDpUkTKEcUqF+jm/LuerPI=",
         version = "v0.1.0",
     )
+    go_repository(
+        name = "com_github_dgryski_go_rendezvous",
+        importpath = "github.com/dgryski/go-rendezvous",
+        sum = "h1:lO4WD4F/rVNCu3HqELle0jiPLLBs70cWOduZpkS1E78=",
+        version = "v0.0.0-20200823014737-9f7001d12a5f",
+    )
 
     go_repository(
         name = "com_github_dustin_go_humanize",
@@ -1215,6 +1221,12 @@ def go_repositories():
         importpath = "github.com/r3labs/sse/v2",
         sum = "h1:lZH+W4XOLIq88U5MIHOsLec7+R62uhz3bIi2yn0Sg8o=",
         version = "v2.8.1",
+    )
+    go_repository(
+        name = "com_github_redis_go_redis_v9",
+        importpath = "github.com/redis/go-redis/v9",
+        sum = "h1:fOAp1/uJG+ZtcITgZOfYFmTKPE7n4Vclj1wZFgRciUU=",
+        version = "v9.5.3",
     )
 
     go_repository(
@@ -2673,8 +2685,8 @@ def go_repositories():
     go_repository(
         name = "org_skia_go_infra",
         importpath = "go.skia.org/infra",
-        sum = "h1:06vMBzUjw5esN+/9Qo6X0/ERpR0v0533qVrSDLsYaME=",
-        version = "v0.0.0-20240606200124-df52ea3d7148",
+        sum = "h1:J3g6z4GbsQYjvgPmTpjgawT6ftE7nsPd9w8m+Eh9JmI=",
+        version = "v0.0.0-20240612054035-3e4b1b489466",
     )
     go_repository(
         name = "org_uber_go_atomic",
