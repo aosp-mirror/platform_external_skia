@@ -7,15 +7,8 @@
 
 #include "dm/DMJsonWriter.h"
 #include "dm/DMSrcSink.h"
-#include "include/codec/SkBmpDecoder.h"
 #include "include/codec/SkCodec.h"
 #include "include/codec/SkEncodedImageFormat.h"
-#include "include/codec/SkGifDecoder.h"
-#include "include/codec/SkIcoDecoder.h"
-#include "include/codec/SkJpegDecoder.h"
-#include "include/codec/SkPngDecoder.h"
-#include "include/codec/SkWbmpDecoder.h"
-#include "include/codec/SkWebpDecoder.h"
 #include "include/core/SkBBHFactory.h"
 #include "include/core/SkColorPriv.h"
 #include "include/core/SkColorSpace.h"
@@ -27,6 +20,7 @@
 #include "src/base/SkNoDestructor.h"
 #include "src/base/SkSpinlock.h"
 #include "src/base/SkTime.h"
+#include "src/base/SkVx.h"
 #include "src/core/SkChecksum.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkMD5.h"
@@ -38,6 +32,7 @@
 #include "tests/Test.h"
 #include "tests/TestHarness.h"
 #include "tools/AutoreleasePool.h"
+#include "tools/CodecUtils.h"
 #include "tools/HashAndEncode.h"
 #include "tools/ProcStats.h"
 #include "tools/Resources.h"
@@ -71,22 +66,6 @@
 
 #if defined(SK_ENABLE_SVG)
     #include "modules/svg/include/SkSVGOpenTypeSVGDecoder.h"
-#endif
-
-#ifdef SK_CODEC_DECODES_AVIF
-#include "include/codec/SkAvifDecoder.h"
-#endif
-
-#ifdef SK_HAS_HEIF_LIBRARY
-#include "include/android/SkHeifDecoder.h"
-#endif
-
-#ifdef SK_CODEC_DECODES_JPEGXL
-#include "include/codec/SkJpegxlDecoder.h"
-#endif
-
-#ifdef SK_CODEC_DECODES_RAW
-#include "include/codec/SkRawDecoder.h"
 #endif
 
 using namespace skia_private;
@@ -272,29 +251,6 @@ static void dump_json() {
     if (!FLAGS_writePath.isEmpty()) {
         JsonWriter::DumpJson(FLAGS_writePath[0], FLAGS_key, FLAGS_properties);
     }
-}
-
-static void register_codecs() {
-    SkCodecs::Register(SkPngDecoder::Decoder());
-    SkCodecs::Register(SkJpegDecoder::Decoder());
-    SkCodecs::Register(SkWebpDecoder::Decoder());
-    SkCodecs::Register(SkGifDecoder::Decoder());
-    SkCodecs::Register(SkBmpDecoder::Decoder());
-    SkCodecs::Register(SkWbmpDecoder::Decoder());
-    SkCodecs::Register(SkIcoDecoder::Decoder());
-
-#ifdef SK_CODEC_DECODES_AVIF
-    SkCodecs::Register(SkAvifDecoder::Decoder());
-#endif
-#ifdef SK_HAS_HEIF_LIBRARY
-    SkCodecs::Register(SkHeifDecoder::Decoder());
-#endif
-#ifdef SK_CODEC_DECODES_JPEGXL
-    SkCodecs::Register(SkJpegxlDecoder::Decoder());
-#endif
-#ifdef SK_CODEC_DECODES_RAW
-    SkCodecs::Register(SkRawDecoder::Decoder());
-#endif
 }
 
 // We use a spinlock to make locking this in a signal handler _somewhat_ safe.
@@ -1042,10 +998,17 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
 #if defined(SK_GRAPHITE)
     if (FLAGS_graphite) {
         if (const SkCommandLineConfigGraphite *graphiteConfig = config->asConfigGraphite()) {
-            return new GraphiteSink(graphiteConfig);
+#if defined(SK_ENABLE_PRECOMPILE)
+            if (graphiteConfig->getTestPrecompile()) {
+                return new GraphitePrecompileTestingSink(graphiteConfig);
+            } else
+#endif // SK_ENABLE_PRECOMPILE
+            {
+                return new GraphiteSink(graphiteConfig);
+            }
         }
     }
-#endif
+#endif // SK_GRAPHITE
     if (const SkCommandLineConfigSvg* svgConfig = config->asConfigSvg()) {
         int pageIndex = svgConfig->getPageIndex();
         return new SVGSink(pageIndex);
@@ -1109,6 +1072,12 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
 }
 
 static bool gather_sinks(const GrContextOptions& grCtxOptions, bool defaultConfigs) {
+    if (FLAGS_src.size() == 1 && FLAGS_src.contains("tests")) {
+        // If we're just running tests skip trying to accumulate sinks. The 'justOneRect' test
+        // can fail for protected contexts.
+        return true;
+    }
+
     SkCommandLineConfigArray configs;
     ParseConfigs(FLAGS_config, &configs);
     AutoreleasePool pool;
@@ -1307,7 +1276,7 @@ struct Task {
                     bool unclamped = false;
                     for (int y = 0; y < pm.height() && !unclamped; ++y)
                     for (int x = 0; x < pm.width() && !unclamped; ++x) {
-                        skvx::float4 rgba = SkHalfToFloat_finite_ftz(*pm.addr64(x, y));
+                        skvx::float4 rgba = from_half(skvx::half4::Load(pm.addr64(x, y)));
                         float a = rgba[3];
                         if (a > 1.0f || any(rgba < 0.0f) || any(rgba > a)) {
                             SkDebugf("[%s] F16Norm pixel [%d, %d] unclamped: (%g, %g, %g, %g)\n",
@@ -1588,10 +1557,6 @@ int main(int argc, char** argv) {
     setbuf(stdout, nullptr);
     setup_crash_handler();
 
-#if !defined(SK_DISABLE_LEGACY_FONTMGR_FACTORY)
-    ToolUtils::SetDefaultFontMgr();
-#endif
-    CommonFlags::SetAnalyticAA();
     skiatest::SetFontTestDataDirectory();
 
     gSkForceRasterPipelineBlitter     = FLAGS_forceRasterPipelineHP || FLAGS_forceRasterPipeline;
@@ -1622,7 +1587,7 @@ int main(int argc, char** argv) {
     SkGraphics::SetOpenTypeSVGDecoderFactory(SkSVGOpenTypeSVGDecoder::Make);
 #endif
     SkTaskGroup::Enabler enabled(FLAGS_threads);
-    register_codecs();
+    CodecUtils::RegisterAllAvailable();
 
     if (nullptr == GetResourceAsData("images/color_wheel.png")) {
         info("Some resources are missing.  Do you need to set --resourcePath?\n");

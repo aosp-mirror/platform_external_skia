@@ -118,16 +118,13 @@ if [[ $@ == *no_font* ]]; then
   ENABLE_FONT="false"
   ENABLE_EMBEDDED_FONT="false"
   GN_FONT+="skia_enable_fontmgr_custom_embedded=false skia_enable_fontmgr_custom_empty=false "
-  GN_FONT+="skia_fontmgr_factory=\":fontmgr_empty_factory\""
 elif [[ $@ == *no_embedded_font* ]]; then
   echo "Omitting the built-in font(s)"
   ENABLE_EMBEDDED_FONT="false"
   GN_FONT+="skia_enable_fontmgr_custom_embedded=true skia_enable_fontmgr_custom_empty=true "
-  GN_FONT+="skia_fontmgr_factory=\":fontmgr_custom_empty_factory\""
 else
   # Generate the font's binary file (which is covered by .gitignore)
   GN_FONT+="skia_enable_fontmgr_custom_embedded=true skia_enable_fontmgr_custom_empty=false "
-  GN_FONT+="skia_fontmgr_factory=\":fontmgr_custom_embedded_factory\""
 fi
 
 if [[ $@ == *no_woff2* ]]; then
@@ -240,6 +237,7 @@ echo "Compiling"
   skia_enable_ganesh=${ENABLE_GANESH} \
   skia_enable_graphite=${ENABLE_GRAPHITE} \
   skia_build_for_debugger=${DEBUGGER_ENABLED} \
+  skia_enable_skottie=${ENABLE_SKOTTIE} \
   skia_enable_sksl_tracing=${ENABLE_SKSL_TRACE} \
   \
   ${GN_SHAPER} \
@@ -254,7 +252,6 @@ echo "Compiling"
   skia_canvaskit_profile_build=${PROFILE_BUILD} \
   skia_canvaskit_enable_skp_serialization=${SERIALIZE_SKP} \
   skia_canvaskit_enable_effects_deserialization=${DESERIALIZE_EFFECTS} \
-  skia_canvaskit_enable_skottie=${ENABLE_SKOTTIE} \
   skia_canvaskit_include_viewer=${INCLUDE_VIEWER} \
   skia_canvaskit_enable_pathops=${ENABLE_PATHOPS} \
   skia_canvaskit_enable_matrix_helper=${ENABLE_MATRIX} \

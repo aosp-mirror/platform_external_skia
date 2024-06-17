@@ -1,16 +1,19 @@
 ### Compilation failed:
 
-error: :18:20 error: no matching call to modf(f32, f32)
+error: :19:20 error: no matching call to 'modf(f32, f32)'
 
 2 candidate functions:
-  modf(T) -> __modf_result_T  where: T is abstract-float, f32 or f16
-  modf(vecN<T>) -> __modf_result_vecN_T  where: T is abstract-float, f32 or f16
+ • 'modf(T  ✓ ) -> __modf_result_T' where:
+      ✓  'T' is 'abstract-float', 'f32' or 'f16'
+ • 'modf(vecN<T>  ✗ ) -> __modf_result_vecN_T' where:
+      ✗  'T' is 'abstract-float', 'f32' or 'f16'
 
     let _skTemp0 = modf(value.x, whole.x);
                    ^^^^^^^^^^^^^^^^^^^^^^
 
 
 diagnostic(off, derivative_uniformity);
+diagnostic(off, chromium.unreachable_code);
 struct FSOut {
   @location(0) sk_FragColor: vec4<f32>,
 };

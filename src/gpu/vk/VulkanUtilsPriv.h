@@ -8,17 +8,43 @@
 #ifndef skgpu_VulkanUtilsPriv_DEFINED
 #define skgpu_VulkanUtilsPriv_DEFINED
 
+#include <cstdint>
+#include <string>
+
 #include "include/gpu/vk/VulkanTypes.h"
+#include "src/gpu/vk/VulkanInterface.h"
 
 #include "include/core/SkColor.h"
+#include "src/gpu/PipelineUtils.h"
+#include "src/sksl/codegen/SkSLSPIRVCodeGenerator.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
 #include <android/hardware_buffer.h>
-#include "include/gpu/vk/VulkanTypes.h"
-#include "src/gpu/vk/VulkanInterface.h"
 #endif
 
+namespace SkSL {
+
+enum class ProgramKind : int8_t;
+struct ProgramInterface;
+struct ProgramSettings;
+struct ShaderCaps;
+
+}  // namespace SkSL
+
 namespace skgpu {
+
+class ShaderErrorHandler;
+
+inline bool SkSLToSPIRV(const SkSL::ShaderCaps* caps,
+                        const std::string& sksl,
+                        SkSL::ProgramKind programKind,
+                        const SkSL::ProgramSettings& settings,
+                        std::string* spirv,
+                        SkSL::ProgramInterface* outInterface,
+                        ShaderErrorHandler* errorHandler) {
+    return SkSLToBackend(caps, &SkSL::ToSPIRV, /*backendLabel=*/nullptr,
+                         sksl, programKind, settings, spirv, outInterface, errorHandler);
+}
 
 static constexpr uint32_t VkFormatChannels(VkFormat vkFormat) {
     switch (vkFormat) {
@@ -26,6 +52,7 @@ static constexpr uint32_t VkFormatChannels(VkFormat vkFormat) {
         case VK_FORMAT_R8_UNORM:                 return kRed_SkColorChannelFlag;
         case VK_FORMAT_B8G8R8A8_UNORM:           return kRGBA_SkColorChannelFlags;
         case VK_FORMAT_R5G6B5_UNORM_PACK16:      return kRGB_SkColorChannelFlags;
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:      return kRGB_SkColorChannelFlags;
         case VK_FORMAT_R16G16B16A16_SFLOAT:      return kRGBA_SkColorChannelFlags;
         case VK_FORMAT_R16_SFLOAT:               return kRed_SkColorChannelFlag;
         case VK_FORMAT_R8G8B8_UNORM:             return kRGB_SkColorChannelFlags;
@@ -55,6 +82,7 @@ static constexpr size_t VkFormatBytesPerBlock(VkFormat vkFormat) {
         case VK_FORMAT_R8_UNORM:                  return 1;
         case VK_FORMAT_B8G8R8A8_UNORM:            return 4;
         case VK_FORMAT_R5G6B5_UNORM_PACK16:       return 2;
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:       return 2;
         case VK_FORMAT_R16G16B16A16_SFLOAT:       return 8;
         case VK_FORMAT_R16_SFLOAT:                return 2;
         case VK_FORMAT_R8G8B8_UNORM:              return 3;
@@ -76,6 +104,7 @@ static constexpr size_t VkFormatBytesPerBlock(VkFormat vkFormat) {
         // to compressed textures that go through their own special query for calculating size.
         case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM: return 3;
         case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:  return 3;
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16: return 6;
         case VK_FORMAT_S8_UINT:                   return 1;
         case VK_FORMAT_D24_UNORM_S8_UINT:         return 4;
         case VK_FORMAT_D32_SFLOAT_S8_UINT:        return 8;
@@ -120,7 +149,8 @@ static constexpr int VkFormatStencilBits(VkFormat format) {
 
 static constexpr bool VkFormatNeedsYcbcrSampler(VkFormat format)  {
     return format == VK_FORMAT_G8_B8R8_2PLANE_420_UNORM ||
-           format == VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM;
+           format == VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM ||
+           format == VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
 }
 
 static constexpr bool SampleCountToVkSampleCount(uint32_t samples,
@@ -192,13 +222,13 @@ template<typename T> T* GetExtensionFeatureStruct(const VkPhysicalDeviceFeatures
 void SetupSamplerYcbcrConversionInfo(VkSamplerYcbcrConversionCreateInfo* outInfo,
                                      const VulkanYcbcrConversionInfo& conversionInfo);
 
-#if defined(SK_DEBUG) || defined(GR_TEST_UTILS)
 static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
     switch (vkFormat) {
         case VK_FORMAT_R8G8B8A8_UNORM:           return "R8G8B8A8_UNORM";
         case VK_FORMAT_R8_UNORM:                 return "R8_UNORM";
         case VK_FORMAT_B8G8R8A8_UNORM:           return "B8G8R8A8_UNORM";
         case VK_FORMAT_R5G6B5_UNORM_PACK16:      return "R5G6B5_UNORM_PACK16";
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:      return "B5G6R5_UNORM_PACK16";
         case VK_FORMAT_R16G16B16A16_SFLOAT:      return "R16G16B16A16_SFLOAT";
         case VK_FORMAT_R16_SFLOAT:               return "R16_SFLOAT";
         case VK_FORMAT_R8G8B8_UNORM:             return "R8G8B8_UNORM";
@@ -223,7 +253,6 @@ static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
         default:                                 return "Unknown";
     }
 }
-#endif // defined(SK_DEBUG) || defined(GR_TEST_UTILS)
 
 #ifdef SK_BUILD_FOR_ANDROID
 /**
@@ -249,6 +278,17 @@ bool AllocateAndBindImageMemory(skgpu::VulkanAlloc* outVulkanAlloc,
                                 VkDevice);
 
 #endif // SK_BUILD_FOR_ANDROID
+
+/**
+ * Calls faultProc with faultContext; passes debug info if VK_EXT_device_fault is supported/enabled.
+ *
+ * Note: must only be called *after* receiving VK_ERROR_DEVICE_LOST.
+ */
+void InvokeDeviceLostCallback(const skgpu::VulkanInterface* vulkanInterface,
+                              VkDevice vkDevice,
+                              skgpu::VulkanDeviceLostContext faultContext,
+                              skgpu::VulkanDeviceLostProc faultProc,
+                              bool supportsDeviceFaultInfoExtension);
 
 }  // namespace skgpu
 

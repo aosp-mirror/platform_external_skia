@@ -367,6 +367,9 @@ public:
     virtual void drawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
                                const SkSamplingOptions&, const SkPaint&,
                                SkCanvas::SrcRectConstraint) = 0;
+    // Return true if canvas calls to drawImage or drawImageRect should try to
+    // be drawn in a tiled way.
+    virtual bool shouldDrawAsTiledImageRect() const { return false; }
     virtual bool drawAsTiledImageRect(SkCanvas*,
                                       const SkImage*,
                                       const SkRect* src,
@@ -440,9 +443,15 @@ public:
     /**
      * Draw the special image's subset to this device, subject to the given matrix transform instead
      * of the device's current local to device matrix.
+     *
+     * If 'constraint' is kFast, the rendered geometry of the image still reflects the extent of
+     * the SkSpecialImage's subset, but it's assumed that the pixel data beyond the subset is valid
+     * (e.g. SkSpecialImage::makeSubset() was called to crop a larger image).
      */
     virtual void drawSpecial(SkSpecialImage*, const SkMatrix& localToDevice,
-                             const SkSamplingOptions&, const SkPaint&);
+                             const SkSamplingOptions&, const SkPaint&,
+                             SkCanvas::SrcRectConstraint constraint =
+                                    SkCanvas::kStrict_SrcRectConstraint);
 
     /**
      * Draw the special image's subset to this device, treating its alpha channel as coverage for
