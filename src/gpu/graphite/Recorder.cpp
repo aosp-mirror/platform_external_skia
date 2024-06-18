@@ -38,6 +38,7 @@
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/SharedContext.h"
+#include "src/gpu/graphite/SmallPathAtlas.h"
 #include "src/gpu/graphite/TaskGraph.h"
 #include "src/gpu/graphite/Texture.h"
 #include "src/gpu/graphite/UploadBufferManager.h"
@@ -141,9 +142,7 @@ BackendApi Recorder::backend() const { return fSharedContext->backend(); }
 std::unique_ptr<Recording> Recorder::snap() {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     ASSERT_SINGLE_OWNER
-    for (auto& device : fTrackedDevices) {
-        device->flushPendingWorkToRecorder();
-    }
+    this->priv().flushTrackedDevices();
 
     std::unordered_set<sk_sp<TextureProxy>, Recording::ProxyHash> nonVolatileLazyProxies;
     std::unordered_set<sk_sp<TextureProxy>, Recording::ProxyHash> volatileLazyProxies;
@@ -198,15 +197,8 @@ std::unique_ptr<Recording> Recorder::snap() {
     fRuntimeEffectDict->reset();
     fTextureDataCache = std::make_unique<TextureDataCache>();
     fUniformDataCache = std::make_unique<UniformDataCache>();
-
-    if (!this->priv().caps()->disableCachedGlyphUploads()) {
-        // inject an initial task to maintain atlas state for next Recording
-        auto uploads = std::make_unique<UploadList>();
-        fAtlasProvider->textAtlasManager()->recordUploads(uploads.get(), /*useCachedUploads=*/true);
-        if (uploads->size() > 0) {
-            sk_sp<Task> uploadTask = UploadTask::Make(uploads.get());
-            this->priv().add(std::move(uploadTask));
-        }
+    if (!this->priv().caps()->requireOrderedRecordings()) {
+        fAtlasProvider->textAtlasManager()->evictAtlases();
     }
 
     return recording;
@@ -214,6 +206,12 @@ std::unique_ptr<Recording> Recorder::snap() {
 
 SkCanvas* Recorder::makeDeferredCanvas(const SkImageInfo& imageInfo,
                                        const TextureInfo& textureInfo) {
+    // Mipmaps can't reasonably be kept valid on a deferred surface with no actual texture.
+    if (textureInfo.mipmapped() == Mipmapped::kYes) {
+        SKGPU_LOG_W("Requested a deferred canvas with mipmapping; this is not supported");
+        return nullptr;
+    }
+
     if (fTargetProxyCanvas) {
         // Require snapping before requesting another canvas.
         SKGPU_LOG_W("Requested a new deferred canvas before snapping the previous one");
@@ -408,6 +406,10 @@ void RecorderPriv::flushTrackedDevices() {
     for (Device* device : fRecorder->fTrackedDevices) {
         device->flushPendingWorkToRecorder();
     }
+    // Issue next upload flush token. This is only used by the atlasing code which
+    // always uses this method. Calling in Device::flushPendingWorkToRecorder may
+    // miss parent device flushes, increment too often, and lead to atlas corruption.
+    this->tokenTracker()->issueFlushToken();
 }
 
 sk_sp<TextureProxy> RecorderPriv::CreateCachedProxy(Recorder* recorder,

@@ -22,7 +22,7 @@
 
 class GrOpFlushState;
 class TestingUploadTarget;
-namespace skgpu::graphite { class Device; }
+namespace skgpu::graphite { class RecorderPriv; }
 
 /**
  * This file includes internal types that are used by all of our gpu backends for atlases.
@@ -211,7 +211,7 @@ private:
     // Only these classes get to increment the token counters
     friend class ::GrOpFlushState;
     friend class ::TestingUploadTarget;
-    friend class skgpu::graphite::Device;
+    friend class skgpu::graphite::RecorderPriv;
 
     // Issues the next token for a draw.
     AtlasToken issueDrawToken() { return ++fCurrentDrawToken; }
@@ -448,6 +448,15 @@ public:
     }
     SkDEBUGCODE(size_t bpp() const { return fBytesPerPixel; })
 
+    /**
+     * To add data to the Plot, first call addRect to see if it's possible. If successful,
+     * use the atlasLocator to get a pointer to the location in the atlas via dataAt() and render to
+     * that location, or if you already have data use copySubImage().
+     */
+    bool addRect(int width, int height, AtlasLocator* atlasLocator);
+    void* dataAt(const AtlasLocator& atlasLocator);
+    void copySubImage(const AtlasLocator& atlasLocator, const void* image);
+    // TODO: Utility method for Ganesh, consider removing
     bool addSubImage(int width, int height, const void* image, AtlasLocator* atlasLocator);
 
     /**
@@ -467,7 +476,7 @@ public:
     void incFlushesSinceLastUsed() { fFlushesSinceLastUse++; }
 
     bool needsUpload() { return !fDirtyRect.isEmpty(); }
-    std::pair<const void*, SkIRect> prepareForUpload(bool useCachedUploads);
+    std::pair<const void*, SkIRect> prepareForUpload();
     void resetRects();
 
     /**
@@ -511,8 +520,7 @@ private:
     const SkColorType fColorType;
     const size_t fBytesPerPixel;
     SkIRect fDirtyRect;  // area in the Plot that needs to be uploaded
-    SkIRect fCachedRect; // area in the Plot that has already been uploaded
-    SkDEBUGCODE(bool fDirty);
+    SkDEBUGCODE(bool fDirty;)
 };
 
 typedef SkTInternalLList<Plot> PlotList;

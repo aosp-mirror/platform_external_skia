@@ -18,6 +18,7 @@
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/vk/VulkanGraphiteUtilsPriv.h"
+#include "src/gpu/graphite/vk/VulkanRenderPass.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
 
@@ -81,15 +82,20 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
     fResourceBindingReqs.fSeparateTextureAndSamplerBinding = false;
     fResourceBindingReqs.fDistinctIndexRanges = false;
 
-    // Enable the use of memoryless attachments for tiler GPUs (ARM Mali and Qualcomm Adreno).
-    if (physDevProperties.vendorID == kARM_VkVendor ||
-        physDevProperties.vendorID == kQualcomm_VkVendor) {
-        // We currently don't see any Vulkan devices that expose a memory type that supports
-        // both lazy allocated and protected memory. So for simplicity we just disable the
-        // use of memoryless attachments when using protected memory. In the future, if we ever
-        // do see devices that support both, we can look through the device's memory types here
-        // and see if any support both flags.
-        fSupportsMemorylessAttachments = !fProtectedSupport;
+    VkPhysicalDeviceMemoryProperties deviceMemoryProperties;
+    VULKAN_CALL(vkInterface, GetPhysicalDeviceMemoryProperties(physDev, &deviceMemoryProperties));
+    fSupportsMemorylessAttachments = false;
+    VkMemoryPropertyFlags requiredLazyFlags = VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
+    if (fProtectedSupport) {
+        // If we have a protected context we can only use memoryless images if they also support
+        // being protected. With current devices we don't actually expect this combination to be
+        // supported, but this at least covers us for future devices that may allow it.
+        requiredLazyFlags |= VK_MEMORY_PROPERTY_PROTECTED_BIT;
+    }
+    for (uint32_t i = 0; i < deviceMemoryProperties.memoryTypeCount; ++i) {
+        if (deviceMemoryProperties.memoryTypes[i].propertyFlags & requiredLazyFlags) {
+            fSupportsMemorylessAttachments = true;
+        }
     }
 
 #ifdef SK_BUILD_FOR_UNIX
@@ -144,6 +150,10 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
         if (ycbcrFeatures && ycbcrFeatures->samplerYcbcrConversion) {
             fSupportsYcbcrConversion = true;
         }
+    }
+
+    if (extensions->hasExtension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, 1)) {
+        fSupportsDeviceFaultInfo = true;
     }
 
     this->finishInitialization(contextOptions);
@@ -224,7 +234,10 @@ TextureInfo VulkanCaps::getDefaultSampledTextureInfo(SkColorType ct,
                             VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                             VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     if (isRenderable == Renderable::kYes) {
-        info.fImageUsageFlags = info.fImageUsageFlags | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        // We make all renderable images support being used as input attachment
+        info.fImageUsageFlags = info.fImageUsageFlags |
+                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     }
     info.fSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.fAspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -510,7 +523,10 @@ void VulkanCaps::initFormatTable(const skgpu::VulkanInterface* interface,
                 constexpr SkColorType ct = SkColorType::kRGB_888x_SkColorType;
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = ct;
-                // The Vulkan format is 3 bpp so we must convert to/from that when transferring.
+                // This SkColorType is a lie, but we don't have a kRGB_888_SkColorType. The Vulkan
+                // format is 3 bpp so we must manualy convert to/from this and kRGB_888x when doing
+                // transfers. We signal this need for manual conversions in the
+                // supportedRead/WriteColorType calls.
                 ctInfo.fTransferColorType = SkColorType::kRGB_888x_SkColorType;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
             }
@@ -934,10 +950,12 @@ void VulkanCaps::FormatInfo::init(const skgpu::VulkanInterface* interface,
     VULKAN_CALL(interface, GetPhysicalDeviceFormatProperties(physDev, format, &fFormatProperties));
 
     if (this->isRenderable(fFormatProperties.optimalTilingFeatures)) {
+        // We make all renderable images support being used as input attachment
         VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                                        VK_IMAGE_USAGE_SAMPLED_BIT |
-                                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+                                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                       VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
         this->fSupportedSampleCounts.initSampleCounts(interface, physDev, properties, format,
                                                       usageFlags);
     }
@@ -1237,60 +1255,62 @@ bool VulkanCaps::supportsReadPixels(const TextureInfo& texInfo) const {
     return true;
 }
 
-SkColorType VulkanCaps::supportedWritePixelsColorType(SkColorType dstColorType,
-                                                      const TextureInfo& dstTextureInfo,
-                                                      SkColorType srcColorType) const {
+std::pair<SkColorType, bool /*isRGBFormat*/> VulkanCaps::supportedWritePixelsColorType(
+        SkColorType dstColorType,
+        const TextureInfo& dstTextureInfo,
+        SkColorType srcColorType) const {
     VulkanTextureInfo vkInfo;
     if (!dstTextureInfo.getVulkanTextureInfo(&vkInfo)) {
-        return kUnknown_SkColorType;
+        return {kUnknown_SkColorType, false};
     }
 
     // Can't write to YCbCr formats
     // TODO: Can't write to external formats, either
     if (VkFormatNeedsYcbcrSampler(vkInfo.fFormat)) {
-        return kUnknown_SkColorType;
+        return {kUnknown_SkColorType, false};
     }
 
     const FormatInfo& info = this->getFormatInfo(vkInfo.fFormat);
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
         const auto& ctInfo = info.fColorTypeInfos[i];
         if (ctInfo.fColorType == dstColorType) {
-            return dstColorType;
+            return {ctInfo.fTransferColorType, vkInfo.fFormat == VK_FORMAT_R8G8B8_UNORM};
         }
     }
 
-    return kUnknown_SkColorType;
+    return {kUnknown_SkColorType, false};
 }
 
-SkColorType VulkanCaps::supportedReadPixelsColorType(SkColorType srcColorType,
-                                                     const TextureInfo& srcTextureInfo,
-                                                     SkColorType dstColorType) const {
+std::pair<SkColorType, bool /*isRGBFormat*/> VulkanCaps::supportedReadPixelsColorType(
+        SkColorType srcColorType,
+        const TextureInfo& srcTextureInfo,
+        SkColorType dstColorType) const {
     VulkanTextureInfo vkInfo;
     if (!srcTextureInfo.getVulkanTextureInfo(&vkInfo)) {
-        return kUnknown_SkColorType;
+        return {kUnknown_SkColorType, false};
     }
 
     // Can't read from YCbCr formats
     // TODO: external formats?
     if (VkFormatNeedsYcbcrSampler(vkInfo.fFormat)) {
-        return kUnknown_SkColorType;
+        return {kUnknown_SkColorType, false};
     }
 
     // TODO: handle compressed formats
     if (VkFormatIsCompressed(vkInfo.fFormat)) {
         SkASSERT(this->isTexturable(vkInfo));
-        return kUnknown_SkColorType;
+        return {kUnknown_SkColorType, false};
     }
 
     const FormatInfo& info = this->getFormatInfo(vkInfo.fFormat);
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
         const auto& ctInfo = info.fColorTypeInfos[i];
         if (ctInfo.fColorType == srcColorType) {
-            return srcColorType;
+            return {ctInfo.fTransferColorType, vkInfo.fFormat == VK_FORMAT_R8G8B8_UNORM};
         }
     }
 
-    return kUnknown_SkColorType;
+    return {kUnknown_SkColorType, false};
 }
 
 UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipelineDesc,
@@ -1300,17 +1320,25 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
         static const skgpu::UniqueKey::Domain kGraphicsPipelineDomain =
             UniqueKey::GenerateDomain();
 
-        // 5 uint32_t's (render step id, paint id, uint64 renderpass desc, uint16 write swizzle key)
-        UniqueKey::Builder builder(&pipelineKey, kGraphicsPipelineDomain, 5, "GraphicsPipeline");
-        // add graphicspipelinedesc key
-        builder[0] = pipelineDesc.renderStepID();
-        builder[1] = pipelineDesc.paintParamsID().asUInt();
+        VulkanRenderPass::VulkanRenderPassMetaData rpMetaData {renderPassDesc};
 
-        // add renderpassdesc key
-        uint64_t renderPassKey = this->getRenderPassDescKey(renderPassDesc);
-        builder[2] = renderPassKey & 0xFFFFFFFF;
-        builder[3] = (renderPassKey >> 32) & 0xFFFFFFFF;
-        builder[4] = renderPassDesc.fWriteSwizzle.asKey();
+        // Reserve 3 uint32s for the render step id, paint id, and write swizzle.
+        static constexpr int kUint32sNeededForPipelineInfo = 3;
+        // The uint32s needed for a RenderPass is variable number, so consult rpMetaData to
+        // determine how many to reserve.
+        UniqueKey::Builder builder(&pipelineKey,
+                                   kGraphicsPipelineDomain,
+                                   kUint32sNeededForPipelineInfo + rpMetaData.fUint32DataCnt,
+                                   "GraphicsPipeline");
+
+        int idx = 0;
+        // Add GraphicsPipelineDesc information
+        builder[idx++] = pipelineDesc.renderStepID();
+        builder[idx++] = pipelineDesc.paintParamsID().asUInt();
+        // Add RenderPass info relevant for pipeline creation that's not captured in RenderPass keys
+        builder[idx++] = renderPassDesc.fWriteSwizzle.asKey();
+        // Add RenderPassDesc information
+        VulkanRenderPass::AddRenderPassInfoToKey(rpMetaData, builder, idx, /*compatibleOnly=*/true);
 
         builder.finish();
     }
@@ -1365,16 +1393,6 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
                  (static_cast<uint32_t>(vkSpec.fSharingMode)         << 6)  |
                  (static_cast<uint32_t>(vkSpec.fAspectMask)          << 7)  |
                  (static_cast<uint32_t>(vkSpec.fImageUsageFlags)     << 19);
-}
-
-uint64_t VulkanCaps::getRenderPassDescKey(const RenderPassDesc& renderPassDesc) const {
-    VulkanTextureInfo colorInfo, depthStencilInfo;
-    renderPassDesc.fColorAttachment.fTextureInfo.getVulkanTextureInfo(&colorInfo);
-    renderPassDesc.fDepthStencilAttachment.fTextureInfo.getVulkanTextureInfo(&depthStencilInfo);
-    SkASSERT(colorInfo.fFormat < 65535 && depthStencilInfo.fFormat < 65535);
-    uint32_t colorAttachmentKey = colorInfo.fFormat << 16 | colorInfo.fSampleCount;
-    uint32_t dsAttachmentKey = depthStencilInfo.fFormat << 16 | depthStencilInfo.fSampleCount;
-    return (((uint64_t) colorAttachmentKey) << 32) | dsAttachmentKey;
 }
 
 } // namespace skgpu::graphite
