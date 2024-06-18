@@ -43,8 +43,6 @@ inline wgpu::VertexFormat attribute_type_to_dawn(VertexAttribType type) {
             return wgpu::VertexFormat::Float32x3;
         case VertexAttribType::kFloat4:
             return wgpu::VertexFormat::Float32x4;
-        case VertexAttribType::kHalf:
-            return wgpu::VertexFormat::Undefined;
         case VertexAttribType::kHalf2:
             return wgpu::VertexFormat::Float16x2;
         case VertexAttribType::kHalf4:
@@ -55,20 +53,14 @@ inline wgpu::VertexFormat attribute_type_to_dawn(VertexAttribType type) {
             return wgpu::VertexFormat::Sint32x3;
         case VertexAttribType::kInt4:
             return wgpu::VertexFormat::Sint32x4;
-        case VertexAttribType::kByte:
-            return wgpu::VertexFormat::Undefined;
         case VertexAttribType::kByte2:
             return wgpu::VertexFormat::Sint8x2;
         case VertexAttribType::kByte4:
             return wgpu::VertexFormat::Sint8x4;
-        case VertexAttribType::kUByte:
-            return wgpu::VertexFormat::Undefined;
         case VertexAttribType::kUByte2:
             return wgpu::VertexFormat::Uint8x2;
         case VertexAttribType::kUByte4:
             return wgpu::VertexFormat::Uint8x4;
-        case VertexAttribType::kUByte_norm:
-            return wgpu::VertexFormat::Undefined;
         case VertexAttribType::kUByte4_norm:
             return wgpu::VertexFormat::Unorm8x4;
         case VertexAttribType::kShort2:
@@ -83,10 +75,15 @@ inline wgpu::VertexFormat attribute_type_to_dawn(VertexAttribType type) {
             return wgpu::VertexFormat::Sint32;
         case VertexAttribType::kUInt:
             return wgpu::VertexFormat::Uint32;
-        case VertexAttribType::kUShort_norm:
-            return wgpu::VertexFormat::Undefined;
         case VertexAttribType::kUShort4_norm:
             return wgpu::VertexFormat::Unorm16x4;
+        case VertexAttribType::kHalf:
+        case VertexAttribType::kByte:
+        case VertexAttribType::kUByte:
+        case VertexAttribType::kUByte_norm:
+        case VertexAttribType::kUShort_norm:
+            // Not supported.
+            break;
     }
     SkUNREACHABLE;
 }
@@ -154,7 +151,6 @@ size_t create_vertex_attributes(SkSpan<const Attribute> attrs,
     for (const auto& attr : attrs) {
         wgpu::VertexAttribute& vertexAttribute =  (*out)[attributeIndex];
         vertexAttribute.format = attribute_type_to_dawn(attr.cpuType());
-        SkASSERT(vertexAttribute.format != wgpu::VertexFormat::Undefined);
         vertexAttribute.offset = vertexAttributeOffset;
         vertexAttribute.shaderLocation = shaderLocationOffset + attributeIndex;
         vertexAttributeOffset += attr.sizeAlign4();
@@ -547,27 +543,25 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
         // We shouldn't use CreateRenderPipelineAsync in wasm.
         SKGPU_LOG_F("CreateRenderPipelineAsync shouldn't be used in WASM");
 #else
-        wgpu::CreateRenderPipelineAsyncCallbackInfo callbackInfo{};
-        callbackInfo.mode = wgpu::CallbackMode::WaitAnyOnly;
-        callbackInfo.userdata = asyncCreation.get();
-        callbackInfo.callback = [](WGPUCreatePipelineAsyncStatus status,
-                                   WGPURenderPipeline pipeline,
-                                   char const* message,
-                                   void* userdata) {
-            auto* arg = static_cast<AsyncPipelineCreation*>(userdata);
+        asyncCreation->fFuture = device.CreateRenderPipelineAsync(
+                &descriptor,
+                wgpu::CallbackMode::WaitAnyOnly,
+                [asyncCreationPtr = asyncCreation.get()](wgpu::CreatePipelineAsyncStatus status,
+                                                         wgpu::RenderPipeline pipeline,
+                                                         char const* message) {
+                    if (status != wgpu::CreatePipelineAsyncStatus::Success) {
+                        SKGPU_LOG_E("Failed to create render pipeline (%d): %s",
+                                    static_cast<int>(status),
+                                    message);
+                        // invalidate AsyncPipelineCreation pointer to signal that this pipeline has
+                        // failed.
+                        asyncCreationPtr->fRenderPipeline = nullptr;
+                    } else {
+                        asyncCreationPtr->fRenderPipeline = std::move(pipeline);
+                    }
 
-            if (status != WGPUCreatePipelineAsyncStatus_Success) {
-                SKGPU_LOG_E("Failed to create render pipeline (%d): %s", status, message);
-                // invalidate AsyncPipelineCreation pointer to signal that this pipeline has failed.
-                arg->fRenderPipeline = nullptr;
-            } else {
-                arg->fRenderPipeline = wgpu::RenderPipeline::Acquire(pipeline);
-            }
-
-            arg->fFinished = true;
-        };
-
-        asyncCreation->fFuture = device.CreateRenderPipelineAsync(&descriptor, callbackInfo);
+                    asyncCreationPtr->fFinished = true;
+                });
 #endif
     } else {
         std::optional<DawnErrorChecker> errorChecker;
@@ -602,6 +596,7 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
                                      depthStencilSettings.fStencilReferenceValue,
                                      /*hasStepUniforms=*/!step->uniforms().empty(),
                                      /*hasPaintUniforms=*/fsSkSLInfo.fNumPaintUniforms > 0,
+                                     /*hasGradientbuffer=*/fsSkSLInfo.fHasGradientBuffer,
                                      numTexturesAndSamplers));
 }
 
@@ -613,6 +608,7 @@ DawnGraphicsPipeline::DawnGraphicsPipeline(const skgpu::graphite::SharedContext*
                                            uint32_t refValue,
                                            bool hasStepUniforms,
                                            bool hasPaintUniforms,
+                                           bool hasGradientBuffer,
                                            int numFragmentTexturesAndSamplers)
         : GraphicsPipeline(sharedContext, pipelineInfo)
         , fAsyncPipelineCreation(std::move(asyncCreationInfo))
@@ -621,6 +617,7 @@ DawnGraphicsPipeline::DawnGraphicsPipeline(const skgpu::graphite::SharedContext*
         , fStencilReferenceValue(refValue)
         , fHasStepUniforms(hasStepUniforms)
         , fHasPaintUniforms(hasPaintUniforms)
+        , fHasGradientBuffer(hasGradientBuffer)
         , fNumFragmentTexturesAndSamplers(numFragmentTexturesAndSamplers) {}
 
 DawnGraphicsPipeline::~DawnGraphicsPipeline() {
