@@ -28,30 +28,34 @@ namespace {
 // These are all the valid wgpu::TextureFormat that we currently support in Skia.
 // They are roughly ordered from most frequently used to least to improve lookup times in arrays.
 static constexpr wgpu::TextureFormat kFormats[skgpu::graphite::DawnCaps::kFormatCnt] = {
-    wgpu::TextureFormat::RGBA8Unorm,
-    wgpu::TextureFormat::R8Unorm,
+        wgpu::TextureFormat::RGBA8Unorm,
+        wgpu::TextureFormat::R8Unorm,
 #if !defined(__EMSCRIPTEN__)
-    wgpu::TextureFormat::R16Unorm,
+        wgpu::TextureFormat::R16Unorm,
 #endif
-    wgpu::TextureFormat::BGRA8Unorm,
-    wgpu::TextureFormat::RGBA16Float,
-    wgpu::TextureFormat::R16Float,
-    wgpu::TextureFormat::RG8Unorm,
+        wgpu::TextureFormat::BGRA8Unorm,
+        wgpu::TextureFormat::RGBA16Float,
+        wgpu::TextureFormat::R16Float,
+        wgpu::TextureFormat::RG8Unorm,
 #if !defined(__EMSCRIPTEN__)
-    wgpu::TextureFormat::RG16Unorm,
+        wgpu::TextureFormat::RG16Unorm,
 #endif
-    wgpu::TextureFormat::RGB10A2Unorm,
-    wgpu::TextureFormat::RG16Float,
+        wgpu::TextureFormat::RGB10A2Unorm,
+        wgpu::TextureFormat::RG16Float,
 
-    wgpu::TextureFormat::Stencil8,
-    wgpu::TextureFormat::Depth16Unorm,
-    wgpu::TextureFormat::Depth32Float,
-    wgpu::TextureFormat::Depth24PlusStencil8,
+        wgpu::TextureFormat::Stencil8,
+        wgpu::TextureFormat::Depth16Unorm,
+        wgpu::TextureFormat::Depth32Float,
+        wgpu::TextureFormat::Depth24PlusStencil8,
 
-    wgpu::TextureFormat::BC1RGBAUnorm,
-    wgpu::TextureFormat::ETC2RGB8Unorm,
+        wgpu::TextureFormat::BC1RGBAUnorm,
+        wgpu::TextureFormat::ETC2RGB8Unorm,
 
-    wgpu::TextureFormat::Undefined,
+#if !defined(__EMSCRIPTEN__)
+        wgpu::TextureFormat::External,
+#endif
+
+        wgpu::TextureFormat::Undefined,
 };
 
 #if !defined(__EMSCRIPTEN__)
@@ -391,27 +395,30 @@ std::pair<SkColorType, bool /*isRGBFormat*/> DawnCaps::supportedReadPixelsColorT
 }
 
 void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextOptions& options) {
-    // GetAdapter() is not available in WASM and there's no way to get AdapterProperties off of
+    // GetAdapter() is not available in WASM and there's no way to get AdapterInfo off of
     // the WGPUDevice directly.
 #if !defined(__EMSCRIPTEN__)
-    wgpu::AdapterProperties props;
-    backendContext.fDevice.GetAdapter().GetProperties(&props);
+    wgpu::AdapterInfo info;
+    backendContext.fDevice.GetAdapter().GetInfo(&info);
 
 #if defined(GRAPHITE_TEST_UTILS)
-    this->setDeviceName(props.name);
+    this->setDeviceName(info.device);
 #endif
 #endif // defined(__EMSCRIPTEN__)
 
     wgpu::SupportedLimits limits;
-
+#if defined(__EMSCRIPTEN__)
+    // TODO(crbug.com/42241199): Update Emscripten path with when webgpu.h in Emscripten is updated.
     [[maybe_unused]] bool limitsSucceeded = backendContext.fDevice.GetLimits(&limits);
+#if (__EMSCRIPTEN_major__ > 3 || (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ > 1) || \
+     (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ == 1 && __EMSCRIPTEN_tiny__ > 50))
     // In Emscripten this always "fails" until
     // https://github.com/emscripten-core/emscripten/pull/20808, which was first included in 3.1.51.
-#if !defined(__EMSCRIPTEN__)                                     || \
-        (__EMSCRIPTEN_major__ >  3                               || \
-        (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ >  1) || \
-        (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ == 1 && __EMSCRIPTEN_tiny__ > 50))
     SkASSERT(limitsSucceeded);
+#endif
+#else
+    [[maybe_unused]] wgpu::Status status = backendContext.fDevice.GetLimits(&limits);
+    SkASSERT(status == wgpu::Status::Success);
 #endif
 
     fMaxTextureSize = limits.limits.maxTextureDimension2D;
@@ -431,8 +438,8 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
 
 #if !defined(__EMSCRIPTEN__)
     // TODO(b/318817249): SSBOs trigger FXC compiler failures when attempting to unroll loops
-    fStorageBufferSupport = props.backendType != wgpu::BackendType::D3D11;
-    fStorageBufferPreferred = props.backendType != wgpu::BackendType::D3D11;
+    fStorageBufferSupport = info.backendType != wgpu::BackendType::D3D11;
+    fStorageBufferPreferred = info.backendType != wgpu::BackendType::D3D11;
 #else
     // WASM doesn't provide a way to query the backend, so can't tell if we are on d3d11 or not.
     // Pessimistically assume we could be. Once b/318817249 is fixed, this can go away and SSBOs
@@ -776,6 +783,22 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
         info->fFlags = FormatInfo::kMSAA_Flag;
         info->fColorTypeInfoCount = 0;
     }
+
+#if !defined(__EMSCRIPTEN__)
+    // Format: External
+    {
+        info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::External)];
+        info->fFlags = FormatInfo::kTexturable_Flag;
+        info->fColorTypeInfoCount = 1;
+        info->fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info->fColorTypeInfoCount);
+        int ctIdx = 0;
+        // Format: External, Surface: kRGBA_8888
+        {
+            auto& ctInfo = info->fColorTypeInfos[ctIdx++];
+            ctInfo.fColorType = kRGBA_8888_SkColorType;
+        }
+    }
+#endif
 
     // Format: Undefined
     {
