@@ -81,7 +81,7 @@ public:
     }
 };
 
-static void dict_add_double(CFMutableDictionaryRef d, const void* name, double value) {
+[[maybe_unused]] static void dict_add_double(CFMutableDictionaryRef d, const void* name, double value) {
     SkUniqueCFRef<CFNumberRef> number(
             CFNumberCreate(kCFAllocatorDefault, kCFNumberDoubleType, &value));
     CFDictionaryAddValue(d, name, number.get());
@@ -90,6 +90,9 @@ static void dict_add_double(CFMutableDictionaryRef d, const void* name, double v
 static SkUniqueCFRef<CTFontRef> create_ctfont_from_font(const SkFont& font) {
     auto typeface = font.getTypeface();
     auto ctfont = SkTypeface_GetCTFontRef(typeface);
+    if (!ctfont) {
+        return nullptr;
+    }
     return SkUniqueCFRef<CTFontRef>(
             CTFontCreateCopyWithAttributes(ctfont, font.getSize(), nullptr, nullptr));
 }
@@ -204,7 +207,6 @@ void SkShaper_CoreText::shape(const char* utf8,
         fontRuns.consume();
         font = fontRuns.currentFont();
     }
-    SkASSERT(font.getTypeface());
 
     SkUniqueCFRef<CFStringRef> textString(
             CFStringCreateWithBytes(kCFAllocatorDefault, (const uint8_t*)utf8, utf8Bytes,
@@ -216,13 +218,16 @@ void SkShaper_CoreText::shape(const char* utf8,
     }
 
     SkUniqueCFRef<CTFontRef> ctfont = create_ctfont_from_font(font);
+    if (!ctfont) {
+        return;
+    }
 
     SkUniqueCFRef<CFMutableDictionaryRef> attr(
             CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
                                       &kCFTypeDictionaryKeyCallBacks,
                                       &kCFTypeDictionaryValueCallBacks));
     CFDictionaryAddValue(attr.get(), kCTFontAttributeName, ctfont.get());
-    if (false) {
+    if ((false)) {
         // trying to see what these affect
         dict_add_double(attr.get(), kCTTracking_AttributeName, 1);
         dict_add_double(attr.get(), kCTKernAttributeName, 0.0);

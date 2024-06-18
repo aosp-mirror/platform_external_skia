@@ -1,6 +1,10 @@
 load("//bazel:macros.bzl", "py_binary")
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_binary_with_flags")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -109,6 +113,7 @@ result = subprocess.run([
     sksl_minify_exe,
     "src/sksl/sksl_shared.sksl",
     "src/sksl/sksl_public.sksl",
+    "src/sksl/sksl_rt_shader.sksl",
     "resources",
     "tests",
     test_inputs,

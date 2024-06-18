@@ -73,11 +73,7 @@ private:
                  Ownership owned,
                  skgpu::Budgeted budgeted,
                  size_t gpuMemorySize)
-            : Resource(sharedContext,
-                       owned,
-                       budgeted,
-                       gpuMemorySize,
-                       	/*label=*/"TestResource") {}
+            : Resource(sharedContext, owned, budgeted, gpuMemorySize) {}
 
     void freeGpuData() override {}
 };
@@ -198,7 +194,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest,
     {
         // We don't want the view holding a ref to the Proxy or else we can't send things back to
         // the cache.
-        auto [view, _] = skgpu::graphite::AsView(recorder.get(), imageGpu.get(), Mipmapped::kNo);
+        auto view = skgpu::graphite::AsView(imageGpu.get());
         REPORTER_ASSERT(reporter, view);
         imageProxy = view.proxy();
     }

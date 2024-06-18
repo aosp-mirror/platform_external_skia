@@ -20,7 +20,6 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkRegion.h"
 #include "include/core/SkSamplingOptions.h"
-#include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkSurfaceProps.h"
@@ -34,6 +33,7 @@
 #include <cstdint>
 #include <utility>
 
+struct SkArc;
 class SkBitmap;
 class SkColorSpace;
 class SkMesh;
@@ -326,14 +326,11 @@ public:
     // Ensure that non-RSXForm runs are passed to onDrawGlyphRunList.
     void drawGlyphRunList(SkCanvas*,
                           const sktext::GlyphRunList& glyphRunList,
-                          const SkPaint& initialPaint,
-                          const SkPaint& drawingPaint);
+                          const SkPaint& paint);
     // Slug handling routines.
     virtual sk_sp<sktext::gpu::Slug> convertGlyphRunListToSlug(
-            const sktext::GlyphRunList& glyphRunList,
-            const SkPaint& initialPaint,
-            const SkPaint& drawingPaint);
-    virtual void drawSlug(SkCanvas*, const sktext::gpu::Slug* slug, const SkPaint& drawingPaint);
+            const sktext::GlyphRunList& glyphRunList, const SkPaint& paint);
+    virtual void drawSlug(SkCanvas*, const sktext::gpu::Slug* slug, const SkPaint& paint);
 
     virtual void drawPaint(const SkPaint& paint) = 0;
     virtual void drawPoints(SkCanvas::PointMode mode, size_t count,
@@ -345,8 +342,7 @@ public:
     virtual void drawOval(const SkRect& oval,
                           const SkPaint& paint) = 0;
     /** By the time this is called we know that abs(sweepAngle) is in the range [0, 360). */
-    virtual void drawArc(const SkRect& oval, SkScalar startAngle,
-                         SkScalar sweepAngle, bool useCenter, const SkPaint& paint);
+    virtual void drawArc(const SkArc& arc, const SkPaint& paint);
     virtual void drawRRect(const SkRRect& rr,
                            const SkPaint& paint) = 0;
 
@@ -468,6 +464,13 @@ public:
                                   const SkSamplingOptions&, const SkPaint&);
 
     /**
+     * Draw rrect with an optimized path for analytic blurs, if provided by the device.
+     */
+    virtual bool drawBlurredRRect(const SkRRect&, const SkPaint&, float deviceSigma) {
+        return false;
+    }
+
+    /**
      * Evaluate 'filter' and draw the final output into this device using 'paint'. The 'mapping'
      * defines the parameter-to-layer space transform used to evaluate the image filter on 'src',
      * and the layer-to-device space transform that is used to draw the result into this device.
@@ -536,13 +539,11 @@ private:
     // Only called with glyphRunLists that do not contain RSXForm.
     virtual void onDrawGlyphRunList(SkCanvas*,
                                     const sktext::GlyphRunList&,
-                                    const SkPaint& initialPaint,
-                                    const SkPaint& drawingPaint) = 0;
+                                    const SkPaint& paint) = 0;
 
     void simplifyGlyphRunRSXFormAndRedraw(SkCanvas*,
                                           const sktext::GlyphRunList&,
-                                          const SkPaint& initialPaint,
-                                          const SkPaint& drawingPaint);
+                                          const SkPaint& paint);
 
     const SkImageInfo    fInfo;
     const SkSurfaceProps fSurfaceProps;
@@ -611,8 +612,7 @@ protected:
     void drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) override {}
 
     void drawSlug(SkCanvas*, const sktext::gpu::Slug*, const SkPaint&) override {}
-    void onDrawGlyphRunList(
-            SkCanvas*, const sktext::GlyphRunList&, const SkPaint&, const SkPaint&) override {}
+    void onDrawGlyphRunList(SkCanvas*, const sktext::GlyphRunList&, const SkPaint&) override {}
 
     bool isNoPixelsDevice() const override { return true; }
 

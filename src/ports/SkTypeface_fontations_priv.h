@@ -10,6 +10,7 @@
 
 #include "include/core/SkFontParameters.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/base/SkOnce.h"
@@ -42,8 +43,8 @@ private:
     bool current_is_not(SkPoint);
 
     SkPath fPath;
-    bool fStarted;
-    SkPoint fCurrent;
+    bool fStarted{false};
+    SkPoint fCurrent{0, 0};
 };
 
 /** Implementation of AxisWrapper FFI C++ interface, allowing Rust to call back into
@@ -69,6 +70,7 @@ public:
                  SkCanvas& canvas,
                  SkSpan<SkColor> palette,
                  SkColor foregroundColor,
+                 bool antialias,
                  uint16_t upem);
 
     // fontations_ffi::ColorPainter interface.
@@ -133,6 +135,7 @@ private:
     SkCanvas& fCanvas;
     SkSpan<SkColor> fPalette;
     SkColor fForegroundColor;
+    bool fAntialias;
     uint16_t fUpem;
 };
 
@@ -200,17 +203,22 @@ private:
 
 /** SkTypeface implementation based on Google Fonts Fontations Rust libraries. */
 class SkTypeface_Fontations : public SkTypeface {
-public:
-    SkTypeface_Fontations(sk_sp<SkData> fontData, const SkFontArguments&);
+private:
+    SkTypeface_Fontations(sk_sp<SkData> fontData,
+                          const SkFontStyle& style,
+                          uint32_t ttcIndex,
+                          rust::Box<fontations_ffi::BridgeFontRef>&& fontRef,
+                          rust::Box<fontations_ffi::BridgeMappingIndex>&& mappingIndex,
+                          rust::Box<fontations_ffi::BridgeNormalizedCoords>&& normalizedCoords,
+                          rust::Box<fontations_ffi::BridgeOutlineCollection>&& outlines,
+                          rust::Vec<uint32_t>&& palette);
 
-    bool hasValidBridgeFontRef() const;
+public:
     const fontations_ffi::BridgeFontRef& getBridgeFontRef() { return *fBridgeFontRef; }
     const fontations_ffi::BridgeNormalizedCoords& getBridgeNormalizedCoords() {
         return *fBridgeNormalizedCoords;
     }
-    const fontations_ffi::BridgeOutlineCollection& getOutlines() {
-        return *fOutlines;
-    }
+    const fontations_ffi::BridgeOutlineCollection& getOutlines() { return *fOutlines; }
     SkSpan<SkColor> getPalette() {
         return SkSpan<SkColor>(reinterpret_cast<SkColor*>(fPalette.data()), fPalette.size());
     }
@@ -226,14 +234,12 @@ protected:
     std::unique_ptr<SkScalerContext> onCreateScalerContext(const SkScalerContextEffects& effects,
                                                            const SkDescriptor* desc) const override;
     void onFilterRec(SkScalerContextRec*) const override;
-    std::unique_ptr<SkAdvancedTypefaceMetrics> onGetAdvancedMetrics() const override {
-        return nullptr;
-    }
+    std::unique_ptr<SkAdvancedTypefaceMetrics> onGetAdvancedMetrics() const override;
     void onGetFontDescriptor(SkFontDescriptor*, bool*) const override;
     void onCharsToGlyphs(const SkUnichar* chars, int count, SkGlyphID glyphs[]) const override;
     int onCountGlyphs() const override;
     void getPostScriptGlyphNames(SkString*) const override {}
-    void getGlyphToUnicodeMap(SkUnichar*) const override {}
+    void getGlyphToUnicodeMap(SkUnichar*) const override;
     int onGetUPEM() const override;
     void onGetFamilyName(SkString* familyName) const override;
     bool onGetPostScriptName(SkString*) const override;
@@ -253,6 +259,7 @@ private:
     // fBridgeFontRef accesses the data in fFontData. fFontData needs to be kept around for the
     // lifetime of fBridgeFontRef to safely request parsed data.
     rust::Box<fontations_ffi::BridgeFontRef> fBridgeFontRef;
+    rust::Box<fontations_ffi::BridgeMappingIndex> fMappingIndex;
     rust::Box<fontations_ffi::BridgeNormalizedCoords> fBridgeNormalizedCoords;
     rust::Box<fontations_ffi::BridgeOutlineCollection> fOutlines;
     rust::Vec<uint32_t> fPalette;
