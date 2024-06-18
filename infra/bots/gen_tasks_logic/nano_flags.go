@@ -150,11 +150,31 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 		}
 
 		if b.extraConfig("Graphite") {
-			if b.extraConfig("Metal") {
-				configs = []string{"grmtl"}
-			}
 			if b.extraConfig("Dawn") {
-				configs = []string{"grdawn"}
+				if b.extraConfig("D3D11") {
+					configs = []string{"grdawn_d3d11"}
+				}
+				if b.extraConfig("D3D12") {
+					configs = []string{"grdawn_d3d12"}
+				}
+				if b.extraConfig("Metal") {
+					configs = []string{"grdawn_mtl"}
+				}
+				if b.extraConfig("Vulkan") {
+					configs = []string{"grdawn_vk"}
+				}
+				if b.extraConfig("GL") {
+					configs = []string{"grdawn_gl"}
+				}
+				if b.extraConfig("GLES") {
+					configs = []string{"grdawn_gles"}
+				}
+
+			}
+			if b.extraConfig("Native") {
+				if b.extraConfig("Metal") {
+					configs = []string{"grmtl"}
+				}
 			}
 		}
 
@@ -262,6 +282,13 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 		match = append(match, "~^create_backend_texture")
 		match = append(match, "~^draw_coverage")
 		match = append(match, "~^compositing_images")
+	}
+	if b.extraConfig("Graphite") && b.extraConfig("Dawn") {
+		if b.matchOs("Win10") && b.matchGpu("RadeonR9M470X") {
+			// The Dawn Win10 Radeon allocates too many Vulkan resources in bulk rect tests (b/318725123)
+			match = append(match, "~bulkrect_1000_grid_uniqueimages")
+			match = append(match, "~bulkrect_1000_random_uniqueimages")
+		}
 	}
 
 	if b.model(DONT_REDUCE_OPS_TASK_SPLITTING_MODELS...) {

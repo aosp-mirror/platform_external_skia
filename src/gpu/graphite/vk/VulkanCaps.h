@@ -79,12 +79,12 @@ public:
 
     bool supportsYcbcrConversion() const { return fSupportsYcbcrConversion; }
 
+    bool supportsDeviceFaultInfo() const { return fSupportsDeviceFaultInfo; }
+
     uint32_t maxVertexAttributes() const {
         return fMaxVertexAttributes;
     }
     uint64_t maxUniformBufferRange() const { return fMaxUniformBufferRange; }
-
-    uint64_t getRenderPassDescKey(const RenderPassDesc& renderPassDesc) const;
 
     const VkPhysicalDeviceMemoryProperties2& physicalDeviceMemoryProperties2() const {
         return fPhysicalDeviceMemoryProperties2;
@@ -128,12 +128,14 @@ private:
     bool supportsWritePixels(const TextureInfo&) const override;
     bool supportsReadPixels(const TextureInfo&) const override;
 
-    SkColorType supportedWritePixelsColorType(SkColorType dstColorType,
-                                              const TextureInfo& dstTextureInfo,
-                                              SkColorType srcColorType) const override;
-    SkColorType supportedReadPixelsColorType(SkColorType srcColorType,
-                                             const TextureInfo& srcTextureInfo,
-                                             SkColorType dstColorType) const override;
+    std::pair<SkColorType, bool /*isRGBFormat*/> supportedWritePixelsColorType(
+            SkColorType dstColorType,
+            const TextureInfo& dstTextureInfo,
+            SkColorType srcColorType) const override;
+    std::pair<SkColorType, bool /*isRGBFormat*/> supportedReadPixelsColorType(
+            SkColorType srcColorType,
+            const TextureInfo& srcTextureInfo,
+            SkColorType dstColorType) const override;
 
     // Struct that determines and stores which sample count quantities a VkFormat supports.
     struct SupportedSampleCounts {
@@ -233,6 +235,7 @@ private:
     bool fShouldAlwaysUseDedicatedImageMemory = false;
     bool fGpuOnlyBuffersMorePerformant = false;
     bool fShouldPersistentlyMapCpuToGpuBuffers = true;
+    bool fSupportsDeviceFaultInfo = false;
 };
 
 } // namespace skgpu::graphite
