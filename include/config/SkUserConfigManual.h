@@ -24,7 +24,6 @@
   #define SK_DISABLE_LEGACY_SKSURFACE_FLUSH
   #define SK_DISABLE_LEGACY_CANVAS_FLUSH
   #define SK_LEGACY_GPU_GETTERS_CONST
-  #define SK_USE_LEGACY_BLUR_GANESH
 
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG

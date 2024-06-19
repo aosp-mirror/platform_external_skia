@@ -395,30 +395,27 @@ std::pair<SkColorType, bool /*isRGBFormat*/> DawnCaps::supportedReadPixelsColorT
 }
 
 void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextOptions& options) {
-    // GetAdapter() is not available in WASM and there's no way to get AdapterInfo off of
+    // GetAdapter() is not available in WASM and there's no way to get AdapterProperties off of
     // the WGPUDevice directly.
 #if !defined(__EMSCRIPTEN__)
-    wgpu::AdapterInfo info;
-    backendContext.fDevice.GetAdapter().GetInfo(&info);
+    wgpu::AdapterProperties props;
+    backendContext.fDevice.GetAdapter().GetProperties(&props);
 
 #if defined(GRAPHITE_TEST_UTILS)
-    this->setDeviceName(info.device);
+    this->setDeviceName(props.name);
 #endif
 #endif // defined(__EMSCRIPTEN__)
 
     wgpu::SupportedLimits limits;
-#if defined(__EMSCRIPTEN__)
-    // TODO(crbug.com/42241199): Update Emscripten path with when webgpu.h in Emscripten is updated.
+
     [[maybe_unused]] bool limitsSucceeded = backendContext.fDevice.GetLimits(&limits);
-#if (__EMSCRIPTEN_major__ > 3 || (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ > 1) || \
-     (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ == 1 && __EMSCRIPTEN_tiny__ > 50))
     // In Emscripten this always "fails" until
     // https://github.com/emscripten-core/emscripten/pull/20808, which was first included in 3.1.51.
+#if !defined(__EMSCRIPTEN__)                                     || \
+        (__EMSCRIPTEN_major__ >  3                               || \
+        (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ >  1) || \
+        (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ == 1 && __EMSCRIPTEN_tiny__ > 50))
     SkASSERT(limitsSucceeded);
-#endif
-#else
-    [[maybe_unused]] wgpu::Status status = backendContext.fDevice.GetLimits(&limits);
-    SkASSERT(status == wgpu::Status::Success);
 #endif
 
     fMaxTextureSize = limits.limits.maxTextureDimension2D;
@@ -438,8 +435,8 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
 
 #if !defined(__EMSCRIPTEN__)
     // TODO(b/318817249): SSBOs trigger FXC compiler failures when attempting to unroll loops
-    fStorageBufferSupport = info.backendType != wgpu::BackendType::D3D11;
-    fStorageBufferPreferred = info.backendType != wgpu::BackendType::D3D11;
+    fStorageBufferSupport = props.backendType != wgpu::BackendType::D3D11;
+    fStorageBufferPreferred = props.backendType != wgpu::BackendType::D3D11;
 #else
     // WASM doesn't provide a way to query the backend, so can't tell if we are on d3d11 or not.
     // Pessimistically assume we could be. Once b/318817249 is fixed, this can go away and SSBOs

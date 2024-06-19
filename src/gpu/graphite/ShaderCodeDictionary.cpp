@@ -1206,17 +1206,6 @@ static constexpr Uniform kCubicYUVImageShaderUniforms[] = {
         { "yuvToRGBTranslate",     SkSLType::kFloat3 },
 };
 
-static constexpr Uniform kHWYUVImageShaderUniforms[] = {
-        { "invImgSizeY",           SkSLType::kFloat2 },
-        { "invImgSizeUV",          SkSLType::kFloat2 },  // Relative to Y's texel space
-        { "channelSelectY",        SkSLType::kHalf4 },
-        { "channelSelectU",        SkSLType::kHalf4 },
-        { "channelSelectV",        SkSLType::kHalf4 },
-        { "channelSelectA",        SkSLType::kHalf4 },
-        { "yuvToRGBMatrix",        SkSLType::kHalf3x3 },
-        { "yuvToRGBTranslate",     SkSLType::kFloat3 },
-};
-
 static constexpr TextureAndSampler kYUVISTexturesAndSamplers[] = {
     { "samplerY" },
     { "samplerU" },
@@ -1226,7 +1215,6 @@ static constexpr TextureAndSampler kYUVISTexturesAndSamplers[] = {
 
 static constexpr char kYUVImageShaderName[] = "sk_yuv_image_shader";
 static constexpr char kCubicYUVImageShaderName[] = "sk_cubic_yuv_image_shader";
-static constexpr char kHWYUVImageShaderName[] = "sk_hw_yuv_image_shader";
 
 //--------------------------------------------------------------------------------------------------
 static constexpr Uniform kCoordClampShaderUniforms[] = {
@@ -2069,16 +2057,6 @@ ShaderCodeDictionary::ShaderCodeDictionary() {
             SnippetRequirementFlags::kLocalCoords,
             SkSpan(kYUVISTexturesAndSamplers),
             kCubicYUVImageShaderName,
-            GenerateDefaultExpression,
-            GenerateDefaultPreamble,
-            kNoChildren
-    };
-    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWYUVImageShader] = {
-            "HWYUVImageShader",
-            SkSpan(kHWYUVImageShaderUniforms),
-            SnippetRequirementFlags::kLocalCoords,
-            SkSpan(kYUVISTexturesAndSamplers),
-            kHWYUVImageShaderName,
             GenerateDefaultExpression,
             GenerateDefaultPreamble,
             kNoChildren
