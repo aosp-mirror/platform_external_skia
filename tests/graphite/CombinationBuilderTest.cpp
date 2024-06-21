@@ -12,6 +12,7 @@
 #include "include/core/SkColorSpace.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/FactoryFunctions.h"
@@ -82,16 +83,20 @@ void run_test(const KeyContext& keyContext,
 void big_test(const KeyContext& keyContext,
               PipelineDataGatherer* gatherer,
               skiatest::Reporter* reporter) {
-    // paintOptions (248)
-    //  |- sweepGrad_0 (2) | blendShader_0 (60)
-    //  |                     0: kSrc (1)
-    //  |                     1: (dsts) linearGrad_0 (2) | solid_0 (1)
-    //  |                     2: (srcs) linearGrad_1 (2) | blendShader_1 (18)
-    //  |                                                   0: kDst (1)
-    //  |                                                   1: (dsts) radGrad_0 (2) | solid_1 (1)
-    //  |                                                   2: (srcs) imageShader_0 (6)
+
+    static constexpr int kNumExpected = 444;
+    // paintOptions (444 = 4*111)
+    //  |- (111 = 3+108) sweepGrad_0 (3) |
+    //  |                blendShader_0 (108 = 1*4*27)
+    //  |                 |- 0: (1)       kSrc (1)
+    //  |                 |- 1: (4=3+1)   (dsts) linearGrad_0 (3) | solid_0 (1)
+    //  |                 |- 2: (27=3+24) (srcs) linearGrad_1 (3) |
+    //  |                                        blendShader_1 (24=1*4*6)
+    //  |                                         |- 0: (1) kDst (1)
+    //  |                                         |- 1: (4=3+1) (dsts) radGrad_0 (3) | solid_1 (1)
+    //  |                                         |- 2: (6) (srcs) imageShader_0 (6)
     //  |
-    //  |- 4-built-in-blend-modes
+    //  |- (4) 4-built-in-blend-modes
 
     PaintOptions paintOptions;
 
@@ -134,7 +139,7 @@ void big_test(const KeyContext& keyContext,
     // now, blend modes
     paintOptions.setBlendModes(kEvenMoreBlendModes);                             // c array
 
-    REPORTER_ASSERT(reporter, paintOptions.priv().numCombinations() == 248,
+    REPORTER_ASSERT(reporter, paintOptions.priv().numCombinations() == kNumExpected,
                     "Actual # of combinations %d", paintOptions.priv().numCombinations());
 
     std::vector<UniquePaintParamsID> precompileIDs;
@@ -150,7 +155,7 @@ void big_test(const KeyContext& keyContext,
                                                                precompileIDs.push_back(id);
                                                            });
 
-    SkASSERT(precompileIDs.size() == 248);
+    SkASSERT(precompileIDs.size() == kNumExpected);
 }
 
 template <typename T>
@@ -184,7 +189,7 @@ std::vector<sk_sp<T>> create_runtime_combos(
 void runtime_effect_test(const KeyContext& keyContext,
                          PipelineDataGatherer* gatherer,
                          skiatest::Reporter* reporter) {
-    // paintOptions (8)
+    // paintOptions (8 = 2*2*2)
     //  |- combineShader (2)
     //  |       0: redShader   | greenShader
     //  |       1: greenShader | redShader
@@ -312,7 +317,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(CombinationBuilderTest, reporter, context,
                           /* dstTexture= */ nullptr,
                           /* dstOffset= */ {0, 0});
 
-    PipelineDataGatherer gatherer(context->priv().caps(), Layout::kMetal);
+    PipelineDataGatherer gatherer(Layout::kMetal);
 
     // The default PaintOptions should create a single combination with a solid color shader and
     // kSrcOver blending

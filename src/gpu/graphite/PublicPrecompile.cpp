@@ -10,6 +10,7 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
 #include "include/gpu/graphite/precompile/Precompile.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
@@ -139,7 +140,7 @@ void PrecompileCombinations(Context* context,
     const Caps* caps = keyContext.caps();
     // Since the precompilation path's uniforms aren't used and don't change the key,
     // the exact layout doesn't matter
-    PipelineDataGatherer gatherer(caps, Layout::kMetal);
+    PipelineDataGatherer gatherer(Layout::kMetal);
 
     SkColorType destCT = keyContext.dstColorInfo().colorType();
     // TODO: we need iterate over a broader set of TextureInfos here. Perhaps, allow the client
