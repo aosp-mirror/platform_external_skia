@@ -36,6 +36,7 @@
 #include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/precompile/Precompile.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/base/SkRandom.h"
 #include "src/core/SkBlenderBase.h"
@@ -44,7 +45,7 @@
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/FactoryFunctions.h"
-#include "src/gpu/graphite/FactoryFunctionsPriv.h"
+//#include "src/gpu/graphite/FactoryFunctionsPriv.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
@@ -61,6 +62,8 @@
 #include "src/gpu/graphite/UniquePaintParamsID.h"
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/precompile/PaintOptionsPriv.h"
+#include "src/gpu/graphite/precompile/PrecompileColorFiltersPriv.h"
+#include "src/gpu/graphite/precompile/PrecompileShadersPriv.h"
 #include "src/shaders/SkImageShader.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/FontToolUtils.h"
@@ -560,11 +563,42 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_gradient_shader(
         SkRandom* rand,
         SkShaderBase::GradientType type,
         ColorConstraint constraint = ColorConstraint::kOpaque) {
-    // TODO: fuzz the gradient parameters - esp. the number of stops & hard stops
-    SkPoint pts[2] = {{-100, -100},
-                      {100,  100}};
-    SkColor colors[2] = {random_color(rand, constraint), random_color(rand, constraint)};
-    SkScalar offsets[2] = {0.0f, 1.0f};
+    // TODO: fuzz more of the gradient parameters
+
+    static constexpr int kMaxNumStops = 9;
+    SkColor colors[kMaxNumStops] = {
+            random_color(rand, constraint),
+            random_color(rand, constraint),
+            random_color(rand, constraint),
+            random_color(rand, constraint),
+            random_color(rand, constraint),
+            random_color(rand, constraint),
+            random_color(rand, constraint),
+            random_color(rand, constraint),
+            random_color(rand, constraint)
+    };
+    static const SkPoint kPts[kMaxNumStops] = {
+            { -100.0f, -100.0f },
+            { -50.0f, -50.0f },
+            { -25.0f, -25.0f },
+            { -12.5f, -12.5f },
+            { 0.0f, 0.0f },
+            { 12.5f, 12.5f },
+            { 25.0f, 25.0f },
+            { 50.0f, 50.0f },
+            { 100.0f, 100.0f }
+    };
+    static const float kOffsets[kMaxNumStops] =
+            { 0.0f, 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.75f, 0.875f, 1.0f };
+
+    int numStops;
+
+    switch (rand->nextULessThan(3)) {
+        case 0:  numStops = 2; break;
+        case 1:  numStops = 7; break;
+        case 2:  [[fallthrough]];
+        default: numStops = kMaxNumStops; break;
+    }
 
     SkMatrix lmStorage;
     SkMatrix* lmPtr = random_local_matrix(rand, &lmStorage);
@@ -578,24 +612,28 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_gradient_shader(
 
     switch (type) {
         case SkShaderBase::GradientType::kLinear:
-            s = SkGradientShader::MakeLinear(pts, colors, offsets, 2, tm, flags, lmPtr);
+            s = SkGradientShader::MakeLinear(kPts,
+                                             colors, kOffsets, numStops, tm, flags, lmPtr);
             o = PrecompileShaders::LinearGradient();
             break;
         case SkShaderBase::GradientType::kRadial:
-            s = SkGradientShader::MakeRadial({0, 0}, 100, colors, offsets, 2, tm, flags, lmPtr);
+            s = SkGradientShader::MakeRadial(/* center= */ {0, 0}, /* radius= */ 100,
+                                             colors, kOffsets, numStops, tm, flags, lmPtr);
             o = PrecompileShaders::RadialGradient();
             break;
         case SkShaderBase::GradientType::kSweep:
-            s = SkGradientShader::MakeSweep(0, 0, colors, offsets, 2, tm,
+            s = SkGradientShader::MakeSweep(/* cx= */ 0, /* cy= */ 0,
+                                            colors, kOffsets, numStops, tm,
                                             /* startAngle= */ 0, /* endAngle= */ 359,
                                             flags, lmPtr);
             o = PrecompileShaders::SweepGradient();
             break;
         case SkShaderBase::GradientType::kConical:
-            s = SkGradientShader::MakeTwoPointConical({100, 100}, 100,
-                                                      {-100, -100}, 100,
-                                                      colors, offsets, 2,
-                                                      tm, flags, lmPtr);
+            s = SkGradientShader::MakeTwoPointConical(/* start= */ {100, 100},
+                                                      /* startRadius= */ 100,
+                                                      /* end= */ {-100, -100},
+                                                      /* endRadius= */ 100,
+                                                      colors, kOffsets, numStops, tm, flags, lmPtr);
             o = PrecompileShaders::TwoPointConicalGradient();
             break;
         case SkShaderBase::GradientType::kNone:
@@ -1860,8 +1898,8 @@ void run_test(skiatest::Reporter* reporter,
     }
 
     PaintParamsKeyBuilder builder(dict);
-    PipelineDataGatherer paramsGatherer(recorder->priv().caps(), Layout::kMetal);
-    PipelineDataGatherer precompileGatherer(recorder->priv().caps(), Layout::kMetal);
+    PipelineDataGatherer paramsGatherer(Layout::kMetal);
+    PipelineDataGatherer precompileGatherer(Layout::kMetal);
 
     gNeedSKPPaintOption = false;
     auto [paint, paintOptions] = create_paint(&rand, recorder.get(), s, bm, cf, mf, imageFilter);

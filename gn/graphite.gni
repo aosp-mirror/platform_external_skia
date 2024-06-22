@@ -355,6 +355,7 @@ skia_graphite_precompile_public = [
   "$_include/precompile/Precompile.h",
   "$_include/precompile/PrecompileBase.h",
   "$_include/precompile/PrecompileBlender.h",
+  "$_include/precompile/PrecompileColorFilter.h",
   "$_include/precompile/PrecompileShader.h",
   "$_include/precompile/PaintOptions.h",
 ]
@@ -362,8 +363,6 @@ skia_graphite_precompile_public = [
 skia_graphite_precompile_sources = [
   "$_src/FactoryFunctions.cpp",
   "$_src/FactoryFunctions.h",
-  "$_src/FactoryFunctionsPriv.h",
-  "$_src/Precompile.cpp",
   "$_src/PrecompileInternal.h",
   "$_src/PublicPrecompile.cpp",
   "$_src/PublicPrecompile.h",
@@ -375,6 +374,9 @@ skia_graphite_precompile_sources = [
   "$_src/precompile/PrecompileBasePriv.h",
   "$_src/precompile/PrecompileBlender.cpp",
   "$_src/precompile/PrecompileBlenderPriv.h",
+  "$_src/precompile/PrecompileColorFilter.cpp",
+  "$_src/precompile/PrecompileColorFiltersPriv.h",
   "$_src/precompile/PrecompileShader.cpp",
   "$_src/precompile/PrecompileShaderPriv.h",
+  "$_src/precompile/PrecompileShadersPriv.h",
 ]

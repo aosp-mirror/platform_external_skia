@@ -19,6 +19,7 @@
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/precompile/Precompile.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "modules/skcms/skcms.h"
 #include "src/core/SkBlenderBase.h"
 #include "src/gpu/graphite/ContextPriv.h"
@@ -335,8 +336,7 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
                                                                     : Layout::kStd140;
 
     PaintParamsKeyBuilder builder(dict);
-    PipelineDataGatherer gatherer(recorder->priv().caps(), layout);
-
+    PipelineDataGatherer gatherer(layout);
 
     auto [paint, paintOptions] = create_random_paint(fuzz, depth);
 
