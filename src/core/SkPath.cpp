@@ -258,6 +258,7 @@ bool SkPath::interpolate(const SkPath& ending, SkScalar weight, SkPath* out) con
     }
     out->reset();
     out->addPath(*this);
+    SkPathRef::Editor editor(&(out->fPathRef));
     fPathRef->interpolate(*ending.fPathRef, weight, out->fPathRef.get());
     return true;
 }
@@ -1434,6 +1435,13 @@ SkPath& SkPath::addPath(const SkPath& srcPath, const SkMatrix& matrix, AddPathMo
         return *this;
     }
 
+    if (this->isEmpty() && matrix.isIdentity()) {
+        const uint8_t fillType = fFillType;
+        *this = srcPath;
+        fFillType = fillType;
+        return *this;
+    }
+
     // Detect if we're trying to add ourself
     const SkPath* src = &srcPath;
     SkTLazy<SkPath> tmp;
@@ -2138,8 +2146,9 @@ struct Convexicator {
         if (fLastPt == pt) {
             return true;
         }
-        // should only be true for first non-zero vector after setMovePt was called.
-        if (fFirstPt == fLastPt && fExpectedDir == kInvalid_DirChange) {
+        // should only be true for first non-zero vector after setMovePt was called. It is possible
+        // we doubled backed at the start so need to check if fLastVec is zero or not.
+        if (fFirstPt == fLastPt && fExpectedDir == kInvalid_DirChange && fLastVec.equals(0,0)) {
             fLastVec = pt - fLastPt;
             fFirstVec = fLastVec;
         } else if (!this->addVec(pt - fLastPt)) {

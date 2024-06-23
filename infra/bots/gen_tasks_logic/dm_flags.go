@@ -174,8 +174,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	sampleCount := 0
 	glPrefix := ""
-	if b.extraConfig("NeverYield") {
-		configs = append(configs, "grdawn_neveryield")
+	if b.extraConfig("FakeWGPU") {
+		configs = append(configs, "grdawn_fakeWGPU")
 	} else if b.extraConfig("SwiftShader") {
 		configs = append(configs, "vk", "vkdmsaa")
 		// skbug.com/12826
@@ -258,6 +258,112 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "colorImage", ALL, ALL)
 			skip(ALL, "svg", ALL, ALL)
 			skip(ALL, "skp", ALL, ALL)
+
+			// These unit tests attempt to readback
+			skip(ALL, "test", ALL, "ApplyGamma")
+			skip(ALL, "test", ALL, "BigImageTest_Ganesh")
+			skip(ALL, "test", ALL, "BigImageTest_Graphite")
+			skip(ALL, "test", ALL, "BlendRequiringDstReadWithLargeCoordinates")
+			skip(ALL, "test", ALL, "BlurMaskBiggerThanDest")
+			skip(ALL, "test", ALL, "ClearOp")
+			skip(ALL, "test", ALL, "ColorTypeBackendAllocationTest")
+			skip(ALL, "test", ALL, "ComposedImageFilterBounds_Gpu")
+			skip(ALL, "test", ALL, "CopySurface")
+			skip(ALL, "test", ALL, "crbug_1271431")
+			skip(ALL, "test", ALL, "DashPathEffectTest_2PiInterval")
+			skip(ALL, "test", ALL, "DeviceTestVertexTransparency")
+			skip(ALL, "test", ALL, "DDLMultipleDDLs")
+			skip(ALL, "test", ALL, "DefaultPathRendererTest")
+			skip(ALL, "test", ALL, "DMSAA_aa_dst_read_after_dmsaa")
+			skip(ALL, "test", ALL, "DMSAA_dst_read")
+			skip(ALL, "test", ALL, "DMSAA_dst_read_with_existing_barrier")
+			skip(ALL, "test", ALL, "DMSAA_dual_source_blend_disable")
+			skip(ALL, "test", ALL, "DMSAA_preserve_contents")
+			skip(ALL, "test", ALL, "ExtendedSkColorTypeTests_gpu")
+			skip(ALL, "test", ALL, "FilterResult_ganesh") // knocks out a bunch
+			skip(ALL, "test", ALL, "FullScreenClearWithLayers")
+			skip(ALL, "test", ALL, "GrAHardwareBuffer_BasicDrawTest")
+			skip(ALL, "test", ALL, "GrGpuBufferTransferTest")
+			skip(ALL, "test", ALL, "GrGpuBufferUpdateDataTest")
+			skip(ALL, "test", ALL, "GrMeshTest")
+			skip(ALL, "test", ALL, "GrPipelineDynamicStateTest")
+			skip(ALL, "test", ALL, "GrTextBlobScaleAnimation")
+			skip(ALL, "test", ALL, "HalfFloatAlphaTextureTest")
+			skip(ALL, "test", ALL, "HalfFloatRGBATextureTest")
+			skip(ALL, "test", ALL, "ImageAsyncReadPixelsGraphite")
+			skip(ALL, "test", ALL, "ImageEncode_Gpu")
+			skip(ALL, "test", ALL, "ImageFilterFailAffectsTransparentBlack_Gpu")
+			skip(ALL, "test", ALL, "ImageFilterNegativeBlurSigma_Gpu")
+			skip(ALL, "test", ALL, "ImageFilterZeroBlurSigma_Gpu")
+			skip(ALL, "test", ALL, "ImageLegacyBitmap_Gpu")
+			skip(ALL, "test", ALL, "ImageNewShader_GPU")
+			skip(ALL, "test", ALL, "ImageOriginTest_drawImage_Graphite")
+			skip(ALL, "test", ALL, "ImageOriginTest_imageShader_Graphite")
+			skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Default")
+			skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Testing")
+			skip(ALL, "test", ALL, "ImageReadPixels_Gpu")
+			skip(ALL, "test", ALL, "ImageScalePixels_Gpu")
+			skip(ALL, "test", ALL, "ImageShaderTest")
+			skip(ALL, "test", ALL, "MatrixColorFilter_TransparentBlack")
+			skip(ALL, "test", ALL, "MorphologyFilterRadiusWithMirrorCTM_Gpu")
+			skip(ALL, "test", ALL, "MultisampleRetainTest")
+			skip(ALL, "test", ALL, "MutableImagesTest")
+			skip(ALL, "test", ALL, "OpsTaskFlushCount")
+			skip(ALL, "test", ALL, "OverdrawSurface_Gpu")
+			skip(ALL, "test", ALL, "PinnedImageTest")
+			skip(ALL, "test", ALL, "RecordingOrderTest_Graphite")
+			skip(ALL, "test", ALL, "RecordingSurfacesTestClear")
+			skip(ALL, "test", ALL, "RecordingSurfacesTestWritePixels")
+			skip(ALL, "test", ALL, "RecordingSurfacesTestWritePixelsOffscreen")
+			skip(ALL, "test", ALL, "ReplaceSurfaceBackendTexture")
+			skip(ALL, "test", ALL, "ResourceCacheCache")
+			skip(ALL, "test", ALL, "SaveLayerOrigin")
+			skip(ALL, "test", ALL, "ShaderTestNestedBlendsGanesh")
+			skip(ALL, "test", ALL, "ShaderTestNestedBlendsGraphite")
+			skip(ALL, "test", ALL, "skbug6653")
+			skip(ALL, "test", ALL, "SkImage_makeNonTextureImage")
+			skip(ALL, "test", ALL, "SkipCopyTaskTest")
+			skip(ALL, "test", ALL, "SkipOpsTaskTest")
+			skip(ALL, "test", ALL, "SkRuntimeBlender_GPU")
+			skip(ALL, "test", ALL, "SkRuntimeEffect") // knocks out a bunch
+			skip(ALL, "test", ALL, "SkRuntimeShaderImageFilter_GPU")
+			skip(ALL, "test", ALL, "SkSLCross")
+			skip(ALL, "test", ALL, "SkSL") // knocks out a bunch
+			skip(ALL, "test", ALL, "SpecialImage_Gpu")
+			skip(ALL, "test", ALL, "SRGBReadWritePixels")
+			skip(ALL, "test", ALL, "SurfaceAsyncReadPixels")
+			skip(ALL, "test", ALL, "SurfaceContextReadPixels")
+			skip(ALL, "test", ALL, "SurfaceContextWritePixelsMipped")
+			skip(ALL, "test", ALL, "SurfaceDrawContextTest")
+			skip(ALL, "test", ALL, "SurfaceSemaphores")
+			skip(ALL, "test", ALL, "TestSweepGradientZeroXGanesh")
+			skip(ALL, "test", ALL, "TiledDrawCacheTest_Ganesh")
+			skip(ALL, "test", ALL, "TiledDrawCacheTest_Graphite")
+			skip(ALL, "test", ALL, "UnpremulTextureImage")
+			skip(ALL, "test", ALL, "VkBackendAllocationTest")
+			skip(ALL, "test", ALL, "VkDrawableTest")
+			skip(ALL, "test", ALL, "VkDrawableImportTest")
+			skip(ALL, "test", ALL, "VkYCbcrSampler_DrawImageWithYcbcrSampler")
+			skip(ALL, "test", ALL, "WritePixels_Gpu")
+			skip(ALL, "test", ALL, "WritePixels_Graphite")
+			skip(ALL, "test", ALL, "WritePixelsMSAA_Gpu")
+			skip(ALL, "test", ALL, "WritePixelsPendingIO")
+			skip(ALL, "test", ALL, "XfermodeImageFilterCroppedInput_Gpu")
+
+			// These unit tests require some debugging (skbug.com/319229312)
+			skip(ALL, "test", ALL, "GrTextBlobMoveAround")          // a lot of AllocImageMemory failures
+			skip(ALL, "test", ALL, "Programs")                      // Perlin Noise FP violating protected constraints
+			skip(ALL, "test", ALL, "Protected_SmokeTest")           // Ganesh/Vulkan disallow creating Unprotected Image
+			skip(ALL, "test", ALL, "ReadOnlyTexture")               // crashes device!
+			skip(ALL, "test", ALL, "RepeatedClippedBlurTest")       // blurs not creating expected # of resources
+			skip(ALL, "test", ALL, "CharacterizationVkSCBnessTest") // DDL Validation failure for Vk SCBs
+
+			// These unit tests are very slow and probably don't benefit from Protected testing
+			skip(ALL, "test", ALL, "PaintParamsKeyTest")
+			skip(ALL, "test", ALL, "ProcessorCloneTest")
+			skip(ALL, "test", ALL, "ProcessorOptimizationValidationTest")
+			skip(ALL, "test", ALL, "TextBlobAbnormal")
+			skip(ALL, "test", ALL, "TextBlobStressAbnormal")
 		}
 
 		// The Tegra3 doesn't support MSAA
@@ -284,16 +390,25 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.extraConfig("Graphite") {
 			args = append(args, "--nogpu") // disable non-Graphite tests
 
-			if b.extraConfig("Metal") {
-				configs = []string{"grmtl"}
-				if b.gpu("IntelIrisPlus") {
-					// We get some 27/255 RGB diffs on the 45 degree
-					// rotation case on this device (skbug.com/14408)
-					skip(ALL, "test", ALL, "BigImageTest_Graphite")
-				}
-			}
 			if b.extraConfig("Dawn") {
-				configs = []string{"grdawn"}
+				if b.extraConfig("D3D11") {
+					configs = []string{"grdawn_d3d11"}
+				}
+				if b.extraConfig("D3D12") {
+					configs = []string{"grdawn_d3d12"}
+				}
+				if b.extraConfig("Metal") {
+					configs = []string{"grdawn_mtl"}
+				}
+				if b.extraConfig("Vulkan") {
+					configs = []string{"grdawn_vk"}
+				}
+				if b.extraConfig("GL") {
+					configs = []string{"grdawn_gl"}
+				}
+				if b.extraConfig("GLES") {
+					configs = []string{"grdawn_gles"}
+				}
 				// Shader doesn't compile
 				// https://skbug.com/14105
 				skip(ALL, "gm", ALL, "runtime_intrinsics_matrix")
@@ -303,47 +418,60 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
 				skip(ALL, "test", ALL, "PaintParamsKeyTest")
 
-				if b.matchOs("Win10") {
-					// The Dawn Win10 job OOMs (skbug.com/14410)
+				if b.matchOs("Win10") || b.matchGpu("MaliG78", "Adreno620") {
+					// The Dawn Win10 and some Android device jobs OOMs (skbug.com/14410, b/318725123)
 					skip(ALL, "test", ALL, "BigImageTest_Graphite")
 				}
-			}
-			if b.extraConfig("Vulkan") {
-				configs = []string{"grvk"}
-				// Couldn't readback
-				skip(ALL, "gm", ALL, "aaxfermodes")
-				// Could not instantiate texture proxy for UploadTask!
-				skip(ALL, "test", ALL, "BigImageTest_Graphite")
-				// Test failures
-				skip(ALL, "test", ALL, "DeviceTestVertexTransparency")
-				skip(ALL, "test", ALL, "GraphitePromiseImageMultipleImgUses")
-				skip(ALL, "test", ALL, "GraphitePromiseImageRecorderLoss")
-				skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
-				skip(ALL, "test", ALL, "GraphiteTextureProxyTest")
-				skip(ALL, "test", ALL, "GraphiteYUVAPromiseImageMultipleImgUses")
-				skip(ALL, "test", ALL, "GraphiteYUVAPromiseImageRecorderLoss")
-				skip(ALL, "test", ALL, "ImageOriginTest_drawImage_Graphite")
-				skip(ALL, "test", ALL, "ImageOriginTest_imageShader_Graphite")
-				skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Testing")
-				skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Default")
-				skip(ALL, "test", ALL, "MakeColorSpace_Test")
-				skip(ALL, "test", ALL, "ImageProviderTest")
-				skip(ALL, "test", ALL, "ImageShaderTest")
-				skip(ALL, "test", ALL, "MutableImagesTest")
-				skip(ALL, "test", ALL, "MultisampleRetainTest")
-				skip(ALL, "test", ALL, "NonVolatileGraphitePromiseImageTest")
-				skip(ALL, "test", ALL, "NonVolatileGraphiteYUVAPromiseImageTest")
-				skip(ALL, "test", ALL, "PaintParamsKeyTest")
-				skip(ALL, "test", ALL, "RecordingOrderTest_Graphite")
-				skip(ALL, "test", ALL, "RecordingSurfacesTestClear")
-				skip(ALL, "test", ALL, "ShaderTestNestedBlendsGraphite")
-				skip(ALL, "test", ALL, "SkRuntimeEffectSimple_Graphite")
-				skip(ALL, "test", ALL, "VolatileGraphiteYUVAPromiseImageTest")
-				skip(ALL, "test", ALL, "VolatileGraphitePromiseImageTest")
-				if b.matchOs("Android") {
-					// Currently broken on Android Vulkan (skbug.com/310180104)
-					skip(ALL, "test", ALL, "ImageAsyncReadPixelsGraphite")
-					skip(ALL, "test", ALL, "SurfaceAsyncReadPixelsGraphite")
+				if b.matchGpu("Adreno620") {
+					// The Dawn Pixel5 device job fails one compute test (b/318725123)
+					skip(ALL, "test", ALL, "Compute_AtomicOperationsOverArrayAndStructTest")
+				}
+			} else if b.extraConfig("Native") {
+				if b.extraConfig("Metal") {
+					configs = []string{"grmtl"}
+					if b.gpu("IntelIrisPlus") {
+						// We get some 27/255 RGB diffs on the 45 degree
+						// rotation case on this device (skbug.com/14408)
+						skip(ALL, "test", ALL, "BigImageTest_Graphite")
+					}
+				}
+				if b.extraConfig("Vulkan") {
+					configs = []string{"grvk"}
+					// Couldn't readback
+					skip(ALL, "gm", ALL, "aaxfermodes")
+					// Could not instantiate texture proxy for UploadTask!
+					skip(ALL, "test", ALL, "BigImageTest_Graphite")
+					// Test failures
+					skip(ALL, "test", ALL, "DeviceTestVertexTransparency")
+					skip(ALL, "test", ALL, "GraphitePromiseImageMultipleImgUses")
+					skip(ALL, "test", ALL, "GraphitePromiseImageRecorderLoss")
+					skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
+					skip(ALL, "test", ALL, "GraphiteTextureProxyTest")
+					skip(ALL, "test", ALL, "GraphiteYUVAPromiseImageMultipleImgUses")
+					skip(ALL, "test", ALL, "GraphiteYUVAPromiseImageRecorderLoss")
+					skip(ALL, "test", ALL, "ImageOriginTest_drawImage_Graphite")
+					skip(ALL, "test", ALL, "ImageOriginTest_imageShader_Graphite")
+					skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Testing")
+					skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Default")
+					skip(ALL, "test", ALL, "MakeColorSpace_Test")
+					skip(ALL, "test", ALL, "ImageProviderTest")
+					skip(ALL, "test", ALL, "ImageShaderTest")
+					skip(ALL, "test", ALL, "MutableImagesTest")
+					skip(ALL, "test", ALL, "MultisampleRetainTest")
+					skip(ALL, "test", ALL, "NonVolatileGraphitePromiseImageTest")
+					skip(ALL, "test", ALL, "NonVolatileGraphiteYUVAPromiseImageTest")
+					skip(ALL, "test", ALL, "PaintParamsKeyTest")
+					skip(ALL, "test", ALL, "RecordingOrderTest_Graphite")
+					skip(ALL, "test", ALL, "RecordingSurfacesTestClear")
+					skip(ALL, "test", ALL, "ShaderTestNestedBlendsGraphite")
+					skip(ALL, "test", ALL, "SkRuntimeEffectSimple_Graphite")
+					skip(ALL, "test", ALL, "VolatileGraphiteYUVAPromiseImageTest")
+					skip(ALL, "test", ALL, "VolatileGraphitePromiseImageTest")
+					if b.matchOs("Android") {
+						// Currently broken on Android Vulkan (skbug.com/310180104)
+						skip(ALL, "test", ALL, "ImageAsyncReadPixelsGraphite")
+						skip(ALL, "test", ALL, "SurfaceAsyncReadPixelsGraphite")
+					}
 				}
 			}
 		}
@@ -716,6 +844,14 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		removeFromArgs("tests")
 		removeFromArgs("image")
 		removeFromArgs("colorImage")
+	} else if b.extraConfig("Protected") {
+		// Currently the Protected jobs only run the unit tests
+		removeFromArgs("gm")
+		removeFromArgs("image")
+		removeFromArgs("lottie")
+		removeFromArgs("colorImage")
+		removeFromArgs("svg")
+		removeFromArgs("skp")
 	} else {
 		// No other tasks render the .skps.
 		removeFromArgs("skp")
@@ -1074,7 +1210,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	}
 
 	if b.matchOs("Mac") && (b.gpu("IntelIrisPlus") || b.gpu("IntelHD6000")) &&
-		(b.extraConfig("Metal") || b.extraConfig("Dawn")) {
+		b.extraConfig("Metal") {
 		// TODO(skia:296960708): The IntelIrisPlus+Metal config hangs on this test, but passes
 		// SurfaceContextWritePixelsMipped so let that one keep running.
 		skip(ALL, "tests", ALL, "SurfaceContextWritePixels")
@@ -1154,6 +1290,12 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.extraConfig("Vulkan") && b.gpu("Adreno530") {
 		// skia:5777
 		match = append(match, "~CopySurface")
+	}
+
+	// Pixel4XL on the tree is still on Android 10 (Q), and the vulkan drivers
+	// crash during this GM. It works correctly on newer versions of Android.
+	if b.extraConfig("Vulkan") && b.model("Pixel4XL") {
+		skip("vk", "gm", ALL, "custommesh_cs_uniforms")
 	}
 
 	if b.extraConfig("Vulkan") && b.matchGpu("Adreno") {
@@ -1292,6 +1434,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		match = append(match, "drawlines_with_local_matrix")
 		match = append(match, "gradients_interesting")
 		match = append(match, "manypathatlases_2048")
+		match = append(match, "custommesh_cs_uniforms")
 		match = append(match, "paint_alpha_normals_rt")
 		match = append(match, "runtimefunctions")
 		match = append(match, "savelayer_f16")
@@ -1318,13 +1461,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	// existing behavior, but we should verify that it's needed.
 	if b.model("Nexus5", "Nexus5x", "Nexus9", "JioNext") {
 		args = append(args, "--noRAW_threading")
-	}
-
-	if b.extraConfig("FSAA") {
-		args = append(args, "--analyticAA", "false")
-	}
-	if b.extraConfig("FAAA") {
-		args = append(args, "--forceAnalyticAA")
 	}
 
 	if b.extraConfig("NativeFonts") {
