@@ -10,11 +10,11 @@
 #include "include/core/SkColorSpace.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkKnownRuntimeEffects.h"
 #include "src/gpu/Blend.h"
 #include "src/gpu/graphite/BuiltInCodeSnippetID.h"
-#include "src/gpu/graphite/FactoryFunctionsPriv.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParams.h"
@@ -25,6 +25,7 @@
 #include "src/gpu/graphite/precompile/PrecompileBasePriv.h"
 #include "src/gpu/graphite/precompile/PrecompileBlenderPriv.h"
 #include "src/gpu/graphite/precompile/PrecompileShaderPriv.h"
+#include "src/gpu/graphite/precompile/PrecompileShadersPriv.h"
 
 namespace skgpu::graphite {
 
@@ -477,10 +478,11 @@ public:
 
 private:
     /*
-     * The gradients currently have two specializations based on the number of stops.
+     * The gradients currently have three specializations based on the number of stops.
      */
-    inline static constexpr int kNumStopVariants = 2;
-    inline static constexpr int kStopVariants[kNumStopVariants] = { 4, 8 };
+    inline static constexpr int kNumStopVariants = 3;
+    inline static constexpr int kStopVariants[kNumStopVariants] =
+            { 4, 8, GradientShaderBlocks::GradientData::kNumInternalStorageStops+1 };
 
     int numIntrinsicCombinations() const override {
         return kNumStopVariants;
@@ -495,7 +497,12 @@ private:
         SkASSERT(intrinsicCombination < kNumStopVariants);
         SkASSERT(childCombination == 0);
 
-        GradientShaderBlocks::GradientData gradData(fType, kStopVariants[intrinsicCombination]);
+        bool useStorageBuffer = keyContext.caps()->storageBufferSupport() &&
+                                keyContext.caps()->storageBufferPreferred();
+
+        GradientShaderBlocks::GradientData gradData(fType,
+                                                    kStopVariants[intrinsicCombination],
+                                                    useStorageBuffer);
 
         constexpr SkAlphaType kAlphaType = kPremul_SkAlphaType;
         ColorSpaceTransformBlock::ColorSpaceTransformData csData(sk_srgb_singleton(), kAlphaType,
@@ -539,9 +546,9 @@ sk_sp<PrecompileShader> PrecompileShaders::TwoPointConicalGradient() {
 
 //--------------------------------------------------------------------------------------------------
 // The PictureShader ultimately turns into an SkImageShader optionally wrapped in a
-// LocalMatrixShader. The PrecompileImageShader already captures that use case so just reuse it.
-// Note that this means each precompile PictureShader will add 24 combinations:
-//    2 (pictureshader LM) x 2 (imageShader LM) x 6 (imageShader variations)
+// LocalMatrixShader.
+// Note that this means each precompile PictureShader will add 12 combinations:
+//    2 (pictureshader LM) x 6 (imageShader variations)
 sk_sp<PrecompileShader> PrecompileShaders::Picture() {
     // Note: We don't need to consider the PrecompileYUVImageShader since the image
     // being drawn was created internally by Skia (as non-YUV).

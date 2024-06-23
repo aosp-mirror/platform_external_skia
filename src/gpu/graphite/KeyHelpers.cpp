@@ -75,7 +75,6 @@
 #include "src/shaders/SkTriColorShader.h"
 #include "src/shaders/SkWorkingColorSpaceShader.h"
 #include "src/shaders/gradients/SkConicalGradient.h"
-#include "src/shaders/gradients/SkGradientBaseShader.h"
 #include "src/shaders/gradients/SkLinearGradient.h"
 #include "src/shaders/gradients/SkRadialGradient.h"
 #include "src/shaders/gradients/SkSweepGradient.h"
@@ -154,7 +153,7 @@ void add_dst_read_sample_uniform_data(const ShaderCodeDictionary* dict,
                                       sk_sp<TextureProxy> dstTexture,
                                       SkIPoint dstOffset) {
     static const SkTileMode kTileModes[2] = {SkTileMode::kClamp, SkTileMode::kClamp};
-    gatherer->add(SkSamplingOptions(), kTileModes, dstTexture);
+    gatherer->add(dstTexture, {SkSamplingOptions(), kTileModes});
 
     VALIDATE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kDstReadSample)
 
@@ -314,33 +313,42 @@ void add_conical_gradient_uniform_data(const ShaderCodeDictionary* dict,
 static int write_color_and_offset_bufdata(int numStops,
                                            const SkPMColor4f* colors,
                                            const float* offsets,
+                                           const SkGradientBaseShader* shader,
                                            PipelineDataGatherer* gatherer) {
-    auto [dstData, bufferOffset] = gatherer->allocateGradientData(numStops * 5);
-    for (int i = 0; i < numStops; i++) {
-        SkColor4f unpremulColor = colors[i].unpremul();
+    auto [dstData, bufferOffset] = gatherer->allocateGradientData(numStops, shader);
+    if (dstData) {
+        // Data doesn't already exist so we need to write it.
+        for (int i = 0; i < numStops; i++) {
+            SkColor4f unpremulColor = colors[i].unpremul();
 
-        float offset = offsets ? offsets[i] : SkIntToFloat(i) / (numStops - 1);
-        SkASSERT(offset >= 0.0f && offset <= 1.0f);
+            float offset = offsets ? offsets[i] : SkIntToFloat(i) / (numStops - 1);
+            SkASSERT(offset >= 0.0f && offset <= 1.0f);
 
-        int dataIndex = i * 5;
-        dstData[dataIndex] = offset;
-        dstData[dataIndex + 1] = unpremulColor.fR;
-        dstData[dataIndex + 2] = unpremulColor.fG;
-        dstData[dataIndex + 3] = unpremulColor.fB;
-        dstData[dataIndex + 4] = unpremulColor.fA;
+            int dataIndex = i * 5;
+            dstData[dataIndex] = offset;
+            dstData[dataIndex + 1] = unpremulColor.fR;
+            dstData[dataIndex + 2] = unpremulColor.fG;
+            dstData[dataIndex + 3] = unpremulColor.fB;
+            dstData[dataIndex + 4] = unpremulColor.fA;
+        }
     }
 
     return bufferOffset;
 }
 
-GradientShaderBlocks::GradientData::GradientData(SkShaderBase::GradientType type, int numStops)
+GradientShaderBlocks::GradientData::GradientData(SkShaderBase::GradientType type,
+                                                 int numStops,
+                                                 bool useStorageBuffer)
         : fType(type)
         , fPoints{{0.0f, 0.0f}, {0.0f, 0.0f}}
         , fRadii{0.0f, 0.0f}
         , fBias(0.0f)
         , fScale(0.0f)
         , fTM(SkTileMode::kClamp)
-        , fNumStops(numStops) {
+        , fNumStops(numStops)
+        , fUseStorageBuffer(useStorageBuffer)
+        , fSrcColors(nullptr)
+        , fSrcOffsets(nullptr) {
     sk_bzero(fColors, sizeof(fColors));
     sk_bzero(fOffsets, sizeof(fOffsets));
 }
@@ -353,6 +361,7 @@ GradientShaderBlocks::GradientData::GradientData(SkShaderBase::GradientType type
                                                  int numStops,
                                                  const SkPMColor4f* colors,
                                                  const float* offsets,
+                                                 const SkGradientBaseShader* shader,
                                                  sk_sp<TextureProxy> colorsAndOffsetsProxy,
                                                  bool useStorageBuffer,
                                                  const SkGradientShader::Interpolation& interp)
@@ -364,6 +373,7 @@ GradientShaderBlocks::GradientData::GradientData(SkShaderBase::GradientType type
         , fUseStorageBuffer(useStorageBuffer)
         , fSrcColors(colors)
         , fSrcOffsets(offsets)
+        , fSrcShader(shader)
         , fInterpolation(interp) {
     SkASSERT(fNumStops >= 1);
 
@@ -404,17 +414,17 @@ void GradientShaderBlocks::AddBlock(const KeyContext& keyContext,
     auto dict = keyContext.dict();
 
     int bufferOffset = 0;
-    if (gradData.fNumStops > GradientData::kNumInternalStorageStops && gatherer) {
+    if (gradData.fNumStops > GradientData::kNumInternalStorageStops && keyContext.recorder()) {
         if (gradData.fUseStorageBuffer) {
             bufferOffset = write_color_and_offset_bufdata(gradData.fNumStops,
                                                           gradData.fSrcColors,
                                                           gradData.fSrcOffsets,
+                                                          gradData.fSrcShader,
                                                           gatherer);
         } else {
             SkASSERT(gradData.fColorsAndOffsetsProxy);
-
             static constexpr SkTileMode kClampTiling[2] = {SkTileMode::kClamp, SkTileMode::kClamp};
-            gatherer->add(SkFilterMode::kNearest, kClampTiling, gradData.fColorsAndOffsetsProxy);
+            gatherer->add(gradData.fColorsAndOffsetsProxy, {SkFilterMode::kNearest, kClampTiling});
         }
     }
 
@@ -626,6 +636,24 @@ void add_hw_image_uniform_data(const ShaderCodeDictionary* dict,
     add_color_space_uniforms(imgData.fSteps, imgData.fReadSwizzle, gatherer);
 }
 
+bool can_do_tiling_in_hw(const Caps* caps, const ImageShaderBlock::ImageData& imgData) {
+    if (!caps->clampToBorderSupport() && (imgData.fTileModes[0] == SkTileMode::kDecal ||
+                                          imgData.fTileModes[1] == SkTileMode::kDecal)) {
+        return false;
+    }
+    return imgData.fSubset.contains(SkRect::Make(imgData.fImgSize));
+}
+
+void add_sampler_data_to_key(PaintParamsKeyBuilder* builder, const SamplerDesc& samplerDesc) {
+    if (samplerDesc.isImmutable()) {
+        builder->addData({samplerDesc.asSpan()});
+    } else {
+        // Means we have a regular dynamic sampler for which no data needs to be appended. Call
+        // addData() regardless w/ an empty span such that a data legnth of '0' is added.
+        builder->addData({});
+    }
+}
+
 } // anonymous namespace
 
 ImageShaderBlock::ImageData::ImageData(const SkSamplingOptions& sampling,
@@ -642,14 +670,6 @@ ImageShaderBlock::ImageData::ImageData(const SkSamplingOptions& sampling,
     SkASSERT(fSteps.flags.mask() == 0);   // By default, the colorspace should have no effect
 }
 
-static bool can_do_tiling_in_hw(const Caps* caps, const ImageShaderBlock::ImageData& imgData) {
-    if (!caps->clampToBorderSupport() && (imgData.fTileModes[0] == SkTileMode::kDecal ||
-                                          imgData.fTileModes[1] == SkTileMode::kDecal)) {
-        return false;
-    }
-    return imgData.fSubset.contains(SkRect::Make(imgData.fImgSize));
-}
-
 void ImageShaderBlock::AddBlock(const KeyContext& keyContext,
                                 PaintParamsKeyBuilder* builder,
                                 PipelineDataGatherer* gatherer,
@@ -663,11 +683,6 @@ void ImageShaderBlock::AddBlock(const KeyContext& keyContext,
     const Caps* caps = keyContext.caps();
     const bool doTilingInHw = !imgData.fSampling.useCubic && can_do_tiling_in_hw(caps, imgData);
 
-    static constexpr SkTileMode kDefaultTileModes[2] = {SkTileMode::kClamp, SkTileMode::kClamp};
-    gatherer->add(imgData.fSampling,
-                  doTilingInHw ? imgData.fTileModes : kDefaultTileModes,
-                  imgData.fTextureProxy);
-
     if (doTilingInHw) {
         add_hw_image_uniform_data(keyContext.dict(), imgData, gatherer);
         builder->addBlock(BuiltInCodeSnippetID::kHWImageShader);
@@ -678,6 +693,17 @@ void ImageShaderBlock::AddBlock(const KeyContext& keyContext,
         add_image_uniform_data(keyContext.dict(), imgData, gatherer);
         builder->addBlock(BuiltInCodeSnippetID::kImageShader);
     }
+
+    static constexpr SkTileMode kDefaultTileModes[2] = {SkTileMode::kClamp, SkTileMode::kClamp};
+
+    // Image shaders must append immutable sampler data (or '0' in the more common case where
+    // regular samplers are used).
+    ImmutableSamplerInfo info = caps->getImmutableSamplerInfo(imgData.fTextureProxy.get());
+    SamplerDesc samplerDesc {imgData.fSampling,
+                             doTilingInHw ? imgData.fTileModes : kDefaultTileModes,
+                             info};
+    gatherer->add(imgData.fTextureProxy, samplerDesc);
+    add_sampler_data_to_key(builder, samplerDesc);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -703,7 +729,7 @@ void add_yuv_image_uniform_data(const ShaderCodeDictionary* dict,
         gatherer->writeHalf(imgData.fChannelSelect[i]);
     }
     gatherer->writeHalf(imgData.fYUVtoRGBMatrix);
-    gatherer->write(imgData.fYUVtoRGBTranslate);
+    gatherer->writeHalf(imgData.fYUVtoRGBTranslate);
 }
 
 void add_cubic_yuv_image_uniform_data(const ShaderCodeDictionary* dict,
@@ -723,7 +749,7 @@ void add_cubic_yuv_image_uniform_data(const ShaderCodeDictionary* dict,
         gatherer->writeHalf(imgData.fChannelSelect[i]);
     }
     gatherer->writeHalf(imgData.fYUVtoRGBMatrix);
-    gatherer->write(imgData.fYUVtoRGBTranslate);
+    gatherer->writeHalf(imgData.fYUVtoRGBTranslate);
 }
 
 void add_hw_yuv_image_uniform_data(const ShaderCodeDictionary* dict,
@@ -737,7 +763,7 @@ void add_hw_yuv_image_uniform_data(const ShaderCodeDictionary* dict,
         gatherer->writeHalf(imgData.fChannelSelect[i]);
     }
     gatherer->writeHalf(imgData.fYUVtoRGBMatrix);
-    gatherer->write(imgData.fYUVtoRGBTranslate);
+    gatherer->writeHalf(imgData.fYUVtoRGBTranslate);
 }
 
 } // anonymous namespace
@@ -793,10 +819,10 @@ void YUVImageShaderBlock::AddBlock(const KeyContext& keyContext,
                                           ? SkTileMode::kClamp : imgData.fTileModes[0],
                                   imgData.fTileModes[1] == SkTileMode::kDecal
                                           ? SkTileMode::kClamp : imgData.fTileModes[1] };
-    gatherer->add(imgData.fSampling, imgData.fTileModes, imgData.fTextureProxies[0]);
-    gatherer->add(imgData.fSamplingUV, uvTileModes, imgData.fTextureProxies[1]);
-    gatherer->add(imgData.fSamplingUV, uvTileModes, imgData.fTextureProxies[2]);
-    gatherer->add(imgData.fSampling, imgData.fTileModes, imgData.fTextureProxies[3]);
+    gatherer->add(imgData.fTextureProxies[0], {imgData.fSampling, imgData.fTileModes});
+    gatherer->add(imgData.fTextureProxies[1], {imgData.fSamplingUV, uvTileModes});
+    gatherer->add(imgData.fTextureProxies[2], {imgData.fSamplingUV, uvTileModes});
+    gatherer->add(imgData.fTextureProxies[3], {imgData.fSampling, imgData.fTileModes});
 
     if (doTilingInHw) {
         add_hw_yuv_image_uniform_data(keyContext.dict(), imgData, gatherer);
@@ -857,7 +883,7 @@ void DitherShaderBlock::AddBlock(const KeyContext& keyContext,
     static constexpr SkTileMode kRepeatTiling[2] = { SkTileMode::kRepeat, SkTileMode::kRepeat };
 
     SkASSERT(data.fLUTProxy || !keyContext.recorder());
-    gatherer->add(kNearest, kRepeatTiling, data.fLUTProxy);
+    gatherer->add(data.fLUTProxy, {kNearest, kRepeatTiling});
 
     builder->addBlock(BuiltInCodeSnippetID::kDitherShader);
 }
@@ -880,8 +906,8 @@ void add_perlin_noise_uniform_data(const ShaderCodeDictionary* dict,
     static const SkTileMode kRepeatXTileModes[2] = { SkTileMode::kRepeat, SkTileMode::kClamp };
     static const SkSamplingOptions kNearestSampling { SkFilterMode::kNearest };
 
-    gatherer->add(kNearestSampling, kRepeatXTileModes, noiseData.fPermutationsProxy);
-    gatherer->add(kNearestSampling, kRepeatXTileModes, noiseData.fNoiseProxy);
+    gatherer->add(noiseData.fPermutationsProxy, {kNearestSampling, kRepeatXTileModes});
+    gatherer->add(noiseData.fNoiseProxy, {kNearestSampling, kRepeatXTileModes});
 }
 
 } // anonymous namespace
@@ -983,7 +1009,7 @@ void add_table_colorfilter_uniform_data(const ShaderCodeDictionary* dict,
     VALIDATE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kTableColorFilter)
 
     static const SkTileMode kTileModes[2] = { SkTileMode::kClamp, SkTileMode::kClamp };
-    gatherer->add(SkSamplingOptions(), kTileModes, data.fTextureProxy);
+    gatherer->add(data.fTextureProxy, {SkSamplingOptions(), kTileModes});
 }
 
 } // anonymous namespace
@@ -2251,7 +2277,7 @@ static void add_gradient_to_key(const KeyContext& keyContext,
     sk_sp<TextureProxy> proxy;
 
     bool useStorageBuffer = keyContext.caps()->storageBufferSupport() &&
-                                keyContext.caps()->storageBufferPreferred();
+                            keyContext.caps()->storageBufferPreferred();
     if (colorCount > GradientShaderBlocks::GradientData::kNumInternalStorageStops
             && !useStorageBuffer) {
         if (shader->cachedBitmap().empty()) {
@@ -2285,6 +2311,7 @@ static void add_gradient_to_key(const KeyContext& keyContext,
                                             colorCount,
                                             colors,
                                             positions,
+                                            shader,
                                             std::move(proxy),
                                             useStorageBuffer,
                                             shader->getInterpolation());
