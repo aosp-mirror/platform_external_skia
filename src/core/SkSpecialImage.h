@@ -60,7 +60,11 @@ public:
 
     uint32_t uniqueID() const { return fUniqueID; }
 
+    virtual SkISize backingStoreDimensions() const = 0;
+
     virtual size_t getSize() const = 0;
+
+    bool isExactFit() const { return fSubset == SkIRect::MakeSize(this->backingStoreDimensions()); }
 
     const SkColorInfo& colorInfo() const { return fColorInfo; }
     SkAlphaType alphaType() const { return fColorInfo.alphaType(); }
@@ -86,7 +90,15 @@ public:
      */
     sk_sp<SkSpecialImage> makeSubset(const SkIRect& subset) const {
         SkIRect absolute = subset.makeOffset(this->subset().topLeft());
-        return this->onMakeSubset(absolute);
+        return this->onMakeBackingStoreSubset(absolute);
+    }
+
+    /**
+     * Return a special image with a 1px larger subset in the backing store compared to this image.
+     * This should only be used when it's externally known that those outer pixels are valid.
+     */
+    sk_sp<SkSpecialImage> makePixelOutset() const {
+        return this->onMakeBackingStoreSubset(this->subset().makeOutset(1, 1));
     }
 
     /**
@@ -102,14 +114,17 @@ public:
     /**
      * Create an SkShader that samples the contents of this special image, applying tile mode for
      * any sample that falls outside its internal subset.
+     *
+     * 'strict' defaults to true and applies shader-based tiling to the subset. If the subset is
+     * the same as the backing store dimensions, it is automatically degraded to non-strict
+     * (HW tiling and sampling). 'strict' can be set to false if it's known that the subset
+     * boundaries aren't visible AND the texel data in adjacent rows/cols is valid to be included
+     * by the given sampling options.
      */
-    sk_sp<SkShader> asShader(SkTileMode, const SkSamplingOptions&, const SkMatrix& lm) const;
-    /**
-     * Create an SkShader that samples the contents of this special image, assuming that the
-     * coords it's evaluated at will not access pixels beyond its subset
-     * (i.e., non-strict sampling).
-     */
-    sk_sp<SkShader> asShaderFast(const SkSamplingOptions& sampling, const SkMatrix& lm) const;
+    virtual sk_sp<SkShader> asShader(SkTileMode,
+                                     const SkSamplingOptions&,
+                                     const SkMatrix& lm,
+                                     bool strict=true) const;
 
     /**
      *  If the SpecialImage is backed by a gpu texture, return true.
@@ -129,14 +144,9 @@ protected:
                    const SkSurfaceProps&);
 
     // This subset is relative to the backing store's coordinate frame, it has already been mapped
-    // from the content rect by the non-virtual makeSubset().
-    virtual sk_sp<SkSpecialImage> onMakeSubset(const SkIRect& subset) const = 0;
-
-    // The default implementation calls `asImage()` or `SkImageShader::MakeSubset` based on `strict`
-    virtual sk_sp<SkShader> onAsShader(SkTileMode,
-                                       const SkSamplingOptions&,
-                                       const SkMatrix&,
-                                       bool strict) const;
+    // from the content rect by the non-virtual makeSubset(). The provided 'subset' is not
+    // necessarily contained within this special image's subset.
+    virtual sk_sp<SkSpecialImage> onMakeBackingStoreSubset(const SkIRect& subset) const = 0;
 
 private:
     const SkIRect        fSubset;

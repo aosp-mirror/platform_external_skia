@@ -58,7 +58,7 @@ skia_graphite_sources = [
   "$_src/ContextUtils.h",
   "$_src/CopyTask.cpp",
   "$_src/CopyTask.h",
-  "$_src/DescriptorTypes.h",
+  "$_src/DescriptorData.h",
   "$_src/Device.cpp",
   "$_src/Device.h",
   "$_src/DrawAtlas.cpp",
@@ -111,6 +111,8 @@ skia_graphite_sources = [
   "$_src/QueueManager.h",
   "$_src/RasterPathAtlas.cpp",
   "$_src/RasterPathAtlas.h",
+  "$_src/RasterPathUtils.cpp",
+  "$_src/RasterPathUtils.h",
   "$_src/ReadSwizzle.h",
   "$_src/Recorder.cpp",
   "$_src/RecorderPriv.h",
@@ -137,6 +139,8 @@ skia_graphite_sources = [
   "$_src/ShaderCodeDictionary.h",
   "$_src/SharedContext.cpp",
   "$_src/SharedContext.h",
+  "$_src/SmallPathAtlas.cpp",
+  "$_src/SmallPathAtlas.h",
   "$_src/SpecialImage_Graphite.cpp",
   "$_src/Surface_Graphite.cpp",
   "$_src/Surface_Graphite.h",
@@ -208,6 +212,11 @@ skia_graphite_sources = [
   "$_src/render/VerticesRenderStep.h",
   "$_src/text/TextAtlasManager.cpp",
   "$_src/text/TextAtlasManager.h",
+]
+
+skia_graphite_android_private = [
+  "$_src/surface/Surface_AndroidFactories.cpp",
+  "$_include/android/graphite/SurfaceAndroid.h",
 ]
 
 skia_graphite_dawn_public = [

@@ -30,8 +30,14 @@
 #include <new>
 
 using namespace skia_private;
+using namespace SkKnownRuntimeEffects;
 
 namespace skgpu::graphite {
+
+static constexpr int kNoChildren = 0;
+static constexpr char kRuntimeShaderName[] = "RuntimeEffect";
+
+static_assert(static_cast<int>(BuiltInCodeSnippetID::kLast) < kSkiaBuiltInReservedCnt);
 
 namespace {
 
@@ -214,7 +220,8 @@ void append_color_output(std::string* mainBody,
 
 // The current, incomplete, model for shader construction is:
 //   - Static code snippets (which can have an arbitrary signature) live in the Graphite
-//     pre-compiled module, which is located at `src/sksl/sksl_graphite_frag.sksl`.
+//     pre-compiled modules, which are located at `src/sksl/sksl_graphite_frag.sksl` and
+//     `src/sksl/sksl_graphite_frag_es2.sksl`.
 //   - Glue code is generated in a `main` method which calls these static code snippets.
 //     The glue code is responsible for:
 //            1) gathering the correct (mangled) uniforms
@@ -314,6 +321,10 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
         mainBody += step->fragmentColorSkSL();
     }
 
+    // While looping through root nodes to emit shader code, skip the clip shader node if it's found
+    // and keep it to apply later during coverage calculation.
+    const ShaderNode* clipShaderNode = nullptr;
+
     // Emit shader main body code, invoking each root node's expression, forwarding the previous
     // node's output to the next.
     static constexpr char kUnusedDstColor[] = "half4(1)";
@@ -322,6 +333,11 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
                                 kUnusedDstColor,
                                 this->needsLocalCoords() ? "localCoordsVar" : kUnusedLocalCoords};
     for (const ShaderNode* node : fRootNodes) {
+        if (node->codeSnippetId() == (int) BuiltInCodeSnippetID::kClipShader) {
+            SkASSERT(!clipShaderNode);
+            clipShaderNode = node;
+            continue;
+        }
         // This exclusion of the final Blend can be removed once we've resolved the final
         // blend parenting issue w/in the key
         if (node->codeSnippetId() >= kBuiltInCodeSnippetIDCount ||
@@ -338,7 +354,7 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
 
     const char* outColor = args.fPriorStageOutput.c_str();
     const Coverage coverage = step->coverage();
-    if (coverage != Coverage::kNone) {
+    if (coverage != Coverage::kNone || clipShaderNode) {
         if (useStepStorageBuffer) {
             SkSL::String::appendf(&mainBody,
                                   "uint stepSsboIndex = %s.x;\n",
@@ -346,8 +362,14 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
             mainBody += EmitUniformsFromStorageBuffer("step", "stepSsboIndex", step->uniforms());
         }
 
-        mainBody += "half4 outputCoverage;";
+        mainBody += "half4 outputCoverage = half4(1);";
         mainBody += step->fragmentCoverageSkSL();
+
+        if (clipShaderNode) {
+            std::string clipShaderOutput =
+                    emit_glue_code_for_entry(*this, clipShaderNode, args, &mainBody);
+            SkSL::String::appendf(&mainBody, "outputCoverage *= %s.a;", clipShaderOutput.c_str());
+        }
 
         // TODO: Determine whether draw is opaque and pass that to GetBlendFormula.
         BlendFormula coverageBlendFormula =
@@ -468,9 +490,25 @@ const ShaderSnippet* ShaderCodeDictionary::getEntry(int codeSnippetID) const {
         return &fBuiltInCodeSnippets[codeSnippetID];
     }
 
-    int userDefinedCodeSnippetID = codeSnippetID - kBuiltInCodeSnippetIDCount;
-    if (userDefinedCodeSnippetID < SkTo<int>(fUserDefinedCodeSnippets.size())) {
-        return fUserDefinedCodeSnippets[userDefinedCodeSnippetID].get();
+    SkAutoSpinlock lock{fSpinLock};
+
+    if (codeSnippetID >= kSkiaKnownRuntimeEffectsStart &&
+        codeSnippetID < kSkiaKnownRuntimeEffectsStart + kStableKeyCnt) {
+        int knownRTECodeSnippetID = codeSnippetID - kSkiaKnownRuntimeEffectsStart;
+
+        // TODO(b/238759147): if the snippet hasn't been initialized, get the SkRuntimeEffect and
+        // initialize it here
+        SkASSERT(fKnownRuntimeEffectCodeSnippets[knownRTECodeSnippetID].fPreambleGenerator);
+        return &fKnownRuntimeEffectCodeSnippets[knownRTECodeSnippetID];
+    }
+
+    // TODO(b/238759147): handle Android and chrome known runtime effects
+
+    if (codeSnippetID >= kUnknownRuntimeEffectIDStart) {
+        int userDefinedCodeSnippetID = codeSnippetID - kUnknownRuntimeEffectIDStart;
+        if (userDefinedCodeSnippetID < SkTo<int>(fUserDefinedCodeSnippets.size())) {
+            return fUserDefinedCodeSnippets[userDefinedCodeSnippetID].get();
+        }
     }
 
     return nullptr;
@@ -615,8 +653,6 @@ static constexpr TextureAndSampler kDstReadSampleTexturesAndSamplers[] = {
         {"dstSampler"},
 };
 
-// Call a function from the preamble which initializes the dst color and passes through the prior
-// stage output without modification.
 std::string GenerateDstReadSampleExpression(const ShaderInfo& shaderInfo,
                                             const ShaderNode* node,
                                             const ShaderSnippet::Args& args) {
@@ -667,6 +703,24 @@ std::string GenerateDstReadFetchPreamble(const ShaderInfo& shaderInfo, const Sha
                 "return surfaceColor;"
             "}",
             helperFnName.c_str());
+}
+
+//--------------------------------------------------------------------------------------------------
+static constexpr int kNumClipShaderChildren = 1;
+
+std::string GenerateClipShaderExpression(const ShaderInfo& shaderInfo,
+                                         const ShaderNode* node,
+                                         const ShaderSnippet::Args& args) {
+    SkASSERT(node->numChildren() == kNumClipShaderChildren);
+    static constexpr char kUnusedSrcColor[] = "half4(1)";
+    static constexpr char kUnusedDstColor[] = "half4(1)";
+    return emit_expression_for_entry(
+            shaderInfo, node->child(0), {kUnusedSrcColor, kUnusedDstColor, "sk_FragCoord.xy"});
+}
+
+std::string GenerateClipShaderPreamble(const ShaderInfo& shaderInfo, const ShaderNode* node) {
+    // No preamble is used for clip shaders. The child shader is called directly with sk_FragCoord.
+    return "";
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -818,10 +872,7 @@ static constexpr Uniform kSolidShaderUniforms[] = {
 static constexpr char kSolidShaderName[] = "sk_solid_shader";
 
 //--------------------------------------------------------------------------------------------------
-static constexpr Uniform kPaintColorUniforms[] = {
-        { "paintColorSingleton", SkSLType::kFloat4, Uniform::kNonArray,
-          Uniform::IsPaintColor::kYes }
-};
+static constexpr Uniform kPaintColorUniforms[] = { Uniform::PaintColor() };
 
 static constexpr char kRGBPaintColorName[] = "sk_rgb_opaque";
 static constexpr char kAlphaOnlyPaintColorName[] = "sk_alpha_only";
@@ -1096,8 +1147,6 @@ std::string GenerateBlendShaderPreamble(const ShaderInfo& shaderInfo,
 }
 
 //--------------------------------------------------------------------------------------------------
-static constexpr char kRuntimeShaderName[] = "RuntimeEffect";
-
 class GraphitePipelineCallbacks : public SkSL::PipelineStage::Callbacks {
 public:
     GraphitePipelineCallbacks(const ShaderInfo& shaderInfo,
@@ -1179,9 +1228,15 @@ std::string GenerateRuntimeShaderPreamble(const ShaderInfo& shaderInfo,
                                           const ShaderNode* node) {
     // Find this runtime effect in the runtime-effect dictionary.
     SkASSERT(node->codeSnippetId() >= kBuiltInCodeSnippetIDCount);
-    const SkRuntimeEffect* effect =
-            shaderInfo.runtimeEffectDictionary()->find(node->codeSnippetId());
+    const SkRuntimeEffect* effect;
+    if (node->codeSnippetId() < kSkiaKnownRuntimeEffectsStart + kStableKeyCnt) {
+        effect = GetKnownRuntimeEffect(static_cast<StableKey>(node->codeSnippetId()));
+    } else {
+        SkASSERT(node->codeSnippetId() >= kUnknownRuntimeEffectIDStart);
+        effect = shaderInfo.runtimeEffectDictionary()->find(node->codeSnippetId());
+    }
     SkASSERT(effect);
+
     const SkSL::Program& program = SkRuntimeEffectPriv::Program(*effect);
 
     std::string preamble;
@@ -1303,6 +1358,7 @@ std::string GeneratePrimitiveColorExpression(const ShaderInfo&,
 
 } // anonymous namespace
 
+#if defined(SK_DEBUG)
 bool ShaderCodeDictionary::isValidID(int snippetID) const {
     if (snippetID < 0) {
         return false;
@@ -1311,48 +1367,40 @@ bool ShaderCodeDictionary::isValidID(int snippetID) const {
     if (snippetID < kBuiltInCodeSnippetIDCount) {
         return true;
     }
+    if (snippetID >= kSkiaKnownRuntimeEffectsStart && snippetID < kSkiaKnownRuntimeEffectsEnd) {
+        return snippetID < kSkiaKnownRuntimeEffectsStart + kStableKeyCnt;
+    }
 
-    int userDefinedCodeSnippetID = snippetID - kBuiltInCodeSnippetIDCount;
-    return userDefinedCodeSnippetID < SkTo<int>(fUserDefinedCodeSnippets.size());
+    SkAutoSpinlock lock{fSpinLock};
+
+    if (snippetID >= kUnknownRuntimeEffectIDStart) {
+        int userDefinedCodeSnippetID = snippetID - kUnknownRuntimeEffectIDStart;
+        return userDefinedCodeSnippetID < SkTo<int>(fUserDefinedCodeSnippets.size());
+    }
+
+    return false;
+}
+#endif
+
+#if defined(GRAPHITE_TEST_UTILS)
+
+int ShaderCodeDictionary::addRuntimeEffectSnippet(const char* functionName) {
+    SkAutoSpinlock lock{fSpinLock};
+
+    fUserDefinedCodeSnippets.push_back(
+            std::make_unique<ShaderSnippet>("UserDefined",
+                                            SkSpan<const Uniform>(),            // no uniforms
+                                            SnippetRequirementFlags::kNone,
+                                            SkSpan<const TextureAndSampler>(),  // no samplers
+                                            functionName,
+                                            GenerateDefaultExpression,
+                                            GenerateDefaultPreamble,
+                                            kNoChildren));
+
+    return kUnknownRuntimeEffectIDStart + fUserDefinedCodeSnippets.size() - 1;
 }
 
-static constexpr int kNoChildren = 0;
-
-int ShaderCodeDictionary::addUserDefinedSnippet(
-        const char* name,
-        SkSpan<const Uniform> uniforms,
-        SkEnumBitMask<SnippetRequirementFlags> snippetRequirementFlags,
-        SkSpan<const TextureAndSampler> texturesAndSamplers,
-        const char* functionName,
-        ShaderSnippet::GenerateExpressionForSnippetFn expressionGenerator,
-        ShaderSnippet::GeneratePreambleForSnippetFn preambleGenerator,
-        int numChildren) {
-    // TODO: the memory for user-defined entries could go in the dictionary's arena but that
-    // would have to be a thread safe allocation since the arena also stores entries for
-    // 'fHash' and 'fEntryVector'
-    fUserDefinedCodeSnippets.push_back(std::make_unique<ShaderSnippet>(name,
-                                                                       uniforms,
-                                                                       snippetRequirementFlags,
-                                                                       texturesAndSamplers,
-                                                                       functionName,
-                                                                       expressionGenerator,
-                                                                       preambleGenerator,
-                                                                       numChildren));
-
-    return kBuiltInCodeSnippetIDCount + fUserDefinedCodeSnippets.size() - 1;
-}
-
-// TODO: this version needs to be removed
-int ShaderCodeDictionary::addUserDefinedSnippet(const char* name) {
-    return this->addUserDefinedSnippet("UserDefined",
-                                       {},  // no uniforms
-                                       SnippetRequirementFlags::kNone,
-                                       {},  // no samplers
-                                       name,
-                                       GenerateDefaultExpression,
-                                       GenerateDefaultPreamble,
-                                       kNoChildren);
-}
+#endif // GRAPHITE_TEST_UTILS
 
 static SkSLType uniform_type_to_sksl_type(const SkRuntimeEffect::Uniform& u) {
     using Type = SkRuntimeEffect::Uniform::Type;
@@ -1365,10 +1413,12 @@ static SkSLType uniform_type_to_sksl_type(const SkRuntimeEffect::Uniform& u) {
             case Type::kFloat2x2: return SkSLType::kHalf2x2;
             case Type::kFloat3x3: return SkSLType::kHalf3x3;
             case Type::kFloat4x4: return SkSLType::kHalf4x4;
-            case Type::kInt:      return SkSLType::kShort;
-            case Type::kInt2:     return SkSLType::kShort2;
-            case Type::kInt3:     return SkSLType::kShort3;
-            case Type::kInt4:     return SkSLType::kShort4;
+            // NOTE: shorts cannot be uniforms, so we shouldn't ever get here.
+            // Defensively return the full precision integer type.
+            case Type::kInt:      SkDEBUGFAIL("unsupported uniform type"); return SkSLType::kInt;
+            case Type::kInt2:     SkDEBUGFAIL("unsupported uniform type"); return SkSLType::kInt2;
+            case Type::kInt3:     SkDEBUGFAIL("unsupported uniform type"); return SkSLType::kInt3;
+            case Type::kInt4:     SkDEBUGFAIL("unsupported uniform type"); return SkSLType::kInt4;
         }
     } else {
         switch (u.type) {
@@ -1420,20 +1470,6 @@ SkSpan<const Uniform> ShaderCodeDictionary::convertUniforms(const SkRuntimeEffec
 }
 
 int ShaderCodeDictionary::findOrCreateRuntimeEffectSnippet(const SkRuntimeEffect* effect) {
-    // Use the combination of {SkSL program hash, uniform size} as our key.
-    // In the unfortunate event of a hash collision, at least we'll have the right amount of
-    // uniform data available.
-    RuntimeEffectKey key;
-    key.fHash = SkRuntimeEffectPriv::Hash(*effect);
-    key.fUniformSize = effect->uniformSize();
-
-    SkAutoSpinlock lock{fSpinLock};
-
-    int32_t* existingCodeSnippetID = fRuntimeEffectMap.find(key);
-    if (existingCodeSnippetID) {
-        return *existingCodeSnippetID;
-    }
-
     SkEnumBitMask<SnippetRequirementFlags> snippetFlags = SnippetRequirementFlags::kNone;
     if (effect->allowShader()) {
         snippetFlags |= SnippetRequirementFlags::kLocalCoords;
@@ -1441,14 +1477,57 @@ int ShaderCodeDictionary::findOrCreateRuntimeEffectSnippet(const SkRuntimeEffect
     if (effect->allowBlender()) {
         snippetFlags |= SnippetRequirementFlags::kBlenderDstColor;
     }
-    int newCodeSnippetID = this->addUserDefinedSnippet("RuntimeEffect",
-                                                       this->convertUniforms(effect),
-                                                       snippetFlags,
-                                                       /*texturesAndSamplers=*/{},
-                                                       kRuntimeShaderName,
-                                                       GenerateRuntimeShaderExpression,
-                                                       GenerateRuntimeShaderPreamble,
-                                                       (int)effect->children().size());
+
+    SkAutoSpinlock lock{fSpinLock};
+
+    if (int stableKey = SkRuntimeEffectPriv::StableKey(*effect)) {
+        SkASSERT(stableKey >= kSkiaKnownRuntimeEffectsStart &&
+                 stableKey < kSkiaKnownRuntimeEffectsStart + kStableKeyCnt);
+
+        int index = stableKey - kSkiaKnownRuntimeEffectsStart;
+
+        if (!fKnownRuntimeEffectCodeSnippets[index].fExpressionGenerator) {
+            fKnownRuntimeEffectCodeSnippets[index] = ShaderSnippet(
+                    "KnownRuntimeEffect",
+                    this->convertUniforms(effect),
+                    snippetFlags,
+                    /* texturesAndSamplers= */ {},
+                    "KnownRuntimeEffect",
+                    GenerateRuntimeShaderExpression,
+                    GenerateRuntimeShaderPreamble,
+                    (int)effect->children().size());
+        }
+
+        return stableKey;
+    }
+
+    // Use the combination of {SkSL program hash, uniform size} as our key.
+    // In the unfortunate event of a hash collision, at least we'll have the right amount of
+    // uniform data available.
+    RuntimeEffectKey key;
+    key.fHash = SkRuntimeEffectPriv::Hash(*effect);
+    key.fUniformSize = effect->uniformSize();
+
+    int32_t* existingCodeSnippetID = fRuntimeEffectMap.find(key);
+    if (existingCodeSnippetID) {
+        return *existingCodeSnippetID;
+    }
+
+    // TODO: the memory for user-defined entries could go in the dictionary's arena but that
+    // would have to be a thread safe allocation since the arena also stores entries for
+    // 'fHash' and 'fEntryVector'
+    fUserDefinedCodeSnippets.push_back(
+        std::make_unique<ShaderSnippet>("RuntimeEffect",
+                                        this->convertUniforms(effect),
+                                        snippetFlags,
+                                        /* texturesAndSamplers= */SkSpan<const TextureAndSampler>(),
+                                        kRuntimeShaderName,
+                                        GenerateRuntimeShaderExpression,
+                                        GenerateRuntimeShaderPreamble,
+                                        (int)effect->children().size()));
+
+    int newCodeSnippetID = kUnknownRuntimeEffectIDStart + fUserDefinedCodeSnippets.size() - 1;
+
     fRuntimeEffectMap.set(key, newCodeSnippetID);
     return newCodeSnippetID;
 }
@@ -1822,6 +1901,18 @@ ShaderCodeDictionary::ShaderCodeDictionary() {
             GenerateDstReadFetchPreamble,
             kNoChildren
     };
+
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kClipShader] = {
+            "ClipShader",
+            { },            // no uniforms
+            SnippetRequirementFlags::kNone,
+            { },            // no samplers
+            "clip shader",  // no static sksl
+            GenerateClipShaderExpression,
+            GenerateClipShaderPreamble,
+            kNumClipShaderChildren
+    };
+
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCompose] = {
             "Compose",
             { },     // no uniforms

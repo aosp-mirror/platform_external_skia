@@ -22,8 +22,7 @@
 
 namespace skiatest::graphite {
 
-std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(
-        std::optional<wgpu::BackendType> backend) {
+std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType backend) {
     static std::unique_ptr<dawn::native::Instance> sInstance;
     static SkOnce sOnce;
 
@@ -63,29 +62,15 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(
                          std::tuple(propB.adapterType, propB.backendType);
               });
 
-    if (backend.has_value()) {
-        for (const auto& adapter : adapters) {
-            wgpu::AdapterProperties props;
-            adapter.GetProperties(&props);
-            if (backend.value() == props.backendType) {
-                matchedAdaptor = adapter;
-                break;
-            }
-        }
-    } else {
-        for (const auto& adapter : adapters) {
-            wgpu::AdapterProperties props;
-            adapter.GetProperties(&props);
-            // We never want a null/undefined backend.
-            // Skip Dawn D3D11 backend for now.
-            if (props.backendType != wgpu::BackendType::Null &&
-                props.backendType != wgpu::BackendType::Undefined &&
-                props.backendType != wgpu::BackendType::D3D11) {
-                matchedAdaptor = adapter;
-                break;
-            }
+    for (const auto& adapter : adapters) {
+        wgpu::AdapterProperties props;
+        adapter.GetProperties(&props);
+        if (backend == props.backendType) {
+            matchedAdaptor = adapter;
+            break;
         }
     }
+
     if (!matchedAdaptor) {
         return nullptr;
     }
@@ -113,6 +98,9 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(
     if (adapter.HasFeature(wgpu::FeatureName::FramebufferFetch)) {
         features.push_back(wgpu::FeatureName::FramebufferFetch);
     }
+    if (adapter.HasFeature(wgpu::FeatureName::BufferMapExtendedUsages)) {
+        features.push_back(wgpu::FeatureName::BufferMapExtendedUsages);
+    }
 
     wgpu::DeviceDescriptor desc;
     desc.requiredFeatureCount  = features.size();
@@ -135,6 +123,7 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(
             /*userdata=*/nullptr);
 
     skgpu::graphite::DawnBackendContext backendContext;
+    backendContext.fInstance = wgpu::Instance(sInstance->Get());
     backendContext.fDevice = device;
     backendContext.fQueue  = device.GetQueue();
     return std::unique_ptr<GraphiteTestContext>(new DawnTestContext(backendContext));
@@ -161,10 +150,9 @@ skgpu::ContextType DawnTestContext::contextType() {
 
         case wgpu::BackendType::OpenGLES:
             return skgpu::ContextType::kDawn_OpenGLES;
-
         default:
-            SkDEBUGFAIL("unexpected Dawn backend");
-            return skgpu::ContextType::kDawn;
+            SK_ABORT("unexpected Dawn backend");
+            return skgpu::ContextType::kMock;
     }
 }
 
@@ -185,6 +173,6 @@ std::unique_ptr<skgpu::graphite::Context> DawnTestContext::makeContext(const Tes
     return skgpu::graphite::ContextFactory::MakeDawn(backendContext, revisedContextOptions);
 }
 
-void DawnTestContext::tick() { fBackendContext.fTick(fBackendContext.fDevice); }
+void DawnTestContext::tick() { fBackendContext.fTick(fBackendContext.fInstance); }
 
 }  // namespace skiatest::graphite

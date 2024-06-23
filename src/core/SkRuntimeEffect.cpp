@@ -46,7 +46,6 @@
 #include "src/sksl/SkSLDefines.h"
 #include "src/sksl/SkSLProgramKind.h"
 #include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/analysis/SkSLProgramUsage.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "src/sksl/codegen/SkSLRasterPipelineCodeGenerator.h"
@@ -225,7 +224,7 @@ const SkSL::RP::Program* SkRuntimeEffect::getRPProgram(SkSL::DebugTracePriv* deb
         // no additional compilation occurring, so we need to manually inline here if we want the
         // performance boost of inlining.
         if (!(fFlags & kDisableOptimization_Flag)) {
-            SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Standalone());
+            SkSL::Compiler compiler;
             fBaseProgram->fConfig->fSettings.fInlineThreshold = SkSL::kDefaultInlineThreshold;
             compiler.runInliner(*fBaseProgram);
         }
@@ -468,7 +467,7 @@ SkSL::ProgramSettings SkRuntimeEffect::MakeSettings(const Options& options) {
 SkRuntimeEffect::Result SkRuntimeEffect::MakeFromSource(SkString sksl,
                                                         const Options& options,
                                                         SkSL::ProgramKind kind) {
-    SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Standalone());
+    SkSL::Compiler compiler;
     SkSL::ProgramSettings settings = MakeSettings(options);
     std::unique_ptr<SkSL::Program> program =
             compiler.convertProgram(kind, std::string(sksl.c_str(), sksl.size()), settings);
@@ -483,7 +482,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeFromSource(SkString sksl,
 SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Program> program,
                                                       const Options& options,
                                                       SkSL::ProgramKind kind) {
-    SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Standalone());
+    SkSL::Compiler compiler;
 
     uint32_t flags = 0;
     switch (kind) {
@@ -491,7 +490,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
         case SkSL::ProgramKind::kRuntimeColorFilter:
             // TODO(skia:11209): Figure out a way to run ES3+ color filters on the CPU. This doesn't
             // need to be fast - it could just be direct IR evaluation. But without it, there's no
-            // way for us to fully implement the SkColorFilter API (eg, `filterColor`)
+            // way for us to fully implement the SkColorFilter API (eg, `filterColor4f`)
             if (!SkRuntimeEffectPriv::CanDraw(SkCapabilities::RasterBackend().get(),
                                               program.get())) {
                 RETURN_FAILURE("SkSL color filters must target #version 100");
@@ -630,7 +629,7 @@ sk_sp<SkRuntimeEffect> SkRuntimeEffect::makeUnoptimizedClone() {
     // Attempt to recompile the program's source with optimizations off. This ensures that the
     // Debugger shows results on every line, even for things that could be optimized away (static
     // branches, unused variables, etc). If recompilation fails, we fall back to the original code.
-    SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Standalone());
+    SkSL::Compiler compiler;
     SkSL::ProgramSettings settings = MakeSettings(options);
     std::unique_ptr<SkSL::Program> program =
             compiler.convertProgram(kind, *fBaseProgram->fSource, settings);
@@ -741,6 +740,7 @@ SkRuntimeEffect::SkRuntimeEffect(std::unique_ptr<SkSL::Program> baseProgram,
                                  std::vector<SkSL::SampleUsage>&& sampleUsages,
                                  uint32_t flags)
         : fHash(SkChecksum::Hash32(baseProgram->fSource->c_str(), baseProgram->fSource->size()))
+        , fStableKey(options.fStableKey)
         , fBaseProgram(std::move(baseProgram))
         , fMain(main)
         , fUniforms(std::move(uniforms))
@@ -756,6 +756,7 @@ SkRuntimeEffect::SkRuntimeEffect(std::unique_ptr<SkSL::Program> baseProgram,
     // to match the layout of Options.
     struct KnownOptions {
         bool forceUnoptimized, allowPrivateAccess;
+        uint32_t fStableKey;
         SkSL::Version maxVersionAllowed;
     };
     static_assert(sizeof(Options) == sizeof(KnownOptions));
@@ -763,6 +764,8 @@ SkRuntimeEffect::SkRuntimeEffect(std::unique_ptr<SkSL::Program> baseProgram,
                                sizeof(options.forceUnoptimized), fHash);
     fHash = SkChecksum::Hash32(&options.allowPrivateAccess,
                                sizeof(options.allowPrivateAccess), fHash);
+    fHash = SkChecksum::Hash32(&options.fStableKey,
+                               sizeof(options.fStableKey), fHash);
     fHash = SkChecksum::Hash32(&options.maxVersionAllowed,
                                sizeof(options.maxVersionAllowed), fHash);
 }
