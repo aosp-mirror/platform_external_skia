@@ -24,6 +24,7 @@
 #include "src/codec/SkJpegMultiPicture.h"
 #include "src/codec/SkJpegSegmentScan.h"
 #include "src/codec/SkJpegSourceMgr.h"
+#include "src/codec/SkTiffUtility.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 
@@ -400,7 +401,7 @@ DEF_TEST(Codec_jpegMultiPicture, r) {
 
     // Verify that we get the same parameters when we re-serialize and de-serialize them
     {
-        auto mpParamsSerialized = mpParams->serialize();
+        auto mpParamsSerialized = mpParams->serialize(0);
         REPORTER_ASSERT(r, mpParamsSerialized);
         auto mpParamsRoundTripped = SkJpegMultiPictureParameters::Make(mpParamsSerialized);
         REPORTER_ASSERT(r, mpParamsRoundTripped);
@@ -451,8 +452,8 @@ DEF_TEST(Codec_jpegMultiPicture, r) {
                 continue;
             }
             auto imageData = sourceMgr->getSubsetData(
-                    SkJpegMultiPictureParameters::GetAbsoluteOffset(mpParams->images[i].dataOffset,
-                                                                    mpParamsSegment.offset),
+                    SkJpegMultiPictureParameters::GetImageAbsoluteOffset(
+                            mpParams->images[i].dataOffset, mpParamsSegment.offset),
                     mpParams->images[i].size);
             REPORTER_ASSERT(r, imageData);
 
@@ -893,6 +894,156 @@ DEF_TEST(AndroidCodec_jpegGainmapTranscode, r) {
 
             REPORTER_ASSERT(r, approx_eq(p0, p1, kEpsilon));
         }
+    }
+}
+
+static sk_sp<SkData> get_mp_image(sk_sp<SkData> imageData, size_t imageNumber) {
+    SkMemoryStream stream(imageData);
+    auto sourceMgr = SkJpegSourceMgr::Make(&stream);
+
+    std::unique_ptr<SkJpegMultiPictureParameters> mpParams;
+    SkJpegSegment mpParamsSegment;
+    if (!find_mp_params_segment(&stream, &mpParams, &mpParamsSegment)) {
+        return nullptr;
+    }
+    return SkData::MakeSubset(
+            imageData.get(),
+            SkJpegMultiPictureParameters::GetImageAbsoluteOffset(
+                    mpParams->images[imageNumber].dataOffset, mpParamsSegment.offset),
+            mpParams->images[imageNumber].size);
+}
+
+static std::unique_ptr<SkTiff::ImageFileDirectory> get_ifd(
+        sk_sp<SkData> imageData, uint8_t marker, const void* sig, size_t sigSize, size_t pad) {
+    SkMemoryStream stream(imageData);
+    auto sourceMgr = SkJpegSourceMgr::Make(&stream);
+    for (const auto& segment : sourceMgr->getAllSegments()) {
+        if (segment.marker != marker) {
+            continue;
+        }
+        auto parameterData = sourceMgr->getSegmentParameters(segment);
+        if (!parameterData) {
+            continue;
+        }
+        if (parameterData->size() < sigSize || memcmp(sig, parameterData->data(), sigSize) != 0) {
+            continue;
+        }
+        auto ifdData = SkData::MakeSubset(
+                parameterData.get(), sigSize + pad, parameterData->size() - (sigSize + pad));
+
+        bool littleEndian = false;
+        uint32_t ifdOffset = 0;
+        if (!SkTiff::ImageFileDirectory::ParseHeader(ifdData.get(), &littleEndian, &ifdOffset)) {
+            return nullptr;
+        }
+        return SkTiff::ImageFileDirectory::MakeFromOffset(ifdData, littleEndian, ifdOffset);
+    }
+    return nullptr;
+}
+
+static std::unique_ptr<SkTiff::ImageFileDirectory> get_mpf_ifd(sk_sp<SkData> imageData) {
+    return get_ifd(std::move(imageData), kMpfMarker, kMpfSig, sizeof(kMpfSig), 0);
+}
+
+static std::unique_ptr<SkTiff::ImageFileDirectory> get_exif_ifd(sk_sp<SkData> imageData) {
+    return get_ifd(std::move(imageData), kExifMarker, kExifSig, sizeof(kExifSig), 1);
+}
+
+DEF_TEST(AndroidCodec_mpfParse, r) {
+    sk_sp<SkData> inputData = GetResourceAsData("images/iphone_13_pro.jpeg");
+
+    {
+        // The MPF in iPhone images has 3 entries: version, image count, and the MP entries.
+        auto ifd = get_mpf_ifd(inputData);
+        REPORTER_ASSERT(r, ifd);
+        REPORTER_ASSERT(r, ifd->getNumEntries() == 3);
+        REPORTER_ASSERT(r, ifd->getEntryTag(0) == 0xB000);
+        REPORTER_ASSERT(r, ifd->getEntryTag(1) == 0xB001);
+        REPORTER_ASSERT(r, ifd->getEntryTag(2) == 0xB002);
+
+        // There is no attribute IFD.
+        REPORTER_ASSERT(r, !ifd->nextIfdOffset());
+    }
+
+    {
+        // The gainmap images have version and image count.
+        auto ifd = get_mpf_ifd(get_mp_image(inputData, 1));
+        REPORTER_ASSERT(r, ifd);
+
+        REPORTER_ASSERT(r, ifd->getNumEntries() == 2);
+        REPORTER_ASSERT(r, ifd->getEntryTag(0) == 0xB000);
+        REPORTER_ASSERT(r, ifd->getEntryTag(1) == 0xB001);
+        uint32_t value = 0;
+        REPORTER_ASSERT(r, ifd->getEntryUnsignedLong(1, 1, &value));
+        REPORTER_ASSERT(r, value == 3);
+
+        // There is no further IFD.
+        REPORTER_ASSERT(r, !ifd->nextIfdOffset());
+    }
+
+    // Replace |inputData| with its transcoded version.
+    {
+        SkBitmap baseBitmap;
+        SkBitmap gainmapBitmap;
+        SkGainmapInfo gainmapInfo;
+        decode_all(r,
+                   std::make_unique<SkMemoryStream>(inputData),
+                   baseBitmap,
+                   gainmapBitmap,
+                   gainmapInfo);
+        gainmapInfo.fType = SkGainmapInfo::Type::kDefault;
+        SkDynamicMemoryWStream encodeStream;
+        bool encodeResult = SkJpegGainmapEncoder::EncodeHDRGM(&encodeStream,
+                                                              baseBitmap.pixmap(),
+                                                              SkJpegEncoder::Options(),
+                                                              gainmapBitmap.pixmap(),
+                                                              SkJpegEncoder::Options(),
+                                                              gainmapInfo);
+        REPORTER_ASSERT(r, encodeResult);
+        inputData = encodeStream.detachAsData();
+    }
+
+    {
+        // Exif should be present and valid.
+        auto ifd = get_exif_ifd(inputData);
+        REPORTER_ASSERT(r, ifd);
+        REPORTER_ASSERT(r, ifd->getNumEntries() == 1);
+        constexpr uint16_t kSubIFDOffsetTag = 0x8769;
+        REPORTER_ASSERT(r, ifd->getEntryTag(0) == kSubIFDOffsetTag);
+    }
+
+    {
+        // The MPF in encoded images has 3 entries: version, image count, and the MP entries.
+        auto ifd = get_mpf_ifd(inputData);
+        REPORTER_ASSERT(r, ifd);
+        REPORTER_ASSERT(r, ifd->getNumEntries() == 3);
+        REPORTER_ASSERT(r, ifd->getEntryTag(0) == 0xB000);
+        REPORTER_ASSERT(r, ifd->getEntryTag(1) == 0xB001);
+        REPORTER_ASSERT(r, ifd->getEntryTag(2) == 0xB002);
+
+        // There is no attribute IFD.
+        REPORTER_ASSERT(r, !ifd->nextIfdOffset());
+    }
+
+    {
+        // The MPF in encoded gainmap images has 2 entries: Version and number of images.
+        auto ifd = get_mpf_ifd(get_mp_image(inputData, 1));
+        REPORTER_ASSERT(r, ifd);
+
+        REPORTER_ASSERT(r, ifd->getNumEntries() == 1);
+        REPORTER_ASSERT(r, ifd->getEntryTag(0) == 0xB000);
+
+        // Verify the version data (don't verify the version in the primary image, because if that
+        // were broken all MPF images would be broken).
+        sk_sp<SkData> versionData = ifd->getEntryUndefinedData(0);
+        REPORTER_ASSERT(r, versionData);
+        REPORTER_ASSERT(r, versionData->bytes()[0] == '0');
+        REPORTER_ASSERT(r, versionData->bytes()[1] == '1');
+        REPORTER_ASSERT(r, versionData->bytes()[2] == '0');
+        REPORTER_ASSERT(r, versionData->bytes()[3] == '0');
+
+        // There is no further IFD.
+        REPORTER_ASSERT(r, !ifd->nextIfdOffset());
     }
 }
 

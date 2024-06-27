@@ -964,6 +964,7 @@ void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
                                                    glyphsRegenerated,
                                                    SkPaintPriv::ComputeLuminanceColor(subRunPaint),
                                                    useGammaCorrectDistanceTable,
+                                                   this->surfaceProps().pixelGeometry(),
                                                    fRecorder,
                                                    rendererData)),
                                subRunPaint,
@@ -1321,7 +1322,11 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
         if (!rendererData.isSDF) {
             return {renderers->bitmapText(rendererData.isLCD), nullptr};
         }
-        return {renderers->sdfText(rendererData.isLCD), nullptr};
+        // Even though the SkPaint can request subpixel rendering, we still need to match
+        // this with the pixel geometry.
+        bool useLCD = rendererData.isLCD &&
+                      geometry.subRunData().pixelGeometry() != kUnknown_SkPixelGeometry;
+        return {renderers->sdfText(useLCD), nullptr};
     } else if (geometry.isVertices()) {
         SkVerticesPriv info(geometry.vertices()->priv());
         return {renderers->vertices(info.mode(), info.hasColors(), info.hasTexCoords()), nullptr};
@@ -1615,7 +1620,7 @@ void Device::drawCoverageMask(const SkSpecialImage* mask,
     TextureDataBlock tdb;
     // NOTE: CoverageMaskRenderStep controls the final sampling options; this texture data block
     // serves only to keep the mask alive so the sampling passed to add() doesn't matter.
-    tdb.add(fRecorder->priv().caps(), SkFilterMode::kLinear, kClamp, maskProxyView.refProxy());
+    tdb.add(maskProxyView.refProxy(), {SkFilterMode::kLinear, kClamp});
     fRecorder->priv().textureDataCache()->insert(tdb);
 
     // CoverageMaskShape() wraps a Shape when it's used as a PathAtlas, but in this case the

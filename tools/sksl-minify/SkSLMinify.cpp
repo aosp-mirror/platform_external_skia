@@ -5,10 +5,7 @@
  * found in the LICENSE file.
  */
 
-#define SK_OPTS_NS sksl_minify_standalone
-#include "include/core/SkStream.h"
 #include "src/base/SkStringView.h"
-#include "src/core/SkCpu.h"
 #include "src/core/SkOpts.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLFileOutputStream.h"
@@ -16,20 +13,18 @@
 #include "src/sksl/SkSLModuleLoader.h"
 #include "src/sksl/SkSLProgramKind.h"
 #include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLStructDefinition.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/transform/SkSLTransform.h"
+#include "src/utils/SkGetExecutablePath.h"
 #include "src/utils/SkOSPath.h"
-#include "tools/SkGetExecutablePath.h"
 #include "tools/skslc/ProcessWorklist.h"
 
 #include <cctype>
 #include <forward_list>
 #include <fstream>
 #include <limits.h>
-#include <optional>
 #include <stdarg.h>
 #include <stdio.h>
 

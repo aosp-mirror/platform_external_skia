@@ -49,7 +49,7 @@ public:
 
     TextureInfo getDefaultStorageTextureInfo(SkColorType) const override;
 
-    ImmutableSamplerInfo getImmutableSamplerInfo(sk_sp<TextureProxy> proxy) const override;
+    ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy* proxy) const override;
 
     UniqueKey makeGraphicsPipelineKey(const GraphicsPipelineDesc&,
                                       const RenderPassDesc&) const override;
@@ -229,6 +229,13 @@ private:
     uint32_t fMaxVertexAttributes;
     uint64_t fMaxUniformBufferRange;
     VkPhysicalDeviceMemoryProperties2 fPhysicalDeviceMemoryProperties2;
+
+    // ColorTypeInfo struct for use w/ external formats.
+    const ColorTypeInfo fExternalFormatColorTypeInfo = {SkColorType::kRGBA_8888_SkColorType,
+                                                        SkColorType::kRGBA_8888_SkColorType,
+                                                        /*flags=*/0,
+                                                        skgpu::Swizzle::RGBA(),
+                                                        skgpu::Swizzle::RGBA()};
 
     // Various bools to define whether certain Vulkan features are supported.
     bool fSupportsMemorylessAttachments = false;
