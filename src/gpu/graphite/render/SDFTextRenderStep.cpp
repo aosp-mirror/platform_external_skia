@@ -43,7 +43,7 @@ SDFTextRenderStep::SDFTextRenderStep()
                      /*uniforms=*/{{"subRunDeviceMatrix", SkSLType::kFloat4x4},
                                    {"deviceToLocal", SkSLType::kFloat4x4},
                                    {"atlasSizeInv", SkSLType::kFloat2},
-                                   {"distAdjust", SkSLType::kFloat}},
+                                   {"gammaParams", SkSLType::kHalf2}},
                      PrimitiveType::kTriangleStrip,
                      kDirectDepthGEqualPass,
                      /*vertexAttrs=*/ {},
@@ -108,7 +108,7 @@ const char* SDFTextRenderStep::fragmentCoverageSkSL() const {
                                                                       "sdf_atlas_1, "
                                                                       "sdf_atlas_2, "
                                                                       "sdf_atlas_3).r, "
-                                                 "half(distAdjust), "
+                                                 "gammaParams, "
                                                  "unormTexCoords);";
 }
 
@@ -153,17 +153,18 @@ void SDFTextRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                                         subRunData.luminanceColor());
     gammaAdjustment = dfAdjustTable->getAdjustment(lum, subRunData.useGammaCorrectDistanceTable());
 #endif
-    gatherer->write(gammaAdjustment);
+    SkV2 gammaParams = {gammaAdjustment, subRunData.useGammaCorrectDistanceTable() ? 1.f : 0.f};
+    gatherer->writeHalf(gammaParams);
 
     // write textures and samplers
     const SkSamplingOptions kSamplingOptions(SkFilterMode::kLinear);
     constexpr SkTileMode kTileModes[2] = { SkTileMode::kClamp, SkTileMode::kClamp };
     for (unsigned int i = 0; i < numProxies; ++i) {
-        gatherer->add(kSamplingOptions, kTileModes, proxies[i]);
+        gatherer->add(proxies[i], {kSamplingOptions, kTileModes});
     }
     // If the atlas has less than 4 active proxies we still need to set up samplers for the shader.
     for (unsigned int i = numProxies; i < kNumSDFAtlasTextures; ++i) {
-        gatherer->add(kSamplingOptions, kTileModes, proxies[0]);
+        gatherer->add(proxies[0], {kSamplingOptions, kTileModes});
     }
 }
 
