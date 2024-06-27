@@ -426,8 +426,9 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
     const bool hasStepUniforms = step->numUniforms() > 0 && step->coverage() != Coverage::kNone;
     const bool useStepStorageBuffer = useStorageBuffers && hasStepUniforms;
     const bool useShadingStorageBuffer = useStorageBuffers && step->performsShading();
-    const bool useGradientStorageBuffer = useStorageBuffers && (fSnippetRequirementFlags
-                                                    & SnippetRequirementFlags::kGradientBuffer);
+    const bool useGradientStorageBuffer = caps->gradientBufferSupport() &&
+                                          (fSnippetRequirementFlags
+                                                & SnippetRequirementFlags::kGradientBuffer);
 
     const bool defineLocalCoordsVarying = this->needsLocalCoords();
     std::string preamble = EmitVaryings(step,
@@ -466,8 +467,6 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
     }
 
     if (useGradientStorageBuffer) {
-        SkASSERT(caps->storageBufferSupport());
-
         SkSL::String::appendf(&preamble,
                               "layout (binding=%d) readonly buffer FSGradientBuffer {\n"
                               "    float %s[];\n"
@@ -1584,6 +1583,20 @@ ShaderCodeDictionary::ShaderCodeDictionary() {
                            { "channelSelectA",        SkSLType::kHalf4 },
                            { "yuvToRGBMatrix",        SkSLType::kHalf3x3 },
                            { "yuvToRGBTranslate",     SkSLType::kHalf3 } },
+            /*textures=*/ {{ "samplerY" },
+                           { "samplerU" },
+                           { "samplerV" },
+                           { "samplerA" }}
+    };
+
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWYUVNoSwizzleImageShader] = {
+            /*name=*/"HWYUVImageShader",
+            /*staticFn=*/"sk_hw_yuv_no_swizzle_image_shader",
+            SnippetRequirementFlags::kLocalCoords,
+            /*uniforms=*/{ { "invImgSizeY",              SkSLType::kFloat2 },
+                           { "invImgSizeUV",             SkSLType::kFloat2 }, // Relative to Y space
+                           { "yuvToRGBMatrix",           SkSLType::kHalf3x3 },
+                           { "yuvToRGBXlateAlphaParams", SkSLType::kHalf4 } },
             /*textures=*/ {{ "samplerY" },
                            { "samplerU" },
                            { "samplerV" },

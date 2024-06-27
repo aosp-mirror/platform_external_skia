@@ -427,7 +427,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				// Crashes and failures
 				// https://skbug.com/14105
 				skip(ALL, "test", ALL, "BackendTextureTest")
-				skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
 				skip(ALL, "test", ALL, "PaintParamsKeyTest")
 
 				if b.matchOs("Win10") || b.matchGpu("MaliG78", "Adreno620", "QuadroP400") {
@@ -457,7 +456,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					skip(ALL, "test", ALL, "DeviceTestVertexTransparency")
 					skip(ALL, "test", ALL, "GraphitePromiseImageMultipleImgUses")
 					skip(ALL, "test", ALL, "GraphitePromiseImageRecorderLoss")
-					skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
 					skip(ALL, "test", ALL, "GraphiteTextureProxyTest")
 					skip(ALL, "test", ALL, "GraphiteYUVAPromiseImageMultipleImgUses")
 					skip(ALL, "test", ALL, "GraphiteYUVAPromiseImageRecorderLoss")
@@ -923,6 +921,13 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.model("Wembley", "JioNext") {
 		// These tests run forever on the Wembley.
 		skip(ALL, "gm", ALL, "async_rescale_and_read")
+	}
+
+	if b.model("Wembley") {
+		// These tests run forever or use too many resources on the Wembley.
+		skip(ALL, "gm", ALL, "wacky_yuv_formats")
+		skip(ALL, "gm", ALL, "wacky_yuv_formats_cubic")
+		skip(ALL, "gm", ALL, "wacky_yuv_formats_imggen")
 	}
 
 	if b.os("iOS") {
