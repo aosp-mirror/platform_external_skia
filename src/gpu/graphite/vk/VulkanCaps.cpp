@@ -24,6 +24,7 @@
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/gpu/graphite/vk/VulkanYcbcrConversion.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
+#include "src/sksl/SkSLUtil.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
 #include <sys/system_properties.h>
@@ -84,6 +85,13 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
     fResourceBindingReqs.fStorageBufferLayout = Layout::kStd140;
     fResourceBindingReqs.fSeparateTextureAndSamplerBinding = false;
     fResourceBindingReqs.fDistinctIndexRanges = false;
+
+    fResourceBindingReqs.fIntrinsicBufferBinding =
+            VulkanGraphicsPipeline::kIntrinsicUniformBufferIndex;
+    fResourceBindingReqs.fRenderStepBufferBinding =
+            VulkanGraphicsPipeline::kRenderStepUniformBufferIndex;
+    fResourceBindingReqs.fPaintParamsBufferBinding =
+            VulkanGraphicsPipeline::kPaintUniformBufferIndex;
 
     VkPhysicalDeviceMemoryProperties deviceMemoryProperties;
     VULKAN_CALL(vkInterface, GetPhysicalDeviceMemoryProperties(physDev, &deviceMemoryProperties));
@@ -155,6 +163,8 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
     if (extensions->hasExtension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, 1)) {
         fSupportsDeviceFaultInfo = true;
     }
+
+    fShaderCaps->fFloatBufferArrayName = "fsGradientBuffer";
 
     // Note that format table initialization should be performed at the end of this method to ensure
     // all capability determinations are completed prior to populating the format tables.
@@ -1240,7 +1250,12 @@ const Caps::ColorTypeInfo* VulkanCaps::getColorTypeInfo(SkColorType ct,
                                                         const TextureInfo& textureInfo) const {
     VkFormat vkFormat = textureInfo.vulkanTextureSpec().fFormat;
     if (vkFormat == VK_FORMAT_UNDEFINED) {
-        return nullptr;
+        // If VkFormat is undefined but there is a valid YCbCr conversion associated with the
+        // texture, then we know we are using an external format and can return color type
+        // info representative of external format color information.
+        return textureInfo.vulkanTextureSpec().fYcbcrConversionInfo.isValid()
+                ? &fExternalFormatColorTypeInfo
+                : nullptr;
     }
 
     const FormatInfo& info = this->getFormatInfo(vkFormat);
@@ -1260,14 +1275,16 @@ bool VulkanCaps::onIsTexturable(const TextureInfo& texInfo) const {
         return false;
     }
 
-    // TODO:
-    // Once we support external formats with associated YCbCr conversion info, check for that
-    // and return true here because we can always texture from an external format.
+    // All images using external formats are required to be able to be sampled per Vulkan spec.
+    // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkAndroidHardwareBufferFormatPropertiesANDROID.html#_description
+    if (vkInfo.fFormat == VK_FORMAT_UNDEFINED && vkInfo.fYcbcrConversionInfo.isValid()) {
+        return true;
+    }
 
+    // Otherwise, we are working with a known format and can simply reference the format table info.
     const FormatInfo& info = this->getFormatInfo(vkInfo.fFormat);
     return info.isTexturable(vkInfo.fImageTiling);
 }
-
 
 bool VulkanCaps::isRenderable(const TextureInfo& texInfo) const {
     VulkanTextureInfo vkInfo;
@@ -1444,36 +1461,17 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
 
 GraphiteResourceKey VulkanCaps::makeSamplerKey(const SamplerDesc& samplerDesc) const {
     GraphiteResourceKey samplerKey;
-    // Non-zero conversion information means the sampler utilizes a ycbcr conversion.
-    uint32_t nonFormatYcbcrInfo =
-            (uint32_t)(samplerDesc.desc() >> SamplerDesc::kImmutableSamplerInfoShift);
-    bool usesYcbcrConversion = nonFormatYcbcrInfo != 0;
-
-    int uint32Quantity = 1;
-    bool usesExternalFormat = false;
-    if (usesYcbcrConversion) {
-        // If using a YCbCr conversion, check nonFormatYcbcrInfo to see if we are using an external
-        // format and update uint32Quantity accordingly.
-        usesExternalFormat = static_cast<bool>(
-                ((nonFormatYcbcrInfo & ycbcrPackaging::kUseExternalFormatMask) >>
-                        ycbcrPackaging::kUsesExternalFormatShift));
-        // Reassign uint32Quantity. This is an assignment instead of an additive operation because
-        // non-format ycbcr information and sampler information cam be fit into just one int32.
-        uint32Quantity = usesExternalFormat ? ycbcrPackaging::kInt32sNeededExternalFormat
-                                            : ycbcrPackaging::kInt32sNeededKnownFormat;
-    }
+    const SkSpan<const uint32_t>& samplerData = samplerDesc.asSpan();
     static const ResourceType kSamplerType = GraphiteResourceKey::GenerateResourceType();
-    GraphiteResourceKey::Builder builder(&samplerKey, kSamplerType, uint32Quantity,
+    // Non-format ycbcr and sampler information are guaranteed to fit within one uint32, so the size
+    // of the returned span accurately captures the quantity of uint32s needed whether the sampler
+    // is immutable or not.
+    GraphiteResourceKey::Builder builder(&samplerKey, kSamplerType, samplerData.size(),
                                          Shareable::kYes);
-    int i = 0;
-    builder[i++] = samplerDesc.desc();
-    if (usesYcbcrConversion) {
-        if (usesExternalFormat) {
-            builder[i++] = samplerDesc.externalFormatMSBs();
-        }
-        builder[i++] = samplerDesc.format();
+
+    for (size_t i = 0; i < samplerData.size(); i++) {
+        builder[i] = samplerData[i];
     }
-    SkASSERT(i == uint32Quantity);
 
     builder.finish();
     return samplerKey;
@@ -1549,7 +1547,7 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
     SkASSERT(i == num32DataCnt);
 }
 
-ImmutableSamplerInfo VulkanCaps::getImmutableSamplerInfo(sk_sp<TextureProxy> proxy) const {
+ImmutableSamplerInfo VulkanCaps::getImmutableSamplerInfo(const TextureProxy* proxy) const {
     if (proxy) {
         const skgpu::VulkanYcbcrConversionInfo& ycbcrConversionInfo =
                 proxy->textureInfo().vulkanTextureSpec().fYcbcrConversionInfo;

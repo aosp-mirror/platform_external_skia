@@ -4,7 +4,6 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 #include "src/sksl/codegen/SkSLMetalCodeGenerator.h"
 
 #include "include/core/SkSpan.h"
@@ -31,6 +30,7 @@
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/analysis/SkSLProgramVisitor.h"
+#include "src/sksl/codegen/SkSLCodeGenTypes.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBlock.h"
@@ -48,6 +48,7 @@
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLFunctionPrototype.h"
+#include "src/sksl/ir/SkSLIRHelpers.h"
 #include "src/sksl/ir/SkSLIRNode.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
@@ -95,10 +96,12 @@ public:
     MetalCodeGenerator(const Context* context,
                        const ShaderCaps* caps,
                        const Program* program,
-                       OutputStream* out)
-            : INHERITED(context, caps, program, out)
+                       OutputStream* out,
+                       PrettyPrint pp)
+            : CodeGenerator(context, caps, program, out)
             , fReservedWords({"atan2", "rsqrt", "rint", "dfdx", "dfdy", "vertex", "fragment"})
-            , fLineEnding("\n") {}
+            , fLineEnding("\n")
+            , fPrettyPrint(pp) {}
 
     bool generateCode() override;
 
@@ -359,13 +362,12 @@ protected:
         bool fCreateSubstitutes = true;
     };
     std::unique_ptr<IndexSubstitutionData> fIndexSubstitutionData;
+    PrettyPrint fPrettyPrint;
 
     // Workaround/polyfill flags
     bool fWrittenInverse2 = false, fWrittenInverse3 = false, fWrittenInverse4 = false;
     bool fWrittenMatrixCompMult = false;
     bool fWrittenOuterProduct = false;
-
-    using INHERITED = CodeGenerator;
 };
 
 static const char* operator_name(Operator op) {
@@ -395,13 +397,11 @@ void MetalCodeGenerator::write(std::string_view s) {
     if (s.empty()) {
         return;
     }
-#if defined(SK_DEBUG) || defined(SKSL_STANDALONE)
-    if (fAtLineStart) {
+    if (fAtLineStart && fPrettyPrint == PrettyPrint::kYes) {
         for (int i = 0; i < fIndentation; i++) {
             fOut->writeText("    ");
         }
     }
-#endif
     fOut->writeText(std::string(s).c_str());
     fAtLineStart = false;
 }
@@ -1310,6 +1310,16 @@ bool MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
             this->writeExpression(*c.arguments()[1], Precedence::kSequence);
             this->write(", memory_order_relaxed)");
             return true;
+        case k_loadFloatBuffer_IntrinsicKind: {
+            auto indexExpression = IRHelpers::LoadFloatBuffer(
+                                        fContext,
+                                        fCaps,
+                                        c.position(),
+                                        c.arguments()[0]->clone());
+
+            this->writeExpression(*indexExpression, Precedence::kExpression);
+            return true;
+        }
         default:
             return false;
     }
@@ -3554,12 +3564,11 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Statemen
                 default:
                     break;
             }
-            return INHERITED::visitExpression(e);
+            return ProgramVisitor::visitExpression(e);
         }
 
         MetalCodeGenerator* fCodeGen;
         Requirements fRequirements = kNo_Requirements;
-        using INHERITED = ProgramVisitor;
     };
 
     RequirementsVisitor visitor;
@@ -3584,6 +3593,14 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Function
                 }
             }
         }
+
+        // Loading data from the instrinsic float buffer requires access to the Globals struct.
+        if (f.intrinsicKind() == IntrinsicKind::k_loadFloatBuffer_IntrinsicKind) {
+            Requirements reqs = kGlobals_Requirement;
+            fRequirements.set(&f, reqs);
+            return reqs;
+        }
+
         // We never found a definition for this declared function, but it's legal to prototype a
         // function without ever giving a definition, as long as you don't call it.
         return kNo_Requirements;
@@ -3631,16 +3648,25 @@ bool MetalCodeGenerator::generateCode() {
     return fContext.fErrors->errorCount() == 0;
 }
 
-bool ToMetal(Program& program, const ShaderCaps* caps, OutputStream& out) {
+bool ToMetal(Program& program, const ShaderCaps* caps, OutputStream& out, PrettyPrint pp) {
     TRACE_EVENT0("skia.shaders", "SkSL::ToMetal");
     SkASSERT(caps != nullptr);
 
     program.fContext->fErrors->setSource(*program.fSource);
-    MetalCodeGenerator cg(program.fContext.get(), caps, &program, &out);
+    MetalCodeGenerator cg(program.fContext.get(), caps, &program, &out, pp);
     bool result = cg.generateCode();
     program.fContext->fErrors->setSource(std::string_view());
 
     return result;
+}
+
+bool ToMetal(Program& program, const ShaderCaps* caps, OutputStream& out) {
+#if defined(SK_DEBUG)
+    constexpr PrettyPrint defaultPrintOpts = PrettyPrint::kYes;
+#else
+    constexpr PrettyPrint defaultPrintOpts = PrettyPrint::kNo;
+#endif
+    return ToMetal(program, caps, out, defaultPrintOpts);
 }
 
 bool ToMetal(Program& program, const ShaderCaps* caps, std::string* out) {

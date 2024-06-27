@@ -603,7 +603,7 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     ShaderErrorHandler* errorHandler = sharedContext->caps()->shaderErrorHandler();
 
     const RenderStep* step = sharedContext->rendererProvider()->lookup(pipelineDesc.renderStepID());
-    const bool useStorageBuffers = sharedContext->caps()->storageBufferPreferred();
+    const bool useStorageBuffers = sharedContext->caps()->storageBufferSupport();
 
     if (step->vertexAttributes().size() + step->instanceAttributes().size() >
         sharedContext->vulkanCaps().maxVertexAttributes()) {
@@ -704,6 +704,9 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
                                 fsModule,
                                 &pipelineShaderStages[1]);
     }
+
+    // TODO(b/347070730): Analyze fsSkSLInfo.fData to see if we have any immutable samplers which
+    // should be a part of the pipeline layout.
 
     // TODO: Query RenderPassDesc for input attachment information. For now, we only use one for
     // loading MSAA from resolve so we can simply pass in 0 when not doing that.
