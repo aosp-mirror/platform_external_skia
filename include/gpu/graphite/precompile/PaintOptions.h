@@ -144,6 +144,8 @@ public:
 
 private:
     friend class PaintOptionsPriv;
+    friend class PrecompileImageFilter; // for ProcessCombination access
+    friend class PrecompileMaskFilter;  // for ProcessCombination access
 
     void addColorFilter(sk_sp<PrecompileColorFilter> cf);
     void addBlendMode(SkBlendMode bm) {

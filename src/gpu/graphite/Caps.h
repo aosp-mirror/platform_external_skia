@@ -59,6 +59,11 @@ struct ResourceBindingRequirements {
 
     // Whether buffer, texture, and sampler resource bindings use distinct index ranges.
     bool fDistinctIndexRanges = false;
+
+    int fIntrinsicBufferBinding = -1;
+    int fRenderStepBufferBinding = -1;
+    int fPaintParamsBufferBinding = -1;
+    int fGradientBufferBinding = -1;
 };
 
 enum class DstReadRequirement {
@@ -122,7 +127,7 @@ public:
 
     // Backends can optionally override this method to return meaningful sampler conversion info.
     // By default, simply return a default ImmutableSamplerInfo.
-    virtual ImmutableSamplerInfo getImmutableSamplerInfo(sk_sp<TextureProxy> proxy) const {
+    virtual ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy*) const {
         return {};
     }
 
@@ -231,12 +236,17 @@ public:
     // If false then calling Context::submit with SyncToCpu::kYes is an error.
     bool allowCpuSync() const { return fAllowCpuSync; }
 
-    // Returns whether storage buffers are supported.
+    // Returns whether storage buffers are supported and to be preferred over uniform buffers.
     bool storageBufferSupport() const { return fStorageBufferSupport; }
 
-    // Returns whether storage buffers are preferred over uniform buffers, when both will yield
-    // correct results.
-    bool storageBufferPreferred() const { return fStorageBufferPreferred; }
+    // The gradient buffer is an unsized float array so it is only optimal memory-wise to use it if
+    // the storage buffer memory layout is std430 or in metal, which is also the only supported
+    // way the data is packed.
+    bool gradientBufferSupport() const {
+        return fStorageBufferSupport &&
+               (fResourceBindingReqs.fStorageBufferLayout == Layout::kStd430 ||
+                    fResourceBindingReqs.fStorageBufferLayout == Layout::kMetal);
+    }
 
     // Returns whether a draw buffer can be mapped.
     bool drawBufferCanBeMapped() const { return fDrawBufferCanBeMapped; }
@@ -367,7 +377,6 @@ protected:
     bool fSemaphoreSupport = false;
     bool fAllowCpuSync = true;
     bool fStorageBufferSupport = false;
-    bool fStorageBufferPreferred = false;
     bool fDrawBufferCanBeMapped = true;
     bool fBufferMapsAreAsync = false;
     bool fMSAARenderToSingleSampledSupport = false;
