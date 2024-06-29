@@ -11,6 +11,7 @@
 #include "include/gpu/graphite/precompile/PrecompileBase.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
+#include "include/gpu/graphite/precompile/PrecompileImageFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkKnownRuntimeEffects.h"
@@ -23,6 +24,7 @@
 #include "src/gpu/graphite/precompile/PrecompileBaseComplete.h"
 #include "src/gpu/graphite/precompile/PrecompileBasePriv.h"
 #include "src/gpu/graphite/precompile/PrecompileBlenderPriv.h"
+#include "src/gpu/graphite/precompile/PrecompileImageFilterPriv.h"
 #include "src/gpu/graphite/precompile/PrecompileShaderPriv.h"
 #include "src/gpu/graphite/precompile/PrecompileShadersPriv.h"
 
@@ -82,23 +84,6 @@ private:
 
 sk_sp<PrecompileShader> PrecompileShaders::YUVImage() {
     return sk_make_sp<PrecompileYUVImageShader>();
-}
-
-//--------------------------------------------------------------------------------------------------
-sk_sp<PrecompileColorFilter> PrecompileImageFilter::asAColorFilter() const {
-    sk_sp<PrecompileColorFilter> tmp = this->isColorFilterNode();
-    if (!tmp) {
-        return nullptr;
-    }
-    SkASSERT(this->countInputs() == 1);
-    if (this->getInput(0)) {
-        return nullptr;
-    }
-    // TODO: as in SkImageFilter::asAColorFilter, handle the special case of
-    // affectsTransparentBlack. This is tricky for precompilation since we don't,
-    // necessarily, have all the parameters of the ColorFilter in order to evaluate
-    // filterColor4f(SkColors::kTransparent) - the normal API's implementation.
-    return tmp;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -176,9 +161,9 @@ sk_sp<PrecompileImageFilter> PrecompileImageFilters::Blend(
     return sk_make_sp<PrecompileBlendFilterImageFilter>(std::move(blender), inputs);
 }
 
-namespace {
+namespace PrecompileImageFiltersPriv {
 
-void create_blur_imagefilter_pipelines(
+void CreateBlurImageFilterPipelines(
         const KeyContext& keyContext,
         PipelineDataGatherer* gatherer,
         const PaintOptionsPriv::ProcessCombination& processCombination) {
@@ -202,7 +187,7 @@ void create_blur_imagefilter_pipelines(
                                               processCombination);
 }
 
-} // anonymous namespace
+} // namespace PrecompileImageFiltersPriv
 
 class PrecompileBlurImageFilter : public PrecompileImageFilter {
 public:
@@ -216,7 +201,8 @@ private:
             PipelineDataGatherer* gatherer,
             const PaintOptionsPriv::ProcessCombination& processCombination) const override {
 
-        create_blur_imagefilter_pipelines(keyContext, gatherer, processCombination);
+        PrecompileImageFiltersPriv::CreateBlurImageFilterPipelines(keyContext, gatherer,
+                                                                   processCombination);
     }
 };
 
@@ -269,10 +255,10 @@ sk_sp<PrecompileImageFilter> PrecompileImageFilters::ColorFilter(
         sk_sp<PrecompileColorFilter> colorFilter,
         sk_sp<PrecompileImageFilter> input) {
     if (colorFilter && input) {
-        sk_sp<PrecompileColorFilter> inputCF = input->isColorFilterNode();
+        sk_sp<PrecompileColorFilter> inputCF = input->priv().isColorFilterNode();
         if (inputCF) {
             colorFilter = colorFilter->makeComposed(std::move(inputCF));
-            input = sk_ref_sp(input->getInput(0));
+            input = sk_ref_sp(input->priv().getInput(0));
         }
     }
 
@@ -446,28 +432,6 @@ sk_sp<PrecompileImageFilter> PrecompileImageFilters::Morphology(
         sk_sp<PrecompileImageFilter> input) {
     return sk_make_sp<PrecompileMorphologyImageFilter>(SkSpan(&input, 1));
 }
-
-//--------------------------------------------------------------------------------------------------
-// TODO(b/342413572): the analytic blurmasks are triggered off of the simple DrawType thus
-// over-generate when a simple draw doesn't have a blur mask.
-class PrecompileBlurMaskFilter : public PrecompileMaskFilter {
-public:
-    PrecompileBlurMaskFilter() {}
-
-private:
-    void createPipelines(
-            const KeyContext& keyContext,
-            PipelineDataGatherer* gatherer,
-            const PaintOptionsPriv::ProcessCombination& processCombination) const override {
-        create_blur_imagefilter_pipelines(keyContext, gatherer, processCombination);
-    }
-};
-
-sk_sp<PrecompileMaskFilter> PrecompileMaskFilters::Blur() {
-    return sk_make_sp<PrecompileBlurMaskFilter>();
-}
-
-//--------------------------------------------------------------------------------------------------
 
 //--------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------
