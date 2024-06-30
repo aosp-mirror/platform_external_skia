@@ -57,6 +57,8 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType bac
     dawn::native::Adapter matchedAdaptor;
 
     wgpu::RequestAdapterOptions options;
+    options.compatibilityMode =
+            backend == wgpu::BackendType::OpenGL || backend == wgpu::BackendType::OpenGLES;
     options.nextInChain = &togglesDesc;
     std::vector<dawn::native::Adapter> adapters = sInstance->EnumerateAdapters(&options);
     SkASSERT(!adapters.empty());
@@ -128,6 +130,7 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType bac
     desc.requiredFeatureCount  = features.size();
     desc.requiredFeatures      = features.data();
     desc.nextInChain           = &togglesDesc;
+    desc.deviceLostCallbackInfo.mode = wgpu::CallbackMode::AllowSpontaneous;
     desc.deviceLostCallbackInfo.callback =
         [](WGPUDeviceImpl *const *, WGPUDeviceLostReason reason, const char* message, void*) {
             if (reason != WGPUDeviceLostReason_Destroyed) {
