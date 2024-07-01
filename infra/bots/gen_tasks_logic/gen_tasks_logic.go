@@ -42,7 +42,6 @@ const (
 	CAS_RECIPES       = "recipes"
 	CAS_RECREATE_SKPS = "recreate-skps"
 	CAS_SKOTTIE_WASM  = "skottie-wasm"
-	CAS_SKPBENCH      = "skpbench"
 	CAS_TASK_DRIVERS  = "task-drivers"
 	CAS_TEST          = "test"
 	CAS_WASM_GM       = "wasm-gm"
@@ -549,17 +548,6 @@ func GenTasks(cfg *Config) {
 		},
 		Excludes: []string{rbe.ExcludeGitDir},
 	})
-	b.MustAddCasSpec(CAS_SKPBENCH, &specs.CasSpec{
-		Root: "..",
-		Paths: []string{
-			"skia/.vpython3",
-			"skia/infra/bots/assets",
-			"skia/infra/bots/run_recipe.py",
-			"skia/tools/skpbench",
-			"skia/tools/valgrind.supp",
-		},
-		Excludes: []string{rbe.ExcludeGitDir},
-	})
 	b.MustAddCasSpec(CAS_TASK_DRIVERS, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
@@ -732,11 +720,11 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 		if val := b.parts["extra_config"]; val != "" {
 			ec = strings.Split(val, "_")
 			ignore := []string{
-				"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind",
+				"AbandonGpuContext", "PreAbandonGpuContext", "Valgrind",
 				"FailFlushTimeCallbacks", "ReleaseAndAbandonGpuContext",
 				"NativeFonts", "GDI", "NoGPUThreads", "DDL1", "DDL3",
-				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "ColorSpaces", "GL",
-				"SkottieTracing", "SkottieWASM", "GpuTess", "DMSAAStats", "Mskp", "Docker", "PDF",
+				"DDLRecord", "BonusConfigs", "ColorSpaces", "GL",
+				"SkottieTracing", "SkottieWASM", "GpuTess", "DMSAAStats", "Docker", "PDF",
 				"Puppeteer", "SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile",
 				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "Protected"}
 			keep := make([]string, 0, len(ec))
@@ -829,6 +817,7 @@ var androidDeviceInfos = map[string][]string{
 	"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
 	"GalaxyS9":        {"starlte", "QP1A.190711.020"},     // This is Android10.
 	"GalaxyS20":       {"exynos990", "QP1A.190711.020"},
+	"GalaxyS24":       {"pineapple", "UP1A.231005.007"},
 	"JioNext":         {"msm8937", "RKQ1.210602.002"},
 	"Mokey":           {"mokey", "UDC_11161052"},
 	"MokeyGo32":       {"mokey_go32", "UQ1A.240105.003.A1_11159138"},
@@ -1673,10 +1662,7 @@ func (b *taskBuilder) commonTestPerfAssets() {
 	if b.extraConfig("CanvasKit", "PathKit") || (b.role("Test") && b.extraConfig("LottieWeb")) {
 		return
 	}
-	if b.extraConfig("Skpbench") {
-		// Skpbench only needs skps
-		b.asset("skp", "mskp")
-	} else if b.os("Android", "ChromeOS", "iOS") {
+	if b.os("Android", "ChromeOS", "iOS") {
 		b.asset("skp", "svg", "skimage")
 	} else if b.extraConfig("OldestSupportedSkpVersion") {
 		b.assetWithVersion("skp", oldestSupportedSkpVersion)
@@ -1975,10 +1961,7 @@ func (b *jobBuilder) perf() {
 	b.addTask(b.Name, func(b *taskBuilder) {
 		recipe := "perf"
 		cas := CAS_PERF
-		if b.extraConfig("Skpbench") {
-			recipe = "skpbench"
-			cas = CAS_SKPBENCH
-		} else if b.extraConfig("PathKit") {
+		if b.extraConfig("PathKit") {
 			cas = CAS_PATHKIT
 			recipe = "perf_pathkit"
 		} else if b.extraConfig("CanvasKit") {
@@ -1996,8 +1979,6 @@ func (b *jobBuilder) perf() {
 		b.recipeProps(EXTRA_PROPS)
 		if recipe == "perf" {
 			b.nanobenchFlags(doUpload)
-		} else if recipe == "skpbench" {
-			b.skpbenchFlags()
 		}
 		b.kitchenTask(recipe, OUTPUT_PERF)
 		b.cas(cas)
