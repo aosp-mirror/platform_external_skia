@@ -9,6 +9,7 @@
 
 #include "include/core/SkPathTypes.h"
 #include "include/core/SkVertices.h"
+#include "src/gpu/AtlasTypes.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/render/AnalyticBlurRenderStep.h"
 #include "src/gpu/graphite/render/AnalyticRRectRenderStep.h"
@@ -18,6 +19,7 @@
 #include "src/gpu/graphite/render/CoverageMaskRenderStep.h"
 #include "src/gpu/graphite/render/MiddleOutFanRenderStep.h"
 #include "src/gpu/graphite/render/PerEdgeAAQuadRenderStep.h"
+#include "src/gpu/graphite/render/SDFTextLCDRenderStep.h"
 #include "src/gpu/graphite/render/SDFTextRenderStep.h"
 #include "src/gpu/graphite/render/TessellateCurvesRenderStep.h"
 #include "src/gpu/graphite/render/TessellateStrokesRenderStep.h"
@@ -71,11 +73,18 @@ RendererProvider::RendererProvider(const Caps* caps, StaticBufferManager* buffer
     fTessellatedStrokes = makeFromStep(
             std::make_unique<TessellateStrokesRenderStep>(infinitySupport), DrawTypeFlags::kShape);
     fCoverageMask = makeFromStep(std::make_unique<CoverageMaskRenderStep>(), DrawTypeFlags::kShape);
+    // We are using 565 here to represent LCD text, regardless of texture format
+    for (skgpu::MaskFormat variant : {skgpu::MaskFormat::kA8,
+                                      skgpu::MaskFormat::kA565,
+                                      skgpu::MaskFormat::kARGB}) {
+        fBitmapText[int(variant)] = makeFromStep(std::make_unique<BitmapTextRenderStep>(variant),
+                                                 DrawTypeFlags::kText);
+    }
     for (bool lcd : {false, true}) {
-        fBitmapText[lcd] = makeFromStep(std::make_unique<BitmapTextRenderStep>(lcd),
-                                        DrawTypeFlags::kText);
-        fSDFText[lcd] = makeFromStep(std::make_unique<SDFTextRenderStep>(lcd),
-                                     DrawTypeFlags::kText);
+        fSDFText[lcd] = lcd ? makeFromStep(std::make_unique<SDFTextLCDRenderStep>(),
+                                           DrawTypeFlags::kText)
+                            : makeFromStep(std::make_unique<SDFTextRenderStep>(),
+                                           DrawTypeFlags::kText);
     }
     fAnalyticRRect = makeFromStep(std::make_unique<AnalyticRRectRenderStep>(bufferManager),
                                   DrawTypeFlags::kSimpleShape);
