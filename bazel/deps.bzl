@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "66b3d4eee7e46526b6bc8e5a4e6c2c0f493285f7",
+        commit = "7a9c120785468ed77adfb0a83bcf311d7c8e241c",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -192,7 +192,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "vello",
         build_file = ws + "//bazel/external/vello:BUILD.bazel",
-        commit = "6938a2893d6a2ba658709d1d04720f6c6033700f",
+        commit = "3ee3bea02164c5a816fe6c16ef4e3a810edb7620",
         remote = "https://skia.googlesource.com/external/github.com/linebender/vello.git",
     )
 
