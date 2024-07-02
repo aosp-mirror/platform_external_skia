@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#ifndef skgpu_graphite_PrecompileBasePriv_DEFINED
-#define skgpu_graphite_PrecompileBasePriv_DEFINED
+#ifndef skgpu_graphite_precompile_PrecompileBasePriv_DEFINED
+#define skgpu_graphite_precompile_PrecompileBasePriv_DEFINED
 
-#include "src/gpu/graphite/Precompile.h"
+#include "src/gpu/graphite/PrecompileInternal.h"
 
 namespace skgpu::graphite {
 
@@ -17,8 +17,12 @@ namespace skgpu::graphite {
     data members or virtual methods. */
 class PrecompileBasePriv {
 public:
-    bool isALocalMatrixShader() const {
-        return fPrecompileBase->isALocalMatrixShader();
+    int numChildCombinations() const {
+        return fPrecompileBase->numChildCombinations();
+    }
+
+    int numCombinations() const {
+        return fPrecompileBase->numCombinations();
     }
 
     void addToKey(const KeyContext& keyContext,
@@ -53,4 +57,4 @@ inline const PrecompileBasePriv PrecompileBase::priv() const {
 
 } // namespace skgpu::graphite
 
-#endif // skgpu_graphite_PrecompileBasePriv_DEFINED
+#endif // skgpu_graphite_precompile_PrecompileBasePriv_DEFINED
