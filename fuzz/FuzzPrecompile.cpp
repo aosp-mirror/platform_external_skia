@@ -18,22 +18,24 @@
 #include "include/effects/SkColorMatrix.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Surface.h"
+#include "include/gpu/graphite/precompile/Precompile.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "modules/skcms/skcms.h"
 #include "src/core/SkBlenderBase.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/FactoryFunctions.h"
 #include "src/gpu/graphite/KeyContext.h"
-#include "src/gpu/graphite/PaintOptionsPriv.h"
 #include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/PipelineData.h"
-#include "src/gpu/graphite/Precompile.h"
+#include "src/gpu/graphite/PrecompileInternal.h"
 #include "src/gpu/graphite/PublicPrecompile.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/geom/Geometry.h"
+#include "src/gpu/graphite/precompile/PaintOptionsPriv.h"
 #include "tools/ToolUtils.h"
 #include "tools/gpu/GrContextFactory.h"
 #include "tools/graphite/ContextFactory.h"
@@ -334,8 +336,7 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
                                                                     : Layout::kStd140;
 
     PaintParamsKeyBuilder builder(dict);
-    PipelineDataGatherer gatherer(recorder->priv().caps(), layout);
-
+    PipelineDataGatherer gatherer(layout);
 
     auto [paint, paintOptions] = create_random_paint(fuzz, depth);
 

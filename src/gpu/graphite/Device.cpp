@@ -946,10 +946,9 @@ void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
             auto [bounds, localToDevice] = subRun->vertexFiller().boundsAndDeviceMatrix(
                                                    this->localToDeviceTransform(), drawOrigin);
             SkPaint subRunPaint = paint;
-            // For color emoji, only the paint alpha affects the final color
+            // For color emoji, shaders don't affect the final color
             if (subRun->maskFormat() == skgpu::MaskFormat::kARGB) {
-                subRunPaint.setColor(SK_ColorWHITE);
-                subRunPaint.setAlphaf(paint.getAlphaf());
+                subRunPaint.setShader(nullptr);
             }
 
             bool useGammaCorrectDistanceTable =
@@ -969,7 +968,8 @@ void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
                                                    rendererData)),
                                subRunPaint,
                                DefaultFillStyle(),
-                               DrawFlags::kIgnorePathEffect);
+                               DrawFlags::kIgnorePathEffect,
+                               SkBlender::Mode(SkBlendMode::kDstIn));
         }
         subRunCursor += glyphsRegenerated;
 
@@ -1320,7 +1320,7 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
         SkASSERT(!requireMSAA);
         sktext::gpu::RendererData rendererData = geometry.subRunData().rendererData();
         if (!rendererData.isSDF) {
-            return {renderers->bitmapText(rendererData.isLCD), nullptr};
+            return {renderers->bitmapText(rendererData.isLCD, rendererData.maskFormat), nullptr};
         }
         // Even though the SkPaint can request subpixel rendering, we still need to match
         // this with the pixel geometry.
@@ -1620,7 +1620,7 @@ void Device::drawCoverageMask(const SkSpecialImage* mask,
     TextureDataBlock tdb;
     // NOTE: CoverageMaskRenderStep controls the final sampling options; this texture data block
     // serves only to keep the mask alive so the sampling passed to add() doesn't matter.
-    tdb.add(fRecorder->priv().caps(), SkFilterMode::kLinear, kClamp, maskProxyView.refProxy());
+    tdb.add(maskProxyView.refProxy(), {SkFilterMode::kLinear, kClamp});
     fRecorder->priv().textureDataCache()->insert(tdb);
 
     // CoverageMaskShape() wraps a Shape when it's used as a PathAtlas, but in this case the
