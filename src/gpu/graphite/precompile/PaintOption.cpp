@@ -9,6 +9,7 @@
 
 #include "include/core/SkBlender.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
@@ -74,7 +75,7 @@ void PaintOption::handlePrimitiveColor(const KeyContext& keyContext,
                   this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
               },
               /* addDstToKey= */ [&]() -> void {
-                  keyBuilder->addBlock(BuiltInCodeSnippetID::kPrimitiveColor);
+                  PrimitiveColorBlock::AddBlock(keyContext, keyBuilder, gatherer);
               });
     } else {
         this->addPaintColorToKey(keyContext, keyBuilder, gatherer);

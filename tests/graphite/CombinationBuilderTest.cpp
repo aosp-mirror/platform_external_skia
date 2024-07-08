@@ -12,6 +12,7 @@
 #include "include/core/SkColorSpace.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/FactoryFunctions.h"
@@ -27,6 +28,25 @@
 using namespace::skgpu::graphite;
 
 namespace {
+
+// colorfilters
+static constexpr int kExpectedBlendCFCombos = 1;
+static constexpr int kExpectedColorSpaceCFCombos = 1;
+static constexpr int kExpectedHighContrastCFCombos = 1;
+static constexpr int kExpectedLightingCFCombos = 1;
+static constexpr int kExpectedLumaCFCombos = 1;
+static constexpr int kExpectedMatrixCFCombos = 1;
+static constexpr int kExpectedOverdrawCFCombos = 1;
+static constexpr int kExpectedTableCFCombos = 1;
+
+// shaders
+static constexpr int kExpectedGradientCombos = 3;
+static constexpr int kExpectedImageCombos = 6;
+static constexpr int kExpectedPerlinNoiseCombos = 1;
+static constexpr int kExpectedPictureCombos = 12;
+static constexpr int kExpectedRawImageCombos = 3;
+static constexpr int kExpectedSolidColorCombos = 1;
+
 
 // A default kSrcOver blend mode will be supplied if no other blend options are added
 void no_blend_mode_option_test(const KeyContext& keyContext,
@@ -82,16 +102,20 @@ void run_test(const KeyContext& keyContext,
 void big_test(const KeyContext& keyContext,
               PipelineDataGatherer* gatherer,
               skiatest::Reporter* reporter) {
-    // paintOptions (248)
-    //  |- sweepGrad_0 (2) | blendShader_0 (60)
-    //  |                     0: kSrc (1)
-    //  |                     1: (dsts) linearGrad_0 (2) | solid_0 (1)
-    //  |                     2: (srcs) linearGrad_1 (2) | blendShader_1 (18)
-    //  |                                                   0: kDst (1)
-    //  |                                                   1: (dsts) radGrad_0 (2) | solid_1 (1)
-    //  |                                                   2: (srcs) imageShader_0 (6)
+
+    static constexpr int kNumExpected = 444;
+    // paintOptions (444 = 4*111)
+    //  |- (111 = 3+108) sweepGrad_0 (3) |
+    //  |                blendShader_0 (108 = 1*4*27)
+    //  |                 |- 0: (1)       kSrc (1)
+    //  |                 |- 1: (4=3+1)   (dsts) linearGrad_0 (3) | solid_0 (1)
+    //  |                 |- 2: (27=3+24) (srcs) linearGrad_1 (3) |
+    //  |                                        blendShader_1 (24=1*4*6)
+    //  |                                         |- 0: (1) kDst (1)
+    //  |                                         |- 1: (4=3+1) (dsts) radGrad_0 (3) | solid_1 (1)
+    //  |                                         |- 2: (6) (srcs) imageShader_0 (6)
     //  |
-    //  |- 4-built-in-blend-modes
+    //  |- (4) 4-built-in-blend-modes
 
     PaintOptions paintOptions;
 
@@ -134,7 +158,7 @@ void big_test(const KeyContext& keyContext,
     // now, blend modes
     paintOptions.setBlendModes(kEvenMoreBlendModes);                             // c array
 
-    REPORTER_ASSERT(reporter, paintOptions.priv().numCombinations() == 248,
+    REPORTER_ASSERT(reporter, paintOptions.priv().numCombinations() == kNumExpected,
                     "Actual # of combinations %d", paintOptions.priv().numCombinations());
 
     std::vector<UniquePaintParamsID> precompileIDs;
@@ -150,7 +174,7 @@ void big_test(const KeyContext& keyContext,
                                                                precompileIDs.push_back(id);
                                                            });
 
-    SkASSERT(precompileIDs.size() == 248);
+    SkASSERT(precompileIDs.size() == kNumExpected);
 }
 
 template <typename T>
@@ -184,7 +208,7 @@ std::vector<sk_sp<T>> create_runtime_combos(
 void runtime_effect_test(const KeyContext& keyContext,
                          PipelineDataGatherer* gatherer,
                          skiatest::Reporter* reporter) {
-    // paintOptions (8)
+    // paintOptions (8 = 2*2*2)
     //  |- combineShader (2)
     //  |       0: redShader   | greenShader
     //  |       1: greenShader | redShader
@@ -296,6 +320,234 @@ void runtime_effect_test(const KeyContext& keyContext,
     SkASSERT(precompileIDs.size() == 8);
 }
 
+// Exercise all the PrecompileBlenders factories
+void blend_subtest(const KeyContext& keyContext,
+                   PipelineDataGatherer* gatherer,
+                   skiatest::Reporter* reporter) {
+    // The BlendMode PrecompileBlender only ever has 1 combination
+    {
+        PaintOptions paintOptions;
+        paintOptions.setBlenders({ PrecompileBlenders::Mode(SkBlendMode::kColorDodge) });
+
+        run_test(keyContext, gatherer, reporter, paintOptions, /* expectedNumOptions= */ 1);
+    }
+
+    // Specifying the BlendMode PrecompileBlender by SkBlendMode should also only ever
+    // yield 1 combination.
+    {
+        PaintOptions paintOptions;
+        paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
+
+        run_test(keyContext, gatherer, reporter, paintOptions, /* expectedNumOptions= */ 1);
+    }
+
+    // The Arithmetic PrecompileBlender only ever has 1 combination
+    {
+        PaintOptions paintOptions;
+        paintOptions.setBlenders({ PrecompileBlenders::Arithmetic() });
+
+        run_test(keyContext, gatherer, reporter, paintOptions, /* expectedNumOptions= */ 1);
+    }
+}
+
+// Exercise all the PrecompileShaders factories
+void shader_subtest(const KeyContext& keyContext,
+                    PipelineDataGatherer* gatherer,
+                    skiatest::Reporter* reporter) {
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders({ PrecompileShaders::Empty() });
+
+        run_test(keyContext, gatherer, reporter, paintOptions, /* expectedNumOptions= */ 1);
+    }
+
+    // The solid color shader only ever generates one combination. Because it is constant
+    // everywhere it can cause other shaders to be elided (e.g., the LocalMatrix shader -
+    // see the LocalMatrix test(s) below).
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders({ PrecompileShaders::Color() });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ kExpectedSolidColorCombos);
+    }
+
+    // In general, the blend shader generates the product of the options in each of its slots.
+    // The rules for how many combinations the SkBlendModes yield are:
+    //   all Porter-Duff SkBlendModes collapse to one option (see SkBlendMode::kLastCoeffMode)
+    //   all non-Porter-Duff SkBlendModes collapse to a second option
+    {
+        const SkBlendMode kBlendModes[] = {
+                SkBlendMode::kScreen,    // Porter-Duff
+                SkBlendMode::kSrcOut,    // Porter-Duff
+                SkBlendMode::kDarken,    // non-Porter-Duff
+                SkBlendMode::kHardLight, // non-Porter-Duff
+        };
+        PaintOptions paintOptions;
+        paintOptions.setShaders(
+                { PrecompileShaders::Blend(SkSpan<const SkBlendMode>(kBlendModes),
+                                           { PrecompileShaders::Color() },
+                                           { PrecompileShaders::MakeFractalNoise() }) });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ 2 *  // both Porter-Duff and non-Porter-Duff
+                                           kExpectedSolidColorCombos *
+                                           kExpectedPerlinNoiseCombos);
+    }
+
+    // The ImageShaders have 6 combinations (3 sampling/tiling x 2 alpha/non-alpha)
+    // The CoordClamp shader doesn't add any additional combinations to its wrapped shader.
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders({ PrecompileShaders::CoordClamp({ PrecompileShaders::Image() }) });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ kExpectedImageCombos);
+    }
+
+    // RawImageShaders only have 3 combinations (since they never incorporate alpha)
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders({ PrecompileShaders::RawImage() });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ kExpectedRawImageCombos);
+    }
+
+    // Each Perlin noise shader only has one combination
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders({ PrecompileShaders::MakeFractalNoise(),
+                                  PrecompileShaders::MakeTurbulence() });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ kExpectedPerlinNoiseCombos + kExpectedPerlinNoiseCombos);
+    }
+
+    // Each gradient shader generates 3 combinations
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders({ PrecompileShaders::LinearGradient(),
+                                  PrecompileShaders::RadialGradient(),
+                                  PrecompileShaders::TwoPointConicalGradient(),
+                                  PrecompileShaders::SweepGradient() });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ kExpectedGradientCombos + kExpectedGradientCombos +
+                                           kExpectedGradientCombos + kExpectedGradientCombos);
+    }
+
+    // Each picture shader generates 12 combinations:
+    //    2 (pictureShader LM) x 6 (imageShader variations)
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders({ PrecompileShaders::Picture() });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ kExpectedPictureCombos);
+    }
+
+    // In general, the local matrix shader just generates however many options its wrapped
+    // shader generates.
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders(
+                { PrecompileShaders::LocalMatrix({ PrecompileShaders::LinearGradient() }) });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ kExpectedGradientCombos);
+    }
+
+    // The ColorFilter shader just creates the cross product of its child options
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders(
+                { PrecompileShaders::ColorFilter({ PrecompileShaders::LinearGradient() },
+                                                 { PrecompileColorFilters::Blend() }) });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ kExpectedGradientCombos * kExpectedBlendCFCombos);
+    }
+
+    {
+        PaintOptions paintOptions;
+        paintOptions.setShaders(
+                { PrecompileShaders::WorkingColorSpace({ PrecompileShaders::LinearGradient() },
+                                                       { SkColorSpace::MakeSRGBLinear() }) });
+
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 /* expectedNumOptions= */ kExpectedGradientCombos *
+                                           1 /* only one colorSpace */);
+    }
+}
+
+// Exercise all the PrecompileColorFilters factories. The impact of colorfilters on the number
+// of combinations is very predictable. Except for the Compose and Lerp color filters, all the
+// color filters only ever have one combination. The Compose and Lerp color filters also just
+// simply generate the cross product of their children.
+void colorfilter_subtest(const KeyContext& keyContext,
+                         PipelineDataGatherer* gatherer,
+                         skiatest::Reporter* reporter) {
+
+
+    {
+        // The compose colorfilter just generates the cross product of its children.
+        static constexpr int kExpectedNumOptions =
+                kExpectedTableCFCombos * (kExpectedHighContrastCFCombos + kExpectedLumaCFCombos) +
+                kExpectedLightingCFCombos * (kExpectedHighContrastCFCombos + kExpectedLumaCFCombos);
+
+        PaintOptions paintOptions;
+        paintOptions.setColorFilters(
+            { PrecompileColorFilters::Compose(
+                    { PrecompileColorFilters::Table(), PrecompileColorFilters::Lighting() },
+                    { PrecompileColorFilters::HighContrast(), PrecompileColorFilters::Luma() }) });
+
+        run_test(keyContext, gatherer, reporter, paintOptions, kExpectedNumOptions);
+    }
+
+    {
+        PaintOptions paintOptions;
+        paintOptions.setColorFilters({ PrecompileColorFilters::Blend() });
+
+        run_test(keyContext, gatherer, reporter, paintOptions, kExpectedBlendCFCombos);
+    }
+
+    {
+        PaintOptions paintOptions;
+        paintOptions.setColorFilters({ PrecompileColorFilters::Matrix(),
+                                       PrecompileColorFilters::HSLAMatrix() });
+
+        // HSLAMatrix and Matrix map to the same color filter
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 kExpectedMatrixCFCombos + kExpectedMatrixCFCombos);
+    }
+
+    {
+        PaintOptions paintOptions;
+        paintOptions.setColorFilters({ PrecompileColorFilters::LinearToSRGBGamma(),
+                                       PrecompileColorFilters::SRGBToLinearGamma() });
+
+        // LinearToSRGB and SRGBToLinear both map to the colorspace colorfilter
+        run_test(keyContext, gatherer, reporter, paintOptions,
+                 kExpectedColorSpaceCFCombos + kExpectedColorSpaceCFCombos);
+    }
+
+    {
+        // The lerp colorfilter just generates the cross product of its children.
+        static constexpr int kExpectedNumOptions =
+                kExpectedMatrixCFCombos * (kExpectedBlendCFCombos + kExpectedOverdrawCFCombos) +
+                kExpectedLumaCFCombos * (kExpectedBlendCFCombos + kExpectedOverdrawCFCombos);
+
+        PaintOptions paintOptions;
+        paintOptions.setColorFilters(
+            { PrecompileColorFilters::Lerp(
+                    { PrecompileColorFilters::Matrix(), PrecompileColorFilters::Luma() },
+                    { PrecompileColorFilters::Blend(), PrecompileColorFilters::Overdraw() }) });
+
+        run_test(keyContext, gatherer, reporter, paintOptions, kExpectedNumOptions);
+    }
+}
+
 } // anonymous namespace
 
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(CombinationBuilderTest, reporter, context,
@@ -312,7 +564,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(CombinationBuilderTest, reporter, context,
                           /* dstTexture= */ nullptr,
                           /* dstOffset= */ {0, 0});
 
-    PipelineDataGatherer gatherer(context->priv().caps(), Layout::kMetal);
+    PipelineDataGatherer gatherer(Layout::kMetal);
 
     // The default PaintOptions should create a single combination with a solid color shader and
     // kSrcOver blending
@@ -322,32 +574,9 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(CombinationBuilderTest, reporter, context,
         run_test(keyContext, &gatherer, reporter, paintOptions, /* expectedNumOptions= */ 1);
     }
 
-    // The BlendMode PrecompileBlender only ever has 1 combination
-    {
-        PaintOptions paintOptions;
-        paintOptions.setBlenders({ PrecompileBlenders::Mode(SkBlendMode::kColorDodge) });
-
-        run_test(keyContext, &gatherer, reporter, paintOptions, /* expectedNumOptions= */ 1);
-    }
-
-    // Specifying the BlendMode PrecompileBlender by SkBlendMode should also only ever
-    // yield 1 combination.
-    {
-        SkBlendMode blendModes[] = { SkBlendMode::kSrcOver };
-
-        PaintOptions paintOptions;
-        paintOptions.setBlendModes(blendModes);
-
-        run_test(keyContext, &gatherer, reporter, paintOptions, /* expectedNumOptions= */ 1);
-    }
-
-    // The Arithmetic PrecompileBlender only ever has 1 combination
-    {
-        PaintOptions paintOptions;
-        paintOptions.setBlenders({ PrecompileBlenders::Arithmetic() });
-
-        run_test(keyContext, &gatherer, reporter, paintOptions, /* expectedNumOptions= */ 1);
-    }
+    blend_subtest(keyContext, &gatherer, reporter);
+    shader_subtest(keyContext, &gatherer, reporter);
+    colorfilter_subtest(keyContext, &gatherer, reporter);
 
     no_blend_mode_option_test(keyContext, &gatherer, reporter);
     big_test(keyContext, &gatherer, reporter);

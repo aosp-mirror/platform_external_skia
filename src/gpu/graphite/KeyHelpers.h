@@ -23,6 +23,7 @@
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/shaders/SkShaderBase.h"
+#include "src/shaders/gradients/SkGradientBaseShader.h"
 
 class SkColorFilter;
 class SkData;
@@ -91,7 +92,7 @@ struct GradientShaderBlocks {
         // This ctor is used during pre-compilation when we don't have enough information to
         // extract uniform data. However, we must be able to provide enough data to make all the
         // relevant decisions about which code snippets to use.
-        GradientData(SkShaderBase::GradientType, int numStops);
+        GradientData(SkShaderBase::GradientType, int numStops, bool useStorageBuffer);
 
         // This ctor is used when extracting information from PaintParams. It must provide
         // enough data to generate the uniform data the selected code snippet will require.
@@ -103,6 +104,7 @@ struct GradientShaderBlocks {
                      int numStops,
                      const SkPMColor4f* colors,
                      const float* offsets,
+                     const SkGradientBaseShader* shader,
                      sk_sp<TextureProxy> colorsAndOffsetsProxy,
                      bool useStorageBuffer,
                      const SkGradientShader::Interpolation&);
@@ -134,6 +136,7 @@ struct GradientShaderBlocks {
         sk_sp<TextureProxy>           fColorsAndOffsetsProxy;
         const SkPMColor4f*            fSrcColors;
         const float*                  fSrcOffsets;
+        const SkGradientBaseShader*   fSrcShader;
 
         SkGradientShader::Interpolation fInterpolation;
     };
@@ -204,6 +207,7 @@ struct YUVImageShaderBlock {
         SkRect fSubset;
         SkPoint fLinearFilterUVInset = { 0.50001f, 0.50001f };
         SkV4 fChannelSelect[4];
+        float fAlphaParam = 0;
         SkMatrix fYUVtoRGBMatrix;
         SkPoint3 fYUVtoRGBTranslate;
 
@@ -365,6 +369,12 @@ struct ColorSpaceTransformBlock {
                          PaintParamsKeyBuilder*,
                          PipelineDataGatherer*,
                          const ColorSpaceTransformData&);
+};
+
+struct PrimitiveColorBlock {
+    static void AddBlock(const KeyContext&,
+                         PaintParamsKeyBuilder*,
+                         PipelineDataGatherer*);
 };
 
 /**
