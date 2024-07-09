@@ -1,7 +1,6 @@
 load("//bazel:flags.bzl", "selects")
 load(
     "//bazel:skia_rules.bzl",
-    "exports_files_legacy",
     "select_multi",
     "skia_cc_deps",
     "skia_cc_library",
@@ -14,8 +13,6 @@ package(
 )
 
 licenses(["notice"])
-
-exports_files_legacy()
 
 skia_filegroup(
     name = "discardable_memory_pool",
@@ -506,10 +503,7 @@ skia_filegroup(
 
 skia_filegroup(
     name = "fontmgr_fontations_empty_srcs",
-    srcs = [
-        "SkFontMgr_fontations_empty.cpp",
-        "SkFontMgr_fontations_empty.h",
-    ],
+    srcs = ["SkFontMgr_fontations_empty.cpp"],
 )
 
 skia_cc_library(
