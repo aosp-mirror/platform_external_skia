@@ -502,7 +502,9 @@ void LocalMatrixShaderBlock::BeginBlock(const KeyContext& keyContext,
 
     add_localmatrixshader_uniform_data(keyContext.dict(), lmShaderData.fLocalMatrix, gatherer);
 
-    builder->beginBlock(BuiltInCodeSnippetID::kLocalMatrixShader);
+    builder->beginBlock(lmShaderData.fHasPerspective
+                                ? BuiltInCodeSnippetID::kLocalMatrixShaderPersp
+                                : BuiltInCodeSnippetID::kLocalMatrixShader);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1093,10 +1095,11 @@ namespace {
 
 void add_primitive_color_uniform_data(
         const ShaderCodeDictionary* dict,
+        const SkColorSpaceXformSteps& steps,
         PipelineDataGatherer* gatherer) {
 
-    // VALIDATE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kPrimitiveColor);
-    // TODO: add colorspace uniforms
+    VALIDATE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kPrimitiveColor)
+    add_color_space_uniforms(steps, ReadSwizzle::kRGBA, gatherer);
 }
 
 }  // anonymous namespace
@@ -1104,7 +1107,11 @@ void add_primitive_color_uniform_data(
 void PrimitiveColorBlock::AddBlock(const KeyContext& keyContext,
                                    PaintParamsKeyBuilder* builder,
                                    PipelineDataGatherer* gatherer) {
-    add_primitive_color_uniform_data(keyContext.dict(), gatherer);
+    SkColorSpaceXformSteps steps = SkColorSpaceXformSteps(SkColorSpace::MakeSRGB().get(),
+                                                          kPremul_SkAlphaType,
+                                                          keyContext.dstColorInfo().colorSpace(),
+                                                          keyContext.dstColorInfo().alphaType());
+    add_primitive_color_uniform_data(keyContext.dict(), steps, gatherer);
 
     builder->addBlock(BuiltInCodeSnippetID::kPrimitiveColor);
 }
@@ -1784,13 +1791,6 @@ static void add_yuv_image_to_key(const KeyContext& keyContext,
     );
     imgData.fYUVtoRGBTranslate = {yuvM[4], yuvM[9], yuvM[14]};
 
-    // The YUV formats can encode their own origin including reflection and rotation,
-    // so we need to wrap our block in an additional local matrix transform.
-    SkMatrix originMatrix = yuvaInfo.originMatrix();
-    LocalMatrixShaderBlock::LMShaderData lmShaderData(originMatrix);
-
-    KeyContextWithLocalMatrix newContext(keyContext, originMatrix);
-
     SkColorSpaceXformSteps steps;
     SkASSERT(steps.flags.mask() == 0);   // By default, the colorspace should have no effect
     if (!origShader->isRaw()) {
@@ -1803,9 +1803,7 @@ static void add_yuv_image_to_key(const KeyContext& keyContext,
 
     Compose(keyContext, builder, gatherer,
             /* addInnerToKey= */ [&]() -> void {
-                LocalMatrixShaderBlock::BeginBlock(newContext, builder, gatherer, lmShaderData);
-                    YUVImageShaderBlock::AddBlock(newContext, builder, gatherer, imgData);
-                builder->endBlock();
+                YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
             },
             /* addOuterToKey= */ [&]() -> void {
                 ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer, data);
@@ -1959,17 +1957,25 @@ static void add_to_key(const KeyContext& keyContext,
         // If the image is not graphite backed then we can assume the origin will be TopLeft as we
         // require that in the ImageProvider utility. Also Graphite YUV images are assumed to be
         // TopLeft origin.
-        // TODO (b/336788317): Fold YUVAImage's origin into this matrix as well.
         auto imgBase = as_IB(imgShader->image());
-        if (imgBase->isGraphiteBacked() && !imgBase->isYUVA()) {
-            auto imgGraphite = static_cast<Image*>(imgBase);
-            SkASSERT(imgGraphite);
-            const auto& view = imgGraphite->textureProxyView();
-            if (view.origin() == Origin::kBottomLeft) {
-                matrix.setScaleY(-1);
-                matrix.setTranslateY(view.height());
+        if (imgBase->isGraphiteBacked()) {
+            // The YUV formats can encode their own origin including reflection and rotation,
+            // so we need to concat that to the local matrix transform.
+            if (imgBase->isYUVA()) {
+                auto imgYUVA = static_cast<const Image_YUVA*>(imgBase);
+                SkASSERT(imgYUVA);
+                matrix = imgYUVA->yuvaInfo().originMatrix();
+            } else {
+                auto imgGraphite = static_cast<Image*>(imgBase);
+                SkASSERT(imgGraphite);
+                const auto& view = imgGraphite->textureProxyView();
+                if (view.origin() == Origin::kBottomLeft) {
+                    matrix.setScaleY(-1);
+                    matrix.setTranslateY(view.height());
+                }
             }
         }
+
     } else if (wrappedShaderBase->type() == SkShaderBase::ShaderType::kGradientBase) {
         auto gradShader = static_cast<const SkGradientBaseShader*>(wrappedShader);
         auto gradMatrix = gradShader->getGradientMatrix();
