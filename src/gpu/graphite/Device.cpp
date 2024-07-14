@@ -1090,8 +1090,13 @@ void Device::drawGeometry(const Transform& localToDevice,
     const SkBlenderBase* blender = as_BB(paint.getBlender());
     const std::optional<SkBlendMode> blendMode = blender ? blender->asBlendMode()
                                                          : SkBlendMode::kSrcOver;
-    const Coverage rendererCoverage = renderer ? renderer->coverage()
-                                               : Coverage::kSingleChannel;
+    Coverage rendererCoverage = renderer ? renderer->coverage()
+                                         : Coverage::kSingleChannel;
+    if (clip.shader() && rendererCoverage == Coverage::kNone) {
+        // Must upgrade to single channel coverage if there is a clip shader; but preserve LCD
+        // coverage if the Renderer uses that.
+        rendererCoverage = Coverage::kSingleChannel;
+    }
     dstReadReq = GetDstReadRequirement(recorder()->priv().caps(), blendMode, rendererCoverage);
 
     // When using a tessellating path renderer a stroke-and-fill is rendered using two draws. When
