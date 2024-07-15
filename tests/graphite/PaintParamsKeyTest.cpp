@@ -39,6 +39,7 @@
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileImageFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileMaskFilter.h"
+#include "include/gpu/graphite/precompile/PrecompileRuntimeEffect.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/base/SkRandom.h"
 #include "src/core/SkBlenderBase.h"
@@ -46,13 +47,11 @@
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
-#include "src/gpu/graphite/FactoryFunctions.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/PipelineData.h"
-#include "src/gpu/graphite/PrecompileInternal.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Renderer.h"
@@ -551,7 +550,7 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_runtime_shader(SkRand
     sk_sp<SkData> uniforms = SkData::MakeWithCopy(kUniforms, sizeof(kUniforms));
 
     sk_sp<SkShader> s = sEffect->makeShader(std::move(uniforms), /* children= */ {});
-    sk_sp<PrecompileShader> o = MakePrecompileShader(sk_ref_sp(sEffect));
+    sk_sp<PrecompileShader> o = PrecompileRuntimeEffects::MakePrecompileShader(sk_ref_sp(sEffect));
     return { std::move(s), std::move(o) };
 }
 
@@ -838,7 +837,8 @@ std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> src_blender() {
     );
 
     sk_sp<SkBlender> b = sSrcEffect->makeBlender(/* uniforms= */ nullptr);
-    sk_sp<PrecompileBlender> o = MakePrecompileBlender(sk_ref_sp(sSrcEffect));
+    sk_sp<PrecompileBlender> o =
+            PrecompileRuntimeEffects::MakePrecompileBlender(sk_ref_sp(sSrcEffect));
     return { std::move(b) , std::move(o) };
 }
 
@@ -851,7 +851,8 @@ std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> dest_blender() {
     );
 
     sk_sp<SkBlender> b = sDestEffect->makeBlender(/* uniforms= */ nullptr);
-    sk_sp<PrecompileBlender> o = MakePrecompileBlender(sk_ref_sp(sDestEffect));
+    sk_sp<PrecompileBlender> o =
+            PrecompileRuntimeEffects::MakePrecompileBlender(sk_ref_sp(sDestEffect));
     return { std::move(b) , std::move(o) };
 }
 
@@ -876,8 +877,9 @@ std::pair<sk_sp<SkBlender>, sk_sp<PrecompileBlender>> combo_blender() {
 
     sk_sp<SkData> uniforms = SkData::MakeWithCopy(kUniforms, sizeof(kUniforms));
     sk_sp<SkBlender> b = sComboEffect->makeBlender(std::move(uniforms), children);
-    sk_sp<PrecompileBlender> o = MakePrecompileBlender(sk_ref_sp(sComboEffect),
-                                                       { { srcO }, { dstO } });
+    sk_sp<PrecompileBlender> o = PrecompileRuntimeEffects::MakePrecompileBlender(
+            sk_ref_sp(sComboEffect),
+            { { srcO }, { dstO } });
     return { std::move(b) , std::move(o) };
 }
 
@@ -942,7 +944,7 @@ std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> double_colorfilter
     );
 
     return { sSrcEffect->makeColorFilter(/* uniforms= */ nullptr),
-             MakePrecompileColorFilter(sk_ref_sp(sSrcEffect)) };
+             PrecompileRuntimeEffects::MakePrecompileColorFilter(sk_ref_sp(sSrcEffect)) };
 }
 
 std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> half_colorfilter() {
@@ -954,7 +956,7 @@ std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> half_colorfilter()
     );
 
     return { sDestEffect->makeColorFilter(/* uniforms= */ nullptr),
-             MakePrecompileColorFilter(sk_ref_sp(sDestEffect)) };
+             PrecompileRuntimeEffects::MakePrecompileColorFilter(sk_ref_sp(sDestEffect)) };
 }
 
 std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> combo_colorfilter() {
@@ -972,14 +974,14 @@ std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> combo_colorfilter(
     auto [dst, dstO] = half_colorfilter();
 
     SkRuntimeEffect::ChildPtr children[] = { src, dst };
-    const sk_sp<PrecompileBase> childOptions[] = { srcO, dstO };
 
     const float kUniforms[] = { 0.5f };
 
     sk_sp<SkData> uniforms = SkData::MakeWithCopy(kUniforms, sizeof(kUniforms));
     sk_sp<SkColorFilter> cf = sComboEffect->makeColorFilter(std::move(uniforms), children);
-    sk_sp<PrecompileColorFilter> o = MakePrecompileColorFilter(sk_ref_sp(sComboEffect),
-                                                               { childOptions });
+    sk_sp<PrecompileColorFilter> o =
+            PrecompileRuntimeEffects::MakePrecompileColorFilter(sk_ref_sp(sComboEffect),
+                                                                { { srcO }, { dstO } });
     return { std::move(cf) , std::move(o) };
 }
 
@@ -1571,6 +1573,23 @@ SkPath make_path() {
 }
 
 struct DrawData {
+    DrawData() {
+        SkFont font(ToolUtils::DefaultPortableTypeface(), 16);
+        const char text[] = "hambur1";
+
+        constexpr int kNumVerts = 4;
+        constexpr SkPoint kPositions[kNumVerts] { { 0, 0 }, { 0, 16 }, { 16, 16 }, { 16, 0 } };
+        constexpr SkColor kColors[kNumVerts] = { SK_ColorBLUE, SK_ColorGREEN,
+                                                 SK_ColorCYAN, SK_ColorYELLOW };
+
+        fPath = make_path();
+        fBlob = SkTextBlob::MakeFromText(text, strlen(text), font);
+        fVertsWithColors = SkVertices::MakeCopy(SkVertices::kTriangleFan_VertexMode, kNumVerts,
+                                                kPositions, kPositions, kColors);
+        fVertsWithOutColors = SkVertices::MakeCopy(SkVertices::kTriangleFan_VertexMode, kNumVerts,
+                                                   kPositions, kPositions, /* colors= */ nullptr);
+    }
+
     SkPath fPath;
     sk_sp<SkTextBlob> fBlob;
     sk_sp<SkVertices> fVertsWithColors;
@@ -1608,8 +1627,9 @@ void check_draw(skiatest::Reporter* reporter,
                 Recorder* recorder,
                 const SkPaint& paint,
                 DrawTypeFlags dt,
-                ClipType clip, sk_sp<SkShader> clipShader,
-                const DrawData& drawData) {
+                ClipType clip,
+                sk_sp<SkShader> clipShader) {
+    static const DrawData kDrawData;
 
     int before = context->priv().globalCache()->numGraphicsPipelines();
 
@@ -1646,18 +1666,18 @@ void check_draw(skiatest::Reporter* reporter,
                 simple_draws(canvas, paint);
                 break;
             case DrawTypeFlags::kNonSimpleShape:
-                non_simple_draws(canvas, paint, drawData);
+                non_simple_draws(canvas, paint, kDrawData);
                 break;
             case DrawTypeFlags::kShape:
                 simple_draws(canvas, paint);
-                non_simple_draws(canvas, paint, drawData);
+                non_simple_draws(canvas, paint, kDrawData);
                 break;
             case DrawTypeFlags::kText:
-                canvas->drawTextBlob(drawData.fBlob, 0, 16, paint);
+                canvas->drawTextBlob(kDrawData.fBlob, 0, 16, paint);
                 break;
             case DrawTypeFlags::kDrawVertices:
-                canvas->drawVertices(drawData.fVertsWithColors, SkBlendMode::kDst, paint);
-                canvas->drawVertices(drawData.fVertsWithOutColors, SkBlendMode::kDst, paint);
+                canvas->drawVertices(kDrawData.fVertsWithColors, SkBlendMode::kDst, paint);
+                canvas->drawVertices(kDrawData.fVertsWithOutColors, SkBlendMode::kDst, paint);
                 break;
             default:
                 SkASSERT(false);
@@ -1708,7 +1728,6 @@ void run_test(skiatest::Reporter*,
               Context*,
               skiatest::graphite::GraphiteTestContext*,
               const KeyContext& precompileKeyContext,
-              const DrawData&,
               ShaderType,
               BlenderType,
               ColorFilterType,
@@ -1757,23 +1776,6 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
                                     destColorInfo,
                                     fakeDstTexture,
                                     kFakeDstOffset);
-
-    SkFont font(ToolUtils::DefaultPortableTypeface(), 16);
-    const char text[] = "hambur";
-
-    constexpr int kNumVerts = 4;
-    constexpr SkPoint kPositions[kNumVerts] { {0,0}, {0,16}, {16,16}, {16,0} };
-    constexpr SkColor kColors[kNumVerts] = { SK_ColorBLUE, SK_ColorGREEN,
-                                             SK_ColorCYAN, SK_ColorYELLOW };
-
-    DrawData drawData = {
-            make_path(),
-            SkTextBlob::MakeFromText(text, strlen(text), font),
-            SkVertices::MakeCopy(SkVertices::kTriangleFan_VertexMode, kNumVerts,
-                                 kPositions, kPositions, kColors),
-            SkVertices::MakeCopy(SkVertices::kTriangleFan_VertexMode, kNumVerts,
-                                 kPositions, kPositions, /* colors= */ nullptr),
-    };
 
     ShaderType shaders[] = {
             ShaderType::kBlend,
@@ -1876,7 +1878,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
 #endif
 
                             run_test(reporter, context, testContext, precompileKeyContext,
-                                     drawData, shader, blender, cf, mf, imageFilter, clip);
+                                     shader, blender, cf, mf, imageFilter, clip);
                         }
                     }
                 }
@@ -1893,7 +1895,6 @@ void run_test(skiatest::Reporter* reporter,
               Context* context,
               skiatest::graphite::GraphiteTestContext* testContext,
               const KeyContext& precompileKeyContext,
-              const DrawData& drawData,
               ShaderType s,
               BlenderType bm,
               ColorFilterType cf,
@@ -2054,8 +2055,7 @@ void run_test(skiatest::Reporter* reporter,
                            paint,
                            dt,
                            clip,
-                           clipShader,
-                           drawData);
+                           clipShader);
             }
         }
     }
