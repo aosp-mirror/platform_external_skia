@@ -129,7 +129,7 @@ std::string get_uniforms(Layout layout,
                          int manglingSuffix,
                          bool* wrotePaintColor) {
     std::string result;
-    UniformOffsetCalculator offsetter(layout, *offset);
+    auto offsetter = UniformOffsetCalculator::ForTopLevel(layout, *offset);
 
     std::string uniformName;
     for (const Uniform& u : uniforms) {
@@ -174,6 +174,8 @@ std::string get_node_uniforms(Layout layout,
     SkSpan<const Uniform> uniforms = node->entry()->fUniforms;
 
     if (!uniforms.empty()) {
+        // TODO: Generate a single field pointing to a struct instance of the given type.
+        SkASSERT(!node->entry()->fUniformStructName);
         SkSL::String::appendf(&result, "// %d - %s uniforms\n",
                               node->keyIndex(), node->entry()->fName);
         result += get_uniforms(layout, uniforms, offset, node->keyIndex(), wrotePaintColor);
@@ -223,6 +225,8 @@ std::string get_node_ssbo_fields(const ShaderNode* node, bool* wrotePaintColor) 
     SkSpan<const Uniform> uniforms = node->entry()->fUniforms;
 
     if (!uniforms.empty()) {
+        // TODO: Generate a single field pointing to a struct instance of the given type.
+        SkASSERT(!node->entry()->fUniformStructName);
         SkSL::String::appendf(&result, "// %d - %s uniforms\n",
                               node->keyIndex(), node->entry()->fName);
 
@@ -269,6 +273,8 @@ std::string EmitPaintParamsUniforms(int bufferID,
 
     std::string result = get_uniform_header(bufferID, "FS");
     for (const ShaderNode* n : nodes) {
+        // TODO: Generate a single field pointing to a struct instance of the given type.
+        SkASSERT(!n->entry()->fUniformStructName);
         result += get_node_uniforms(layout, n, &offset, wrotePaintColor);
     }
     result.append("};\n\n");
@@ -431,24 +437,31 @@ std::string EmitVaryings(const RenderStep* step,
     std::string result;
     int location = 0;
 
-    if (emitSsboIndicesVarying) {
-        SkSL::String::appendf(&result,
-                              "    layout(location=%d) %s flat ushort2 %s;\n",
+    auto appendVarying = [&](const Varying& v) {
+        const char* interpolation;
+        switch (v.interpolation()) {
+            case Interpolation::kPerspective: interpolation = ""; break;
+            case Interpolation::kLinear:      interpolation = "noperspective "; break;
+            case Interpolation::kFlat:        interpolation = "flat "; break;
+        }
+        SkSL::String::appendf(&result, "layout(location=%d) %s %s%s %s;\n",
                               location++,
                               direction,
-                              RenderStep::ssboIndicesVarying());
+                              interpolation,
+                              SkSLTypeString(v.gpuType()),
+                              v.name());
+    };
+
+    if (emitSsboIndicesVarying) {
+        appendVarying({RenderStep::ssboIndicesVarying(), SkSLType::kUShort2});
     }
 
     if (emitLocalCoordsVarying) {
-        SkSL::String::appendf(&result, "    layout(location=%d) %s ", location++, direction);
-        result.append(SkSLTypeString(SkSLType::kFloat2));
-        SkSL::String::appendf(&result, " localCoordsVar;\n");
+        appendVarying({"localCoordsVar", SkSLType::kFloat2});
     }
 
     for (auto v : step->varyings()) {
-        SkSL::String::appendf(&result, "    layout(location=%d) %s ", location++, direction);
-        result.append(SkSLTypeString(v.fType));
-        SkSL::String::appendf(&result, " %s;\n", v.fName);
+        appendVarying(v);
     }
 
     return result;
