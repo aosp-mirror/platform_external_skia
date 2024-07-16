@@ -694,10 +694,6 @@ PaintParamsKey ShaderCodeDictionary::lookup(UniquePaintParamsID codeID) const {
     return fIDToPaintKey[codeID.asUInt()];
 }
 
-SkSpan<const Uniform> ShaderCodeDictionary::getUniforms(BuiltInCodeSnippetID id) const {
-    return fBuiltInCodeSnippets[(int) id].fUniforms;
-}
-
 const ShaderSnippet* ShaderCodeDictionary::getEntry(int codeSnippetID) const {
     if (codeSnippetID < 0) {
         return nullptr;
@@ -1589,6 +1585,12 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "gamutTransform", SkSLType::kHalf3x3 },
                            { "dstKind",        SkSLType::kInt },
                            { "csXformCoeffs",  SkSLType::kHalf4x4 } }
+    };
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPremulAlphaColorFilter] = {
+            /*name=*/"PremulAlpha",
+            /*staticFn=*/"sk_premul_alpha",
+            SnippetRequirementFlags::kPriorStageOutput,
+            /*uniforms=*/{}
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kBlendShader] = {
