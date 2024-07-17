@@ -4295,6 +4295,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         ctxInfo.renderer() == GrGLRenderer::kAdreno530       ||
         ctxInfo.renderer() == GrGLRenderer::kAdreno5xx_other ||
         ctxInfo.driver()   == GrGLDriver::kIntel             ||
+        ctxInfo.angleVendor() == GrGLVendor::kIntel          ||
         ctxInfo.isOverCommandBuffer()                        ||
         ctxInfo.vendor()   == GrGLVendor::kARM /* http://skbug.com/11906 */) {
         fBlendEquationSupport = kBasic_BlendEquationSupport;
@@ -4658,15 +4659,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     if (ctxInfo.renderer()       == GrGLRenderer::kWebGL &&
         (ctxInfo.webglRenderer() == GrGLRenderer::kAdreno4xx_other ||
          ctxInfo.webglRenderer() == GrGLRenderer::kAdreno630)) {
-        fFlushBeforeWritePixels = true;
-    }
-    // b/269561251
-    // PowerVR B-Series over ANGLE and passthrough command decoder has similar text atlas glitches
-    // to those seen on Adreno WebGL on the validating decoder (notably that case was fine on
-    // the passthrough decoder). Directly running on the device works correctly, so see if this
-    // around avoids the issue.
-    if (ctxInfo.angleBackend() != GrGLANGLEBackend::kUnknown &&
-        ctxInfo.angleRenderer() == GrGLRenderer::kPowerVRBSeries) {
         fFlushBeforeWritePixels = true;
     }
     // crbug.com/1395777

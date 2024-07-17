@@ -697,7 +697,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/jsfiddle-base container.
 container_pull(
     name = "jsfiddle-base",
-    digest = "sha256:dbe6ed71568e0034ce3d6dce9f6dc264c2e81b219559ecb2351d3a6ff87eed7f",
+    digest = "sha256:6341b74cad37c6ec95c4529a79ad2816fc974fc6ad73a11fe0089dc401a23e25",
     registry = "gcr.io",
     repository = "skia-public/jsfiddle-base",
 )
@@ -713,7 +713,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:6cfa730ae00a1720cdd4f46cea66bcdd450df0d030066d7a964780798fc37230",
+    digest = "sha256:87ec89cd0d0960a99ab870a5f6b33d097dde770e2a06aadba83e7c5da0ab7364",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )

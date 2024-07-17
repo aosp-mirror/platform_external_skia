@@ -26,6 +26,7 @@
 #include "include/sksl/SkSLVersion.h"
 #include "src/base/SkArenaAlloc.h"
 #include "src/base/SkEnumBitMask.h"
+#include "src/base/SkNoDestructor.h"
 #include "src/base/SkStringView.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkRasterPipelineOpContexts.h"
@@ -402,6 +403,11 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
                                  "SwizzleIndexLookup",
                                  "SwizzleIndexStore"}) {
             disables[test].push_back({regex(ADRENO "[3456]"), _, _, kAndroid});
+        }
+        for (const char* test : {"SwitchWithFallthroughGroups",
+                                 "SwizzleIndexLookup",
+                                 "SwizzleIndexStore"}) {
+            disables[test].push_back({regex(ADRENO "[7]"), _, _, kAndroid});
         }
 
         // Older Adreno 5/6xx drivers report a pipeline error or silently fail when handling inouts.

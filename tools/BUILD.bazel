@@ -1,5 +1,5 @@
 load("//bazel:macros.bzl", "py_binary")
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_objc_library")
+load("//bazel:skia_rules.bzl", "skia_cc_library", "skia_objc_library")
 
 package(
     default_applicable_licenses = ["//:license"],
@@ -7,7 +7,7 @@ package(
 
 licenses(["notice"])
 
-exports_files_legacy(label_list = [
+exports_files([
     "ToolUtils.h",
     "ToolUtils.cpp",
     "SkMetaData.h",
@@ -140,20 +140,6 @@ skia_cc_library(
         "//tools/viewer:__pkg__",
     ],
     deps = ["//:skia_internal"],
-)
-
-skia_cc_library(
-    name = "get_executable_path",
-    srcs = select({
-        "@platforms//os:windows": ["SkGetExecutablePath_win.cpp"],
-        "@platforms//os:macos": ["SkGetExecutablePath_mac.cpp"],
-        "@platforms//os:linux": ["SkGetExecutablePath_linux.cpp"],
-    }),
-    hdrs = ["SkGetExecutablePath.h"],
-    visibility = [
-        "//src/sksl:__pkg__",
-        "//tools/sksl-minify:__pkg__",
-    ],
 )
 
 skia_cc_library(
@@ -309,8 +295,11 @@ skia_cc_library(
         "//src/codec:headers_to_compile",
         "//src/core:headers_to_compile",
         "//src/encode:headers_to_compile",
+        "//src/gpu/ganesh/effects:headers_to_compile",
         "//src/gpu/ganesh/geometry:headers_to_compile",
+        "//src/gpu/ganesh/gl:headers_to_compile",
         "//src/gpu/ganesh/mock:headers_to_compile",
+        "//src/gpu/ganesh/tessellate:headers_to_compile",
         "//src/gpu/ganesh:headers_to_compile",
         "//src/gpu/tessellate:headers_to_compile",
         "//src/gpu/vk:headers_to_compile",

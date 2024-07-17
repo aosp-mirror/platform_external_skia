@@ -726,7 +726,7 @@ public:
               sk_sp<SkRefCnt> subRunStorage,
               const AtlasDrawDelegate& drawAtlas) const override {
         drawAtlas(this, drawOrigin, paint, std::move(subRunStorage),
-                  {/* isSDF = */false, fVertexFiller.isLCD()});
+                  {/* isSDF = */false, fVertexFiller.isLCD(), fVertexFiller.grMaskType()});
     }
 
     int unflattenSize() const override {
@@ -966,7 +966,7 @@ public:
               sk_sp<SkRefCnt> subRunStorage,
               const AtlasDrawDelegate& drawAtlas) const override {
         drawAtlas(this, drawOrigin, paint, std::move(subRunStorage),
-                  {/* isSDF = */false, fVertexFiller.isLCD()});
+                  {/* isSDF = */false, fVertexFiller.isLCD(), fVertexFiller.grMaskType()});
     }
 
 #if defined(SK_GANESH) || defined(SK_USE_LEGACY_GANESH_TEXT_APIS)
@@ -1197,7 +1197,7 @@ public:
               sk_sp<SkRefCnt> subRunStorage,
               const AtlasDrawDelegate& drawAtlas) const override {
         drawAtlas(this, drawOrigin, paint, std::move(subRunStorage),
-                  {/* isSDF = */true, /* isLCD = */fUseLCDText});
+                  {/* isSDF = */true, /* isLCD = */fUseLCDText, skgpu::MaskFormat::kA8});
     }
 
 #if defined(SK_GANESH) || defined(SK_USE_LEGACY_GANESH_TEXT_APIS)
@@ -1351,7 +1351,6 @@ SubRunOwner SubRun::MakeFromBuffer(SkReadBuffer& buffer,
             DrawableSubRun::MakeFromBuffer,
     };
     int subRunTypeInt = buffer.readInt();
-    SkASSERT(kBad < subRunTypeInt && subRunTypeInt < kSubRunStreamTagCount);
     if (!buffer.validate(kBad < subRunTypeInt && subRunTypeInt < kSubRunStreamTagCount)) {
         return nullptr;
     }
