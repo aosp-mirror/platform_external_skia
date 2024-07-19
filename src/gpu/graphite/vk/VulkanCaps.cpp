@@ -93,8 +93,11 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
             VulkanGraphicsPipeline::kRenderStepUniformBufferIndex;
     fResourceBindingReqs.fPaintParamsBufferBinding =
             VulkanGraphicsPipeline::kPaintUniformBufferIndex;
+    fResourceBindingReqs.fGradientBufferBinding =
+            VulkanGraphicsPipeline::kGradientBufferIndex;
 
-    fStorageBufferSupport = true;
+    // TODO(b/353983969): Enable storage buffers once perf regressions are addressed.
+    fStorageBufferSupport = false;
 
     VkPhysicalDeviceMemoryProperties deviceMemoryProperties;
     VULKAN_CALL(vkInterface, GetPhysicalDeviceMemoryProperties(physDev, &deviceMemoryProperties));
