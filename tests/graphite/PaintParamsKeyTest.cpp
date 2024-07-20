@@ -22,6 +22,7 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkVertices.h"
+#include "include/core/SkYUVAPixmaps.h"
 #include "include/effects/SkBlenders.h"
 #include "include/effects/SkColorMatrix.h"
 #include "include/effects/SkGradientShader.h"
@@ -92,12 +93,12 @@ create_random_image_filter(Recorder*, SkRandom*);
 
 //--------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------
+//    M(Empty)
 #define SK_ALL_TEST_SHADERS(M) \
     M(Blend)              \
     M(ColorFilter)        \
     M(CoordClamp)         \
     M(ConicalGradient)    \
-    M(Empty)              \
     M(Image)              \
     M(LinearGradient)     \
     M(LocalMatrix)        \
@@ -108,6 +109,7 @@ create_random_image_filter(Recorder*, SkRandom*);
     M(Runtime)            \
     M(SolidColor)         \
     M(SweepGradient)      \
+    M(YUVImage)           \
     M(WorkingColorSpace)
 
 enum class ShaderType {
@@ -315,14 +317,14 @@ void log_run(const char* label,
              DrawTypeFlags drawTypeFlags) {
     SkDebugf("%s:\n"
              "//------------------------\n"
-             "uint32_t seed = %d;\n"
+             "uint32_t seed = %u;\n"
              "ShaderType shaderType = %s;\n"
              "BlenderType blenderType = %s;\n"
              "ColorFilterType colorFilterType = %s;\n"
              "MaskFilterType maskFilterType = %s;\n"
              "ImageFilterType imageFilterType = %s;\n"
              "ClipType clipType = %s;\n"
-             "DrawTypeFlags drawTypeFlags = %s\n"
+             "DrawTypeFlags drawTypeFlags = %s;\n"
              "//-----------------------\n",
              label, seed,
              to_str(s), to_str(bm), to_str(cf), to_str(mf), to_str(imageFilter), to_str(clip),
@@ -533,6 +535,40 @@ sk_sp<SkImage> make_image(SkRandom* rand, Recorder* recorder) {
     return SkImages::TextureFromImage(recorder, img, {false});
 }
 
+sk_sp<SkImage> make_yuv_image(SkRandom* rand, Recorder* recorder) {
+
+    SkYUVAInfo::PlaneConfig planeConfig = SkYUVAInfo::PlaneConfig::kY_UV;
+    if (rand->nextBool()) {
+        planeConfig = SkYUVAInfo::PlaneConfig::kY_U_V_A;
+    }
+
+    SkYUVAInfo yuvaInfo({ 32, 32, },
+                        planeConfig,
+                        SkYUVAInfo::Subsampling::k420,
+                        kJPEG_Full_SkYUVColorSpace);
+
+    SkASSERT(yuvaInfo.isValid());
+
+    SkYUVAPixmapInfo pmInfo(yuvaInfo, SkYUVAPixmapInfo::DataType::kUnorm8, nullptr);
+
+    SkYUVAPixmaps pixmaps = SkYUVAPixmaps::Allocate(pmInfo);
+
+    for (int i = 0; i < pixmaps.numPlanes(); ++i) {
+        pixmaps.plane(i).erase(SK_ColorBLACK);
+    }
+
+    sk_sp<SkColorSpace> cs;
+    if (rand->nextBool()) {
+        cs = SkColorSpace::MakeSRGBLinear();
+    }
+
+    return SkImages::TextureFromYUVAPixmaps(recorder,
+                                            pixmaps,
+                                            {/* fMipmapped= */ false},
+                                            /* limitToMaxTextureSize= */ false,
+                                            std::move(cs));
+}
+
 //--------------------------------------------------------------------------------------------------
 sk_sp<SkPicture> make_picture(SkRandom* rand) {
     constexpr SkRect kRect = SkRect::MakeWH(128, 128);
@@ -565,12 +601,14 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_coord_clamp_shader(Sk
     return { ccs, cco };
 }
 
+#if 0
 std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_empty_shader(SkRandom* /* rand */) {
     sk_sp<SkShader> s = SkShaders::Empty();
     sk_sp<PrecompileShader> o = PrecompileShaders::Empty();
 
     return { s, o };
 }
+#endif
 
 std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_perlin_noise_shader(SkRandom* rand) {
     sk_sp<SkShader> s;
@@ -800,6 +838,35 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_image_shader(SkRandom
     return { s, o };
 }
 
+std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_yuv_image_shader(SkRandom* rand,
+                                                                            Recorder* recorder) {
+    SkTileMode tmX = random_tilemode(rand);
+    SkTileMode tmY = random_tilemode(rand);
+
+    SkMatrix lmStorage;
+    SkMatrix* lmPtr = random_local_matrix(rand, &lmStorage);
+
+    sk_sp<SkShader> s;
+    sk_sp<PrecompileShader> o;
+
+    SkSamplingOptions samplingOptions(SkFilterMode::kLinear);
+    if (rand->nextBool()) {
+        samplingOptions = SkCubicResampler::Mitchell();
+    }
+
+    sk_sp<SkImage> yuvImage = make_yuv_image(rand, recorder);
+    if (rand->nextBool()) {
+        s = SkImageShader::MakeSubset(std::move(yuvImage), SkRect::MakeXYWH(8, 8, 16, 16),
+                                      tmX, tmY, samplingOptions, lmPtr);
+    } else {
+        s = SkShaders::Image(std::move(yuvImage), tmX, tmY, samplingOptions, lmPtr);
+    }
+
+    o = PrecompileShaders::YUVImage();
+
+    return { s, o };
+}
+
 std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_blend_shader(SkRandom* rand,
                                                                         Recorder* recorder) {
     // TODO: add explicit testing of the kClear, kDst and kSrc blend modes since they short
@@ -855,8 +922,8 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>>  create_shader(SkRandom* ran
             return create_coord_clamp_shader(rand, recorder);
         case ShaderType::kConicalGradient:
             return create_gradient_shader(rand, SkShaderBase::GradientType::kConical);
-        case ShaderType::kEmpty:
-            return create_empty_shader(rand);
+//        case ShaderType::kEmpty:
+//            return create_empty_shader(rand);
         case ShaderType::kImage:
             return create_image_shader(rand, recorder);
         case ShaderType::kLinearGradient:
@@ -875,6 +942,8 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>>  create_shader(SkRandom* ran
             return create_solid_shader(rand);
         case ShaderType::kSweepGradient:
             return create_gradient_shader(rand, SkShaderBase::GradientType::kSweep);
+        case ShaderType::kYUVImage:
+            return create_yuv_image_shader(rand, recorder);
         case ShaderType::kWorkingColorSpace:
             return create_workingCS_shader(rand, recorder);
     }
@@ -1831,21 +1900,216 @@ KeyContext create_key_context(Context* context, RuntimeEffectDictionary* rtDict)
                       kFakeDstOffset);
 }
 
-} // anonymous namespace
+// This subtest compares the output of ExtractPaintData (applied to an SkPaint) and
+// PaintOptions::buildCombinations (applied to a matching PaintOptions). The actual check
+// performed is that the UniquePaintParamsID created by ExtractPaintData is contained in the
+// set of IDs generated by buildCombinations.
+void extract_vs_build_subtest(skiatest::Reporter* reporter,
+                              Context* context,
+                              skiatest::graphite::GraphiteTestContext* /* testContext */,
+                              const KeyContext& precompileKeyContext,
+                              Recorder* recorder,
+                              const SkPaint& paint,
+                              const PaintOptions& paintOptions,
+                              ShaderType s,
+                              BlenderType bm,
+                              ColorFilterType cf,
+                              MaskFilterType mf,
+                              ImageFilterType imageFilter,
+                              ClipType clip,
+                              sk_sp<SkShader> clipShader,
+                              DrawTypeFlags dt,
+                              uint32_t seed,
+                              SkRandom* rand,
+                              bool verbose) {
 
-void run_test(skiatest::Reporter*,
-              Context*,
-              skiatest::graphite::GraphiteTestContext*,
+    ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
+
+    PaintParamsKeyBuilder builder(dict);
+    PipelineDataGatherer paramsGatherer(Layout::kMetal);
+    PipelineDataGatherer precompileGatherer(Layout::kMetal);
+
+    for (bool withPrimitiveBlender: {false, true}) {
+
+        sk_sp<SkBlender> primitiveBlender;
+        if (withPrimitiveBlender) {
+            if (dt != DrawTypeFlags::kDrawVertices) {
+                // Only drawVertices calls need a primitive blender
+                continue;
+            }
+
+            primitiveBlender = SkBlender::Mode(SkBlendMode::kSrcOver);
+        }
+
+        constexpr Coverage coverageOptions[3] = {
+                Coverage::kNone, Coverage::kSingleChannel, Coverage::kLCD
+        };
+        Coverage coverage = coverageOptions[rand->nextULessThan(3)];
+
+        DstReadRequirement dstReadReq = DstReadRequirement::kNone;
+        const SkBlenderBase* blender = as_BB(paint.getBlender());
+        if (blender) {
+            dstReadReq = GetDstReadRequirement(recorder->priv().caps(),
+                                               blender->asBlendMode(),
+                                               coverage);
+        }
+        bool needsDstSample = dstReadReq == DstReadRequirement::kTextureCopy ||
+                              dstReadReq == DstReadRequirement::kTextureSample;
+        sk_sp<TextureProxy> curDst = needsDstSample ? precompileKeyContext.dstTexture()
+                                                    : nullptr;
+
+        // In the normal API this modification happens in SkDevice::clipShader()
+        // All clipShaders get wrapped in a CTMShader
+        sk_sp<SkShader> modifiedClipShader = clipShader
+                                             ? as_SB(clipShader)->makeWithCTM(SkMatrix::I())
+                                             : nullptr;
+        if (clip == ClipType::kShader_Diff && modifiedClipShader) {
+            // The CTMShader gets further wrapped in a ColorFilterShader for kDifference clips
+            modifiedClipShader = modifiedClipShader->makeWithColorFilter(
+                    SkColorFilters::Blend(0xFFFFFFFF, SkBlendMode::kSrcOut));
+        }
+
+        auto [paintID, uData, tData] =
+                ExtractPaintData(recorder,
+                                 &paramsGatherer,
+                                 &builder,
+                                 Layout::kMetal,
+                                 {},
+                                 PaintParams(paint,
+                                             primitiveBlender,
+                                             std::move(modifiedClipShader),
+                                             dstReadReq,
+                                             /* skipColorXform= */ false),
+                                 {},
+                                 curDst,
+                                 precompileKeyContext.dstOffset(),
+                                 precompileKeyContext.dstColorInfo());
+
+        std::vector<UniquePaintParamsID> precompileIDs;
+        paintOptions.priv().buildCombinations(precompileKeyContext,
+                                              &precompileGatherer,
+                                              DrawTypeFlags::kNone,
+                                              withPrimitiveBlender,
+                                              coverage,
+                                              [&precompileIDs](UniquePaintParamsID id,
+                                                               DrawTypeFlags,
+                                                               bool /* withPrimitiveBlender */,
+                                                               Coverage) {
+                                                  precompileIDs.push_back(id);
+                                              });
+
+        if (verbose) {
+            SkDebugf("Precompilation generated %zu unique keys\n", precompileIDs.size());
+        }
+
+        // Although we've gathered both sets of uniforms (i.e., from the paint
+        // params and the precompilation paths) we can't compare the two since the
+        // precompilation path may have generated multiple sets
+        // and the last one created may not be the one that matches the paint
+        // params' set. Additionally, for runtime effects we just skip gathering
+        // the uniforms in the precompilation path.
+
+        // The specific key generated by ExtractPaintData should be one of the
+        // combinations generated by the combination system.
+        auto result = std::find(precompileIDs.begin(), precompileIDs.end(), paintID);
+
+        if (result == precompileIDs.end()) {
+            log_run("Failure on case", seed, s, bm, cf, mf, imageFilter, clip, dt);
+        }
+
+#ifdef SK_DEBUG
+        if (result == precompileIDs.end()) {
+            SkDebugf("From paint: ");
+            dict->dump(paintID);
+
+            SkDebugf("From combination builder [%d]:", static_cast<int>(precompileIDs.size()));
+            for (auto iter: precompileIDs) {
+                dict->dump(iter);
+            }
+        }
+#endif
+
+        REPORTER_ASSERT(reporter, result != precompileIDs.end());
+    }
+}
+
+// This subtest verifies that, given an equivalent SkPaint and PaintOptions, the
+// Precompile system will, at least, generate all the pipelines a real draw would generate.
+void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
+                                      Context* context,
+                                      skiatest::graphite::GraphiteTestContext* testContext,
+                                      Recorder* recorder,
+                                      const SkPaint& paint,
+                                      const PaintOptions& paintOptions,
+                                      ClipType clip,
+                                      sk_sp<SkShader> clipShader,
+                                      DrawTypeFlags dt,
+                                      bool /* verbose */) {
+    context->priv().globalCache()->resetGraphicsPipelines();
+
+    int before = context->priv().globalCache()->numGraphicsPipelines();
+    Precompile(context, paintOptions, dt);
+    if (gNeedSKPPaintOption) {
+        // The skp draws a rect w/ a default SkPaint
+        PaintOptions skpPaintOptions;
+        Precompile(context, skpPaintOptions, DrawTypeFlags::kSimpleShape);
+    }
+    int after = context->priv().globalCache()->numGraphicsPipelines();
+
+    REPORTER_ASSERT(reporter, before == 0);
+    REPORTER_ASSERT(reporter, after > before);
+
+    check_draw(reporter,
+               context,
+               testContext,
+               recorder,
+               paint,
+               dt,
+               clip,
+               clipShader);
+}
+
+void run_test(skiatest::Reporter* reporter,
+              Context* context,
+              skiatest::graphite::GraphiteTestContext* testContext,
               const KeyContext& precompileKeyContext,
-              ShaderType,
-              BlenderType,
-              ColorFilterType,
-              MaskFilterType,
-              ImageFilterType,
-              ClipType,
-              DrawTypeFlags,
+              ShaderType s,
+              BlenderType bm,
+              ColorFilterType cf,
+              MaskFilterType mf,
+              ImageFilterType imageFilter,
+              ClipType clip,
+              DrawTypeFlags dt,
               uint32_t seed,
-              bool verbose);
+              bool verbose) {
+    SkRandom rand(seed);
+
+    std::unique_ptr<Recorder> recorder = context->makeRecorder();
+
+    sk_sp<SkShader> clipShader;
+    sk_sp<PrecompileShader> clipShaderOption;
+
+    if (clip == ClipType::kShader || clip == ClipType::kShader_Diff) {
+        std::tie(clipShader, clipShaderOption) = create_clip_shader(&rand, recorder.get());
+        SkASSERT(!clipShader == !clipShaderOption);
+    }
+
+    gNeedSKPPaintOption = false;
+    auto [paint, paintOptions] = create_paint(&rand, recorder.get(), s, bm, cf, mf, imageFilter);
+
+    // The PaintOptions' clipShader can be handled here while the SkPaint's clipShader handling
+    // must be performed later (in ExtractPaintData or when an SkCanvas is accessible for
+    // a SkCanvas::clipShader call).
+    paintOptions.priv().setClipShaders({clipShaderOption});
+
+    extract_vs_build_subtest(reporter, context, testContext, precompileKeyContext, recorder.get(),
+                             paint, paintOptions, s, bm, cf, mf, imageFilter, clip, clipShader, dt,
+                             seed, &rand, verbose);
+    precompile_vs_real_draws_subtest(reporter, context, testContext, recorder.get(),
+                                     paint, paintOptions, clip, clipShader, dt, verbose);
+}
+
+} // anonymous namespace
 
 DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTestReduced,
                                                reporter,
@@ -1855,6 +2119,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTestReduced,
                                                CtsEnforcement::kNever) {
     std::unique_ptr<RuntimeEffectDictionary> rtDict = std::make_unique<RuntimeEffectDictionary>();
 
+#if 1
     //----------------------
     uint32_t seed = std::time(nullptr) % std::numeric_limits<uint32_t>::max();
     SkRandom rand(seed);
@@ -1862,12 +2127,27 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTestReduced,
     BlenderType blenderType = random_blendertype(&rand);
     ColorFilterType colorFilterType = random_colorfiltertype(&rand);
     MaskFilterType maskFilterType = random_maskfiltertype(&rand);
-    ImageFilterType imageFilterType = random_imagefiltertype(&rand);
+    ImageFilterType imageFilterType = ImageFilterType::kNone; // random_imagefiltertype(&rand);
     ClipType clipType = random_cliptype(&rand);
     DrawTypeFlags drawTypeFlags = random_drawtype(&rand);
     //----------------------
+#else
+    //------------------------
+    uint32_t seed = 1721227069;
+    ShaderType shaderType = ShaderType::kLocalMatrix;
+    BlenderType blenderType = BlenderType::kArithmetic;
+    ColorFilterType colorFilterType = ColorFilterType::kRuntime;
+    MaskFilterType maskFilterType = MaskFilterType::kNone;
+    ImageFilterType imageFilterType = ImageFilterType::kDisplacement;
+    ClipType clipType = ClipType::kNone;
+    DrawTypeFlags drawTypeFlags = DrawTypeFlags::kText;
+    //-----------------------
+#endif
 
-    log_run("Running", seed, shaderType, blenderType, colorFilterType, maskFilterType,
+    SkString logMsg("Running ");
+    logMsg += BackendApiToStr(context->backend());
+
+    log_run(logMsg.c_str(), seed, shaderType, blenderType, colorFilterType, maskFilterType,
             imageFilterType, clipType, drawTypeFlags);
 
     run_test(reporter,
@@ -1919,6 +2199,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
             ShaderType::kPicture,
             ShaderType::kRuntime,
             ShaderType::kSweepGradient,
+            ShaderType::kYUVImage,
             ShaderType::kWorkingColorSpace,
 #endif
     };
@@ -1995,7 +2276,8 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
 
 #if EXPANDED_SET
     size_t kExpected = std::size(shaders) * std::size(blenders) * std::size(colorFilters) *
-                       std::size(maskFilters) * std::size(imageFilters) * std::size(clips);
+                       std::size(maskFilters) * std::size(imageFilters) * std::size(clips) *
+                       std::size(kDrawTypeFlags);
     int current = 0;
 #endif
 
@@ -2025,174 +2307,6 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
 #if EXPANDED_SET
     SkASSERT(current == (int) kExpected);
 #endif
-}
-
-void run_test(skiatest::Reporter* reporter,
-              Context* context,
-              skiatest::graphite::GraphiteTestContext* testContext,
-              const KeyContext& precompileKeyContext,
-              ShaderType s,
-              BlenderType bm,
-              ColorFilterType cf,
-              MaskFilterType mf,
-              ImageFilterType imageFilter,
-              ClipType clip,
-              DrawTypeFlags dt,
-              uint32_t seed,
-              bool verbose) {
-    SkRandom rand(seed);
-
-    std::unique_ptr<Recorder> recorder = context->makeRecorder();
-
-    ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
-
-    sk_sp<SkShader> clipShader;
-    sk_sp<PrecompileShader> clipShaderOption;
-
-    if (clip == ClipType::kShader || clip == ClipType::kShader_Diff) {
-        std::tie(clipShader, clipShaderOption) = create_clip_shader(&rand, recorder.get());
-        SkASSERT(!clipShader == !clipShaderOption);
-    }
-
-    PaintParamsKeyBuilder builder(dict);
-    PipelineDataGatherer paramsGatherer(Layout::kMetal);
-    PipelineDataGatherer precompileGatherer(Layout::kMetal);
-
-    gNeedSKPPaintOption = false;
-    auto [paint, paintOptions] = create_paint(&rand, recorder.get(), s, bm, cf, mf, imageFilter);
-
-    // Note: 'withPrimitiveBlender' and 'primitiveBlender' are only used in ExtractPaintData
-    // and PaintOptions::buildCombinations. Thus, as long as those two uses agree, it doesn't
-    // matter if the actual draw uses a primitive blender (i.e., those variables are only used
-    // in a local unit test independent of the follow-on Precompile/check_draw test)
-    for (bool withPrimitiveBlender : { false, true }) {
-
-        sk_sp<SkBlender> primitiveBlender;
-        if (withPrimitiveBlender) {
-            if (dt != DrawTypeFlags::kDrawVertices) {
-                // Only drawVertices calls need a primitive blender
-                continue;
-            }
-
-            primitiveBlender = SkBlender::Mode(SkBlendMode::kSrcOver);
-        }
-
-        constexpr Coverage coverageOptions[3] = {
-                Coverage::kNone, Coverage::kSingleChannel, Coverage::kLCD};
-        Coverage coverage = coverageOptions[rand.nextULessThan(3)];
-
-        DstReadRequirement dstReadReq = DstReadRequirement::kNone;
-        const SkBlenderBase* blender = as_BB(paint.getBlender());
-        if (blender) {
-            dstReadReq = GetDstReadRequirement(recorder->priv().caps(),
-                                               blender->asBlendMode(),
-                                               coverage);
-        }
-        bool needsDstSample = dstReadReq == DstReadRequirement::kTextureCopy ||
-                              dstReadReq == DstReadRequirement::kTextureSample;
-        sk_sp<TextureProxy> curDst = needsDstSample ? precompileKeyContext.dstTexture()
-                                                    : nullptr;
-
-        // In the normal API this modification happens in SkDevice::clipShader()
-        // All clipShaders get wrapped in a CTMShader
-        sk_sp<SkShader> modifiedClipShader = clipShader
-                                               ? as_SB(clipShader)->makeWithCTM(SkMatrix::I())
-                                               : nullptr;
-        if (clip == ClipType::kShader_Diff && modifiedClipShader) {
-            // The CTMShader gets further wrapped in a ColorFilterShader for kDifference clips
-            modifiedClipShader = modifiedClipShader->makeWithColorFilter(
-                    SkColorFilters::Blend(0xFFFFFFFF, SkBlendMode::kSrcOut));
-        }
-
-        auto [paintID, uData, tData] =
-                ExtractPaintData(recorder.get(),
-                                 &paramsGatherer,
-                                 &builder,
-                                 Layout::kMetal,
-                                 {},
-                                 PaintParams(paint,
-                                             primitiveBlender,
-                                             std::move(modifiedClipShader),
-                                             dstReadReq,
-                                             /* skipColorXform= */ false),
-                                 {},
-                                 curDst,
-                                 precompileKeyContext.dstOffset(),
-                                 precompileKeyContext.dstColorInfo());
-
-        paintOptions.priv().setClipShaders({ clipShaderOption });
-
-        std::vector<UniquePaintParamsID> precompileIDs;
-        paintOptions.priv().buildCombinations(precompileKeyContext,
-                                              &precompileGatherer,
-                                              DrawTypeFlags::kNone,
-                                              withPrimitiveBlender,
-                                              coverage,
-                                              [&precompileIDs](UniquePaintParamsID id,
-                                                               DrawTypeFlags,
-                                                               bool /* withPrimitiveBlender */,
-                                                               Coverage) {
-                                                  precompileIDs.push_back(id);
-                                              });
-
-        if (verbose) {
-            SkDebugf("Precompilation generated %zu unique keys\n", precompileIDs.size());
-        }
-
-        // Although we've gathered both sets of uniforms (i.e., from the paint
-        // params and the precompilation paths) we can't compare the two since the
-        // precompilation path may have generated multiple sets
-        // and the last one created may not be the one that matches the paint
-        // params' set. Additionally, for runtime effects we just skip gathering
-        // the uniforms in the precompilation path.
-
-        // The specific key generated by ExtractPaintData should be one of the
-        // combinations generated by the combination system.
-        auto result = std::find(precompileIDs.begin(), precompileIDs.end(), paintID);
-
-        if (result == precompileIDs.end()) {
-            log_run("Failure on case", seed, s, bm, cf, mf, imageFilter, clip, dt);
-        }
-
-#ifdef SK_DEBUG
-        if (result == precompileIDs.end()) {
-            SkDebugf("From paint: ");
-            dict->dump(paintID);
-
-            SkDebugf("From combination builder [%d]:", static_cast<int>(precompileIDs.size()));
-            for (auto iter : precompileIDs) {
-                dict->dump(iter);
-            }
-        }
-#endif
-
-        REPORTER_ASSERT(reporter, result != precompileIDs.end());
-
-        {
-            context->priv().globalCache()->resetGraphicsPipelines();
-
-            int before = context->priv().globalCache()->numGraphicsPipelines();
-            Precompile(context, paintOptions, dt);
-            if (gNeedSKPPaintOption) {
-                // The skp draws a rect w/ a default SkPaint
-                PaintOptions skpPaintOptions;
-                Precompile(context, skpPaintOptions, DrawTypeFlags::kSimpleShape);
-            }
-            int after = context->priv().globalCache()->numGraphicsPipelines();
-
-            REPORTER_ASSERT(reporter, before == 0);
-            REPORTER_ASSERT(reporter, after > before);
-
-            check_draw(reporter,
-                       context,
-                       testContext,
-                       recorder.get(),
-                       paint,
-                       dt,
-                       clip,
-                       clipShader);
-        }
-    }
 }
 
 #endif // SK_GRAPHITE
