@@ -1,24 +1,24 @@
 /*
- * Copyright 2022 Google LLC
+ * Copyright 2024 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
-#include "src/gpu/graphite/FactoryFunctions.h"
+#include "include/gpu/graphite/precompile/PrecompileRuntimeEffect.h"
 
+#include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/precompile/PrecompileBase.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
+#include "include/private/base/SkTArray.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/precompile/PrecompileBaseComplete.h"
 #include "src/gpu/graphite/precompile/PrecompileBasePriv.h"
-#include "src/gpu/graphite/precompile/PrecompileBlenderPriv.h"
-#include "src/gpu/graphite/precompile/PrecompileShaderPriv.h"
 
 namespace skgpu::graphite {
 
@@ -43,45 +43,6 @@ bool precompilebase_is_valid_as_child(const PrecompileBase *child) {
 
 #endif // SK_DEBUG
 
-} // anonymous namespace
-
-//--------------------------------------------------------------------------------------------------
-class PrecompileYUVImageShader : public PrecompileShader {
-public:
-    PrecompileYUVImageShader() {}
-
-private:
-    // non-cubic and cubic sampling
-    inline static constexpr int kNumIntrinsicCombinations = 2;
-
-    int numIntrinsicCombinations() const override { return kNumIntrinsicCombinations; }
-
-    void addToKey(const KeyContext& keyContext,
-                  PaintParamsKeyBuilder* builder,
-                  PipelineDataGatherer* gatherer,
-                  int desiredCombination) const override {
-        SkASSERT(desiredCombination < kNumIntrinsicCombinations);
-
-        static constexpr SkSamplingOptions kDefaultCubicSampling(SkCubicResampler::Mitchell());
-        static constexpr SkSamplingOptions kDefaultSampling;
-
-        YUVImageShaderBlock::ImageData imgData(desiredCombination == 1 ? kDefaultCubicSampling
-                                                                       : kDefaultSampling,
-                                               SkTileMode::kClamp, SkTileMode::kClamp,
-                                               SkISize::MakeEmpty(), SkRect::MakeEmpty());
-
-        YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
-    }
-};
-
-sk_sp<PrecompileShader> PrecompileShaders::YUVImage() {
-    return sk_make_sp<PrecompileYUVImageShader>();
-}
-
-//--------------------------------------------------------------------------------------------------
-//--------------------------------------------------------------------------------------------------
-namespace {
-
 int num_options_in_set(const SkSpan<const sk_sp<PrecompileBase>>& optionSet) {
     int numOptions = 0;
     for (const sk_sp<PrecompileBase>& childOption : optionSet) {
@@ -94,6 +55,35 @@ int num_options_in_set(const SkSpan<const sk_sp<PrecompileBase>>& optionSet) {
     }
 
     return numOptions;
+}
+
+// Convert from runtime effect type to precompile type
+PrecompileBase::Type to_precompile_type(SkRuntimeEffect::ChildType childType) {
+    switch(childType) {
+        case SkRuntimeEffect::ChildType::kShader:      return PrecompileBase::Type::kShader;
+        case SkRuntimeEffect::ChildType::kColorFilter: return PrecompileBase::Type::kColorFilter;
+        case SkRuntimeEffect::ChildType::kBlender:     return PrecompileBase::Type::kBlender;
+    }
+    SkUNREACHABLE;
+}
+
+bool children_are_valid(SkRuntimeEffect* effect,
+                        SkSpan<const PrecompileChildOptions> childOptions) {
+    SkSpan<const SkRuntimeEffect::Child> childInfo = effect->children();
+    if (childOptions.size() != childInfo.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < childInfo.size(); ++i) {
+        const PrecompileBase::Type expectedType = to_precompile_type(childInfo[i].type);
+        for (const sk_sp<PrecompileBase>& childOption : childOptions[i]) {
+            if (childOption && expectedType != childOption->type()) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 } // anonymous namespace
@@ -184,33 +174,46 @@ private:
     int fNumChildCombinations;
 };
 
-sk_sp<PrecompileShader> MakePrecompileShader(
+sk_sp<PrecompileShader> PrecompileRuntimeEffects::MakePrecompileShader(
         sk_sp<SkRuntimeEffect> effect,
         SkSpan<const PrecompileChildOptions> childOptions) {
-    // TODO: check that 'effect' has the kAllowShader_Flag bit set and:
-    //  for each entry in childOptions:
-    //    all the SkPrecompileChildPtrs have the same type as the corresponding child in the effect
+    if (!effect || !effect->allowShader()) {
+        return nullptr;
+    }
+
+    if (!children_are_valid(effect.get(), childOptions)) {
+        return nullptr;
+    }
+
     return sk_make_sp<PrecompileRTEffect<PrecompileShader>>(std::move(effect), childOptions);
 }
 
-sk_sp<PrecompileColorFilter> MakePrecompileColorFilter(
+sk_sp<PrecompileColorFilter> PrecompileRuntimeEffects::MakePrecompileColorFilter(
         sk_sp<SkRuntimeEffect> effect,
         SkSpan<const PrecompileChildOptions> childOptions) {
-    // TODO: check that 'effect' has the kAllowColorFilter_Flag bit set and:
-    //  for each entry in childOptions:
-    //    all the SkPrecompileChildPtrs have the same type as the corresponding child in the effect
+    if (!effect || !effect->allowColorFilter()) {
+        return nullptr;
+    }
+
+    if (!children_are_valid(effect.get(), childOptions)) {
+        return nullptr;
+    }
+
     return sk_make_sp<PrecompileRTEffect<PrecompileColorFilter>>(std::move(effect), childOptions);
 }
 
-sk_sp<PrecompileBlender> MakePrecompileBlender(
+sk_sp<PrecompileBlender> PrecompileRuntimeEffects::MakePrecompileBlender(
         sk_sp<SkRuntimeEffect> effect,
         SkSpan<const PrecompileChildOptions> childOptions) {
-    // TODO: check that 'effect' has the kAllowBlender_Flag bit set and:
-    //  for each entry in childOptions:
-    //    all the SkPrecompileChildPtrs have the same type as the corresponding child in the effect
+    if (!effect || !effect->allowBlender()) {
+        return nullptr;
+    }
+
+    if (!children_are_valid(effect.get(), childOptions)) {
+        return nullptr;
+    }
+
     return sk_make_sp<PrecompileRTEffect<PrecompileBlender>>(std::move(effect), childOptions);
 }
 
 } // namespace skgpu::graphite
-
-//--------------------------------------------------------------------------------------------------

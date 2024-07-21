@@ -321,7 +321,6 @@ sk_sp<PrecompileShader> PrecompileShaders::CoordClamp(SkSpan<const sk_sp<Precomp
 }
 
 //--------------------------------------------------------------------------------------------------
-// TODO: Investigate the YUV-image use case
 class PrecompileImageShader final : public PrecompileShader {
 public:
     PrecompileImageShader(SkEnumBitMask<PrecompileImageShaderFlags> flags) : fFlags(flags) {}
@@ -385,7 +384,8 @@ private:
                                                             : kDefaultSampling,
                 SkTileMode::kClamp, SkTileMode::kClamp,
                 desiredSamplingTilingCombo == kHWTiled ? kHWTileableSize : kShaderTileableSize,
-                kSubset, kIgnoredSwizzle);
+                kSubset);
+        ColorSpaceTransformBlock::ColorSpaceTransformData colorXformData(kIgnoredSwizzle);
 
         if (desiredAlphaCombo == kAlphaOnly) {
             SkASSERT(!(fFlags & PrecompileImageShaderFlags::kExcludeAlpha));
@@ -395,13 +395,28 @@ private:
                       AddKnownModeBlend(keyContext, builder, gatherer, SkBlendMode::kDstIn);
                   },
                   /* addSrcToKey= */ [&] () -> void {
-                      ImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                      Compose(keyContext, builder, gatherer,
+                              /* addInnerToKey= */ [&]() -> void {
+                                  ImageShaderBlock::AddBlock(keyContext, builder, gatherer,
+                                                             imgData);
+                              },
+                              /* addOuterToKey= */ [&]() -> void {
+                                  ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer,
+                                                                     colorXformData);
+                              });
                   },
                   /* addDstToKey= */ [&]() -> void {
                       RGBPaintColorBlock::AddBlock(keyContext, builder, gatherer);
                   });
         } else {
-            ImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+            Compose(keyContext, builder, gatherer,
+                    /* addInnerToKey= */ [&]() -> void {
+                        ImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                    },
+                    /* addOuterToKey= */ [&]() -> void {
+                        ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer,
+                                                           colorXformData);
+                    });
         }
     }
 
@@ -430,6 +445,100 @@ sk_sp<PrecompileShader> PrecompileShadersPriv::RawImage(
     return PrecompileShaders::LocalMatrix(
             { sk_make_sp<PrecompileImageShader>(flags |
                                                 PrecompileImageShaderFlags::kExcludeAlpha) });
+}
+
+//--------------------------------------------------------------------------------------------------
+class PrecompileYUVImageShader : public PrecompileShader {
+public:
+    PrecompileYUVImageShader() {}
+
+private:
+    // There are 8 intrinsic YUV shaders:
+    //  4 tiling modes
+    //    HW tiling w/o swizzle
+    //    HW tiling w/ swizzle
+    //    cubic shader tiling
+    //    non-cubic shader tiling
+    //  crossed with two postambles:
+    //    just premul
+    //    full-blown colorSpace transform
+    inline static constexpr int kNumTilingModes     = 4;
+    inline static constexpr int kHWTiledNoSwizzle   = 3;
+    inline static constexpr int kHWTiledWithSwizzle = 2;
+    inline static constexpr int kCubicShaderTiled   = 1;
+    inline static constexpr int kShaderTiled        = 0;
+
+    inline static constexpr int kNumPostambles       = 2;
+    inline static constexpr int kWithColorSpaceXform = 1;
+    inline static constexpr int kJustPremul          = 0;
+
+    inline static constexpr int kNumIntrinsicCombinations = kNumTilingModes * kNumPostambles;
+
+    int numIntrinsicCombinations() const override { return kNumIntrinsicCombinations; }
+
+    void addToKey(const KeyContext& keyContext,
+                  PaintParamsKeyBuilder* builder,
+                  PipelineDataGatherer* gatherer,
+                  int desiredCombination) const override {
+        SkASSERT(desiredCombination < kNumIntrinsicCombinations);
+
+        int desiredPostamble = desiredCombination % kNumPostambles;
+        int desiredTiling = desiredCombination / kNumPostambles;
+        SkASSERT(desiredTiling < kNumTilingModes);
+
+        static constexpr SkSamplingOptions kDefaultCubicSampling(SkCubicResampler::Mitchell());
+        static constexpr SkSamplingOptions kDefaultSampling;
+
+        YUVImageShaderBlock::ImageData imgData(desiredTiling == kCubicShaderTiled
+                                                                       ? kDefaultCubicSampling
+                                                                       : kDefaultSampling,
+                                               SkTileMode::kClamp, SkTileMode::kClamp,
+                                               /* imgSize= */ { 1, 1 },
+                                               /* subset= */ desiredTiling == kShaderTiled
+                                                                     ? SkRect::MakeEmpty()
+                                                                     : SkRect::MakeWH(1, 1));
+
+        static constexpr SkV4 kRedChannel{ 1.f, 0.f, 0.f, 0.f };
+        imgData.fChannelSelect[0] = kRedChannel;
+        imgData.fChannelSelect[1] = kRedChannel;
+        if (desiredTiling == kHWTiledNoSwizzle) {
+            imgData.fChannelSelect[2] = kRedChannel;
+        } else {
+            // Having a non-red channel selector forces a swizzle
+            imgData.fChannelSelect[2] = { 0.f, 1.f, 0.f, 0.f};
+        }
+        imgData.fChannelSelect[3] = kRedChannel;
+
+        imgData.fYUVtoRGBMatrix.setAll(1, 0, 0, 0, 1, 0, 0, 0, 0);
+        imgData.fYUVtoRGBTranslate = { 0, 0, 0 };
+
+        ColorSpaceTransformBlock::ColorSpaceTransformData colorXformData(
+                                      skgpu::graphite::ReadSwizzle::kRGBA);
+
+        if (desiredPostamble == kJustPremul) {
+            Compose(keyContext, builder, gatherer,
+                    /* addInnerToKey= */ [&]() -> void {
+                        YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                    },
+                    /* addOuterToKey= */ [&]() -> void {
+                        builder->addBlock(BuiltInCodeSnippetID::kPremulAlphaColorFilter);
+                    });
+        } else {
+            Compose(keyContext, builder, gatherer,
+                    /* addInnerToKey= */ [&]() -> void {
+                        YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                    },
+                    /* addOuterToKey= */ [&]() -> void {
+                        ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer,
+                                                           colorXformData);
+                    });
+        }
+
+    }
+};
+
+sk_sp<PrecompileShader> PrecompileShaders::YUVImage() {
+    return PrecompileShaders::LocalMatrix({ sk_make_sp<PrecompileYUVImageShader>() });
 }
 
 //--------------------------------------------------------------------------------------------------
