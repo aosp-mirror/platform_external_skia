@@ -149,9 +149,6 @@ Recorder::~Recorder() {
         fContext->priv().deregisterRecorder(this);
     }
 #endif
-
-    // TODO: needed?
-    fStrikeCache->freeAll();
 }
 
 BackendApi Recorder::backend() const { return fSharedContext->backend(); }
@@ -452,9 +449,13 @@ void Recorder::freeGpuResources() {
     // The AtlasProvider gives out refs to TextureProxies so it should be safe to clear its pool
     // in the middle of Recording since those using the previous TextureProxies will have refs on
     // them.
-    fAtlasProvider->clearTexturePool();
+    fAtlasProvider->freeGpuResources();
 
     fResourceProvider->freeGpuResources();
+
+    // This is technically not GPU memory, but there's no other place for the client to tell us to
+    // clean this up, and without any cleanup it can grow unbounded.
+    fStrikeCache->freeAll();
 }
 
 void Recorder::performDeferredCleanup(std::chrono::milliseconds msNotUsed) {
