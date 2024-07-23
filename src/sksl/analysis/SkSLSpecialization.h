@@ -13,6 +13,7 @@
 #include "src/core/SkTHash.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 
 namespace SkSL {
@@ -39,28 +40,28 @@ using SpecializationMap = skia_private::THashMap<const FunctionDeclaration*, Spe
 
 // A function call to specialized function and the function specialization index of the function
 // body the call is within.
-struct SpecializedCall {
+struct SpecializedCallKey {
     struct Hash {
-        size_t operator()(const SpecializedCall& entry) {
-            return SkGoodHash()(entry.fFunctionCall) ^
+        size_t operator()(const SpecializedCallKey& entry) {
+            return SkGoodHash()(entry.fStableID) ^
                    SkGoodHash()(entry.fParentSpecializationIndex);
         }
     };
 
-    bool operator==(const SpecializedCall& other) const {
-        return fFunctionCall == other.fFunctionCall &&
+    bool operator==(const SpecializedCallKey& other) const {
+        return fStableID == other.fStableID &&
                fParentSpecializationIndex == other.fParentSpecializationIndex;
     }
 
-    const FunctionCall* fFunctionCall;
+    const uint32_t fStableID;
     SpecializationIndex fParentSpecializationIndex;
 };
 
 // The mapping of function calls and their inherited specialization to their corresponding
 // specialization index in `Specializations`
-using SpecializedCallMap =
-        skia_private::THashMap<SpecializedCall, SpecializationIndex, SpecializedCall::Hash>;
-
+using SpecializedCallMap = skia_private::THashMap<SpecializedCallKey,
+                                                  SpecializationIndex,
+                                                  SpecializedCallKey::Hash>;
 struct SpecializationInfo {
     SpecializationMap fSpecializationMap;
     SpecializedCallMap fSpecializedCallMap;
@@ -75,6 +76,14 @@ using ParameterMatchesFn = std::function<bool(const Variable&)>;
 void FindFunctionsToSpecialize(const Program& program,
                                SpecializationInfo* info,
                                const ParameterMatchesFn& specializationFn);
+
+// Given a function call and the active specialization index, looks up the specialization index for
+// the call target. In other words: in the specialization map, we first look up the call target's
+// declaration, which yields a Specialization array. We would find the correct mappings in the array
+// at the SpecializationIndex returned by this function.
+SpecializationIndex FindSpecializationIndexForCall(const FunctionCall& call,
+                                                   const SpecializationInfo& info,
+                                                   SpecializationIndex activeSpecializationIndex);
 
 }  // namespace Analysis
 }  // namespace SkSL
