@@ -13,10 +13,12 @@
 #include "src/core/SkTHash.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 
 namespace SkSL {
 
+class Expression;
 class FunctionCall;
 class FunctionDeclaration;
 class Variable;
@@ -30,30 +32,49 @@ namespace Analysis {
 using SpecializationIndex = int;
 static constexpr SpecializationIndex kUnspecialized = -1;
 
-// Global uniforms used by a specialization, maps <function parameter, global uniform>
-using SpecializedParameters = skia_private::THashMap<const Variable*, const Variable*>;
+// Global uniforms used by a specialization,
+// maps <function parameter, expression referencing global uniform>
+using SpecializedParameters = skia_private::THashMap<const Variable*, const Expression*>;
 // The set of specializated implementations needed for a given function.
 using Specializations = skia_private::TArray<SpecializedParameters>;
 // The full set of all specializations required by the program.
 using SpecializationMap = skia_private::THashMap<const FunctionDeclaration*, Specializations>;
 
-// A function call to specialized function and the function specialization index of the function
-// body the call is within.
+// This can be used as a key into a map of specialized function declarations. Most backends which
+// implement function specialization will have a need for this.
+struct SpecializedFunctionKey {
+    struct Hash {
+        size_t operator()(const SpecializedFunctionKey& entry) {
+            return SkGoodHash()(entry.fDeclaration) ^
+                   SkGoodHash()(entry.fSpecializationIndex);
+        }
+    };
+
+    bool operator==(const SpecializedFunctionKey& other) const {
+        return fDeclaration == other.fDeclaration &&
+               fSpecializationIndex == other.fSpecializationIndex;
+    }
+
+    const FunctionDeclaration* fDeclaration = nullptr;
+    SpecializationIndex fSpecializationIndex = Analysis::kUnspecialized;
+};
+
+// This is used as a key into the SpecializedCallMap.
 struct SpecializedCallKey {
     struct Hash {
         size_t operator()(const SpecializedCallKey& entry) {
-            return SkGoodHash()(entry.fFunctionCall) ^
+            return SkGoodHash()(entry.fStableID) ^
                    SkGoodHash()(entry.fParentSpecializationIndex);
         }
     };
 
     bool operator==(const SpecializedCallKey& other) const {
-        return fFunctionCall == other.fFunctionCall &&
+        return fStableID == other.fStableID &&
                fParentSpecializationIndex == other.fParentSpecializationIndex;
     }
 
-    const FunctionCall* fFunctionCall;
-    SpecializationIndex fParentSpecializationIndex;
+    const uint32_t fStableID = 0;
+    SpecializationIndex fParentSpecializationIndex = Analysis::kUnspecialized;
 };
 
 // The mapping of function calls and their inherited specialization to their corresponding
