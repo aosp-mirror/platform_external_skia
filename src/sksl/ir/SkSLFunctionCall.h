@@ -33,10 +33,11 @@ public:
     inline static constexpr Kind kIRNodeKind = Kind::kFunctionCall;
 
     FunctionCall(Position pos, const Type* type, const FunctionDeclaration* function,
-                 ExpressionArray arguments)
+                 ExpressionArray arguments, uint32_t stableID)
         : INHERITED(pos, kIRNodeKind, type)
         , fFunction(*function)
-        , fArguments(std::move(arguments)) {}
+        , fArguments(std::move(arguments))
+        , fStableID(stableID) {}
 
     // Resolves generic types, performs type conversion on arguments, determines return type, and
     // reports errors via the ErrorReporter.
@@ -50,12 +51,20 @@ public:
                                                std::unique_ptr<Expression> functionValue,
                                                ExpressionArray arguments);
 
-    // Creates the function call; reports errors via ASSERT.
+    // Computes a new stable ID and creates a function call; reports errors via ASSERT.
     static std::unique_ptr<Expression> Make(const Context& context,
                                             Position pos,
                                             const Type* returnType,
                                             const FunctionDeclaration& function,
                                             ExpressionArray arguments);
+
+    // Creates a function call with a known stable ID; reports errors via ASSERT.
+    static std::unique_ptr<Expression> Make(const Context& context,
+                                            Position pos,
+                                            const Type* returnType,
+                                            const FunctionDeclaration& function,
+                                            ExpressionArray arguments,
+                                            uint32_t stableID);
 
     static const FunctionDeclaration* FindBestFunctionForCall(const Context& context,
                                                               const FunctionDeclaration* overloads,
@@ -73,6 +82,10 @@ public:
         return fArguments;
     }
 
+    uint32_t stableID() const {
+        return fStableID;
+    }
+
     std::unique_ptr<Expression> clone(Position pos) const override;
 
     std::string description(OperatorPrecedence) const override;
@@ -80,6 +93,10 @@ public:
 private:
     const FunctionDeclaration& fFunction;
     ExpressionArray fArguments;
+
+    // The stable ID is a 32-bit value which uniquely identifies this FunctionCall across an entire
+    // SkSL program. It is preserved across calls to Clone() or Make(), unlike a pointer address.
+    uint32_t fStableID;
 
     using INHERITED = Expression;
 };
