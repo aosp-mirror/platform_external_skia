@@ -22,12 +22,15 @@ class SkSVGNode;
 struct SkSVGPresentationContext;
 class SkSVGSVG;
 
-class SkSVGDOM : public SkRefCnt {
+class SK_API SkSVGDOM : public SkRefCnt {
 public:
     class Builder final {
     public:
         /**
-         * Specify a font manager for loading SVG fonts.
+         * Specify a font manager for loading fonts (e.g. from the system) to render <text>
+         * SVG nodes.
+         * If this is not set, but a font is required as part of rendering, the text will
+         * not be displayed.
          */
         Builder& setFontManager(sk_sp<SkFontMgr>);
 

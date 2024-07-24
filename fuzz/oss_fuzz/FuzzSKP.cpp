@@ -6,20 +6,19 @@
  */
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkData.h"
 #include "include/core/SkPicture.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 
 constexpr static SkISize kCanvasSize= {128, 160};
 
-void FuzzSKP(sk_sp<SkData> bytes) {
-    sk_sp<SkPicture> pic = SkPicture::MakeFromData(bytes->data(), bytes->size());
+void FuzzSKP(const uint8_t *data, size_t size) {
+    sk_sp<SkPicture> pic = SkPicture::MakeFromData(data, size);
     if (!pic) {
         return;
     }
-    sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(kCanvasSize.width(),
-                                                              kCanvasSize.height());
+    sk_sp<SkSurface> surface = SkSurfaces::Raster(
+            SkImageInfo::MakeN32Premul(kCanvasSize.width(), kCanvasSize.height()));
     surface->getCanvas()->drawPicture(pic);
     pic->approximateBytesUsed();
     pic->approximateOpCount();
@@ -28,8 +27,7 @@ void FuzzSKP(sk_sp<SkData> bytes) {
 
 #if defined(SK_BUILD_FOR_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    auto bytes = SkData::MakeWithoutCopy(data, size);
-    FuzzSKP(bytes);
+    FuzzSKP(data, size);
     return 0;
 }
 #endif

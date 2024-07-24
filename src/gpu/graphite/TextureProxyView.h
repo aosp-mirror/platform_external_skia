@@ -14,6 +14,8 @@
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/TextureProxy.h"
 
+enum class SkBackingFit;
+
 namespace skgpu::graphite {
 
 class Recorder;
@@ -25,7 +27,10 @@ public:
     TextureProxyView(sk_sp<TextureProxy> proxy, Swizzle swizzle)
             : fProxy(std::move(proxy)), fSwizzle(swizzle) {}
 
-    // This entry point is used when we don't care about the swizzle.
+    TextureProxyView(sk_sp<TextureProxy> proxy, Swizzle swizzle, Origin origin)
+            : fProxy(std::move(proxy)), fSwizzle(swizzle), fOrigin(origin) {}
+
+    // This entry point is used when we don't care about the swizzle and assume TopLeft origin.
     explicit TextureProxyView(sk_sp<TextureProxy> proxy)
             : fProxy(std::move(proxy)) {}
 
@@ -39,7 +44,8 @@ public:
 
     bool operator==(const TextureProxyView& view) const {
         return fProxy == view.fProxy &&
-               fSwizzle == view.fSwizzle;
+               fSwizzle == view.fSwizzle &&
+               fOrigin == view.fOrigin;
     }
     bool operator!=(const TextureProxyView& other) const { return !(*this == other); }
 
@@ -71,6 +77,8 @@ public:
         return {std::move(fProxy), Swizzle::Concat(fSwizzle, swizzle)};
     }
 
+    Origin origin() const { return fOrigin; }
+
     void reset() {
         *this = {};
     }
@@ -85,11 +93,13 @@ public:
                                  const SkColorInfo& srcColorInfo,
                                  const TextureProxyView& srcView,
                                  SkIRect srcRect,
-                                 Mipmapped);
+                                 Mipmapped,
+                                 SkBackingFit);
 
 private:
     sk_sp<TextureProxy> fProxy;
     Swizzle fSwizzle;
+    Origin fOrigin = Origin::kTopLeft;
 };
 
 } // namespace skgpu::graphite

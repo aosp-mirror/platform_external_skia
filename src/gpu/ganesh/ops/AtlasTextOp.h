@@ -8,14 +8,44 @@
 #ifndef skgpu_ganesh_AtlasTextOp_DEFINED
 #define skgpu_ganesh_AtlasTextOp_DEFINED
 
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkString.h"
+#include "include/private/SkColorData.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkPoint_impl.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/AtlasTypes.h"
+#include "src/gpu/ganesh/GrAppliedClip.h"
+#include "src/gpu/ganesh/GrBuffer.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrColorSpaceXform.h"
+#include "src/gpu/ganesh/GrProcessorSet.h"
 #include "src/gpu/ganesh/effects/GrDistanceFieldGeoProc.h"
 #include "src/gpu/ganesh/ops/GrMeshDrawOp.h"
-#include "src/text/gpu/TextBlob.h"
+#include "src/gpu/ganesh/ops/GrOp.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <utility>
+
+class GrDstProxyView;
+class GrGeometryProcessor;
+class GrMeshDrawTarget;
+class GrOpFlushState;
+class GrPaint;
 class GrProgramInfo;
 class GrRecordingContext;
+class GrSurfaceProxy;
+class GrSurfaceProxyView;
+class SkArenaAlloc;
+enum class GrXferBarrierFlags;
+struct GrShaderCaps;
+
+namespace sktext { namespace gpu { class AtlasSubRun; } }
 
 namespace skgpu::ganesh {
 
@@ -105,16 +135,6 @@ public:
     };
     inline static constexpr int kMaskTypeCount = static_cast<int>(MaskType::kLast) + 1;
 
-#if GR_TEST_UTILS
-    static GrOp::Owner CreateOpTestingOnly(skgpu::v1::SurfaceDrawContext*,
-                                           const SkPaint&,
-                                           const SkFont&,
-                                           const SkMatrixProvider&,
-                                           const char* text,
-                                           int x,
-                                           int y);
-#endif
-
 private:
     friend class GrOp; // for ctor
 
@@ -184,7 +204,7 @@ private:
     void onPrepareDraws(GrMeshDrawTarget*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     SkString onDumpInfo() const override;
 #endif
 

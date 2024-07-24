@@ -8,6 +8,7 @@
 #ifndef GrMtlUniformHandler_DEFINED
 #define GrMtlUniformHandler_DEFINED
 
+#include "include/private/base/SkTArray.h"
 #include "src/base/SkTBlockList.h"
 #include "src/gpu/ganesh/GrShaderVar.h"
 #include "src/gpu/ganesh/glsl/GrGLSLUniformHandler.h"
@@ -95,7 +96,7 @@ private:
 
     UniformInfoArray    fUniforms;
     UniformInfoArray    fSamplers;
-    SkTArray<skgpu::Swizzle> fSamplerSwizzles;
+    skia_private::TArray<skgpu::Swizzle> fSamplerSwizzles;
 
     uint32_t            fCurrentUBOOffset;
     uint32_t            fCurrentUBOMaxAlignment;

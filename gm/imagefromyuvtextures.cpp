@@ -27,9 +27,11 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkMathPriv.h"
 #include "src/core/SkYUVMath.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/gpu/YUVUtils.h"
 
@@ -41,15 +43,13 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("image_from_yuv_textures");
-    }
+    SkString getName() const override { return SkString("image_from_yuv_textures"); }
 
-    SkISize onISize() override { return {1420, 610}; }
+    SkISize getISize() override { return {1420, 610}; }
 
     static std::unique_ptr<sk_gpu_test::LazyYUVImage> CreatePlanes(const char* name) {
         SkBitmap bmp;
-        if (!GetResourceAsBitmap(name, &bmp)) {
+        if (!ToolUtils::GetResourceAsBitmap(name, &bmp)) {
             return {};
         }
         if (bmp.colorType() != kRGBA_8888_SkColorType) {
@@ -134,7 +134,7 @@ protected:
         auto resultInfo = SkImageInfo::Make(fLazyYUVImage->dimensions(),
                                             kRGBA_8888_SkColorType,
                                             kPremul_SkAlphaType);
-        auto resultSurface = SkSurface::MakeRenderTarget(
+        auto resultSurface = SkSurfaces::RenderTarget(
                 dContext, skgpu::Budgeted::kYes, resultInfo, 1, kTopLeft_GrSurfaceOrigin, nullptr);
         if (!resultSurface) {
             return nullptr;
@@ -144,7 +144,7 @@ protected:
         return resultSurface->makeImageSnapshot();
     }
 
-    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg, GraphiteTestContext*) override {
         auto dContext = GrAsDirectContext(canvas->recordingContext());
         if (!dContext || dContext->abandoned()) {
             *errorMsg = "DirectContext required to create YUV images";
@@ -175,7 +175,7 @@ protected:
         // before they are deleted. Since we don't know when we'll next have access to a
         // direct context, flush all the work now.
         dContext->flush();
-        dContext->submit(true);
+        dContext->submit(GrSyncCpu::kYes);
 
         return DrawResult::kOk;
     }

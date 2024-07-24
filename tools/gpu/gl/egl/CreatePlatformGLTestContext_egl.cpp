@@ -5,13 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/ganesh/gl/GrGLDefines_impl.h"
+#include "include/gpu/gl/egl/GrGLMakeEGLInterface.h"
+#include "src/gpu/ganesh/gl/GrGLDefines.h"
 #include "src/gpu/ganesh/gl/GrGLUtil.h"
 #include "tools/gpu/gl/GLTestContext.h"
 
+#include <vector>
+
+#define EGL_PROTECTED_CONTENT_EXT 0x32C0
 #define GL_GLEXT_PROTOTYPES
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+
+extern bool gCreateProtectedContext;
 
 namespace {
 
@@ -54,21 +60,38 @@ private:
 static EGLContext create_gles_egl_context(EGLDisplay display,
                                           EGLConfig surfaceConfig,
                                           EGLContext eglShareContext,
-                                          EGLint eglContextClientVersion) {
-    const EGLint contextAttribsForOpenGLES[] = {
-        EGL_CONTEXT_CLIENT_VERSION,
-        eglContextClientVersion,
-        EGL_NONE
+                                          EGLint eglContextClientVersion,
+                                          bool createProtected) {
+
+    std::vector<EGLint> contextAttribs = {
+            EGL_CONTEXT_CLIENT_VERSION, eglContextClientVersion,
     };
-    return eglCreateContext(display, surfaceConfig, eglShareContext, contextAttribsForOpenGLES);
+
+    if (createProtected) {
+        contextAttribs.push_back(EGL_PROTECTED_CONTENT_EXT);
+        contextAttribs.push_back(EGL_TRUE);
+    }
+
+    contextAttribs.push_back(EGL_NONE);
+
+    return eglCreateContext(display, surfaceConfig, eglShareContext, contextAttribs.data());
 }
+
 static EGLContext create_gl_egl_context(EGLDisplay display,
                                         EGLConfig surfaceConfig,
-                                        EGLContext eglShareContext) {
-    const EGLint contextAttribsForOpenGL[] = {
-        EGL_NONE
-    };
-    return eglCreateContext(display, surfaceConfig, eglShareContext, contextAttribsForOpenGL);
+                                        EGLContext eglShareContext,
+                                        bool createProtected) {
+
+    std::vector<EGLint> contextAttribs;
+
+    if (createProtected) {
+        contextAttribs.push_back(EGL_PROTECTED_CONTENT_EXT);
+        contextAttribs.push_back(EGL_TRUE);
+    }
+
+    contextAttribs.push_back(EGL_NONE);
+
+    return eglCreateContext(display, surfaceConfig, eglShareContext, contextAttribs.data());
 }
 
 EGLGLTestContext::EGLGLTestContext(GrGLStandard forcedGpuAPI, EGLGLTestContext* shareContext)
@@ -101,11 +124,13 @@ EGLGLTestContext::EGLGLTestContext(GrGLStandard forcedGpuAPI, EGLGLTestContext* 
         EGLint minorVersion;
         eglInitialize(fDisplay, &majorVersion, &minorVersion);
 
+        const char* extensions = eglQueryString(fDisplay, EGL_EXTENSIONS);
+
 #if 0
         SkDebugf("VENDOR: %s\n", eglQueryString(fDisplay, EGL_VENDOR));
         SkDebugf("APIS: %s\n", eglQueryString(fDisplay, EGL_CLIENT_APIS));
         SkDebugf("VERSION: %s\n", eglQueryString(fDisplay, EGL_VERSION));
-        SkDebugf("EXTENSIONS %s\n", eglQueryString(fDisplay, EGL_EXTENSIONS));
+        SkDebugf("EXTENSIONS %s\n", extensions);
 #endif
         bool gles = kGLES_GrGLStandard == kStandards[api];
 
@@ -135,19 +160,29 @@ EGLGLTestContext::EGLGLTestContext(GrGLStandard forcedGpuAPI, EGLGLTestContext* 
             continue;
         }
 
+        bool createProtected = gCreateProtectedContext;
+        if (createProtected && !strstr(extensions, "EGL_EXT_protected_content")) {
+            SkDebugf("Missing EGL_EXT_protected_content support!\n");
+            createProtected = false;
+        }
+
         if (gles) {
-#ifdef GR_EGL_TRY_GLES3_THEN_GLES2
+#if defined(GR_EGL_TRY_GLES3_THEN_GLES2)
             // Some older devices (Nexus7/Tegra3) crash when you try this.  So it is (for now)
             // hidden behind this flag.
-            fContext = create_gles_egl_context(fDisplay, surfaceConfig, eglShareContext, 3);
+            fContext = create_gles_egl_context(fDisplay, surfaceConfig, eglShareContext, 3,
+                                               createProtected);
             if (EGL_NO_CONTEXT == fContext) {
-                fContext = create_gles_egl_context(fDisplay, surfaceConfig, eglShareContext, 2);
+                fContext = create_gles_egl_context(fDisplay, surfaceConfig, eglShareContext, 2,
+                                                   createProtected);
             }
 #else
-            fContext = create_gles_egl_context(fDisplay, surfaceConfig, eglShareContext, 2);
+            fContext = create_gles_egl_context(fDisplay, surfaceConfig, eglShareContext, 2,
+                                               createProtected);
 #endif
         } else {
-            fContext = create_gl_egl_context(fDisplay, surfaceConfig, eglShareContext);
+            fContext = create_gl_egl_context(fDisplay, surfaceConfig, eglShareContext,
+                                             createProtected);
         }
         if (EGL_NO_CONTEXT == fContext) {
             SkDebugf("eglCreateContext failed.  EGL Error: 0x%08x\n", eglGetError());
@@ -157,6 +192,8 @@ EGLGLTestContext::EGLGLTestContext(GrGLStandard forcedGpuAPI, EGLGLTestContext* 
         static const EGLint kSurfaceAttribs[] = {
             EGL_WIDTH, 1,
             EGL_HEIGHT, 1,
+            createProtected ? EGL_PROTECTED_CONTENT_EXT : EGL_NONE,
+            createProtected ? EGL_TRUE : EGL_NONE,
             EGL_NONE
         };
 
@@ -174,8 +211,8 @@ EGLGLTestContext::EGLGLTestContext(GrGLStandard forcedGpuAPI, EGLGLTestContext* 
             continue;
         }
 
-#ifdef SK_GL
-        gl = GrGLMakeNativeInterface();
+#if defined(SK_GL)
+        gl = GrGLInterfaces::MakeEGL();
         if (!gl) {
             SkDebugf("Failed to create gl interface.\n");
             this->destroyGLContext();
@@ -187,7 +224,6 @@ EGLGLTestContext::EGLGLTestContext(GrGLStandard forcedGpuAPI, EGLGLTestContext* 
             this->destroyGLContext();
             continue;
         }
-        const char* extensions = eglQueryString(fDisplay, EGL_EXTENSIONS);
         if (strstr(extensions, "EGL_KHR_image")) {
             fEglCreateImageProc = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
             fEglDestroyImageProc =
@@ -232,7 +268,7 @@ void EGLGLTestContext::destroyGLContext() {
 }
 
 GrEGLImage EGLGLTestContext::texture2DToEGLImage(GrGLuint texID) const {
-#ifdef SK_GL
+#if defined(SK_GL)
     if (!this->gl()->hasExtension("EGL_KHR_gl_texture_2D_image") || !fEglCreateImageProc) {
         return GR_EGL_NO_IMAGE;
     }
@@ -250,7 +286,7 @@ void EGLGLTestContext::destroyEGLImage(GrEGLImage image) const {
 }
 
 GrGLuint EGLGLTestContext::eglImageToExternalTexture(GrEGLImage image) const {
-#ifdef SK_GL
+#if defined(SK_GL)
     while (this->gl()->fFunctions.fGetError() != GR_GL_NO_ERROR) {}
     if (!this->gl()->hasExtension("GL_OES_EGL_image_external")) {
         return 0;

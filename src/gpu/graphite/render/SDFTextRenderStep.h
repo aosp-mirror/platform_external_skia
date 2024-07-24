@@ -16,7 +16,7 @@ namespace skgpu::graphite {
 
 class SDFTextRenderStep final : public RenderStep {
 public:
-    SDFTextRenderStep(bool isA8);
+    SDFTextRenderStep(bool isLCD);
 
     ~SDFTextRenderStep() override;
 
@@ -25,7 +25,7 @@ public:
                                         int* nextBindingIndex) const override;
     const char* fragmentCoverageSkSL() const override;
 
-    void writeVertices(DrawWriter*, const DrawParams&, int ssboIndex) const override;
+    void writeVertices(DrawWriter*, const DrawParams&, skvx::ushort2 ssboIndices) const override;
     void writeUniformsAndTextures(const DrawParams&, PipelineDataGatherer*) const override;
 };
 

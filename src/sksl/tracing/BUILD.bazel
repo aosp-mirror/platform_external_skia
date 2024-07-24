@@ -8,7 +8,7 @@ exports_files_legacy()
 skia_filegroup(
     name = "enabled_srcs",
     srcs = select({
-        "//src/sksl:enable_sksl_tracing_true": ["SkVMDebugTracePlayer.cpp"],
+        "//src/sksl:enable_sksl_tracing_true": ["SkSLDebugTracePlayer.cpp"],
         "//src/sksl:enable_sksl_tracing_false": [],
     }),
 )
@@ -17,7 +17,7 @@ skia_filegroup(
 skia_filegroup(
     name = "enabled_hdrs",
     srcs = select({
-        "//src/sksl:enable_sksl_tracing_true": ["SkVMDebugTracePlayer.h"],
+        "//src/sksl:enable_sksl_tracing_true": ["SkSLDebugTracePlayer.h"],
         "//src/sksl:enable_sksl_tracing_false": [],
     }),
 )
@@ -25,20 +25,56 @@ skia_filegroup(
 skia_filegroup(
     name = "srcs",
     srcs = [
-        "SkRPDebugTrace.cpp",
-        "SkVMDebugTrace.cpp",
+        "SkSLDebugTracePriv.cpp",
+        "SkSLTraceHook.cpp",
         ":enabled_srcs",
     ],
     visibility = ["//src/sksl:__pkg__"],
 )
 
 skia_filegroup(
+    name = "skopts_hdrs",
+    srcs = [
+        "SkSLTraceHook.h",
+    ],
+    visibility = [
+        "//src:__pkg__",
+        "//src/opts:__pkg__",
+    ],
+)
+
+skia_filegroup(
     name = "private_hdrs",
     srcs = [
-        "SkRPDebugTrace.h",
-        "SkSLDebugInfo.h",
-        "SkVMDebugTrace.h",
+        "SkSLDebugTracePriv.h",
         ":enabled_hdrs",
+        ":skopts_hdrs",
+    ],
+    visibility = ["//src/sksl:__pkg__"],
+)
+
+skia_filegroup(
+    name = "core_priv_hdrs",
+    srcs = [
+        "SkSLDebugTracePriv.h",
+        "SkSLTraceHook.h",
+    ],
+    visibility = ["//src/sksl:__pkg__"],
+)
+
+skia_filegroup(
+    name = "opts_srcs",
+    srcs = [
+        "SkSLTraceHook.h",
+    ],
+    visibility = ["//src/opts:__pkg__"],
+)
+
+skia_filegroup(
+    name = "core_srcs",
+    srcs = [
+        "SkSLDebugTracePriv.cpp",
+        "SkSLTraceHook.cpp",
     ],
     visibility = ["//src/sksl:__pkg__"],
 )

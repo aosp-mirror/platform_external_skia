@@ -17,8 +17,11 @@
 #include "include/utils/SkNoDrawCanvas.h"
 #include "src/base/SkTLazy.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/utils/SkMultiPictureDocument.h"
+#include "src/core/SkStringUtils.h"
+#include "include/docs/SkMultiPictureDocument.h"
 #include "tools/SkSharingProc.h"
+
+using namespace skia_private;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -291,7 +294,7 @@ protected:
     void onDrawAnnotation(const SkRect& rect, const char key[], SkData* value) override {
         static constexpr char kOffscreenLayerDraw[] = "OffscreenLayerDraw";
         static constexpr char kSurfaceID[] = "SurfaceID";
-        SkTArray<SkString> tokens;
+        TArray<SkString> tokens;
         SkStrSplit(key, "|", kStrict_SkStrSplitMode, &tokens);
         if (tokens.size() == 2) {
             if (tokens[0].equals(kOffscreenLayerDraw)) {
@@ -386,12 +389,12 @@ std::unique_ptr<MSKPPlayer> MSKPPlayer::Make(SkStreamSeekable* stream) {
     procs.fImageProc = SkSharingDeserialContext::deserializeImage;
     procs.fImageCtx = deserialContext.get();
 
-    int pageCount = SkMultiPictureDocumentReadPageCount(stream);
+    int pageCount = SkMultiPictureDocument::ReadPageCount(stream);
     if (!pageCount) {
         return nullptr;
     }
     std::vector<SkDocumentPage> pages(pageCount);
-    if (!SkMultiPictureDocumentRead(stream, pages.data(), pageCount, &procs)) {
+    if (!SkMultiPictureDocument::Read(stream, pages.data(), pageCount, &procs)) {
         return nullptr;
     }
     std::unique_ptr<MSKPPlayer> result(new MSKPPlayer);

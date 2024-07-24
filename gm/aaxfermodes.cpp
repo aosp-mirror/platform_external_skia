@@ -21,6 +21,7 @@
 #include "include/core/SkTypes.h"
 #include "include/utils/SkTextUtils.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 enum {
     kXfermodeCount = (int)SkBlendMode::kLastMode + 1 + 1,   // extra for arith
@@ -66,11 +67,9 @@ protected:
         kShape_Pass
     };
 
-    SkString onShortName() override {
-        return SkString("aaxfermodes");
-    }
+    SkString getName() const override { return SkString("aaxfermodes"); }
 
-    SkISize onISize() override {
+    SkISize getISize() override {
         return SkISize::Make(2 * kMargin + 2 * kXfermodeTypeSpacing -
                              (kXfermodeTypeSpacing - (kLabelSpacing + 2 * kPaintSpacing)),
                              2 * kMargin + kTitleSpacing + kSubtitleSpacing +
@@ -78,7 +77,7 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        fLabelFont.setTypeface(ToolUtils::create_portable_typeface());
+        fLabelFont.setTypeface(ToolUtils::DefaultPortableTypeface());
         fLabelFont.setSize(5 * kShapeSize/8);
         fLabelFont.setSubpixel(true);
 

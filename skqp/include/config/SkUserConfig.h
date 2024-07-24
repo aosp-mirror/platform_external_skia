@@ -3,6 +3,22 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef GRAPHITE_TEST_UTILS
+#define GRAPHITE_TEST_UTILS 1
+#endif
+
+#ifndef GR_TEST_UTILS
+#define GR_TEST_UTILS 1
+#endif
+
+#ifndef SKCMS_DISABLE_HSW
+#define SKCMS_DISABLE_HSW
+#endif
+
+#ifndef SKCMS_DISABLE_SKX
+#define SKCMS_DISABLE_SKX
+#endif
+
 #ifndef SKSL_ENABLE_TRACING
 #define SKSL_ENABLE_TRACING
 #endif
@@ -15,6 +31,18 @@
 #define SK_BUILD_FOR_SKQP
 #endif
 
+#ifndef SK_CODEC_DECODES_BMP
+#define SK_CODEC_DECODES_BMP
+#endif
+
+#ifndef SK_CODEC_DECODES_GIF
+#define SK_CODEC_DECODES_GIF
+#endif
+
+#ifndef SK_CODEC_DECODES_ICO
+#define SK_CODEC_DECODES_ICO
+#endif
+
 #ifndef SK_CODEC_DECODES_JPEG
 #define SK_CODEC_DECODES_JPEG
 #endif
@@ -23,8 +51,24 @@
 #define SK_CODEC_DECODES_PNG
 #endif
 
+#ifndef SK_CODEC_DECODES_WBMP
+#define SK_CODEC_DECODES_WBMP
+#endif
+
 #ifndef SK_CODEC_DECODES_WEBP
 #define SK_CODEC_DECODES_WEBP
+#endif
+
+#ifndef SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
+#define SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
+#endif
+
+#ifndef SK_DISABLE_TRACING
+#define SK_DISABLE_TRACING
+#endif
+
+#ifndef SK_ENABLE_AVX512_OPTS
+#define SK_ENABLE_AVX512_OPTS
 #endif
 
 #ifndef SK_ENABLE_DISCRETE_GPU
@@ -37,22 +81,6 @@
 
 #ifndef SK_ENABLE_PRECOMPILE
 #define SK_ENABLE_PRECOMPILE
-#endif
-
-#ifndef SK_ENABLE_SKSL
-#define SK_ENABLE_SKSL
-#endif
-
-#ifndef SK_ENCODE_JPEG
-#define SK_ENCODE_JPEG
-#endif
-
-#ifndef SK_ENCODE_PNG
-#define SK_ENCODE_PNG
-#endif
-
-#ifndef SK_ENCODE_WEBP
-#define SK_ENCODE_WEBP
 #endif
 
 #ifndef SK_GAMMA_APPLY_TO_A8
@@ -75,8 +103,8 @@
 #define SK_GL
 #endif
 
-#ifndef SK_HAS_ANDROID_CODEC
-#define SK_HAS_ANDROID_CODEC
+#ifndef SK_GRAPHITE
+#define SK_GRAPHITE
 #endif
 
 #ifndef SK_HAS_WUFFS_LIBRARY

@@ -8,27 +8,19 @@ skia_filegroup(
     name = "srcs",
     # TODO: break up into seperate targets
     srcs = [
-        "SkGLWindowContext_android.cpp",
-        "SkVulkanWindowContext_android.cpp",
-        "SkWindowContextFactory_android.h",
+        "GLWindowContext_android.cpp",
+        "RasterWindowContext_android.cpp",
+        "VulkanWindowContext_android.cpp",
+        "WindowContextFactory_android.h",
     ],
     visibility = ["//tools/window:__pkg__"],
 )
 
 skia_cc_deps(
     name = "deps",
-    linkopts = [
-        "-lX11",
-        "-lxcb",  # dep of X11
-        "-lXau",  # dep of xcb
-        "-lXdmcp",  # dep of xcb
-    ] + select({
-        "//src/gpu:vulkan_backend": ["-lX11-xcb"],
-        "//conditions:default": [],
-    }),
     visibility = ["//tools/window:__pkg__"],
     deps = select({
-        "//src/gpu:vulkan_backend": ["//tools/gpu/vk:testutils"],
+        "//src/gpu:vulkan_ganesh": ["//tools/gpu/vk:testutils"],
         "//conditions:default": [],
     }),
 )

@@ -16,6 +16,8 @@
 #include "src/gpu/tessellate/MiddleOutPolygonTriangulator.h"
 #include "src/gpu/tessellate/WangsFormula.h"
 
+using namespace skia_private;
+
 namespace skgpu::tess {
 
 namespace {
@@ -151,8 +153,8 @@ private:
     SkPath fPath;
 
     // Used for stack-based recursion (instead of using the runtime stack).
-    SkSTArray<8, SkPoint> fPointStack;
-    SkSTArray<2, float> fWeightStack;
+    STArray<8, SkPoint> fPointStack;
+    STArray<2, float> fWeightStack;
 };
 
 }  // namespace
@@ -192,7 +194,10 @@ SkPath PreChopPathCurves(float tessellationPrecision,
                 break;
         }
     }
-    return chopper.path();
+    // Must preserve the input path's fill type (see crbug.com/1472747)
+    SkPath chopped = chopper.path();
+    chopped.setFillType(path.getFillType());
+    return chopped;
 }
 
 int FindCubicConvex180Chops(const SkPoint pts[], float T[2], bool* areCusps) {
@@ -212,10 +217,10 @@ int FindCubicConvex180Chops(const SkPoint pts[], float T[2], bool* areCusps) {
     // kIEEE_one_minus_2_epsilon bits are correct.
     SkASSERT(sk_bit_cast<float>(kIEEE_one_minus_2_epsilon) == 1 - 2*kEpsilon);
 
-    float2 p0 = skvx::bit_pun<float2>(pts[0]);
-    float2 p1 = skvx::bit_pun<float2>(pts[1]);
-    float2 p2 = skvx::bit_pun<float2>(pts[2]);
-    float2 p3 = skvx::bit_pun<float2>(pts[3]);
+    float2 p0 = sk_bit_cast<float2>(pts[0]);
+    float2 p1 = sk_bit_cast<float2>(pts[1]);
+    float2 p2 = sk_bit_cast<float2>(pts[2]);
+    float2 p3 = sk_bit_cast<float2>(pts[3]);
 
     // Find the cubic's power basis coefficients. These define the bezier curve as:
     //

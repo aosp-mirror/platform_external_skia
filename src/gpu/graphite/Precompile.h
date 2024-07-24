@@ -20,7 +20,9 @@ class SkRuntimeEffect;
 
 namespace skgpu::graphite {
 
+enum class Coverage;
 class KeyContext;
+class PipelineDataGatherer;
 class PrecompileBasePriv;
 class UniquePaintParamsID;
 
@@ -53,11 +55,17 @@ public:
     const PrecompileBasePriv priv() const;  // NOLINT(readability-const-return-type)
 
 protected:
+    // This returns the desired option along with the child options.
+    template<typename T>
+    static std::pair<sk_sp<T>, int> SelectOption(const std::vector<sk_sp<T>>& options,
+                                                 int desiredOption);
+
     // In general, derived classes should use AddToKey to select the desired child option from
     // a vector and then have it added to the key with its reduced/nested child option.
     template<typename T>
     static void AddToKey(const KeyContext&,
                          PaintParamsKeyBuilder*,
+                         PipelineDataGatherer*,
                          const std::vector<sk_sp<T>>& options,
                          int desiredOption);
 
@@ -68,25 +76,36 @@ private:
     virtual bool isALocalMatrixShader() const { return false; }
 
     virtual void addToKey(const KeyContext&,
-                          int desiredCombination,
-                          PaintParamsKeyBuilder*) const = 0;
+                          PaintParamsKeyBuilder*,
+                          PipelineDataGatherer*,
+                          int desiredCombination) const = 0;
 
     Type fType;
 };
 
 //--------------------------------------------------------------------------------------------------
+
+template<typename T>
+std::pair<sk_sp<T>, int> PrecompileBase::SelectOption(const std::vector<sk_sp<T>>& options,
+                                                      int desiredOption) {
+    for (const sk_sp<T>& option : options) {
+        if (desiredOption < (option ? option->numCombinations() : 1)) {
+            return { option, desiredOption };
+        }
+        desiredOption -= option->numCombinations();
+    }
+    return { nullptr, 0 };
+}
+
 template<typename T>
 void PrecompileBase::AddToKey(const KeyContext& keyContext,
                               PaintParamsKeyBuilder* builder,
+                              PipelineDataGatherer* gatherer,
                               const std::vector<sk_sp<T>>& options,
                               int desiredOption) {
-    for (const sk_sp<T>& option : options) {
-        if (desiredOption < option->numCombinations()) {
-            option->priv().addToKey(keyContext, desiredOption, builder);
-            break;
-        }
-
-        desiredOption -= option->numCombinations();
+    auto [option, childOptions] = SelectOption(options, desiredOption);
+    if (option) {
+        option->priv().addToKey(keyContext, builder, gatherer, childOptions);
     }
 }
 
@@ -96,6 +115,8 @@ class PrecompileColorFilter;
 class PrecompileShader : public PrecompileBase {
 public:
     PrecompileShader() : PrecompileBase(Type::kShader) {}
+
+    virtual bool isConstant() const { return false; }
 
     sk_sp<PrecompileShader> makeWithLocalMatrix();
 
@@ -110,6 +131,8 @@ public:
 class PrecompileColorFilter : public PrecompileBase {
 public:
     PrecompileColorFilter() : PrecompileBase(Type::kColorFilter) {}
+
+    sk_sp<PrecompileColorFilter> makeComposed(sk_sp<PrecompileColorFilter> inner) const;
 };
 
 class PrecompileImageFilter : public PrecompileBase {
@@ -157,6 +180,8 @@ public:
         fBlenderOptions.assign(blenders.begin(), blenders.end());
     }
 
+    void setDither(bool dither) { fDither = dither; }
+
     // Provides access to functions that aren't part of the public API.
     PaintOptionsPriv priv();
     const PaintOptionsPriv priv() const;  // NOLINT(readability-const-return-type)
@@ -172,11 +197,17 @@ private:
 
     int numCombinations() const;
     // 'desiredCombination' must be less than the result of the numCombinations call
-    void createKey(const KeyContext&, int desiredCombination,
-                   PaintParamsKeyBuilder*, bool addPrimitiveBlender) const;
+    void createKey(const KeyContext&,
+                   PaintParamsKeyBuilder*,
+                   PipelineDataGatherer*,
+                   int desiredCombination,
+                   bool addPrimitiveBlender,
+                   Coverage coverage) const;
     void buildCombinations(
         const KeyContext&,
+        PipelineDataGatherer*,
         bool addPrimitiveBlender,
+        Coverage coverage,
         const std::function<void(UniquePaintParamsID)>& processCombination) const;
 
     std::vector<sk_sp<PrecompileShader>> fShaderOptions;
@@ -184,6 +215,7 @@ private:
     std::vector<sk_sp<PrecompileColorFilter>> fColorFilterOptions;
     std::vector<sk_sp<PrecompileImageFilter>> fImageFilterOptions;
     std::vector<sk_sp<PrecompileBlender>> fBlenderOptions;
+    bool fDither = false;
 };
 
 } // namespace skgpu::graphite

@@ -8,60 +8,41 @@
 #ifndef GrBackendSemaphore_DEFINED
 #define GrBackendSemaphore_DEFINED
 
-#include "include/gpu/GrTypes.h"
-
-#include "include/gpu/gl/GrGLTypes.h"
+#include "include/gpu/GrTypes.h"  // IWYU pragma: keep
+#include "include/private/base/SkAPI.h"
+#include "include/private/base/SkAnySubclass.h"
 
 #ifdef SK_METAL
 #include "include/gpu/mtl/GrMtlTypes.h"
 #endif
 
-#ifdef SK_VULKAN
-#include "include/gpu/vk/GrVkTypes.h"
+#if defined(SK_VULKAN) && !defined(SK_DISABLE_LEGACY_VULKAN_BACKENDSEMAPHORE)
+#include "include/private/gpu/vk/SkiaVulkan.h"
 #endif
 
 #ifdef SK_DIRECT3D
 #include "include/private/gpu/ganesh/GrD3DTypesMinimal.h"
 #endif
 
+#include <cstddef>
+
+class GrBackendSemaphoreData;
+
 /**
  * Wrapper class for passing into and receiving data from Ganesh about a backend semaphore object.
  */
-class GrBackendSemaphore {
+class SK_API GrBackendSemaphore {
 public:
-    // For convenience we just set the backend here to OpenGL. The GrBackendSemaphore cannot be used
-    // until either init* is called, which will set the appropriate GrBackend.
-    GrBackendSemaphore()
-            : fBackend(GrBackendApi::kOpenGL), fGLSync(nullptr), fIsInitialized(false) {}
-
-#ifdef SK_DIRECT3D
-    // We only need to specify these if Direct3D is enabled, because it requires special copy
-    // characteristics.
+    // The GrBackendSemaphore cannot be used until either init* is called, which will set the
+    // appropriate GrBackend.
+    GrBackendSemaphore();
     ~GrBackendSemaphore();
     GrBackendSemaphore(const GrBackendSemaphore&);
     GrBackendSemaphore& operator=(const GrBackendSemaphore&);
-#endif
 
-    void initGL(GrGLsync sync) {
-        fBackend = GrBackendApi::kOpenGL;
-        fGLSync = sync;
-        fIsInitialized = true;
-    }
-
-#ifdef SK_VULKAN
-    void initVulkan(VkSemaphore semaphore) {
-        fBackend = GrBackendApi::kVulkan;
-        fVkSemaphore = semaphore;
-
-        fIsInitialized = true;
-    }
-
-    VkSemaphore vkSemaphore() const {
-        if (!fIsInitialized || GrBackendApi::kVulkan != fBackend) {
-            return VK_NULL_HANDLE;
-        }
-        return fVkSemaphore;
-    }
+#if defined(SK_VULKAN) && !defined(SK_DISABLE_LEGACY_VULKAN_BACKENDSEMAPHORE)
+    void initVulkan(VkSemaphore semaphore);
+    VkSemaphore vkSemaphore() const;
 #endif
 
 #ifdef SK_METAL
@@ -100,30 +81,35 @@ public:
 #endif
 
     bool isInitialized() const { return fIsInitialized; }
-
-    GrGLsync glSync() const {
-        if (!fIsInitialized || GrBackendApi::kOpenGL != fBackend) {
-            return nullptr;
-        }
-        return fGLSync;
-    }
-
+    GrBackendApi backend() const { return fBackend; }
 
 #ifdef SK_DIRECT3D
     bool getD3DFenceInfo(GrD3DFenceInfo* outInfo) const;
 #endif
 
 private:
+    friend class GrBackendSemaphorePriv;
+    friend class GrBackendSemaphoreData;
+    // Size determined by looking at the GrBackendSemaphoreData subclasses, then
+    // guessing-and-checking. Compiler will complain if this is too small - in that case,
+    // just increase the number.
+    inline constexpr static size_t kMaxSubclassSize = 16;
+    using AnySemaphoreData = SkAnySubclass<GrBackendSemaphoreData, kMaxSubclassSize>;
+
+    template <typename SemaphoreData>
+    GrBackendSemaphore(GrBackendApi api, SemaphoreData data) : fBackend(api), fIsInitialized(true) {
+        fSemaphoreData.emplace<SemaphoreData>(data);
+    }
+
 #ifdef SK_DIRECT3D
     void assignD3DFenceInfo(const GrD3DFenceInfo& info);
 #endif
 
     GrBackendApi fBackend;
+    AnySemaphoreData fSemaphoreData;
+
     union {
-        GrGLsync    fGLSync;
-#ifdef SK_VULKAN
-        VkSemaphore fVkSemaphore;
-#endif
+        void* fPlaceholder;  // TODO(293490566)
 #ifdef SK_METAL
         GrMTLHandle fMtlEvent;    // Expected to be an id<MTLEvent>
 #endif

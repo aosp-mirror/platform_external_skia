@@ -24,7 +24,7 @@
 class SkCanvas;
 class SkSVGLength;
 
-class SkSVGLengthContext {
+class SK_API SkSVGLengthContext {
 public:
     SkSVGLengthContext(const SkSize& viewport, SkScalar dpi = 90)
         : fViewport(viewport), fDPI(dpi) {}
@@ -47,18 +47,18 @@ private:
     SkScalar fDPI;
 };
 
-struct SkSVGPresentationContext {
+struct SK_API SkSVGPresentationContext {
     SkSVGPresentationContext();
     SkSVGPresentationContext(const SkSVGPresentationContext&)            = default;
     SkSVGPresentationContext& operator=(const SkSVGPresentationContext&) = default;
 
-    const SkTHashMap<SkString, SkSVGColorType>* fNamedColors = nullptr;
+    const skia_private::THashMap<SkString, SkSVGColorType>* fNamedColors = nullptr;
 
     // Inherited presentation attributes, computed for the current node.
     SkSVGPresentationAttributes fInherited;
 };
 
-class SkSVGRenderContext {
+class SK_API SkSVGRenderContext {
 public:
     // Captures data required for object bounding box resolution.
     struct OBBScope {
@@ -138,7 +138,10 @@ public:
     }
 
     sk_sp<SkFontMgr> fontMgr() const {
-        return fFontMgr ? fFontMgr : SkFontMgr::RefDefault();
+        // It is probably an oversight to try to render <text> without having set the SkFontMgr.
+        // We will assert this in debug mode, but fallback to an empty fontmgr in release builds.
+        SkASSERT(fFontMgr);
+        return fFontMgr ? fFontMgr : SkFontMgr::RefEmpty();
     }
 
     // Returns the translate/scale transformation required to map into the current OBB scope,

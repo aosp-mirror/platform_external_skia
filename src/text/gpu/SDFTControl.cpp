@@ -8,16 +8,18 @@
 #include "src/text/gpu/SDFTControl.h"
 
 #include "include/core/SkFont.h"
-#include "include/core/SkGraphics.h"
+#include "include/core/SkFontTypes.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkScalar.h"
-#include "include/core/SkSurfaceProps.h"
 #include "src/core/SkFontPriv.h"
-#include "src/core/SkGlyphRunPainter.h"
+#include "src/core/SkGlyph.h"
 #include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
 
 #include <tuple>
+
+struct SkPoint;
 
 namespace sktext::gpu {
 
@@ -90,28 +92,34 @@ SDFTControl::getSDFFont(const SkFont& font, const SkMatrix& viewMatrix,
 
     SkScalar dfMaskScaleFloor;
     SkScalar dfMaskScaleCeil;
+    SkScalar dfMaskSize;
     if (scaledTextSize <= kSmallDFFontLimit) {
         dfMaskScaleFloor = fMinDistanceFieldFontSize;
         dfMaskScaleCeil = kSmallDFFontLimit;
+        dfMaskSize = kSmallDFFontLimit;
     } else if (scaledTextSize <= kMediumDFFontLimit) {
         dfMaskScaleFloor = kSmallDFFontLimit;
         dfMaskScaleCeil = kMediumDFFontLimit;
+        dfMaskSize = kMediumDFFontLimit;
 #ifdef SK_BUILD_FOR_MAC
     } else if (scaledTextSize <= kLargeDFFontLimit) {
         dfMaskScaleFloor = kMediumDFFontLimit;
         dfMaskScaleCeil = kLargeDFFontLimit;
+        dfMaskSize = kLargeDFFontLimit;
     } else {
         dfMaskScaleFloor = kLargeDFFontLimit;
-        dfMaskScaleCeil = kExtraLargeDFFontLimit;
+        dfMaskScaleCeil = fMaxDistanceFieldFontSize;
+        dfMaskSize = kExtraLargeDFFontLimit;
     }
 #else
     } else {
         dfMaskScaleFloor = kMediumDFFontLimit;
-        dfMaskScaleCeil = kLargeDFFontLimit;
+        dfMaskScaleCeil = fMaxDistanceFieldFontSize;
+        dfMaskSize = kLargeDFFontLimit;
     }
 #endif
 
-    dfFont.setSize(SkIntToScalar(dfMaskScaleCeil));
+    dfFont.setSize(dfMaskSize);
     dfFont.setEdging(SkFont::Edging::kAntiAlias);
     dfFont.setForceAutoHinting(false);
     dfFont.setHinting(SkFontHinting::kNormal);
@@ -121,7 +129,7 @@ SDFTControl::getSDFFont(const SkFont& font, const SkMatrix& viewMatrix,
 
     SkScalar minMatrixScale = dfMaskScaleFloor / textSize,
              maxMatrixScale = dfMaskScaleCeil  / textSize;
-    return {dfFont, textSize / dfMaskScaleCeil, {minMatrixScale, maxMatrixScale}};
+    return {dfFont, textSize / dfMaskSize, {minMatrixScale, maxMatrixScale}};
 }
 
 bool SDFTMatrixRange::matrixInRange(const SkMatrix& matrix) const {

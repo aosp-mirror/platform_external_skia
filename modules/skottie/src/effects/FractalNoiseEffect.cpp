@@ -5,22 +5,47 @@
  * found in the LICENSE file.
  */
 
-#include "modules/skottie/src/effects/Effects.h"
-
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkM44.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkString.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
-#include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
+#include "modules/skottie/src/effects/Effects.h"
+#include "modules/sksg/include/SkSGNode.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
 #include "src/base/SkRandom.h"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+struct SkPoint;
+
+namespace skjson {
+class ArrayValue;
+}
+namespace sksg {
+class InvalidationController;
+}
 
 namespace skottie::internal {
-
-#ifdef SK_ENABLE_SKSL
-
 namespace {
 
 // An implementation of the ADBE Fractal Noise effect:
@@ -101,22 +126,19 @@ static constexpr char gNoiseEffectSkSL[] =
         // Constant loop counter chosen to be >= ceil(u_octaves).
         // The logical counter is actually 'oct'.
         "for (float i = 0; i < %u; ++i) {"
-            // effective layer weight computed to accommodate fixed loop counters
-            //
+            // effective layer weight
             //   -- for full octaves:              layer amplitude
             //   -- for fractional octave:         layer amplitude modulated by fractional part
-            //   -- for octaves > ceil(u_octaves): 0
-            //
-            // e.g. for 6 loops and u_octaves = 2.3, this generates the sequence [1,1,.3,0,0]
-            "float w = amp*saturate(oct);"
+            "float w = amp*min(oct,1.0);"
 
-            "n += w*fractal(filter(xy));"
-
+            "n    += w*fractal(filter(xy));"
             "wacc += w;"
-            "amp  *= u_persistence;"
-            "oct  -= 1;"
 
-            "xy = (u_submatrix*float3(xy,1)).xy;"
+            "if (oct <= 1.0) { break; }"
+
+            "oct -= 1.0;"
+            "amp *= u_persistence;"
+            "xy   = (u_submatrix*float3(xy,1)).xy;"
         "}"
 
         "n /= wacc;"
@@ -531,19 +553,12 @@ private:
 
 } // namespace
 
-#endif  // SK_ENABLE_SKSL
-
 sk_sp<sksg::RenderNode> EffectBuilder::attachFractalNoiseEffect(
         const skjson::ArrayValue& jprops, sk_sp<sksg::RenderNode> layer) const {
-#ifdef SK_ENABLE_SKSL
     auto fractal_noise = sk_make_sp<FractalNoiseNode>(std::move(layer));
 
     return fBuilder->attachDiscardableAdapter<FractalNoiseAdapter>(jprops, fBuilder,
                                                                    std::move(fractal_noise));
-#else
-    // TODO(skia:12197)
-    return layer;
-#endif
 }
 
 } // namespace skottie::internal

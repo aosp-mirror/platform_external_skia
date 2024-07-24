@@ -220,7 +220,7 @@ DEF_GANESH_TEST(OpChainTest, reporter, /*ctxInfo*/, CtsEnforcement::kApiLevel_T)
                                                                kDims,
                                                                GrRenderable::kYes,
                                                                1,
-                                                               GrMipmapped::kNo,
+                                                               skgpu::Mipmapped::kNo,
                                                                SkBackingFit::kExact,
                                                                skgpu::Budgeted::kNo,
                                                                GrProtected::kNo,
@@ -262,10 +262,10 @@ DEF_GANESH_TEST(OpChainTest, reporter, /*ctxInfo*/, CtsEnforcement::kApiLevel_T)
                 GrOpFlushState flushState(dContext->priv().getGpu(),
                                           dContext->priv().resourceProvider(),
                                           &tracker);
-                skgpu::v1::OpsTask opsTask(drawingMgr,
-                                           GrSurfaceProxyView(proxy, kOrigin, writeSwizzle),
-                                           dContext->priv().auditTrail(),
-                                           arenas);
+                skgpu::ganesh::OpsTask opsTask(drawingMgr,
+                                               GrSurfaceProxyView(proxy, kOrigin, writeSwizzle),
+                                               dContext->priv().auditTrail(),
+                                               arenas);
                 // This assumes the particular values of kRanges.
                 std::fill_n(result, result_width(), -1);
                 std::fill_n(validResult, result_width(), -1);

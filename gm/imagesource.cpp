@@ -19,6 +19,7 @@
 #include "include/core/SkString.h"
 #include "include/effects/SkImageFilters.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <utility>
 
@@ -40,14 +41,12 @@ public:
     ImageSourceGM() { }
 
 protected:
-    SkString onShortName() override {
-        return SkString("imagesource");
-    }
+    SkString getName() const override { return SkString("imagesource"); }
 
-    SkISize onISize() override { return SkISize::Make(500, 150); }
+    SkISize getISize() override { return SkISize::Make(500, 150); }
 
     void onOnceBeforeDraw() override {
-        fImage = ToolUtils::create_string_image(100, 100, 0xFFFFFFFF, 20, 70, 96, "e");
+        fImage = ToolUtils::CreateStringImage(100, 100, 0xFFFFFFFF, 20, 70, 96, "e");
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -61,7 +60,7 @@ protected:
 
         {
             // Draw an unscaled bitmap.
-            sk_sp<SkImageFilter> imageSource(SkImageFilters::Image(fImage));
+            sk_sp<SkImageFilter> imageSource(SkImageFilters::Image(fImage, SkFilterMode::kNearest));
             fill_rect_filtered(canvas, clipRect, std::move(imageSource));
             canvas->translate(SkIntToScalar(100), 0);
         }

@@ -24,12 +24,12 @@ const char* PictureCentricBench::onGetName() {
 }
 
 bool PictureCentricBench::isSuitableFor(Backend backend) {
-    return backend == kNonRendering_Backend;
+    return backend == Backend::kNonRendering;
 }
 
-SkIPoint PictureCentricBench::onGetSize() {
-    return SkIPoint::Make(SkScalarCeilToInt(fSrc->cullRect().width()),
-                          SkScalarCeilToInt(fSrc->cullRect().height()));
+SkISize PictureCentricBench::onGetSize() {
+    return SkISize::Make(SkScalarCeilToInt(fSrc->cullRect().width()),
+                         SkScalarCeilToInt(fSrc->cullRect().height()));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -61,11 +61,11 @@ const char* DeserializePictureBench::onGetName() {
 }
 
 bool DeserializePictureBench::isSuitableFor(Backend backend) {
-    return backend == kNonRendering_Backend;
+    return backend == Backend::kNonRendering;
 }
 
-SkIPoint DeserializePictureBench::onGetSize() {
-    return SkIPoint::Make(128, 128);
+SkISize DeserializePictureBench::onGetSize() {
+    return SkISize::Make(128, 128);
 }
 
 void DeserializePictureBench::onDraw(int loops, SkCanvas*) {

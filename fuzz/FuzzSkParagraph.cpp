@@ -10,10 +10,8 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkFontStyle.h"
-#include "include/core/SkImageEncoder.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
@@ -41,7 +39,7 @@
 #include "src/utils/SkOSPath.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
-
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 #include <algorithm>
@@ -71,6 +69,7 @@ public:
         SkOSFile::Iter iter(fResourceDir.c_str());
 
         SkString path;
+        sk_sp<SkFontMgr> mgr = ToolUtils::TestFontMgr();
         while (iter.next(&path)) {
             if (path.endsWith("Roboto-Italic.ttf")) {
                 fFontsFound = true;
@@ -86,7 +85,7 @@ public:
         for (auto& font : fonts) {
             SkString file_path;
             file_path.printf("%s/%s", fResourceDir.c_str(), font.c_str());
-            fFontProvider->registerTypeface(SkTypeface::MakeFromFile(file_path.c_str()));
+            fFontProvider->registerTypeface(mgr->makeFromFile(file_path.c_str(), 0));
         }
 
         if (testOnly) {

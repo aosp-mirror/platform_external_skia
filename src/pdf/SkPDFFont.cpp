@@ -24,8 +24,8 @@
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTypes.h"
 #include "include/docs/SkPDFDocument.h"
-#include "include/private/SkBitmaskEnum.h"
 #include "include/private/base/SkTo.h"
+#include "src/base/SkBitmaskEnum.h"
 #include "src/base/SkUTF.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkImagePriv.h"
@@ -211,7 +211,7 @@ SkPDFFont* SkPDFFont::GetFontResource(SkPDFDocument* doc,
     bool multibyte = SkPDFFont::IsMultiByte(type);
     SkGlyphID subsetCode =
             multibyte ? 0 : first_nonzero_glyph_for_single_byte_encoding(glyph->getGlyphID());
-    uint64_t typefaceID = (static_cast<uint64_t>(SkTypeface::UniqueID(face)) << 16) | subsetCode;
+    uint64_t typefaceID = (static_cast<uint64_t>(face->uniqueID()) << 16) | subsetCode;
 
     if (SkPDFFont* found = doc->fFontMap.find(typefaceID)) {
         SkASSERT(multibyte == found->multiByteGlyphs());
@@ -386,14 +386,15 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
     sysInfo->insertInt("Supplement", 0);
     newCIDFont->insertObject("CIDSystemInfo", std::move(sysInfo));
 
-    SkScalar defaultWidth = 0;
+    // Unfortunately, poppler enforces DW (default width) must be an integer.
+    int32_t defaultWidth = 0;
     {
         std::unique_ptr<SkPDFArray> widths = SkPDFMakeCIDGlyphWidthsArray(
                 *face, font.glyphUsage(), &defaultWidth);
         if (widths && widths->size() > 0) {
             newCIDFont->insertObject("W", std::move(widths));
         }
-        newCIDFont->insertScalar("DW", defaultWidth);
+        newCIDFont->insertInt("DW", defaultWidth);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -481,14 +482,16 @@ static ImageAndOffset to_image(SkGlyphID gid, SkBulkGlyphMetricsAndImages* small
             bm.setImmutable();
             return {bm.asImage(), {bounds.x(), bounds.y()}};
         case SkMask::kA8_Format:
-            bm.installPixels(SkImageInfo::MakeA8(bounds.width(), bounds.height()),
-                             mask.fImage, mask.fRowBytes);
-            return {SkMakeImageFromRasterBitmap(bm, kAlways_SkCopyPixelsMode),
+            return {SkImages::RasterFromData(
+                        SkImageInfo::MakeA8(bounds.width(), bounds.height()),
+                        SkData::MakeWithCopy(mask.fImage, mask.computeTotalImageSize()),
+                        mask.fRowBytes),
                     {bounds.x(), bounds.y()}};
         case SkMask::kARGB32_Format:
-            bm.installPixels(SkImageInfo::MakeN32Premul(bounds.width(), bounds.height()),
-                             mask.fImage, mask.fRowBytes);
-            return {SkMakeImageFromRasterBitmap(bm, kAlways_SkCopyPixelsMode),
+            return {SkImages::RasterFromData(
+                        SkImageInfo::MakeN32Premul(bounds.width(), bounds.height()),
+                        SkData::MakeWithCopy(mask.fImage, mask.computeTotalImageSize()),
+                        mask.fRowBytes),
                     {bounds.x(), bounds.y()}};
         case SkMask::k3D_Format:
         case SkMask::kLCD16_Format:
@@ -538,7 +541,7 @@ SkStrikeSpec make_small_strike(const SkTypeface& typeface) {
     font.setEdging(SkFont::Edging::kAlias);
     return SkStrikeSpec::MakeMask(font,
                                   SkPaint(),
-                                  SkSurfaceProps(0, kUnknown_SkPixelGeometry),
+                                  SkSurfaceProps(),
                                   SkScalerContextFlags::kFakeGammaAndBoostContrast,
                                   SkMatrix::I());
 }

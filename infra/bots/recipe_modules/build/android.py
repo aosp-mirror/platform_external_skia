@@ -44,12 +44,13 @@ def compile_fn(api, checkout_root, out_dir):
   if configuration != 'Debug':
     args['is_debug'] = 'false'
   if 'Dawn' in extra_tokens:
-    util.set_dawn_args_and_env(args, env, api, skia_dir)
+    util.set_dawn_args_and_env(args, env, api, extra_tokens, skia_dir)
     args['ndk_api'] = 26 #skia_use_gl=false, so use vulkan
-  if 'Vulkan' in extra_tokens:
+  if 'Vulkan' in extra_tokens and not 'Dawn' in extra_tokens:
     args['ndk_api'] = 26
     args['skia_enable_vulkan_debug_layers'] = 'false'
     args['skia_use_gl'] = 'false'
+    args['skia_use_vulkan'] = 'true'
   if 'ASAN' in extra_tokens:
     args['sanitize'] = '"ASAN"'
   if 'Graphite' in extra_tokens:
@@ -89,8 +90,8 @@ def compile_fn(api, checkout_root, out_dir):
   gn      = skia_dir.join('bin', 'gn')
 
   with api.context(cwd=skia_dir):
-    api.run(api.python, 'fetch-gn',
-            script=skia_dir.join('bin', 'fetch-gn'),
+    api.run(api.step, 'fetch-gn',
+            cmd=['python3', skia_dir.join('bin', 'fetch-gn')],
             infra_step=True)
 
     with api.env(env):

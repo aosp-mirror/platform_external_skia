@@ -11,8 +11,8 @@
 #include <string>
 
 #include "src/core/SkAutoPixmapStorage.h"
+#include "src/core/SkMemset.h"
 #include "src/core/SkMipmap.h"
-#include "src/core/SkOpts.h"
 #include "tools/flags/CommandLineFlags.h"
 
 #include "tools/fiddle/fiddle_main.h"
@@ -22,7 +22,9 @@ static DEFINE_double(duration, 1.0,
 static DEFINE_double(frame, 1.0,
                      "A double value in [0, 1] that specifies the point in animation to draw.");
 
+#include "include/encode/SkPngEncoder.h"
 #include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrGpu.h"
 #include "src/gpu/ganesh/GrRenderTarget.h"
@@ -30,6 +32,10 @@ static DEFINE_double(frame, 1.0,
 #include "src/gpu/ganesh/GrTexture.h"
 #include "tools/gpu/ManagedBackendTexture.h"
 #include "tools/gpu/gl/GLTestContext.h"
+
+#if defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
+#include "include/ports/SkFontMgr_fontconfig.h"
+#endif
 
 using namespace skia_private;
 
@@ -41,6 +47,7 @@ SkBitmap source;
 sk_sp<SkImage> image;
 double duration; // The total duration of the animation in seconds.
 double frame;    // A value in [0, 1] of where we are in the animation.
+sk_sp<SkFontMgr> fontMgr;
 
 // Global used by the local impl of SkDebugf.
 std::ostringstream gTextOutput;
@@ -111,9 +118,9 @@ static void dump_output(const sk_sp<SkData>& data,
     }
 }
 
-static sk_sp<SkData> encode_snapshot(const sk_sp<SkSurface>& surface) {
+static sk_sp<SkData> encode_snapshot(GrDirectContext* ctx, const sk_sp<SkSurface>& surface) {
     sk_sp<SkImage> img(surface->makeImageSnapshot());
-    return img ? img->encodeToData() : nullptr;
+    return SkPngEncoder::Encode(ctx, img.get(), {});
 }
 
 static SkCanvas* prepare_canvas(SkCanvas * canvas) {
@@ -190,7 +197,7 @@ static bool setup_backend_objects(GrDirectContext* dContext,
                                                 GrRenderable::kYes,
                                                 kSampleCnt,
                                                 skgpu::Budgeted::kNo,
-                                                GrMipmapped::kNo,
+                                                skgpu::Mipmapped::kNo,
                                                 GrProtected::kNo,
                                                 &level0,
                                                 /*label=*/"Fiddle_SetupBackendObjects");
@@ -242,13 +249,18 @@ int main(int argc, char** argv) {
         options.pdf = false;
         options.skp = false;
     }
+#if defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
+    fontMgr = SkFontMgr_New_FontConfig(nullptr);
+#else
+    fontMgr = SkFontMgr::RefEmpty();
+#endif
     if (options.source) {
         sk_sp<SkData> data(SkData::MakeFromFileName(options.source));
         if (!data) {
             perror(options.source);
             return 1;
         } else {
-            image = SkImage::MakeFromEncoded(std::move(data));
+            image = SkImages::DeferredFromEncodedData(std::move(data));
             if (!image) {
                 perror("Unable to decode the source image.");
                 return 1;
@@ -269,10 +281,10 @@ int main(int argc, char** argv) {
     SkImageInfo info = SkImageInfo::Make(options.size.width(), options.size.height(), colorType,
                                          kPremul_SkAlphaType, colorSpace);
     if (options.raster) {
-        auto rasterSurface = SkSurface::MakeRaster(info);
+        auto rasterSurface = SkSurfaces::Raster(info);
         srand(0);
         draw(prepare_canvas(rasterSurface->getCanvas()));
-        rasterData = encode_snapshot(rasterSurface);
+        rasterData = encode_snapshot(nullptr, rasterSurface);
     }
 #ifdef SK_GL
     if (options.gpu) {
@@ -286,14 +298,14 @@ int main(int argc, char** argv) {
                 exit(1);
             }
 
-            auto surface = SkSurface::MakeRenderTarget(direct.get(), skgpu::Budgeted::kNo, info);
+            auto surface = SkSurfaces::RenderTarget(direct.get(), skgpu::Budgeted::kNo, info);
             if (!surface) {
                 fputs("Unable to get render surface.\n", stderr);
                 exit(1);
             }
             srand(0);
             draw(prepare_canvas(surface->getCanvas()));
-            gpuData = encode_snapshot(surface);
+            gpuData = encode_snapshot(direct.get(), surface);
         }
     }
 #endif

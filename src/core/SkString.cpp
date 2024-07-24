@@ -7,9 +7,9 @@
 
 #include "include/core/SkString.h"
 
-#include "include/private/base/SkTPin.h"
-#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkDebug.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkSafeMath.h"
 #include "src/base/SkUTF.h"
@@ -274,6 +274,11 @@ const SkString& SkString::validate() const {
         SkASSERT(fRec->getRefCnt() > 0);
         SkASSERT(0 == fRec->data()[fRec->fLength]);
     }
+    return *this;
+}
+
+SkString& SkString::validate() {
+    const_cast<const SkString*>(this)->validate();
     return *this;
 }
 #endif
@@ -627,35 +632,4 @@ SkString SkStringPrintf(const char* format, ...) {
     formattedOutput.printVAList(format, args);
     va_end(args);
     return formattedOutput;
-}
-
-void SkStrSplit(const char* str, const char* delimiters, SkStrSplitMode splitMode,
-                SkTArray<SkString>* out) {
-    if (splitMode == kCoalesce_SkStrSplitMode) {
-        // Skip any delimiters.
-        str += strspn(str, delimiters);
-    }
-    if (!*str) {
-        return;
-    }
-
-    while (true) {
-        // Find a token.
-        const size_t len = strcspn(str, delimiters);
-        if (splitMode == kStrict_SkStrSplitMode || len > 0) {
-            out->push_back().set(str, len);
-            str += len;
-        }
-
-        if (!*str) {
-            return;
-        }
-        if (splitMode == kCoalesce_SkStrSplitMode) {
-            // Skip any delimiters.
-            str += strspn(str, delimiters);
-        } else {
-            // Skip one delimiter.
-            str += 1;
-        }
-    }
 }
