@@ -8,18 +8,20 @@
 #ifndef SkottieTextAnimator_DEFINED
 #define SkottieTextAnimator_DEFINED
 
+#include "include/core/SkColor.h"
 #include "include/core/SkM44.h"
 #include "include/core/SkRefCnt.h"
-#include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
-#include "modules/sksg/include/SkSGScene.h"
 
-#include <memory>
+#include <cstddef>
 #include <vector>
+
+namespace skjson {
+class ObjectValue;
+}
 
 namespace skottie {
 namespace internal {
-
 class AnimatablePropertyContainer;
 class AnimationBuilder;
 class RangeSelector;
@@ -33,8 +35,8 @@ public:
     // Direct mapping of AE properties.
     struct AnimatedProps {
         VectorValue position,
-                    scale          = { 100, 100, 100 },
-                    fill_color,
+                    scale          = { 100, 100, 100 };
+        ColorValue  fill_color,
                     stroke_color;
         // unlike pos/scale which are animated vectors, rotation is separated in each dimension.
         SkV3        rotation       = { 0, 0, 0 };

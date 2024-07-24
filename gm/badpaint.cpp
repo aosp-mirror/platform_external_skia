@@ -17,15 +17,17 @@
 #include "include/core/SkString.h"
 #include "include/private/base/SkTArray.h"
 
+using namespace skia_private;
+
 /** This GM draws with invalid paints. It should draw nothing other than the background. */
 class BadPaintGM : public skiagm::GM {
  public:
     BadPaintGM() {}
 
 protected:
-    SkString onShortName() override { return SkString("badpaint"); }
+    SkString getName() const override { return SkString("badpaint"); }
 
-    SkISize onISize() override { return SkISize::Make(100, 100); }
+    SkISize getISize() override { return SkISize::Make(100, 100); }
 
     void onOnceBeforeDraw() override {
         SkBitmap emptyBmp;
@@ -54,7 +56,7 @@ protected:
     }
 
 private:
-    SkTArray<SkPaint> fPaints;
+    TArray<SkPaint> fPaints;
 
     using INHERITED = skiagm::GM;
 };

@@ -5,13 +5,26 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/private/base/SkAssert.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
+#include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/layers/shapelayer/ShapeLayer.h"
 #include "modules/sksg/include/SkSGGeometryEffect.h"
+#include "modules/sksg/include/SkSGGeometryNode.h"
 #include "modules/sksg/include/SkSGPaint.h"
+#include "src/utils/SkJSON.h"
+
+#include <algorithm>
+#include <cstddef>
+#include <utility>
+#include <vector>
 
 namespace skottie {
 namespace internal {
@@ -81,7 +94,7 @@ private:
 
     const ShaderType fShaderType;
 
-    VectorValue      fColor;
+    ColorValue       fColor;
     ScalarValue      fOpacity     = 100,
                      fStrokeWidth = 1;
 
@@ -151,18 +164,18 @@ sk_sp<sksg::PaintNode> ShapeBuilder::AttachStroke(const skjson::ObjectValue& jpa
 
 sk_sp<sksg::PaintNode> ShapeBuilder::AttachColorFill(const skjson::ObjectValue& jpaint,
                                                      const AnimationBuilder* abuilder) {
-    auto color_node = sksg::Color::Make(SK_ColorBLACK);
+    auto color_node  = sksg::Color::Make(SK_ColorBLACK);
+    auto color_paint = AttachFill(jpaint, abuilder, color_node);
     abuilder->dispatchColorProperty(color_node);
-
-    return AttachFill(jpaint, abuilder, std::move(color_node));
+    return color_paint;
 }
 
 sk_sp<sksg::PaintNode> ShapeBuilder::AttachColorStroke(const skjson::ObjectValue& jpaint,
                                                        const AnimationBuilder* abuilder) {
-    auto color_node = sksg::Color::Make(SK_ColorBLACK);
+    auto color_node  = sksg::Color::Make(SK_ColorBLACK);
+    auto color_paint = AttachStroke(jpaint, abuilder, color_node);
     abuilder->dispatchColorProperty(color_node);
-
-    return AttachStroke(jpaint, abuilder, std::move(color_node));
+    return color_paint;
 }
 
 std::vector<sk_sp<sksg::GeometryNode>> ShapeBuilder::AdjustStrokeGeometry(

@@ -23,10 +23,10 @@ canvas commands are drawn.
 
 <!--?prettify lang=cc?-->
 
-    #include "SkData.h"
-    #include "SkImage.h"
-    #include "SkStream.h"
-    #include "SkSurface.h"
+    #include "include/core/SkData.h"
+    #include "include/core/SkImage.h"
+    #include "include/core/SkStream.h"
+    #include "include/core/SkSurface.h"
     void raster(int width, int height,
                 void (*draw)(SkCanvas*),
                 const char* path) {
@@ -36,7 +36,7 @@ canvas commands are drawn.
         draw(rasterCanvas);
         sk_sp<SkImage> img(rasterSurface->makeImageSnapshot());
         if (!img) { return; }
-        sk_sp<SkData> png(img->encodeToData());
+        sk_sp<SkData> png = SkPngEncoder::Encode(nullptr, img, {});
         if (!png) { return; }
         SkFILEWStream out(path);
         (void)out.write(png->data(), png->size());
@@ -48,7 +48,7 @@ instead of asking Skia to manage it.
 <!--?prettify lang=cc?-->
 
     #include <vector>
-    #include "SkSurface.h"
+    #include "include/core/SkSurface.h"
     std::vector<char> raster_direct(int width, int height,
                                     void (*draw)(SkCanvas*)) {
         SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
@@ -77,21 +77,22 @@ current thread when Skia calls are made.
 
 <!--?prettify lang=cc?-->
 
-    #include "GrDirectContext.h"
-    #include "gl/GrGLInterface.h"
-    #include "SkData.h"
-    #include "SkImage.h"
-    #include "SkStream.h"
-    #include "SkSurface.h"
+    #include "include/gpu/GrDirectContext.h"
+    #include "include/gpu/gl/GrGLInterface.h"
+    #include "include/gpu/ganesh/gl/GrGLInterface.h"
+    #include "include/core/SkData.h"
+    #include "include/core/SkImage.h"
+    #include "include/core/SkStream.h"
+    #include "include/core/SkSurface.h"
 
     void gl_example(int width, int height, void (*draw)(SkCanvas*), const char* path) {
         // You've already created your OpenGL context and bound it.
         sk_sp<const GrGLInterface> interface = nullptr;
         // Leaving interface as null makes Skia extract pointers to OpenGL functions for the current
-        // context in a platform-specific way. Alternatively, you may create your own GrGLInterface and
-        // initialize it however you like to attach to an alternate OpenGL implementation or intercept
-        // Skia's OpenGL calls.
-        sk_sp<GrDirectContext> context = GrDirectContext::MakeGL(interface);
+        // context in a platform-specific way. Alternatively, you may create your own GrGLInterface
+        // and initialize it however you like to attach to an alternate OpenGL implementation or
+        // intercept Skia's OpenGL calls.
+        sk_sp<GrDirectContext> context = GrDirectContexts::MakeGL(interface);
         SkImageInfo info = SkImageInfo:: MakeN32Premul(width, height);
         sk_sp<SkSurface> gpuSurface(
                 SkSurface::MakeRenderTarget(context.get(), skgpu::Budgeted::kNo, info));
@@ -103,7 +104,8 @@ current thread when Skia calls are made.
         draw(gpuCanvas);
         sk_sp<SkImage> img(gpuSurface->makeImageSnapshot());
         if (!img) { return; }
-        sk_sp<SkData> png(img->encodeToData());
+        // Must pass non-null context so the pixels can be read back and encoded.
+        sk_sp<SkData> png = SkPngEncoder::Encode(context.get(), img, {});
         if (!png) { return; }
         SkFILEWStream out(path);
         (void)out.write(png->data(), png->size());
@@ -118,8 +120,8 @@ must include multiple pages.
 
 <!--?prettify lang=cc?-->
 
-    #include "SkPDFDocument.h"
-    #include "SkStream.h"
+    #include "include/docs/SkPDFDocument.h"
+    #include "include/core/SkStream.h"
     void skpdf(int width, int height,
                void (*draw)(SkCanvas*),
                const char* path) {
@@ -139,9 +141,9 @@ The SkPicture backend uses SkPictureRecorder instead of SkSurface.
 
 <!--?prettify lang=cc?-->
 
-    #include "SkPictureRecorder.h"
-    #include "SkPicture.h"
-    #include "SkStream.h"
+    #include "include/core/SkPictureRecorder.h"
+    #include "include/core/SkPicture.h"
+    #include "include/core/SkStream.h"
     void picture(int width, int height,
                  void (*draw)(SkCanvas*),
                  const char* path) {
@@ -163,7 +165,7 @@ The null canvas is a canvas that ignores all drawing commands and does nothing.
 
 <!--?prettify lang=cc?-->
 
-    #include "SkNullCanvas.h"
+    #include "include/utils/SkNullCanvas.h"
     void null_canvas_example(int, int, void (*draw)(SkCanvas*), const char*) {
         std::unique_ptr<SkCanvas> nullCanvas = SkMakeNullCanvas();
         draw(nullCanvas.get());  // NoOp
@@ -177,8 +179,8 @@ The (_still experimental_) SkXPS canvas writes into an XPS document.
 
 <!--?prettify lang=cc?-->
 
-    #include "SkDocument.h"
-    #include "SkStream.h"
+    #include "include/core/SkDocument.h"
+    #include "include/core/SkStream.h"
     #ifdef SK_BUILD_FOR_WIN
     void skxps(IXpsOMObjectFactory* factory;
                int width, int height,
@@ -201,8 +203,8 @@ The (_still experimental_) SkSVG canvas writes into an SVG document.
 
 <!--?prettify lang=cc?-->
 
-    #include "SkStream.h"
-    #include "SkSVGCanvas.h"
+    #include "include/core/SkStream.h"
+    #include "include/svg/SkSVGCanvas.h"
     #include "SkXMLWriter.h"
     void sksvg(int width, int height,
                void (*draw)(SkCanvas*),
@@ -226,9 +228,9 @@ functions together:
 
 <!--?prettify lang=cc?-->
 
-    #include "SkCanvas.h"
-    #include "SkPath.h"
-    #include "Test.h"
+    #include "include/core/SkCanvas.h"
+    #include "include/core/SkPath.h"
+    #include "tests/Test.h"
     void example(SkCanvas* canvas) {
         const SkScalar scale = 256.0f;
         const SkScalar R = 0.45f * scale;

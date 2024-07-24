@@ -9,8 +9,8 @@
 #define ChromeTracingTracer_DEFINED
 
 #include "include/core/SkString.h"
-#include "include/private/SkSpinlock.h"
 #include "include/utils/SkEventTracer.h"
+#include "src/base/SkSpinlock.h"
 #include "src/core/SkTHash.h"
 #include "tools/trace/EventTracingPriv.h"
 
@@ -76,7 +76,7 @@ private:
     TraceEventBlock fCurBlock;
     size_t          fCurBlockUsed;
 
-    SkTArray<TraceEventBlock> fBlocks;
+    skia_private::TArray<TraceEventBlock> fBlocks;
 };
 
 #endif

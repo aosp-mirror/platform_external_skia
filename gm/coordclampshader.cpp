@@ -13,18 +13,19 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkTileMode.h"
+#include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 
 DEF_SIMPLE_GM(coordclampshader, canvas, 1074, 795) {
-    auto image = GetResourceAsImage("images/mandrill_256.png");
+    auto image = ToolUtils::GetResourceAsImage("images/mandrill_256.png");
     if (!image) {
         return;
     }
     // The mandrill_512 image has a bottom row of mostly black pixels. Remove it.
-    image = image->makeSubset(SkIRect::MakeWH(image->width(), image->height() - 1));
+    image = image->makeSubset(nullptr, SkIRect::MakeWH(image->width(), image->height() - 1));
     image = image->withDefaultMipmaps();
 
-    auto imageShader = image->makeShader(SkSamplingOptions{SkFilterMode::kLinear});
+    auto imageShader = image->makeShader(SkFilterMode::kLinear);
 
     SkPaint paint;
 

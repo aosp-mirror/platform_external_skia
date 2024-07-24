@@ -15,11 +15,17 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
+
+#if defined(SK_TYPEFACE_FACTORY_FONTATIONS)
+#include "include/ports/SkTypeface_fontations.h"
+#endif
 
 #include <string.h>
 
@@ -53,7 +59,7 @@ constexpr SkFontArguments::Palette::Override kColorOverridesAll[] = {
         { 5, 0xffd802e2},
         {13, 0xff00ffff},
         {12, 0xff00ffff},
-        {-1, 0xff00ff00},
+        {static_cast<uint16_t>(-1), 0xff00ff00},
 };
 
 constexpr SkFontArguments::Palette::Override kColorOverridesOne[] = {
@@ -66,6 +72,35 @@ constexpr SkFontArguments::Palette kOnePaletteOverride{
         0, kColorOverridesOne, std::size(kColorOverridesOne)};
 constexpr SkFontArguments::Palette kAllPaletteOverride{
         0, kColorOverridesAll, std::size(kColorOverridesAll)};
+
+
+
+enum TypefaceBackend { UseDefault, UseFontations };
+
+// TODO(b/318667611): Move the explicit instantation to font manager for Fontations.
+#if defined(SK_TYPEFACE_FACTORY_FONTATIONS)
+constexpr auto kBackend = TypefaceBackend::UseFontations;
+#else
+constexpr auto kBackend = TypefaceBackend::UseDefault;
+#endif
+
+template <TypefaceBackend variant>
+sk_sp<SkTypeface> MakeTypefaceFromResource(const char* resource, const SkFontArguments& args);
+
+#if defined(SK_TYPEFACE_FACTORY_FONTATIONS)
+template <>
+sk_sp<SkTypeface> MakeTypefaceFromResource<UseFontations>(const char* resource,
+                                                          const SkFontArguments& args) {
+    std::unique_ptr<SkStreamAsset> resourceStream(GetResourceAsStream(resource, false));
+    return SkTypeface_Make_Fontations(std::move(resourceStream), args);
+}
+#else
+template <>
+sk_sp<SkTypeface> MakeTypefaceFromResource<UseDefault>(const char* resource,
+                                                       const SkFontArguments& args) {
+    return ToolUtils::TestFontMgr()->makeFromStream(GetResourceAsStream(resource), args);
+}
+#endif
 
 }  // namespace
 
@@ -84,20 +119,21 @@ protected:
         SkFontArguments paletteArguments;
         paletteArguments.setPalette(fPalette);
 
-        fTypefaceDefault = MakeResourceAsTypeface(kColrCpalTestFontPath);
+        fTypefaceDefault =
+                MakeTypefaceFromResource<kBackend>(kColrCpalTestFontPath, SkFontArguments());
         fTypefaceCloned =
                 fTypefaceDefault ? fTypefaceDefault->makeClone(paletteArguments) : nullptr;
 
-        fTypefaceFromStream = SkFontMgr::RefDefault()->makeFromStream(
-                GetResourceAsStream(kColrCpalTestFontPath), paletteArguments);
+        fTypefaceFromStream =
+                MakeTypefaceFromResource<kBackend>(kColrCpalTestFontPath, paletteArguments);
     }
 
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString gm_name = SkStringPrintf("font_palette_%s", fName.c_str());
         return gm_name;
     }
 
-    SkISize onISize() override { return SkISize::Make(1000, 400); }
+    SkISize getISize() override { return SkISize::Make(1000, 400); }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
         canvas->drawColor(SK_ColorWHITE);

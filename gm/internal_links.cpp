@@ -20,6 +20,7 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 namespace {
 
@@ -31,9 +32,9 @@ namespace {
 class InternalLinksGM : public skiagm::GM {
     void onOnceBeforeDraw() override { this->setBGColor(0xFFDDDDDD); }
 
-    SkString onShortName() override { return SkString("internal_links"); }
+    SkString getName() const override { return SkString("internal_links"); }
 
-    SkISize onISize() override { return {700, 500}; }
+    SkISize getISize() override { return {700, 500}; }
 
     void onDraw(SkCanvas* canvas) override {
         sk_sp<SkData> name(SkData::MakeWithCString("target-a"));
@@ -62,7 +63,7 @@ class InternalLinksGM : public skiagm::GM {
                                        SkIntToScalar(50), SkIntToScalar(20));
         canvas->drawRect(rect, paint);
 
-        SkFont font(ToolUtils::create_portable_typeface(), 25);
+        SkFont font(ToolUtils::DefaultPortableTypeface(), 25);
         paint.setColor(SK_ColorBLACK);
         canvas->drawString(text, x, y, font, paint);
     }

@@ -8,26 +8,20 @@
 #include "include/codec/SkAndroidCodec.h"
 
 #include "include/codec/SkCodec.h"
+#include "include/codec/SkEncodedImageFormat.h"
 #include "include/core/SkAlphaType.h"
-#include "include/core/SkColor.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
-#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkStream.h"
-#include "include/private/SkGainmapInfo.h"
-#include "include/private/base/SkFloatingPoint.h"
 #include "modules/skcms/skcms.h"
+#include "src/codec/SkAndroidCodecAdapter.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkSampledCodec.h"
 
-#if defined(SK_CODEC_DECODES_WEBP) || defined(SK_CODEC_DECODES_RAW) || \
-        defined(SK_HAS_WUFFS_LIBRARY) || defined(SK_CODEC_DECODES_AVIF)
-#include "src/codec/SkAndroidCodecAdapter.h"
-#endif
-
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <utility>
 
 class SkPngChunkReader;
@@ -220,40 +214,37 @@ std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromCodec(std::unique_ptr<Sk
         return nullptr;
     }
 
-    switch ((SkEncodedImageFormat)codec->getEncodedFormat()) {
+    const SkEncodedImageFormat format = codec->getEncodedFormat();
+    if (format == SkEncodedImageFormat::kAVIF) {
+        if (SkCodecs::HasDecoder("avif")) {
+            // If a dedicated AVIF decoder has been registered, SkAvifCodec can
+            // handle scaling internally.
+            return std::make_unique<SkAndroidCodecAdapter>(codec.release());
+        }
+        // This will fallback to SkHeifCodec, which needs sampling.
+        return std::make_unique<SkSampledCodec>(codec.release());
+    }
+
+    switch (format) {
         case SkEncodedImageFormat::kPNG:
         case SkEncodedImageFormat::kICO:
         case SkEncodedImageFormat::kJPEG:
-#ifndef SK_HAS_WUFFS_LIBRARY
-        case SkEncodedImageFormat::kGIF:
-#endif
         case SkEncodedImageFormat::kBMP:
         case SkEncodedImageFormat::kWBMP:
         case SkEncodedImageFormat::kHEIF:
-#ifndef SK_CODEC_DECODES_AVIF
-        case SkEncodedImageFormat::kAVIF:
-#endif
             return std::make_unique<SkSampledCodec>(codec.release());
-#ifdef SK_HAS_WUFFS_LIBRARY
         case SkEncodedImageFormat::kGIF:
-#endif
-#ifdef SK_CODEC_DECODES_WEBP
         case SkEncodedImageFormat::kWEBP:
-#endif
-#ifdef SK_CODEC_DECODES_RAW
         case SkEncodedImageFormat::kDNG:
-#endif
-#ifdef SK_CODEC_DECODES_AVIF
-        case SkEncodedImageFormat::kAVIF:
-#endif
-#if defined(SK_CODEC_DECODES_WEBP) || defined(SK_CODEC_DECODES_RAW) || \
-        defined(SK_HAS_WUFFS_LIBRARY) || defined(SK_CODEC_DECODES_AVIF)
             return std::make_unique<SkAndroidCodecAdapter>(codec.release());
-#endif
-
-        default:
+        case SkEncodedImageFormat::kAVIF: // Handled above
+        case SkEncodedImageFormat::kPKM:
+        case SkEncodedImageFormat::kKTX:
+        case SkEncodedImageFormat::kASTC:
+        case SkEncodedImageFormat::kJPEGXL:
             return nullptr;
     }
+    SkUNREACHABLE;
 }
 
 std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromData(sk_sp<SkData> data,
@@ -525,8 +516,20 @@ SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo& requestInfo,
         }
     }
 
+    // We may need to have handleFrameIndex recursively call this method
+    // to resolve one frame depending on another. The recursion stops
+    // when we find a frame which does not require an earlier frame
+    // e.g. frame->getRequiredFrame() returns kNoFrame
+    auto getPixelsFn = [&](const SkImageInfo& info, void* pixels, size_t rowBytes,
+                           const SkCodec::Options& opts, int requiredFrame
+                           ) -> SkCodec::Result {
+        SkAndroidCodec::AndroidOptions prevFrameOptions(
+                        reinterpret_cast<const SkAndroidCodec::AndroidOptions&>(opts));
+        prevFrameOptions.fFrameIndex = requiredFrame;
+        return this->getAndroidPixels(info, pixels, rowBytes, &prevFrameOptions);
+    };
     if (auto result = fCodec->handleFrameIndex(requestInfo, requestPixels, requestRowBytes,
-            *options, this); result != SkCodec::kSuccess) {
+            *options, getPixelsFn); result != SkCodec::kSuccess) {
         return result;
     }
 
@@ -540,18 +543,5 @@ SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo& info, void* 
 
 bool SkAndroidCodec::getAndroidGainmap(SkGainmapInfo* info,
                                        std::unique_ptr<SkStream>* outGainmapImageStream) {
-    if (!fCodec->onGetGainmapInfo(info, outGainmapImageStream)) {
-        return false;
-    }
-    // Convert old parameter names to new parameter names.
-    // TODO(ccameron): Remove these parameters.
-    info->fLogRatioMin.fR = sk_float_log(info->fGainmapRatioMin.fR);
-    info->fLogRatioMin.fG = sk_float_log(info->fGainmapRatioMin.fG);
-    info->fLogRatioMin.fB = sk_float_log(info->fGainmapRatioMin.fB);
-    info->fLogRatioMax.fR = sk_float_log(info->fGainmapRatioMax.fR);
-    info->fLogRatioMax.fG = sk_float_log(info->fGainmapRatioMax.fG);
-    info->fLogRatioMax.fB = sk_float_log(info->fGainmapRatioMax.fB);
-    info->fHdrRatioMin = info->fDisplayRatioSdr;
-    info->fHdrRatioMax = info->fDisplayRatioHdr;
-    return true;
+    return fCodec->onGetGainmapInfo(info, outGainmapImageStream);
 }

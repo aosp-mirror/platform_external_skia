@@ -10,6 +10,7 @@
 #include "include/core/SkColorSpace.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/private/base/SkAlign.h"
+#include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkMipmap.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/graphite/Buffer.h"
@@ -22,7 +23,14 @@
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/UploadBufferManager.h"
 
+using namespace skia_private;
+
 namespace skgpu::graphite {
+
+UploadInstance::UploadInstance() = default;
+UploadInstance::UploadInstance(UploadInstance&&) = default;
+UploadInstance& UploadInstance::operator=(UploadInstance&&) = default;
+UploadInstance::~UploadInstance() = default;
 
 UploadInstance::UploadInstance(const Buffer* buffer,
                                size_t bytesPerPixel,
@@ -43,7 +51,7 @@ std::pair<size_t, size_t> compute_combined_buffer_size(
         int mipLevelCount,
         size_t bytesPerPixel,
         const SkISize& baseDimensions,
-        SkTArray<std::pair<size_t, size_t>>* levelOffsetsAndRowBytes) {
+        TArray<std::pair<size_t, size_t>>* levelOffsetsAndRowBytes) {
     SkASSERT(levelOffsetsAndRowBytes && !levelOffsetsAndRowBytes->size());
     SkASSERT(mipLevelCount >= 1);
 
@@ -117,15 +125,25 @@ UploadInstance UploadInstance::Make(Recorder* recorder,
         }
     }
 
-    const size_t bpp = dstColorInfo.bytesPerPixel();
-    SkTArray<std::pair<size_t, size_t>> levelOffsetsAndRowBytes(mipLevelCount);
+    SkColorType supportedColorType;
+    bool isRGB888Format;
+    std::tie(supportedColorType, isRGB888Format) =
+            caps->supportedWritePixelsColorType(dstColorInfo.colorType(),
+                                                textureProxy->textureInfo(),
+                                                srcColorInfo.colorType());
+    if (supportedColorType == kUnknown_SkColorType) {
+        return {};
+    }
+
+    const size_t bpp = isRGB888Format ? 3 : SkColorTypeBytesPerPixel(supportedColorType);
+    TArray<std::pair<size_t, size_t>> levelOffsetsAndRowBytes(mipLevelCount);
 
     auto [combinedBufferSize, minAlignment] = compute_combined_buffer_size(
             caps, mipLevelCount, bpp, dstRect.size(), &levelOffsetsAndRowBytes);
     SkASSERT(combinedBufferSize);
 
     UploadBufferManager* bufferMgr = recorder->priv().uploadBufferManager();
-    auto [writer, bufferInfo] = bufferMgr->getUploadWriter(combinedBufferSize, minAlignment);
+    auto [writer, bufferInfo] = bufferMgr->getTextureUploadWriter(combinedBufferSize, minAlignment);
 
     std::vector<BufferTextureCopyData> copyData(mipLevelCount);
 
@@ -144,7 +162,35 @@ UploadInstance UploadInstance::Make(Recorder* recorder,
 
         // copy data into the buffer, skipping any trailing bytes
         const char* src = (const char*)levels[currentMipLevel].fPixels;
-        if (needsConversion) {
+
+        if (isRGB888Format) {
+            SkASSERT(supportedColorType == kRGB_888x_SkColorType &&
+                     dstColorInfo.colorType() == kRGB_888x_SkColorType);
+            SkISize dims = {currentWidth, currentHeight};
+            SkImageInfo srcImageInfo = SkImageInfo::Make(dims, srcColorInfo);
+            SkImageInfo dstImageInfo = SkImageInfo::Make(dims, dstColorInfo);
+
+            const void* rgbConvertSrc = src;
+            size_t rgbSrcRowBytes = srcRowBytes;
+            SkAutoPixmapStorage temp;
+            if (needsConversion) {
+                temp.alloc(dstImageInfo);
+                SkAssertResult(SkConvertPixels(dstImageInfo,
+                                               temp.writable_addr(),
+                                               temp.rowBytes(),
+                                               srcImageInfo,
+                                               src,
+                                               srcRowBytes));
+                rgbConvertSrc = temp.addr();
+                rgbSrcRowBytes = temp.rowBytes();
+            }
+            writer.writeRGBFromRGBx(mipOffset,
+                                    rgbConvertSrc,
+                                    rgbSrcRowBytes,
+                                    dstRowBytes,
+                                    currentWidth,
+                                    currentHeight);
+        } else if (needsConversion) {
             SkISize dims = {currentWidth, currentHeight};
             SkImageInfo srcImageInfo = SkImageInfo::Make(dims, srcColorInfo);
             SkImageInfo dstImageInfo = SkImageInfo::Make(dims, dstColorInfo);
@@ -222,6 +268,10 @@ void UploadInstance::addCommand(Context* context,
 
         commandBuffer->copyBufferToTexture(
                 fBuffer, fTextureProxy->refTexture(), &transformedCopyData, 1);
+    }
+
+    if (fConditionalContext) {
+        fConditionalContext->uploadSubmitted();
     }
 }
 

@@ -11,13 +11,13 @@
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTemplates.h"
-#include "src/base/SkVx.h"
-#include "include/private/base/SkMalloc.h"
 #include "src/base/SkTDPQueue.h"
 #include "src/base/SkTInternalLList.h"
+#include "src/base/SkVx.h"
 #include "src/core/SkPointPriv.h"
 #include "src/core/SkRectPriv.h"
 
@@ -1279,7 +1279,7 @@ bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSiz
     }
 
     // build initial offset edge list
-    SkSTArray<64, OffsetEdge> edgeData(numEdges);
+    STArray<64, OffsetEdge> edgeData(numEdges);
     OffsetEdge* prevEdge = nullptr;
     for (int currIndex = 0, prevIndex = inputPolygonSize - 1;
          currIndex < inputPolygonSize;

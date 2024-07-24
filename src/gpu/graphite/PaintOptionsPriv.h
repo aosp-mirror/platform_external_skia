@@ -25,9 +25,12 @@ public:
 
     void buildCombinations(
             const KeyContext& keyContext,
+            PipelineDataGatherer* gatherer,
             bool addPrimitiveBlender,
+            Coverage coverage,
             const std::function<void(UniquePaintParamsID)>& processCombination) const {
-        fPaintOptions->buildCombinations(keyContext, addPrimitiveBlender, processCombination);
+        fPaintOptions->buildCombinations(
+                keyContext, gatherer, addPrimitiveBlender, coverage, processCombination);
     }
 
 private:

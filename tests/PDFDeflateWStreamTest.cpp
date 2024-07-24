@@ -10,9 +10,9 @@
 #ifdef SK_SUPPORT_PDF
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
-#include "include/private/base/SkTemplates.h"
-#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkDebug.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkRandom.h"
 #include "src/pdf/SkDeflate.h"
@@ -62,14 +62,14 @@ std::unique_ptr<SkStreamAsset> stream_inflate(skiatest::Reporter* reporter, SkSt
         ERRORF(reporter, "Zlib: inflateInit failed");
         return nullptr;
     }
-    uint8_t* input = (uint8_t*)src->getMemoryBase();
+    const uint8_t* input = (const uint8_t*)src->getMemoryBase();
     size_t inputLength = src->getLength();
     if (input == nullptr || inputLength == 0) {
         input = nullptr;
         flateData.next_in = inputBuffer;
         flateData.avail_in = 0;
     } else {
-        flateData.next_in = input;
+        flateData.next_in = const_cast<uint8_t*>(input);
         flateData.avail_in = SkToUInt(inputLength);
     }
 

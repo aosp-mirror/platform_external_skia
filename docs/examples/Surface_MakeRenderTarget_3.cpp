@@ -4,7 +4,7 @@
 // HASH=5c7629c15e9ac93f098335e72560fa2e
 REG_FIDDLE(Surface_MakeRenderTarget_3, 256, 256, false, 0) {
 void draw(SkCanvas* canvas) {
-    SkFont font(nullptr, 32);
+    SkFont font(fontMgr->matchFamilyStyle(nullptr, {}), 32);
     SkPaint paint;
     auto context = canvas->recordingContext();
     if (!context) {
@@ -12,7 +12,7 @@ void draw(SkCanvas* canvas) {
          return;
     }
     SkImageInfo info = SkImageInfo::MakeN32(256, 64, kOpaque_SkAlphaType);
-    auto gpuSurface(SkSurface::MakeRenderTarget(context, skgpu::Budgeted::kNo, info));
+    auto gpuSurface(SkSurfaces::RenderTarget(context, skgpu::Budgeted::kNo, info));
     auto surfaceCanvas = gpuSurface->getCanvas();
     surfaceCanvas->clear(SK_ColorWHITE);
     surfaceCanvas->drawString("GPU rocks!", 20, 40, font, paint);

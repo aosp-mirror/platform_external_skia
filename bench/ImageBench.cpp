@@ -17,7 +17,7 @@ public:
     }
 
     bool isSuitableFor(Backend backend) override {
-        return kGPU_Backend == backend || kRaster_Backend == backend;
+        return Backend::kGanesh == backend || Backend::kRaster == backend;
     }
 
 protected:
@@ -37,7 +37,7 @@ protected:
 
         // create a cpu-backed Surface
         SkImageInfo n32Info = SkImageInfo::MakeN32Premul(100, 100);
-        fRasterSurface = SkSurface::MakeRaster(n32Info);
+        fRasterSurface = SkSurfaces::Raster(n32Info);
     }
 
     void onPerCanvasPostDraw(SkCanvas*) override {

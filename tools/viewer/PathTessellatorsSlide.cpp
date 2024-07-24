@@ -11,7 +11,9 @@
 
 #if defined(SK_GANESH)
 
+#include "include/core/SkFont.h"
 #include "src/core/SkCanvasPriv.h"
+#include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrOpFlushState.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
@@ -23,8 +25,9 @@
 #include "src/gpu/ganesh/tessellate/PathTessellator.h"
 #include "src/gpu/tessellate/AffineMatrix.h"
 #include "src/gpu/tessellate/MiddleOutPolygonTriangulator.h"
+#include "tools/fonts/FontToolUtils.h"
 
-namespace skgpu::v1 {
+namespace skgpu::ganesh {
 
 namespace {
 
@@ -193,17 +196,17 @@ void PathTessellatorsSlide::draw(SkCanvas* canvas) {
     canvas->clear(SK_ColorBLACK);
 
     auto ctx = canvas->recordingContext();
-    auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+    auto sdc = skgpu::ganesh::TopDeviceSurfaceDrawContext(canvas);
 
     SkString error;
     if (!sdc || !ctx) {
         error = "GPU Only.";
-    } else if (!skgpu::v1::TessellationPathRenderer::IsSupported(*ctx->priv().caps())) {
+    } else if (!skgpu::ganesh::TessellationPathRenderer::IsSupported(*ctx->priv().caps())) {
         error = "TessellationPathRenderer not supported.";
     }
     if (!error.isEmpty()) {
         canvas->clear(SK_ColorRED);
-        SkFont font(nullptr, 20);
+        SkFont font(ToolUtils::DefaultTypeface(), 20);
         SkPaint captionPaint;
         captionPaint.setColor(SK_ColorWHITE);
         canvas->drawString(error.c_str(), 10, 30, font, captionPaint);
@@ -226,7 +229,7 @@ void PathTessellatorsSlide::draw(SkCanvas* canvas) {
         canvas->setMatrix(SkMatrix::I());
         SkString caption(ModeName(fMode));
         caption.appendf(" (w=%g)", fConicWeight);
-        SkFont font(nullptr, 20);
+        SkFont font(ToolUtils::DefaultTypeface(), 20);
         SkPaint captionPaint;
         captionPaint.setColor(SK_ColorWHITE);
         canvas->drawString(caption, 10, 30, font, captionPaint);
@@ -328,6 +331,6 @@ bool PathTessellatorsSlide::onChar(SkUnichar unichar) {
 
 DEF_SLIDE( return new PathTessellatorsSlide; )
 
-}  // namespace skgpu::v1
+}  // namespace skgpu::ganesh
 
 #endif  // defined(SK_GANESH)

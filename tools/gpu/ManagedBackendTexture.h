@@ -10,15 +10,32 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkYUVAInfo.h"
+#ifdef SK_GANESH
+#include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
+#endif
+#ifdef SK_GRAPHITE
+#include "include/gpu/graphite/BackendTexture.h"
+#include "include/gpu/graphite/Context.h"
+#include "src/gpu/graphite/RecorderPriv.h"
+#endif
 
 namespace skgpu {
-    class RefCntedCallback;
+class RefCntedCallback;
 }
+namespace skgpu::graphite {
+class Recorder;
+}
+class SkBitmap;
 struct SkImageInfo;
+
+#ifdef SK_GRAPHITE
+using Recorder = skgpu::graphite::Recorder;
+#endif
 
 namespace sk_gpu_test {
 
+#ifdef SK_GANESH
 class ManagedBackendTexture : public SkNVRefCnt<ManagedBackendTexture> {
 public:
     /**
@@ -43,21 +60,21 @@ public:
 
     static sk_sp<ManagedBackendTexture> MakeFromInfo(GrDirectContext* dContext,
                                                      const SkImageInfo&,
-                                                     GrMipmapped = GrMipmapped::kNo,
-                                                     GrRenderable = GrRenderable::kNo,
-                                                     GrProtected = GrProtected::kNo);
+                                                     skgpu::Mipmapped = skgpu::Mipmapped::kNo,
+                                                     skgpu::Renderable = skgpu::Renderable::kNo,
+                                                     skgpu::Protected = skgpu::Protected::kNo);
 
     static sk_sp<ManagedBackendTexture> MakeFromBitmap(GrDirectContext*,
                                                        const SkBitmap&,
-                                                       GrMipmapped,
-                                                       GrRenderable,
-                                                       GrProtected = GrProtected::kNo);
+                                                       skgpu::Mipmapped,
+                                                       skgpu::Renderable,
+                                                       skgpu::Protected = skgpu::Protected::kNo);
 
     static sk_sp<ManagedBackendTexture> MakeFromPixmap(GrDirectContext*,
                                                        const SkPixmap&,
-                                                       GrMipmapped,
-                                                       GrRenderable,
-                                                       GrProtected = GrProtected::kNo);
+                                                       skgpu::Mipmapped,
+                                                       skgpu::Renderable,
+                                                       skgpu::Protected = skgpu::Protected::kNo);
 
     /** GrGpuFinishedProc or image/surface release proc. */
     static void ReleaseProc(void* context);
@@ -80,7 +97,7 @@ public:
     void wasAdopted();
 
     /**
-     * SkImage::MakeFromYUVATextures takes a single release proc that is called once for all the
+     * SkImages::TextureFromYUVATextures takes a single release proc that is called once for all the
      * textures. This makes a single release context for the group of textures. It's used with the
      * standard ReleaseProc. Like releaseContext(), it must be balanced by a ReleaseProc call for
      * proper ref counting.
@@ -126,7 +143,62 @@ inline sk_sp<ManagedBackendTexture> ManagedBackendTexture::MakeWithoutData(
     mbet->fTexture = std::move(texture);
     return mbet;
 }
+#endif  // SK_GANESH
+
+#ifdef SK_GRAPHITE
+/*
+ * Graphite version of ManagedBackendTexture
+ */
+class ManagedGraphiteTexture : public SkNVRefCnt<ManagedGraphiteTexture> {
+public:
+    static sk_sp<ManagedGraphiteTexture> MakeUnInit(Recorder*,
+                                                    const SkImageInfo&,
+                                                    skgpu::Mipmapped,
+                                                    skgpu::Renderable,
+                                                    skgpu::Protected = skgpu::Protected::kNo);
+
+    static sk_sp<ManagedGraphiteTexture> MakeFromPixmap(Recorder*,
+                                                        const SkPixmap&,
+                                                        skgpu::Mipmapped,
+                                                        skgpu::Renderable,
+                                                        skgpu::Protected = skgpu::Protected::kNo);
+
+    /** finished and image/surface release procs */
+    static void FinishedProc(void* context, skgpu::CallbackResult);
+    static void ReleaseProc(void* context);
+    static void ImageReleaseProc(void* context);
+
+    ~ManagedGraphiteTexture();
+
+    /**
+     * The context to use with the ReleaseProcs. This adds a ref so it *must* be balanced by a call
+     * to TextureReleaseProc or ImageReleaseProc.
+     */
+    void* releaseContext() const;
+
+    sk_sp<skgpu::RefCntedCallback> refCountedCallback() const;
+
+    /**
+     * SkImage::MakeGraphiteFromYUVABackendTextures takes a single release proc that is called once
+     * for all the textures. This makes a single release context for the group of textures. It's
+     * used with the standard ReleaseProc. Like releaseContext(), it must be balanced by a
+     * ReleaseProc call for proper ref counting.
+     */
+    static void* MakeYUVAReleaseContext(const sk_sp<ManagedGraphiteTexture>[SkYUVAInfo::kMaxPlanes]);
+
+    const skgpu::graphite::BackendTexture& texture() { return fTexture; }
+
+private:
+    ManagedGraphiteTexture() = default;
+    ManagedGraphiteTexture(const ManagedGraphiteTexture&) = delete;
+    ManagedGraphiteTexture(ManagedGraphiteTexture&&) = delete;
+
+    skgpu::graphite::Context* fContext;
+    skgpu::graphite::BackendTexture fTexture;
+};
+
+#endif  // SK_GRAPHITE
 
 }  // namespace sk_gpu_test
 
-#endif
+#endif  // ManagedBackendTexture_DEFINED

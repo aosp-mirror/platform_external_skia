@@ -15,11 +15,13 @@
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/graphite/BackendTexture.h"
 #include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/Image.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Recording.h"
+#include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/TextureInfo.h"
+#include "src/base/SkRectMemcpy.h"
 #include "src/core/SkAutoPixmapStorage.h"
-#include "src/core/SkConvertPixels.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
@@ -28,6 +30,9 @@
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
 #include "tools/ToolUtils.h"
+#include "tools/gpu/BackendTextureImageFactory.h"
+#include "tools/gpu/ManagedBackendTexture.h"
+#include "tools/graphite/GraphiteTestContext.h"
 
 using Mipmapped = skgpu::Mipmapped;
 
@@ -51,6 +56,7 @@ static constexpr int min_rgb_channel_bits(SkColorType ct) {
         case kBGRA_1010102_SkColorType:       return 10;
         case kBGR_101010x_SkColorType:        return 10;
         case kBGR_101010x_XR_SkColorType:     return 10;
+        case kRGBA_10x6_SkColorType:          return 10;
         case kGray_8_SkColorType:             return 8;   // counting gray as "rgb"
         case kRGBA_F16Norm_SkColorType:       return 10;  // just counting the mantissa
         case kRGBA_F16_SkColorType:           return 10;  // just counting the mantissa
@@ -81,6 +87,7 @@ static constexpr int alpha_channel_bits(SkColorType ct) {
         case kBGRA_1010102_SkColorType:       return 2;
         case kBGR_101010x_SkColorType:        return 0;
         case kBGR_101010x_XR_SkColorType:     return 0;
+        case kRGBA_10x6_SkColorType:          return 10;
         case kGray_8_SkColorType:             return 0;
         case kRGBA_F16Norm_SkColorType:       return 10;  // just counting the mantissa
         case kRGBA_F16_SkColorType:           return 10;  // just counting the mantissa
@@ -162,7 +169,7 @@ struct GraphiteReadPixelTestRules {
 
 // Makes a src populated with the pixmap. The src should get its image info (or equivalent) from
 // the pixmap.
-template <typename T> using GraphiteSrcFactory = T(SkPixmap&);
+template <typename T> using GraphiteSrcFactory = T(skgpu::graphite::Recorder*, SkPixmap&);
 
 enum class Result {
     kFail,
@@ -174,17 +181,14 @@ enum class Result {
 template <typename T>
 using GraphiteReadSrcFn = Result(const T&, const SkIPoint& offset, const SkPixmap&);
 
-SkPixmap make_pixmap_have_valid_alpha_type(SkPixmap pm) {
-    if (pm.alphaType() == kUnknown_SkAlphaType) {
-        return {pm.info().makeAlphaType(kUnpremul_SkAlphaType), pm.addr(), pm.rowBytes()};
-    }
-    return pm;
-}
-
 static SkAutoPixmapStorage make_ref_data(const SkImageInfo& info, bool forceOpaque) {
     SkAutoPixmapStorage result;
-    result.alloc(info);
-    auto surface = SkSurface::MakeRasterDirect(make_pixmap_have_valid_alpha_type(result));
+    if (info.alphaType() == kUnknown_SkAlphaType) {
+        result.alloc(info.makeAlphaType(kUnpremul_SkAlphaType));
+    } else {
+        result.alloc(info);
+    }
+    auto surface = SkSurfaces::WrapPixels(result);
     if (!surface) {
         return result;
     }
@@ -221,6 +225,7 @@ static SkAutoPixmapStorage make_ref_data(const SkImageInfo& info, bool forceOpaq
 
 template <typename T>
 static void graphite_read_pixels_test_driver(skiatest::Reporter* reporter,
+                                             skgpu::graphite::Context* context,
                                              const GraphiteReadPixelTestRules& rules,
                                              const std::function<GraphiteSrcFactory<T>>& srcFactory,
                                              const std::function<GraphiteReadSrcFn<T>>& read,
@@ -431,7 +436,9 @@ static void graphite_read_pixels_test_driver(skiatest::Reporter* reporter,
                 refPixels.readPixels(readPixmap, 0, 0);
             }
 
-            auto src = srcFactory(srcPixels);
+            std::unique_ptr<skgpu::graphite::Recorder> recorder = context->makeRecorder();
+
+            auto src = srcFactory(recorder.get(), srcPixels);
             if (!src) {
                 continue;
             }
@@ -509,17 +516,20 @@ static void async_callback(void* c, std::unique_ptr<const SkImage::AsyncReadResu
     context->fCalled = true;
 };
 
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixelsGraphite,
-                                         reporter,
-                                         context) {
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixelsGraphite,
+                                                     reporter,
+                                                     context,
+                                                     testContext,
+                                                     true,
+                                                     CtsEnforcement::kNextRelease) {
     using Image = sk_sp<SkImage>;
-    using Recorder = skgpu::graphite::Recorder;
-    using Renderable = skgpu::graphite::Renderable;
+    using Renderable = skgpu::Renderable;
     using TextureInfo = skgpu::graphite::TextureInfo;
 
-    auto reader = std::function<GraphiteReadSrcFn<Image>>([context](const Image& image,
-                                                                    const SkIPoint& offset,
-                                                                    const SkPixmap& pixels) {
+    auto reader = std::function<GraphiteReadSrcFn<Image>>([context, testContext](
+                                                                  const Image& image,
+                                                                  const SkIPoint& offset,
+                                                                  const SkPixmap& pixels) {
         AsyncContext asyncContext;
         auto rect = SkIRect::MakeSize(pixels.dimensions()).makeOffset(offset);
         // The GPU implementation is based on rendering and will fail for non-renderable color
@@ -533,12 +543,18 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixelsGraphite,
             return Result::kExcusedFailure;
         }
 
-        context->asyncReadPixels(image.get(), pixels.info().colorInfo(), rect,
-                                 async_callback, &asyncContext);
+        context->asyncRescaleAndReadPixels(image.get(),
+                                           pixels.info(),
+                                           rect,
+                                           SkImage::RescaleGamma::kSrc,
+                                           SkImage::RescaleMode::kRepeatedLinear,
+                                           async_callback,
+                                           &asyncContext);
         if (!asyncContext.fCalled) {
             context->submit();
         }
         while (!asyncContext.fCalled) {
+            testContext->tick();
             context->checkAsyncWorkCompletion();
         }
         if (!asyncContext.fResult) {
@@ -554,26 +570,16 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixelsGraphite,
     rules.fAllowUnpremulSrc = true;
     rules.fUncontainedRectSucceeds = false;
 
-    std::unique_ptr<Recorder> recorder = context->makeRecorder();
-
     for (auto renderable : {Renderable::kNo, Renderable::kYes}) {
-        auto factory = std::function<GraphiteSrcFactory<Image>>([&](const SkPixmap& src) {
-            // TODO: put this in the equivalent of sk_gpu_test::MakeBackendTextureImage
-            TextureInfo info = recorder->priv().caps()->getDefaultSampledTextureInfo(
-                    src.colorType(),
-                    Mipmapped::kNo,
-                    skgpu::Protected::kNo,
-                    renderable);
-            auto texture = recorder->createBackendTexture(src.dimensions(), info);
-            if (!recorder->updateBackendTexture(texture, &src, 1)) {
-                return (Image)(nullptr);
-            }
-
-            Image image = SkImage::MakeGraphiteFromBackendTexture(recorder.get(),
-                                                                  texture,
-                                                                  src.colorType(),
-                                                                  src.alphaType(),
-                                                                  /*colorSpace=*/nullptr);
+        auto factory = std::function<GraphiteSrcFactory<Image>>([&](
+                skgpu::graphite::Recorder* recorder,
+                const SkPixmap& src) {
+            Image image = sk_gpu_test::MakeBackendTextureImage(recorder,
+                                                               src,
+                                                               Mipmapped::kNo,
+                                                               renderable,
+                                                               skgpu::Origin::kTopLeft,
+                                                               skgpu::Protected::kNo);
 
             std::unique_ptr<skgpu::graphite::Recording> recording = recorder->snap();
             skgpu::graphite::InsertRecordingInfo recordingInfo;
@@ -583,7 +589,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixelsGraphite,
             return image;
         });
         auto label = SkStringPrintf("Renderable: %d", (int)renderable);
-        graphite_read_pixels_test_driver(reporter, rules, factory, reader, label);
+        graphite_read_pixels_test_driver(reporter, context, rules, factory, reader, label);
     }
 
     // It's possible that we've created an Image using the factory, but then don't try to do
@@ -591,24 +597,33 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixelsGraphite,
     context->submit();
 }
 
-DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixelsGraphite,
-                                         reporter,
-                                         context) {
-    using Recorder = skgpu::graphite::Recorder;
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixelsGraphite,
+                                                     reporter,
+                                                     context,
+                                                     testContext,
+                                                     true,
+                                                     CtsEnforcement::kNextRelease) {
     using Surface = sk_sp<SkSurface>;
 
-    auto reader = std::function<GraphiteReadSrcFn<Surface>>([context](const Surface& surface,
-                                                                      const SkIPoint& offset,
-                                                                      const SkPixmap& pixels) {
+    auto reader = std::function<GraphiteReadSrcFn<Surface>>([context, testContext](
+                                                                    const Surface& surface,
+                                                                    const SkIPoint& offset,
+                                                                    const SkPixmap& pixels) {
         AsyncContext asyncContext;
         auto rect = SkIRect::MakeSize(pixels.dimensions()).makeOffset(offset);
 
-        context->asyncReadPixels(surface.get(), pixels.info().colorInfo(), rect,
-                                 async_callback, &asyncContext);
+        context->asyncRescaleAndReadPixels(surface.get(),
+                                           pixels.info(),
+                                           rect,
+                                           SkImage::RescaleGamma::kSrc,
+                                           SkImage::RescaleMode::kRepeatedLinear,
+                                           async_callback,
+                                           &asyncContext);
         if (!asyncContext.fCalled) {
             context->submit();
         }
         while (!asyncContext.fCalled) {
+            testContext->tick();
             context->checkAsyncWorkCompletion();
         }
         if (!asyncContext.fResult) {
@@ -624,24 +639,24 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixelsGraphite,
     rules.fAllowUnpremulSrc = true;
     rules.fUncontainedRectSucceeds = false;
 
-    std::unique_ptr<Recorder> recorder = context->makeRecorder();
-    auto factory = std::function<GraphiteSrcFactory<Surface>>([&](const SkPixmap& src) {
-        Surface surface = SkSurface::MakeGraphite(recorder.get(),
-                                                  src.info(),
-                                                  Mipmapped::kNo,
-                                                  /*surfaceProps=*/nullptr);
-        if (surface) {
-            surface->writePixels(src, 0, 0);
+    auto factory = std::function<GraphiteSrcFactory<Surface>>(
+            [&](skgpu::graphite::Recorder* recorder, const SkPixmap& src) {
+                Surface surface = SkSurfaces::RenderTarget(recorder,
+                                                           src.info(),
+                                                           Mipmapped::kNo,
+                                                           /*surfaceProps=*/nullptr);
+                if (surface) {
+                    surface->writePixels(src, 0, 0);
 
-            std::unique_ptr<skgpu::graphite::Recording> recording = recorder->snap();
-            skgpu::graphite::InsertRecordingInfo recordingInfo;
-            recordingInfo.fRecording = recording.get();
-            context->insertRecording(recordingInfo);
-        }
+                    std::unique_ptr<skgpu::graphite::Recording> recording = recorder->snap();
+                    skgpu::graphite::InsertRecordingInfo recordingInfo;
+                    recordingInfo.fRecording = recording.get();
+                    context->insertRecording(recordingInfo);
+                }
 
-        return surface;
-    });
-    graphite_read_pixels_test_driver(reporter, rules, factory, reader, {});
+                return surface;
+            });
+    graphite_read_pixels_test_driver(reporter, context, rules, factory, reader, {});
 
     // It's possible that we've created an Image using the factory, but then don't try to do
     // readPixels on it, leaving a hanging command buffer. So we submit here to clean up.

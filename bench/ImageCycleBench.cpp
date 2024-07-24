@@ -8,11 +8,13 @@
 #include <memory>
 
 #include "bench/Benchmark.h"
+#include "bench/GpuTools.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkSurface.h"
 #include "src/base/SkRandom.h"
+
 
 /**
  * Draws a small set of small images multiple times each with no overlaps so that each image could
@@ -30,7 +32,7 @@ public:
         fName.appendf("image_cycle_image_cnt_%d_repeat_cnt_%d", fImageCnt, fRepeatCnt);
     }
 
-    bool isSuitableFor(Backend backend) override { return kGPU_Backend == backend; }
+    bool isSuitableFor(Backend backend) override { return Backend::kGanesh == backend; }
 
 protected:
     const char* onGetName() override { return fName.c_str(); }
@@ -75,14 +77,12 @@ protected:
                 }
             }
             // Prevent any batching between "frames".
-            if (auto surf = canvas->getSurface()) {
-                surf->flushAndSubmit();
-            }
+            skgpu::FlushAndSubmit(canvas->getSurface());
         }
     }
 
 private:
-    SkIPoint onGetSize() override { return {kDeviceSize.fWidth, kDeviceSize.fHeight}; }
+    SkISize onGetSize() override { return {kDeviceSize.fWidth, kDeviceSize.fHeight}; }
 
     inline static constexpr SkISize kImageSize{4, 4};
     inline static constexpr SkISize kDeviceSize{64, 64};

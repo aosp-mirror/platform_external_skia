@@ -19,13 +19,8 @@ EFFECTS_FILES = [
     "SkEmbossMaskFilter.cpp",
     "SkEmbossMaskFilter.h",
     "SkHighContrastFilter.cpp",
-    "SkLayerDrawLooper.cpp",
-    "SkLumaColorFilter.cpp",
-    "SkOpPE.h",
-    "SkOpPathEffect.cpp",
-    "SkOverdrawColorFilter.cpp",
-    "SkShaderMaskFilter.cpp",
-    "SkTableColorFilter.cpp",
+    "SkShaderMaskFilterImpl.cpp",
+    "SkShaderMaskFilterImpl.h",
     "SkTableMaskFilter.cpp",
     "SkTrimPE.h",
     "SkTrimPathEffect.cpp",
@@ -37,19 +32,47 @@ split_srcs_and_hdrs(
 )
 
 skia_filegroup(
+    name = "legacy_draw_looper",
+    srcs = ["SkLayerDrawLooper.cpp"],
+)
+
+skia_filegroup(
     name = "srcs",
     srcs = [
         ":effects_srcs",
+        "//src/effects/colorfilters:srcs",
         "//src/effects/imagefilters:srcs",
     ],
-    visibility = ["//src:__pkg__"],
+    visibility = [
+        "//src:__pkg__",
+        "//src/core:__pkg__",
+    ],
 )
 
 skia_filegroup(
     name = "private_hdrs",
     srcs = [
         ":effects_hdrs",
-        "//src/effects/imagefilters:private_hdrs",
+        "//src/effects/colorfilters:private_hdrs",
     ],
     visibility = ["//src:__pkg__"],
+)
+
+skia_filegroup(
+    name = "core_priv_hdrs",
+    srcs = [
+        ":effects_hdrs",
+        "//src/effects/colorfilters:private_hdrs",
+    ],
+    visibility = ["//src/core:__pkg__"],
+)
+
+skia_filegroup(
+    name = "core_srcs",
+    srcs = [
+        ":effects_srcs",
+        "//src/effects/colorfilters:srcs",
+        "//src/effects/imagefilters:srcs",
+    ],
+    visibility = ["//src/core:__pkg__"],
 )

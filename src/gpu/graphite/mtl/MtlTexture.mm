@@ -7,13 +7,13 @@
 
 #include "src/gpu/graphite/mtl/MtlTexture.h"
 
-#include "include/gpu/graphite/mtl/MtlTypes.h"
-#include "include/private/gpu/graphite/MtlTypesPriv.h"
+#include "include/gpu/MutableTextureState.h"
+#include "include/gpu/graphite/mtl/MtlGraphiteTypes.h"
+#include "include/private/gpu/graphite/MtlGraphiteTypesPriv.h"
 #include "src/core/SkMipmap.h"
-#include "src/gpu/MutableTextureStateRef.h"
 #include "src/gpu/graphite/mtl/MtlCaps.h"
 #include "src/gpu/graphite/mtl/MtlSharedContext.h"
-#include "src/gpu/graphite/mtl/MtlUtilsPriv.h"
+#include "src/gpu/mtl/MtlUtilsPriv.h"
 
 namespace skgpu::graphite {
 
@@ -35,6 +35,10 @@ sk_cfp<id<MTLTexture>> MtlTexture::MakeMtlTexture(const MtlSharedContext* shared
 
     if (mtlSpec.fUsage & MTLTextureUsageRenderTarget &&
         !(caps->isRenderable(info) || MtlFormatIsDepthOrStencil((MTLPixelFormat)mtlSpec.fFormat))) {
+        return nullptr;
+    }
+
+    if (mtlSpec.fUsage & MTLTextureUsageShaderWrite && !caps->isStorage(info)) {
         return nullptr;
     }
 
@@ -75,6 +79,9 @@ sk_cfp<id<MTLTexture>> MtlTexture::MakeMtlTexture(const MtlSharedContext* shared
                 }
             }
         }
+    } else if (mtlSpec.fUsage & MTLTextureUsageShaderWrite) {
+        SkASSERT(mtlSpec.fUsage & MTLTextureUsageShaderRead);
+        (*texture).label = @"StorageTexture";
     } else {
         SkASSERT(mtlSpec.fUsage & MTLTextureUsageShaderRead);
         (*texture).label = @"SampledTexture";

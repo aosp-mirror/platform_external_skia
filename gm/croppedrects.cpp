@@ -18,6 +18,7 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
+#include "tools/GpuToolUtils.h"
 #include "tools/ToolUtils.h"
 
 namespace skiagm {
@@ -25,7 +26,7 @@ namespace skiagm {
 constexpr SkRect kSrcImageClip{75, 75, 275, 275};
 
 static sk_sp<SkImage> create_image(SkCanvas* destCanvas) {
-    sk_sp<SkSurface> srcSurface = SkSurface::MakeRasterN32Premul(500, 500);
+    sk_sp<SkSurface> srcSurface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(500, 500));
     SkCanvas* srcCanvas = srcSurface->getCanvas();
 
     srcCanvas->clear(SK_ColorRED);
@@ -45,7 +46,7 @@ static sk_sp<SkImage> create_image(SkCanvas* destCanvas) {
 }
 
 /*
- * The purpose of this test is to exercise all three codepaths in skgpu::v1::SurfaceDrawContext
+ * The purpose of this test is to exercise all three codepaths in skgpu::ganesh::SurfaceDrawContext
  * (drawFilledRect, fillRectToRect, fillRectWithLocalMatrix) that pre-crop filled rects based on the
  * clip.
  *
@@ -55,8 +56,8 @@ static sk_sp<SkImage> create_image(SkCanvas* destCanvas) {
  */
 class CroppedRectsGM : public GM {
 private:
-    SkString onShortName() final { return SkString("croppedrects"); }
-    SkISize onISize() override { return SkISize::Make(500, 500); }
+    SkString getName() const override { return SkString("croppedrects"); }
+    SkISize getISize() override { return SkISize::Make(500, 500); }
 
     void onDraw(SkCanvas* canvas) override {
         if (!fSrcImage) {
@@ -69,7 +70,7 @@ private:
         canvas->clear(SK_ColorWHITE);
 
         {
-            // skgpu::v1::SurfaceDrawContext::drawFilledRect.
+            // skgpu::ganesh::SurfaceDrawContext::drawFilledRect.
             SkAutoCanvasRestore acr(canvas, true);
             SkPaint paint;
             paint.setShader(fSrcImageShader);
@@ -78,7 +79,7 @@ private:
         }
 
         {
-            // skgpu::v1::SurfaceDrawContext::fillRectToRect.
+            // skgpu::ganesh::SurfaceDrawContext::fillRectToRect.
             SkAutoCanvasRestore acr(canvas, true);
             SkRect drawRect = SkRect::MakeXYWH(350, 100, 100, 300);
             canvas->clipRect(drawRect);
@@ -91,7 +92,7 @@ private:
         }
 
         {
-            // skgpu::v1::SurfaceDrawContext::fillRectWithLocalMatrix.
+            // skgpu::ganesh::SurfaceDrawContext::fillRectWithLocalMatrix.
             SkAutoCanvasRestore acr(canvas, true);
             SkPath path = SkPath::Line(
                    {kSrcImageClip.fLeft - kSrcImageClip.width(), kSrcImageClip.centerY()},

@@ -39,6 +39,29 @@ public:
     virtual ~ConditionalUploadContext() {}
 
     virtual bool needsUpload(Context*) const = 0;
+
+    virtual void uploadSubmitted() {}
+};
+
+/**
+ * ImageUploadContext is an implementation of ConditionalUploadContext that returns true on
+ * the first call to needsUpload() and then returns false on subsequent calls. This is used to
+ * upload an image once and then avoid redundant uploads after that.
+ */
+class ImageUploadContext : public ConditionalUploadContext {
+public:
+    ~ImageUploadContext() override {}
+
+    bool needsUpload(Context* context) const override {
+        return fNeedsUpload;
+    }
+
+    void uploadSubmitted() override {
+        fNeedsUpload = false;
+    }
+
+private:
+    bool fNeedsUpload = true;
 };
 
 /**
@@ -54,8 +77,11 @@ public:
                                const std::vector<MipLevel>& levels,
                                const SkIRect& dstRect,
                                std::unique_ptr<ConditionalUploadContext>);
+    UploadInstance(UploadInstance&&);
+    UploadInstance& operator=(UploadInstance&&);
+    ~UploadInstance();
 
-    bool isValid() const { return fBuffer != nullptr; }
+    bool isValid() const { return fBuffer != nullptr && fTextureProxy != nullptr; }
 
     bool prepareResources(ResourceProvider*);
 
@@ -63,7 +89,7 @@ public:
     void addCommand(Context*, CommandBuffer*, Task::ReplayTargetData) const;
 
 private:
-    UploadInstance() {}
+    UploadInstance();
     UploadInstance(const Buffer*,
                    size_t bytesPerPixel,
                    sk_sp<TextureProxy>,

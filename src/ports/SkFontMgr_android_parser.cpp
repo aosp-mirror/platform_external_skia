@@ -10,10 +10,10 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkStream.h"
 #include "include/private/base/SkFixed.h"
+#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTLogic.h"
 #include "include/private/base/SkTemplates.h"
-#include "include/private/base/SkMalloc.h"
 #include "src/base/SkTSearch.h"
 #include "src/core/SkOSFile.h"
 #include "src/ports/SkFontMgr_android_parser.h"
@@ -24,6 +24,8 @@
 #include <string.h>
 
 #include <memory>
+
+using namespace skia_private;
 
 #define LMP_SYSTEM_FONTS_FILE "/system/etc/fonts.xml"
 #define OLD_SYSTEM_FONTS_FILE "/system/etc/system_fonts.xml"
@@ -153,7 +155,7 @@ static void trim_string(SkString* s) {
 }
 
 static void parse_space_separated_languages(const char* value, size_t valueLen,
-                                            SkTArray<SkLanguage, true>& languages)
+                                            TArray<SkLanguage, true>& languages)
 {
     size_t i = 0;
     while (true) {

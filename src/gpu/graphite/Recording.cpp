@@ -7,6 +7,8 @@
 
 #include "include/gpu/graphite/Recording.h"
 
+#include "src/core/SkChecksum.h"
+#include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/graphite/CommandBuffer.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/Log.h"
@@ -20,128 +22,32 @@
 
 #include <unordered_set>
 
+using namespace skia_private;
+
 namespace skgpu::graphite {
 
-Recording::Recording(std::unique_ptr<TaskGraph> graph,
+Recording::Recording(uint32_t uniqueID,
+                     uint32_t recorderID,
+                     std::unique_ptr<TaskGraph> graph,
                      std::unordered_set<sk_sp<TextureProxy>, ProxyHash>&& nonVolatileLazyProxies,
                      std::unordered_set<sk_sp<TextureProxy>, ProxyHash>&& volatileLazyProxies,
-                     std::unique_ptr<LazyProxyData> targetProxyData)
-        : fGraph(std::move(graph))
+                     std::unique_ptr<LazyProxyData> targetProxyData,
+                     TArray<sk_sp<RefCntedCallback>>&& finishedProcs)
+        : fUniqueID(uniqueID)
+        , fRecorderID(recorderID)
+        , fGraph(std::move(graph))
         , fNonVolatileLazyProxies(std::move(nonVolatileLazyProxies))
         , fVolatileLazyProxies(std::move(volatileLazyProxies))
-        , fTargetProxyData(std::move(targetProxyData)) {}
+        , fTargetProxyData(std::move(targetProxyData))
+        , fFinishedProcs(std::move(finishedProcs)) {}
 
-Recording::~Recording() {}
-
-#if GRAPHITE_TEST_UTILS
-bool Recording::isTargetProxyInstantiated() const {
-    return fTargetProxyData->lazyProxy()->isInstantiated();
-}
-#endif
-
-////////////////////////////////////////////////////////////////////////////////
-bool RecordingPriv::hasNonVolatileLazyProxies() const {
-    return !fRecording->fNonVolatileLazyProxies.empty();
+Recording::~Recording() {
+    // Any finished procs that haven't been passed to a CommandBuffer fail
+    this->priv().setFailureResultForFinishedProcs();
 }
 
-bool RecordingPriv::instantiateNonVolatileLazyProxies(ResourceProvider* resourceProvider) {
-    SkASSERT(this->hasNonVolatileLazyProxies());
-
-    for (auto proxy : fRecording->fNonVolatileLazyProxies) {
-        if (!proxy->lazyInstantiate(resourceProvider)) {
-            return false;
-        }
-    }
-
-    // Note: once all the lazy proxies have been instantiated, that's it - there are no more
-    // chances to instantiate.
-    fRecording->fNonVolatileLazyProxies.clear();
-    return true;
-}
-
-bool RecordingPriv::hasVolatileLazyProxies() const {
-    return !fRecording->fVolatileLazyProxies.empty();
-}
-
-bool RecordingPriv::instantiateVolatileLazyProxies(ResourceProvider* resourceProvider) {
-    SkASSERT(this->hasVolatileLazyProxies());
-
-    for (auto proxy : fRecording->fVolatileLazyProxies) {
-        if (!proxy->lazyInstantiate(resourceProvider)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-void RecordingPriv::deinstantiateVolatileLazyProxies() {
-    if (!this->hasVolatileLazyProxies()) {
-        return;
-    }
-
-    for (auto proxy : fRecording->fVolatileLazyProxies) {
-        SkASSERT(proxy->isVolatile());
-        proxy->deinstantiate();
-    }
-}
-
-#if GRAPHITE_TEST_UTILS
-int RecordingPriv::numVolatilePromiseImages() const {
-    return fRecording->fVolatileLazyProxies.size();
-}
-
-int RecordingPriv::numNonVolatilePromiseImages() const {
-    return fRecording->fNonVolatileLazyProxies.size();
-}
-
-bool RecordingPriv::hasTasks() const { return fRecording->fGraph->hasTasks(); }
-#endif
-
-bool RecordingPriv::addCommands(Context* context,
-                                CommandBuffer* commandBuffer,
-                                Surface* replaySurface,
-                                SkIVector replayTranslation) {
-    AutoDeinstantiateTextureProxy autoDeinstantiateTargetProxy(
-            fRecording->fTargetProxyData ? fRecording->fTargetProxyData->lazyProxy() : nullptr);
-
-    const Texture* replayTarget = nullptr;
-    SkASSERT(SkToBool(fRecording->fTargetProxyData) == SkToBool(replaySurface));
-    ResourceProvider* resourceProvider = context->priv().resourceProvider();
-    if (fRecording->fTargetProxyData) {
-        if (!replaySurface) {
-            SKGPU_LOG_E("No surface provided to instantiate target texture proxy.");
-            return false;
-        }
-        TextureProxy* surfaceTexture = replaySurface->backingTextureProxy();
-        if (!surfaceTexture->instantiate(resourceProvider)) {
-            SKGPU_LOG_E("Could not instantiate target texture proxy.");
-            return false;
-        }
-        if (!fRecording->fTargetProxyData->lazyInstantiate(resourceProvider,
-                                                           surfaceTexture->refTexture())) {
-            SKGPU_LOG_E("Could not instantiate deferred texture proxy.");
-            return false;
-        }
-        replayTarget = surfaceTexture->texture();
-    }
-
-    if (!fRecording->fGraph->addCommands(
-                context, commandBuffer, {replayTarget, replayTranslation})) {
-        return false;
-    }
-    for (size_t i = 0; i < fRecording->fExtraResourceRefs.size(); ++i) {
-        commandBuffer->trackResource(fRecording->fExtraResourceRefs[i]);
-    }
-    return true;
-}
-
-void RecordingPriv::addResourceRef(sk_sp<Resource> resource) {
-    fRecording->fExtraResourceRefs.push_back(std::move(resource));
-}
-
-void RecordingPriv::addTask(sk_sp<Task> task) {
-    fRecording->fGraph->prepend(std::move(task));
+std::size_t Recording::ProxyHash::operator()(const sk_sp<TextureProxy> &proxy) const {
+    return SkGoodHash()(proxy.get());
 }
 
 Recording::LazyProxyData::LazyProxyData(const TextureInfo& textureInfo) {
@@ -161,5 +67,128 @@ bool Recording::LazyProxyData::lazyInstantiate(ResourceProvider* resourceProvide
     fTarget = std::move(texture);
     return fTargetProxy->lazyInstantiate(resourceProvider);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+bool RecordingPriv::hasNonVolatileLazyProxies() const {
+    return !fRecording->fNonVolatileLazyProxies.empty();
+}
+
+bool RecordingPriv::instantiateNonVolatileLazyProxies(ResourceProvider* resourceProvider) {
+    SkASSERT(this->hasNonVolatileLazyProxies());
+
+    for (const auto& proxy : fRecording->fNonVolatileLazyProxies) {
+        if (!proxy->lazyInstantiate(resourceProvider)) {
+            return false;
+        }
+    }
+
+    // Note: once all the lazy proxies have been instantiated, that's it - there are no more
+    // chances to instantiate.
+    fRecording->fNonVolatileLazyProxies.clear();
+    return true;
+}
+
+bool RecordingPriv::hasVolatileLazyProxies() const {
+    return !fRecording->fVolatileLazyProxies.empty();
+}
+
+bool RecordingPriv::instantiateVolatileLazyProxies(ResourceProvider* resourceProvider) {
+    SkASSERT(this->hasVolatileLazyProxies());
+
+    for (const auto& proxy : fRecording->fVolatileLazyProxies) {
+        if (!proxy->lazyInstantiate(resourceProvider)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void RecordingPriv::deinstantiateVolatileLazyProxies() {
+    if (!this->hasVolatileLazyProxies()) {
+        return;
+    }
+
+    for (const auto& proxy : fRecording->fVolatileLazyProxies) {
+        SkASSERT(proxy->isVolatile());
+        proxy->deinstantiate();
+    }
+}
+
+void RecordingPriv::setFailureResultForFinishedProcs() {
+    for (int i = 0; i < fRecording->fFinishedProcs.size(); ++i) {
+        fRecording->fFinishedProcs[i]->setFailureResult();
+    }
+    fRecording->fFinishedProcs.clear();
+}
+
+bool RecordingPriv::addCommands(Context* context,
+                                CommandBuffer* commandBuffer,
+                                Surface* targetSurface,
+                                SkIVector targetTranslation) {
+    AutoDeinstantiateTextureProxy autoDeinstantiateTargetProxy(
+            fRecording->fTargetProxyData ? fRecording->fTargetProxyData->lazyProxy() : nullptr);
+
+    const Texture* replayTarget = nullptr;
+    ResourceProvider* resourceProvider = context->priv().resourceProvider();
+    SkASSERT(!SkToBool(fRecording->fTargetProxyData) || SkToBool(targetSurface));
+    if (fRecording->fTargetProxyData) {
+        if (!targetSurface) {
+            SKGPU_LOG_E("No surface provided to instantiate target texture proxy.");
+            return false;
+        }
+        TextureProxy* surfaceTexture = targetSurface->backingTextureProxy();
+        if (!surfaceTexture->instantiate(resourceProvider)) {
+            SKGPU_LOG_E("Could not instantiate target texture proxy.");
+            return false;
+        }
+        if (!fRecording->fTargetProxyData->lazyInstantiate(resourceProvider,
+                                                           surfaceTexture->refTexture())) {
+            SKGPU_LOG_E("Could not instantiate deferred texture proxy.");
+            return false;
+        }
+        replayTarget = surfaceTexture->texture();
+    }
+
+    for (size_t i = 0; i < fRecording->fExtraResourceRefs.size(); ++i) {
+        commandBuffer->trackResource(fRecording->fExtraResourceRefs[i]);
+    }
+    if (!fRecording->fGraph->addCommands(
+                context, commandBuffer, {replayTarget, targetTranslation})) {
+        return false;
+    }
+    for (int i = 0; i < fRecording->fFinishedProcs.size(); ++i) {
+        commandBuffer->addFinishedProc(std::move(fRecording->fFinishedProcs[i]));
+    }
+    fRecording->fFinishedProcs.clear();
+
+    return true;
+}
+
+void RecordingPriv::addResourceRef(sk_sp<Resource> resource) {
+    fRecording->fExtraResourceRefs.push_back(std::move(resource));
+}
+
+void RecordingPriv::addTask(sk_sp<Task> task) {
+    fRecording->fGraph->prepend(std::move(task));
+}
+
+#if defined(GRAPHITE_TEST_UTILS)
+bool RecordingPriv::isTargetProxyInstantiated() const {
+    return fRecording->fTargetProxyData->lazyProxy()->isInstantiated();
+}
+
+int RecordingPriv::numVolatilePromiseImages() const {
+    return fRecording->fVolatileLazyProxies.size();
+}
+
+int RecordingPriv::numNonVolatilePromiseImages() const {
+    return fRecording->fNonVolatileLazyProxies.size();
+}
+
+bool RecordingPriv::hasTasks() const {
+    return fRecording->fGraph->hasTasks();
+}
+#endif
 
 } // namespace skgpu::graphite

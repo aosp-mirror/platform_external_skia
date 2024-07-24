@@ -33,12 +33,25 @@ Skia and the third party dep depend on that.
 CORE_COPTS = [
     "-fstrict-aliasing",
     "-fPIC",
-    "-fvisibility=hidden",
     "-fno-rtti",  # Reduces code size
 ] + select({
     # SkRawCodec catches any exceptions thrown by dng_sdk, insulating the rest of Skia.
     "//src/codec:raw_decode_codec": [],
     "//conditions:default": ["-fno-exceptions"],
+}) + select({
+    "@platforms//os:android": [],
+    "//conditions:default": [
+        # On Android, this option causes the linker to fail
+        # (e.g. "undefined reference to `SkString::data()'").
+        "-fvisibility=hidden",
+    ],
+}) + select({
+    "@platforms//os:windows": [],
+    "//conditions:default": [
+        # In Clang 14, this default was changed. We turn this off to (hopefully) make our
+        # GMs more consistent and avoid some floating-point related test failures on M1 macs.
+        "-ffp-contract=off",
+    ],
 })
 
 OPT_LEVEL = select({
@@ -78,14 +91,17 @@ WARNINGS = [
     "-Wno-old-style-cast",
     "-Wno-padded",
     "-Wno-psabi",  # noisy
+    "-Wno-return-std-move-in-c++11",
     "-Wno-shadow-field-in-constructor",
     "-Wno-shadow-uncaptured-local",
     "-Wno-undefined-func-template",
     "-Wno-unused-parameter",  # It is common to have unused parameters in src/
     "-Wno-zero-as-null-pointer-constant",  # VK_NULL_HANDLE is defined as 0
+    "-Wno-unsafe-buffer-usage",
     #### Warnings we would like to fix ####
     "-Wno-abstract-vbase-init",
     "-Wno-cast-align",
+    "-Wno-cast-function-type-strict",
     "-Wno-cast-qual",
     "-Wno-class-varargs",
     "-Wno-conversion",  # -Wsign-conversion re-enabled for header sources
@@ -143,7 +159,6 @@ WARNINGS = [
     "-Wdeprecated-this-capture",
     "-Wdeprecated-volatile",
     "-Wdeprecated-writable-strings",
-    "-Wc++98-compat-extra-semi",
     # A catch-all for when the version of clang we are using does not have the prior options
     "-Wno-unknown-warning-option",
 ] + select({
@@ -152,6 +167,13 @@ WARNINGS = [
         "-Wno-unused-function",
         "-Wno-unused-template",
         "-Wno-unused-const-variable",
+    ],
+    "//conditions:default": [],
+}) + select({
+    "@platforms//os:windows": [
+        # skbug.com/14203
+        "-Wno-nonportable-system-include-path",
+        "-Wno-unknown-argument",
     ],
     "//conditions:default": [],
 })

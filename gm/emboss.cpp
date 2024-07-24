@@ -22,9 +22,10 @@
 #include "include/core/SkTypeface.h"
 #include "src/core/SkBlurMask.h"
 #include "src/effects/SkEmbossMaskFilter.h"
+#include "tools/fonts/FontToolUtils.h"
 
 static sk_sp<SkImage> make_bm() {
-    auto surf = SkSurface::MakeRasterN32Premul(100, 100);
+    auto surf = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(100, 100));
 
     SkPaint paint;
     paint.setAntiAlias(true);
@@ -38,13 +39,9 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("emboss");
-    }
+    SkString getName() const override { return SkString("emboss"); }
 
-    SkISize onISize() override {
-        return SkISize::Make(600, 120);
-    }
+    SkISize getISize() override { return SkISize::Make(600, 120); }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
@@ -77,12 +74,13 @@ protected:
                            SkIntToScalar(30), paint);
         canvas->translate(SkIntToScalar(100), 0);
 
+        SkFont font = SkFont(ToolUtils::DefaultPortableTypeface(), 50);
         paint.setStyle(SkPaint::kFill_Style);
-        canvas->drawString("Hello", 0, 50, SkFont(nullptr, 50), paint);
+        canvas->drawString("Hello", 0, 50, font, paint);
 
         paint.setShader(nullptr);
         paint.setColor(SK_ColorGREEN);
-        canvas->drawString("World", 0, 100, SkFont(nullptr, 50), paint);
+        canvas->drawString("World", 0, 100, font, paint);
     }
 
 private:

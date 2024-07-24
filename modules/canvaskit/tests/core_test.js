@@ -17,7 +17,7 @@ describe('Core canvas behavior', () => {
     gm('picture_test', (canvas) => {
         const spr = new CanvasKit.PictureRecorder();
         const bounds = CanvasKit.LTRBRect(0, 0, 400, 120);
-        const rcanvas = spr.beginRecording(bounds);
+        const rcanvas = spr.beginRecording(bounds, true);
         const paint = new CanvasKit.Paint();
         paint.setStrokeWidth(2.0);
         paint.setAntiAlias(true);
@@ -26,9 +26,16 @@ describe('Core canvas behavior', () => {
 
         rcanvas.drawRRect(CanvasKit.RRectXY([5, 35, 45, 80], 15, 10), paint);
 
-        const font = new CanvasKit.Font(null, 20);
+        const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 20);
         rcanvas.drawText('this picture has a round rect', 5, 100, paint, font);
         const pic = spr.finishRecordingAsPicture();
+        const cullRect = pic.cullRect();
+        const approxBytesUsed = pic.approximateBytesUsed();
+        expect(approxBytesUsed).toBeGreaterThan(0);
+        expect(cullRect[0]).toBeCloseTo(0);
+        expect(cullRect[1]).toBeCloseTo(31);
+        expect(cullRect[2]).toBeCloseTo(357.84);
+        expect(cullRect[3]).toBeCloseTo(109.42);
         spr.delete();
         paint.delete();
 
@@ -217,7 +224,7 @@ describe('Core canvas behavior', () => {
 
     gm('exif_orientation', (canvas, fetchedByteBuffers) => {
         const paint = new CanvasKit.Paint();
-        const font = new CanvasKit.Font(null, 14);
+        const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 14);
         canvas.drawText('The following heart should be rotated 90 CCW due to exif.',
             5, 25, paint, font);
 
@@ -399,7 +406,7 @@ describe('Core canvas behavior', () => {
     gm('draw_glyphs', (canvas) => {
 
         const paint = new CanvasKit.Paint();
-        const font = new CanvasKit.Font(null, 24);
+        const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 24);
         paint.setAntiAlias(true);
 
         const DIM = 16; // row/col count for the grid
@@ -480,7 +487,7 @@ describe('Core canvas behavior', () => {
         }
         // Label images with the method used to decode them
         const paint = new CanvasKit.Paint();
-        const textFont = new CanvasKit.Font(null, 7);
+        const textFont = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 7);
         canvas.drawText('WASM Decoding', 0, 90, paint, textFont);
         canvas.drawText('ImageBitmap Decoding', 100, 90, paint, textFont);
         canvas.drawText('HTMLImageEl Decoding', 200, 90, paint, textFont);
@@ -728,11 +735,20 @@ describe('Core canvas behavior', () => {
         paint.delete();
     });
 
+    it('can compute ImageFilter filterBounds', () => {
+      const blurIF = CanvasKit.ImageFilter.MakeBlur(5, 10, CanvasKit.TileMode.Clamp, null);
+      const updatedBounds = blurIF.getOutputBounds(CanvasKit.LTRBRect(50, 50, 100, 100));
+      expect(updatedBounds[0]).toEqual(35);
+      expect(updatedBounds[1]).toEqual(20);
+      expect(updatedBounds[2]).toEqual(115);
+      expect(updatedBounds[3]).toEqual(130);
+    });
+
     gm('blur_filters', (canvas) => {
         const pathUL = starPath(CanvasKit, 100, 100, 80);
         const pathBR = starPath(CanvasKit, 400, 300, 80);
         const paint = new CanvasKit.Paint();
-        const textFont = new CanvasKit.Font(null, 24);
+        const textFont = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 24);
 
         canvas.drawText('Above: MaskFilter', 20, 220, paint, textFont);
         canvas.drawText('Right: ImageFilter', 20, 260, paint, textFont);
@@ -1009,7 +1025,7 @@ describe('Core canvas behavior', () => {
         const lightPos = [500,500,20];
         const zPlaneParams = [0,0,1];
         const path = starPath(CanvasKit);
-        const textFont = new CanvasKit.Font(null, 24);
+        const textFont = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 24);
         const textPaint = new CanvasKit.Paint();
 
         canvas.drawShadow(path, zPlaneParams, lightPos, lightRadius,
@@ -1508,7 +1524,7 @@ describe('Core canvas behavior', () => {
             canvas.drawImageRectCubic(newImg, src, CanvasKit.XYWHRect(256, 0, 256, 256), 1/3, 1/3);
             canvas.drawImageRectCubic(img, src, CanvasKit.XYWHRect(0, 0, 256, 256), 1/3, 1/3);
 
-            const font = new CanvasKit.Font(null, 20);
+            const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 20);
             const paint = new CanvasKit.Paint();
             paint.setColor(CanvasKit.BLACK);
             canvas.drawText('original', 100, 280, paint, font);
@@ -1551,7 +1567,7 @@ describe('Core canvas behavior', () => {
             const surface = CanvasKit.MakeWebGLCanvasSurface(glCanvas);
             const surfaceCanvas = surface.getCanvas();
             surfaceCanvas.drawPicture(picture);
-            const font = new CanvasKit.Font(null, 20);
+            const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 20);
             const paint = new CanvasKit.Paint();
             paint.setColor(CanvasKit.WHITE);
             // Put some text onto this surface, just to verify the readback works.
@@ -1789,7 +1805,7 @@ describe('Core canvas behavior', () => {
         // Put a dark green on the paint itself.
         paint.setColor(CanvasKit.Color(0, 255, 0, 0.2));
 
-        const font = new CanvasKit.Font(null, 10);
+        const font = new CanvasKit.Font(CanvasKit.Typeface.GetDefault(), 10);
         const textPaint = new CanvasKit.Paint();
         textPaint.setColor(CanvasKit.BLACK);
 

@@ -27,7 +27,7 @@ GR_NORETAIN_BEGIN
 
 GrMtlResourceProvider::GrMtlResourceProvider(GrMtlGpu* gpu)
     : fGpu(gpu) {
-    fPipelineStateCache.reset(new PipelineStateCache(gpu));
+    fPipelineStateCache = std::make_unique<PipelineStateCache>(gpu);
 }
 
 GrMtlPipelineState* GrMtlResourceProvider::findOrCreateCompatiblePipelineState(
@@ -135,7 +135,7 @@ const GrMtlRenderPipeline* GrMtlResourceProvider::findOrCreateMSAALoadPipeline(
     mtlColorAttachment.writeMask = MTLColorWriteMaskAll;
 
     pipelineDescriptor.colorAttachments[0] = mtlColorAttachment;
-    pipelineDescriptor.sampleCount = sampleCount;
+    pipelineDescriptor.rasterSampleCount = sampleCount;
 
     pipelineDescriptor.stencilAttachmentPixelFormat = stencilFormat;
 
@@ -249,7 +249,7 @@ GrMtlPipelineState* GrMtlResourceProvider::PipelineStateCache::onRefPipelineStat
            return nullptr;
         }
         fStats.incNumCompilationSuccesses();
-        entry = fMap.insert(desc, std::unique_ptr<Entry>(new Entry(pipelineState)));
+        entry = fMap.insert(desc, std::make_unique<Entry>(pipelineState));
         *stat = Stats::ProgramCacheResult::kMiss;
         return (*entry)->fPipelineState.get();
     }

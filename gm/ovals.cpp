@@ -23,6 +23,8 @@
 #include "src/base/SkRandom.h"
 #include "tools/ToolUtils.h"
 
+using namespace skia_private;
+
 namespace skiagm {
 
 class OvalGM : public GM {
@@ -34,14 +36,9 @@ public:
     }
 
 protected:
+    SkString getName() const override { return SkString("ovals"); }
 
-    SkString onShortName() override {
-        return SkString("ovals");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(1200, 900);
-    }
+    SkISize getISize() override { return SkISize::Make(1200, 900); }
 
     void makePaints() {
         {
@@ -298,8 +295,8 @@ protected:
     }
 
 private:
-    SkTArray<SkPaint> fPaints;
-    SkTArray<SkMatrix> fMatrices;
+    TArray<SkPaint> fPaints;
+    TArray<SkMatrix> fMatrices;
 
     using INHERITED = GM;
 };

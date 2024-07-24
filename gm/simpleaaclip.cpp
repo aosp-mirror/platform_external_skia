@@ -23,17 +23,18 @@
 #include "src/core/SkAAClip.h"
 #include "src/core/SkMask.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 namespace skiagm {
 
 static void paint_rgn(SkCanvas* canvas, const SkAAClip& clip,
                       const SkPaint& paint) {
-    SkMask mask;
+    SkMaskBuilder mask;
     SkBitmap bm;
 
     clip.copyToMask(&mask);
 
-    SkAutoMaskFreeImage amfi(mask.fImage);
+    SkAutoMaskFreeImage amfi(mask.image());
 
     bm.installMaskPixels(mask);
 
@@ -141,7 +142,7 @@ protected:
         canvas->restore();
     }
 
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString str;
         str.printf("simpleaaclip_%s",
                     kRect_GeomType == fGeomType ? "rect" :
@@ -150,9 +151,7 @@ protected:
         return str;
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(500, 240);
-    }
+    SkISize getISize() override { return SkISize::Make(500, 240); }
 
     void onDraw(SkCanvas* canvas) override {
 
@@ -166,7 +165,7 @@ protected:
         };
 
         SkPaint textPaint;
-        SkFont  font(ToolUtils::create_portable_typeface(), 24);
+        SkFont  font(ToolUtils::DefaultPortableTypeface(), 24);
         int xOff = 0;
 
         for (size_t op = 0; op < std::size(gOps); op++) {

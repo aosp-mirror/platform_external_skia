@@ -16,15 +16,15 @@
 #include "include/core/SkPathUtils.h"
 #include "include/core/SkRegion.h"
 #include "include/core/SkShader.h"
-#include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/utils/SkParsePath.h"
+#include "src/base/SkTime.h"
 #include "src/base/SkUTF.h"
+#include "src/core/SkGeometry.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/timer/TimeUtils.h"
 #include "tools/viewer/ClickHandlerSlide.h"
-
-#include "src/core/SkGeometry.h"
 
 #include <stdlib.h>
 
@@ -611,7 +611,7 @@ public:
 
             paint.setColor(SK_ColorBLACK);
             paint.setStyle(SkPaint::kFill_Style);
-            SkFont font(nullptr, 20);
+            SkFont font(ToolUtils::DefaultTypeface(), 20);
             canvas->drawString(SkStringPrintf("t = %g", fT), 20, 20, font, paint);
         }
 

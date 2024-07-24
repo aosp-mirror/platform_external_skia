@@ -27,6 +27,7 @@
 #include "include/private/base/SkTPin.h"
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkImageInfoPriv.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <math.h>
 #include <string.h>
@@ -53,7 +54,7 @@ static void compare_pixel(const char* label,
                           SkCanvas* canvas, int x, int y,
                           SkColor4f color, SkColorSpace* cs) {
     SkPaint paint;
-    SkFont font;
+    SkFont font = ToolUtils::DefaultPortableFont();
     auto canvas_cs = canvas->imageInfo().refColorSpace();
 
     // I'm not really sure if this makes things easier or harder to follow,
@@ -146,46 +147,6 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
 
         canvas->drawImage(bm.asImage(), 10,10);
         compare_pixel("drawBitmap P3 red, from drawPaint",
-                      canvas, 10,10,
-                      {1,0,0,1}, p3.get());
-    }
-
-    canvas->translate(0,80);
-
-    // Draw a P3 red bitmap, using SkPixmap::erase().
-    {
-        SkBitmap bm;
-        bm.allocPixels(SkImageInfo::Make(60,60, kRGBA_F16_SkColorType, kPremul_SkAlphaType, p3));
-
-        // At the moment only SkPixmap has an erase() that takes an SkColor4f.
-        SkPixmap pm;
-        SkAssertResult(bm.peekPixels(&pm));
-        SkAssertResult(pm.erase({1,0,0,1}, p3.get()));
-
-        canvas->drawImage(bm.asImage(), 10,10);
-        compare_pixel("drawBitmap P3 red, from SkPixmap::erase",
-                      canvas, 10,10,
-                      {1,0,0,1}, p3.get());
-    }
-
-    canvas->translate(0,80);
-
-    // Draw a P3 red bitmap wrapped in a shader, using SkPixmap::erase().
-    {
-        SkBitmap bm;
-        bm.allocPixels(SkImageInfo::Make(60,60, kRGBA_F16_SkColorType, kPremul_SkAlphaType, p3));
-
-        // At the moment only SkPixmap has an erase() that takes an SkColor4f.
-        SkPixmap pm;
-        SkAssertResult(bm.peekPixels(&pm));
-        SkAssertResult(pm.erase({1,0,0,1}, p3.get()));
-
-        SkPaint paint;
-        paint.setShader(bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                      SkSamplingOptions()));
-
-        canvas->drawRect({10,10,70,70}, paint);
-        compare_pixel("drawBitmapAsShader P3 red, from SkPixmap::erase",
                       canvas, 10,10,
                       {1,0,0,1}, p3.get());
     }

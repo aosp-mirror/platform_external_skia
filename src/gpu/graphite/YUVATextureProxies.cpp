@@ -7,30 +7,69 @@
 
 #include "src/gpu/graphite/YUVATextureProxies.h"
 
+#include "include/gpu/graphite/Recorder.h"
 #include "src/core/SkImageInfoPriv.h"
+#include "src/gpu/graphite/Caps.h"
+#include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/TextureProxy.h"
 
 namespace skgpu::graphite {
 
-YUVATextureProxies::YUVATextureProxies(const SkYUVAInfo& yuvaInfo,
-                                       TextureProxyView views[SkYUVAInfo::kMaxPlanes],
-                                       SkColorType colorTypes[SkYUVAInfo::kMaxPlanes])
+YUVATextureProxies::YUVATextureProxies(const Recorder* recorder,
+                                       const SkYUVAInfo& yuvaInfo,
+                                       SkSpan<sk_sp<TextureProxy>> proxies)
         : fYUVAInfo(yuvaInfo) {
-    uint32_t pixmapChannelMasks[SkYUVAInfo::kMaxPlanes];
     int n = yuvaInfo.numPlanes();
-    if (n == 0) {
+    if (n == 0 || (size_t)n > proxies.size()) {
+        *this = {};
+        SkASSERT(!this->isValid());
+        return;
+    }
+    uint32_t textureChannelMasks[SkYUVAInfo::kMaxPlanes];
+    for (int i = 0; i < n; ++i) {
+        if (!proxies[i]) {
+            *this = {};
+            SkASSERT(!this->isValid());
+            return;
+        }
+        textureChannelMasks[i] = recorder->priv().caps()->channelMask(proxies[i]->textureInfo());
+    }
+    fYUVALocations = yuvaInfo.toYUVALocations(textureChannelMasks);
+    if (fYUVALocations[0].fPlane < 0) {
         *this = {};
         SkASSERT(!this->isValid());
         return;
     }
     fMipmapped = Mipmapped::kYes;
     for (int i = 0; i < n; ++i) {
-        pixmapChannelMasks[i] = SkColorTypeChannelFlags(colorTypes[i]);
+        if (proxies[i]->mipmapped() == Mipmapped::kNo) {
+            fMipmapped = Mipmapped::kNo;
+        }
+        fProxies[i] = std::move(proxies[i]);
+    }
+    SkASSERT(this->isValid());
+}
+
+YUVATextureProxies::YUVATextureProxies(const Recorder* recorder,
+                                       const SkYUVAInfo& yuvaInfo,
+                                       SkSpan<TextureProxyView> views)
+        : fYUVAInfo(yuvaInfo) {
+    uint32_t pixmapChannelMasks[SkYUVAInfo::kMaxPlanes];
+    int n = yuvaInfo.numPlanes();
+    if (n == 0 || (size_t)n > views.size()) {
+        *this = {};
+        SkASSERT(!this->isValid());
+        return;
+    }
+    fMipmapped = Mipmapped::kYes;
+    for (int i = 0; i < n; ++i) {
         if (!views[i]) {
             *this = {};
             SkASSERT(!this->isValid());
             return;
         }
+        pixmapChannelMasks[i] =
+                recorder->priv().caps()->channelMask(views[i].proxy()->textureInfo());
         if (views[i].proxy()->mipmapped() == Mipmapped::kNo) {
             fMipmapped = Mipmapped::kNo;
         }
@@ -68,4 +107,4 @@ YUVATextureProxies::YUVATextureProxies(const SkYUVAInfo& yuvaInfo,
     SkASSERT(this->isValid());
 }
 
-}
+}  // namespace skgpu::graphite

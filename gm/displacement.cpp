@@ -19,6 +19,7 @@
 #include "include/core/SkString.h"
 #include "include/effects/SkImageFilters.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <utility>
 
@@ -31,12 +32,10 @@ public:
     }
 
 protected:
-    SkString onShortName() override {
-        return SkString("displacement");
-    }
+    SkString getName() const override { return SkString("displacement"); }
 
     void onOnceBeforeDraw() override {
-        fImage = ToolUtils::create_string_image(80, 80, 0xFF884422, 15, 55, 96, "g");
+        fImage = ToolUtils::CreateStringImage(80, 80, 0xFF884422, 15, 55, 96, "g");
 
         SkColor c1 = ToolUtils::color_to_565(0xFF244484);
         SkColor c2 = ToolUtils::color_to_565(0xFF804020);
@@ -48,9 +47,7 @@ protected:
         fLargeH = ToolUtils::create_checkerboard_image(64, 96, c1, c2, 8);
     }
 
-    SkISize onISize() override {
-        return SkISize::Make(600, 500);
-    }
+    SkISize getISize() override { return SkISize::Make(600, 500); }
 
     void drawClippedBitmap(SkCanvas* canvas, int x, int y, const SkPaint& paint) const {
         canvas->save();
@@ -63,7 +60,7 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         canvas->clear(SK_ColorBLACK);
         SkPaint paint;
-        sk_sp<SkImageFilter> displ(SkImageFilters::Image(fCheckerboard));
+        sk_sp<SkImageFilter> displ(SkImageFilters::Image(fCheckerboard, SkFilterMode::kLinear));
         paint.setImageFilter(SkImageFilters::DisplacementMap(
                 SkColorChannel::kR, SkColorChannel::kG, 0.0f, displ, nullptr));
         this->drawClippedBitmap(canvas, 0, 0, paint);
@@ -135,19 +132,19 @@ protected:
         this->drawClippedBitmap(canvas, 500, 0, paint);
 
         // Tests for images of different sizes
-        displ = SkImageFilters::Image(fSmall);
+        displ = SkImageFilters::Image(fSmall, SkFilterMode::kLinear);
         paint.setImageFilter(SkImageFilters::DisplacementMap(
                 SkColorChannel::kR, SkColorChannel::kG, 40.0f, std::move(displ), nullptr));
         this->drawClippedBitmap(canvas, 0, 400, paint);
-        displ = SkImageFilters::Image(fLarge);
+        displ = SkImageFilters::Image(fLarge, SkFilterMode::kLinear);
         paint.setImageFilter(SkImageFilters::DisplacementMap(
                 SkColorChannel::kB, SkColorChannel::kA, 40.0f, std::move(displ), nullptr));
         this->drawClippedBitmap(canvas, 100, 400, paint);
-        displ = SkImageFilters::Image(fLargeW);
+        displ = SkImageFilters::Image(fLargeW, SkFilterMode::kLinear);
         paint.setImageFilter(SkImageFilters::DisplacementMap(
                 SkColorChannel::kR, SkColorChannel::kB, 40.0f, std::move(displ), nullptr));
         this->drawClippedBitmap(canvas, 200, 400, paint);
-        displ = SkImageFilters::Image(fLargeH);
+        displ = SkImageFilters::Image(fLargeH, SkFilterMode::kLinear);
         paint.setImageFilter(SkImageFilters::DisplacementMap(
                 SkColorChannel::kG, SkColorChannel::kA, 40.0f, std::move(displ), nullptr));
         this->drawClippedBitmap(canvas, 300, 400, paint);
