@@ -306,13 +306,12 @@ private:
 
     SpvId writeIntrinsicCall(const FunctionCall& c, OutputStream& out);
 
-    SpvId writeFunctionCallArgument(
-            const FunctionCall& call,
-            int argIndex,
-            std::vector<TempVar>* tempVars,
-            OutputStream& out,
-            const Analysis::SpecializedParameters* specializedParams = nullptr,
-            SpvId* outSynthesizedSamplerId = nullptr);
+    void writeFunctionCallArgument(TArray<SpvId>& argumentList,
+                                   const FunctionCall& call,
+                                   int argIndex,
+                                   std::vector<TempVar>* tempVars,
+                                   const SkBitSet* specializedParams,
+                                   OutputStream& out);
 
     void copyBackTempVars(const std::vector<TempVar>& tempVars, OutputStream& out);
 
@@ -2005,7 +2004,8 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
             argumentIds.reserve_exact(arguments.size());
             std::vector<TempVar> tempVars;
             for (int i = 0; i < arguments.size(); i++) {
-                argumentIds.push_back(this->writeFunctionCallArgument(c, i, &tempVars, out));
+                this->writeFunctionCallArgument(argumentIds, c, i, &tempVars,
+                                                /*specializedParams=*/nullptr, out);
             }
             this->writeOpCode(SpvOpExtInst, 5 + (int32_t) argumentIds.size(), out);
             this->writeWord(this->getType(c.type()), out);
@@ -2028,7 +2028,8 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
             argumentIds.reserve_exact(arguments.size());
             std::vector<TempVar> tempVars;
             for (int i = 0; i < arguments.size(); i++) {
-                argumentIds.push_back(this->writeFunctionCallArgument(c, i, &tempVars, out));
+                this->writeFunctionCallArgument(argumentIds, c, i, &tempVars,
+                                                /*specializedParams=*/nullptr, out);
             }
             if (!c.type().isVoid()) {
                 this->writeOpCode((SpvOp_) intrinsicId, 3 + (int32_t) arguments.size(), out);
@@ -2527,24 +2528,23 @@ SpvId SPIRVCodeGenerator::writeAtomicIntrinsic(const FunctionCall& c,
     return resultId;
 }
 
-SpvId SPIRVCodeGenerator::writeFunctionCallArgument(
-        const FunctionCall& call,
-        int argIndex,
-        std::vector<TempVar>* tempVars,
-        OutputStream& out,
-        const Analysis::SpecializedParameters* specializedParams,
-        SpvId* outSynthesizedSamplerId) {
+void SPIRVCodeGenerator::writeFunctionCallArgument(TArray<SpvId>& argumentList,
+                                                   const FunctionCall& call,
+                                                   int argIndex,
+                                                   std::vector<TempVar>* tempVars,
+                                                   const SkBitSet* specializedParams,
+                                                   OutputStream& out) {
     const FunctionDeclaration& funcDecl = call.function();
     const Expression& arg = *call.arguments()[argIndex];
     const Variable* param = funcDecl.parameters()[argIndex];
-    bool paramIsSpecialized = specializedParams && specializedParams->find(param);
+    bool paramIsSpecialized = specializedParams && specializedParams->test(argIndex);
     ModifierFlags paramFlags = param->modifierFlags();
 
     // Ignore the argument since it is specialized, if fUseTextureSamplerPairs is true and this
     // argument is a sampler, handle ignoring the sampler below when generating the texture and
     // sampler pair arguments.
     if (paramIsSpecialized && !(param->type().isSampler() && fUseTextureSamplerPairs)) {
-        return NA;
+        return;
     }
 
     if (arg.is<VariableReference>() && (arg.type().typeKind() == Type::TypeKind::kSampler ||
@@ -2562,24 +2562,25 @@ SpvId SPIRVCodeGenerator::writeFunctionCallArgument(
         // In Dawn-mode the texture and sampler arguments are forwarded to the helper function.
         if (fUseTextureSamplerPairs && var->type().isSampler()) {
             if (const auto* p = fSynthesizedSamplerMap.find(var)) {
-                SkASSERT(outSynthesizedSamplerId);
-
                 SpvId* img = fVariableMap.find((*p)->fTexture.get());
                 SkASSERT(img);
+
+                argumentList.push_back(*img);
 
                 if (!paramIsSpecialized) {
                     SpvId* sampler = fVariableMap.find((*p)->fSampler.get());
                     SkASSERT(sampler);
-                    *outSynthesizedSamplerId = *sampler;
+                    argumentList.push_back(*sampler);
                 }
-                return *img;
+                return;
             }
             SkDEBUGFAIL("sampler missing from fSynthesizedSamplerMap");
         }
 
         SpvId* entry = fVariableMap.find(var);
         SkASSERTF(entry, "%s", arg.description().c_str());
-        return *entry;
+        argumentList.push_back(*entry);
+        return;
     }
     SkASSERT(!paramIsSpecialized);
 
@@ -2602,7 +2603,8 @@ SpvId SPIRVCodeGenerator::writeFunctionCallArgument(
         tempVars->push_back(TempVar{tmpVar, &arg.type(), std::move(lv)});
     } else if (funcDecl.isIntrinsic()) {
         // Unlike user function calls, non-out intrinsic arguments don't need pointer parameters.
-        return this->writeExpression(arg, out);
+        argumentList.push_back(this->writeExpression(arg, out));
+        return;
     } else {
         // We always use pointer parameters when calling user functions.
         // See getFunctionParameterType for further explanation.
@@ -2617,7 +2619,7 @@ SpvId SPIRVCodeGenerator::writeFunctionCallArgument(
     if (tmpValueId != NA) {
         this->writeOpStore(StorageClass::kFunction, tmpVar, tmpValueId, out);
     }
-    return tmpVar;
+    argumentList.push_back(tmpVar);
 }
 
 void SPIRVCodeGenerator::copyBackTempVars(const std::vector<TempVar>& tempVars, OutputStream& out) {
@@ -2647,13 +2649,8 @@ SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream&
 
     // If we are calling a specialized function, we need to gather the specialized parameters
     // so we can remove them from the argument list.
-    const Analysis::SpecializedParameters* specializedParams = nullptr;
-    if (specializationIndex != Analysis::kUnspecialized) {
-        Analysis::Specializations* specializations =
-                fSpecializationInfo.fSpecializationMap.find(&function);
-        SkASSERT(specializations);
-        specializedParams = &specializations->at(specializationIndex);
-    }
+    SkBitSet specializedParams =
+            Analysis::FindSpecializedArgumentsForCall(c, fSpecializationInfo, specializationIndex);
 
     // Temp variables are used to write back out-parameters after the function call is complete.
     const ExpressionArray& arguments = c.arguments();
@@ -2661,15 +2658,7 @@ SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream&
     TArray<SpvId> argumentIds;
     argumentIds.reserve_exact(arguments.size());
     for (int i = 0; i < arguments.size(); i++) {
-        SpvId samplerId = NA;
-        SpvId argId = this->writeFunctionCallArgument(c, i, &tempVars, out,
-                                                      specializedParams, &samplerId);
-        if (argId != NA) {
-            argumentIds.push_back(argId);
-        }
-        if (samplerId != NA) {
-            argumentIds.push_back(samplerId);
-        }
+        this->writeFunctionCallArgument(argumentIds, c, i, &tempVars, &specializedParams, out);
     }
     SpvId result = this->nextId(nullptr);
     this->writeOpCode(SpvOpFunctionCall, 4 + (int32_t)argumentIds.size(), out);
