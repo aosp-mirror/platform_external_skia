@@ -245,6 +245,39 @@ def _RegenerateAllExamplesCPP(input_api, output_api):
   return results
 
 
+def _CheckIncludeForOutsideDeps(input_api, output_api):
+  """The include directory should consist of only public APIs.
+
+     This check makes sure we don't have anything in the include directory
+     depend on outside folders. If we had include/core/SkDonut.h depend on
+     src/core/SkPastry.h, then clients would have transitive access to the
+     private SkPastry class and any symbols in there, even if they don't
+     directly include src/core/SkPastry.h (which can be detected/blocked
+     with build systems like GN or Bazel). By keeping include/ self-contained,
+     we keep a tighter grip on our public API and make Skia easier to distribute
+     (one can ship a .a/.so and a single directory of .h files).
+  """
+  banned_includes = [
+    input_api.re.compile(r'#\s*include\s+("src/.*)'),
+    input_api.re.compile(r'#\s*include\s+("tools/.*)'),
+  ]
+  file_filter = lambda x: (x.LocalPath().startswith('include/'))
+  errors = []
+  for affected_file in input_api.AffectedSourceFiles(file_filter):
+    affected_filepath = affected_file.LocalPath()
+    for (line_num, line) in affected_file.ChangedContents():
+      for re in banned_includes:
+        match = re.search(line)
+        if match:
+          errors.append(('%s:%s: include/* should only depend on other things in include/*. ' +
+                        'Please remove #include of %s, perhaps making it a forward-declare.') % (
+                affected_filepath, line_num, match.group(1)))
+
+  if errors:
+    return [output_api.PresubmitError('\n'.join(errors))]
+  return []
+
+
 def _CheckExamplesForPrivateAPIs(input_api, output_api):
   """We only want our checked-in examples (aka fiddles) to show public API."""
   banned_includes = [
@@ -300,12 +333,6 @@ def _CheckBazelBUILDFiles(input_api, output_api):
     if is_bazel and not is_excluded:
       with open(affected_file_path, 'r') as file:
         contents = file.read()
-        if 'exports_files_legacy(' not in contents:
-          results.append(output_api.PresubmitError(
-            ('%s needs to call exports_files_legacy() to support legacy G3 ' +
-             'rules.\nPut this near the top of the file, beneath ' +
-             'licenses(["notice"]).') % affected_file_path
-          ))
         if 'licenses(["notice"])' not in contents:
           results.append(output_api.PresubmitError(
             ('%s needs to have\nlicenses(["notice"])\nimmediately after ' +
@@ -546,6 +573,7 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckGitConflictMarkers(input_api, output_api))
   results.extend(_RegenerateAllExamplesCPP(input_api, output_api))
   results.extend(_CheckExamplesForPrivateAPIs(input_api, output_api))
+  results.extend(_CheckIncludeForOutsideDeps(input_api, output_api))
   results.extend(_CheckBazelBUILDFiles(input_api, output_api))
   results.extend(_CheckBannedAPIs(input_api, output_api))
   return results

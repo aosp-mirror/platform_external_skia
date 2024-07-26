@@ -1004,7 +1004,7 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
 
 std::unique_ptr<Expression> FunctionCall::clone(Position pos) const {
     return std::make_unique<FunctionCall>(pos, &this->type(), &this->function(),
-                                          this->arguments().clone());
+                                          this->arguments().clone(), this->stableID());
 }
 
 std::string FunctionCall::description(OperatorPrecedence) const {
@@ -1246,6 +1246,21 @@ std::unique_ptr<Expression> FunctionCall::Make(const Context& context,
                                                const Type* returnType,
                                                const FunctionDeclaration& function,
                                                ExpressionArray arguments) {
+    // Synthesize a stable ID from the function-call position and module type.
+    uint32_t stableID = pos.valid() ? pos.startOffset() : 0x00FFFFFF;
+    SkASSERT(stableID < 0x01000000);
+
+    stableID |= SkToU32(context.fConfig->fModuleType) << 24;
+
+    return Make(context, pos, returnType, function, std::move(arguments), stableID);
+}
+
+std::unique_ptr<Expression> FunctionCall::Make(const Context& context,
+                                               Position pos,
+                                               const Type* returnType,
+                                               const FunctionDeclaration& function,
+                                               ExpressionArray arguments,
+                                               uint32_t stableID) {
     SkASSERT(function.parameters().size() == SkToSizeT(arguments.size()));
 
     // We might be able to optimize built-in intrinsics.
@@ -1261,7 +1276,8 @@ std::unique_ptr<Expression> FunctionCall::Make(const Context& context,
         }
     }
 
-    return std::make_unique<FunctionCall>(pos, returnType, &function, std::move(arguments));
+    return std::make_unique<FunctionCall>(pos, returnType, &function, std::move(arguments),
+                                          stableID);
 }
 
 }  // namespace SkSL
