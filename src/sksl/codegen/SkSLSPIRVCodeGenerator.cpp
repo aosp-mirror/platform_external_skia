@@ -262,7 +262,7 @@ private:
                          const MemoryLayout& memoryLayout,
                          StorageClass storageClass);
 
-    skia_private::TArray<SpvId> getAccessChain(const Expression& expr, OutputStream& out);
+    TArray<SpvId> getAccessChain(const Expression& expr, OutputStream& out);
 
     void writeLayout(const Layout& layout, SpvId target, Position pos);
 
@@ -306,13 +306,12 @@ private:
 
     SpvId writeIntrinsicCall(const FunctionCall& c, OutputStream& out);
 
-    SpvId writeFunctionCallArgument(
-            const FunctionCall& call,
-            int argIndex,
-            std::vector<TempVar>* tempVars,
-            OutputStream& out,
-            const Analysis::SpecializedParameters* specializedParams = nullptr,
-            SpvId* outSynthesizedSamplerId = nullptr);
+    void writeFunctionCallArgument(TArray<SpvId>& argumentList,
+                                   const FunctionCall& call,
+                                   int argIndex,
+                                   std::vector<TempVar>* tempVars,
+                                   const SkBitSet* specializedParams,
+                                   OutputStream& out);
 
     void copyBackTempVars(const std::vector<TempVar>& tempVars, OutputStream& out);
 
@@ -321,7 +320,7 @@ private:
 
     void writeGLSLExtendedInstruction(const Type& type, SpvId id, SpvId floatInst,
                                       SpvId signedInst, SpvId unsignedInst,
-                                      const skia_private::TArray<SpvId>& args, OutputStream& out);
+                                      const TArray<SpvId>& args, OutputStream& out);
 
     /**
      * Promotes an expression to a vector. If the expression is already a vector with vectorSize
@@ -337,7 +336,7 @@ private:
      * returns (vec2(float), vec2). It is an error to use mismatched vector sizes, e.g. (float,
      * vec2, vec3).
      */
-    skia_private::TArray<SpvId> vectorize(const ExpressionArray& args, OutputStream& out);
+    TArray<SpvId> vectorize(const ExpressionArray& args, OutputStream& out);
 
     /**
      * Given a SpvId of a scalar, splats it across the passed-in type (scalar, vector or matrix) and
@@ -374,9 +373,11 @@ private:
     SpvId writeMatrixCopy(SpvId src, const Type& srcType, const Type& dstType, OutputStream& out);
 
     void addColumnEntry(const Type& columnType,
-                        skia_private::TArray<SpvId>* currentColumn,
-                        skia_private::TArray<SpvId>* columnIds,
-                        int rows, SpvId entry, OutputStream& out);
+                        TArray<SpvId>* currentColumn,
+                        TArray<SpvId>* columnIds,
+                        int rows,
+                        SpvId entry,
+                        OutputStream& out);
 
     SpvId writeConstructorCompound(const ConstructorCompound& c, OutputStream& out);
 
@@ -544,29 +545,26 @@ private:
     struct Word;
     // 8 Words is enough for nearly all instructions (except variable-length instructions like
     // OpAccessChain or OpConstantComposite).
-    using Words = skia_private::STArray<8, Word, true>;
-    SpvId writeInstruction(
-            SpvOp_ opCode, const skia_private::TArray<Word, true>& words, OutputStream& out);
+    using Words = STArray<8, Word, true>;
+    SpvId writeInstruction(SpvOp_ opCode, const TArray<Word, true>& words, OutputStream& out);
 
     struct Instruction {
         SpvId fOp;
         int32_t fResultKind;
-        skia_private::STArray<8, int32_t>  fWords;
+        STArray<8, int32_t>  fWords;
 
         bool operator==(const Instruction& that) const;
         struct Hash;
     };
 
-    static Instruction BuildInstructionKey(SpvOp_ opCode,
-                                           const skia_private::TArray<Word, true>& words);
+    static Instruction BuildInstructionKey(SpvOp_ opCode, const TArray<Word, true>& words);
 
     // The writeOpXxxxx calls will simplify and deduplicate ops where possible.
     SpvId writeOpConstantTrue(const Type& type);
     SpvId writeOpConstantFalse(const Type& type);
     SpvId writeOpConstant(const Type& type, int32_t valueBits);
-    SpvId writeOpConstantComposite(const Type& type, const skia_private::TArray<SpvId>& values);
-    SpvId writeOpCompositeConstruct(const Type& type, const skia_private::TArray<SpvId>&,
-                                    OutputStream& out);
+    SpvId writeOpConstantComposite(const Type& type, const TArray<SpvId>& values);
+    SpvId writeOpCompositeConstruct(const Type& type, const TArray<SpvId>&, OutputStream& out);
     SpvId writeOpCompositeExtract(const Type& type, SpvId base, int component, OutputStream& out);
     SpvId writeOpCompositeExtract(const Type& type, SpvId base, int componentA, int componentB,
                                   OutputStream& out);
@@ -574,8 +572,8 @@ private:
     void writeOpStore(StorageClass storageClass, SpvId pointer, SpvId value, OutputStream& out);
 
     // Converts the provided SpvId(s) into an array of scalar OpConstants, if it can be done.
-    bool toConstants(SpvId value, skia_private::TArray<SpvId>* constants);
-    bool toConstants(SkSpan<const SpvId> values, skia_private::TArray<SpvId>* constants);
+    bool toConstants(SpvId value, TArray<SpvId>* constants);
+    bool toConstants(SkSpan<const SpvId> values, TArray<SpvId>* constants);
 
     // Extracts the requested component SpvId from a composite instruction, if it can be done.
     Instruction* resultTypeForInstruction(const Instruction& instr);
@@ -658,31 +656,14 @@ private:
     };
     Intrinsic getIntrinsic(IntrinsicKind) const;
 
-    struct SpecializedFunctionDeclaration {
-        struct Hash {
-            size_t operator()(const SpecializedFunctionDeclaration& entry) {
-                return SkGoodHash()(entry.fDeclaration) ^ SkGoodHash()(entry.fSpecializationIndex);
-            }
-        };
-
-        bool operator==(const SpecializedFunctionDeclaration& other) const {
-            return fDeclaration == other.fDeclaration &&
-                   fSpecializationIndex == other.fSpecializationIndex;
-        }
-
-        const FunctionDeclaration* fDeclaration;
-        Analysis::SpecializationIndex fSpecializationIndex;
-    };
-
-    skia_private::
-            THashMap<SpecializedFunctionDeclaration, SpvId, SpecializedFunctionDeclaration::Hash>
-                    fFunctionMap;
+    THashMap<Analysis::SpecializedFunctionKey, SpvId, Analysis::SpecializedFunctionKey::Hash>
+            fFunctionMap;
 
     Analysis::SpecializationIndex fInheritedSpecializationIndex = Analysis::kUnspecialized;
     Analysis::SpecializationInfo fSpecializationInfo;
 
-    skia_private::THashMap<const Variable*, SpvId> fVariableMap;
-    skia_private::THashMap<const Type*, SpvId> fStructMap;
+    THashMap<const Variable*, SpvId> fVariableMap;
+    THashMap<const Type*, SpvId> fStructMap;
     StringStream fGlobalInitializersBuffer;
     StringStream fConstantBuffer;
     StringStream fVariableBuffer;
@@ -702,7 +683,7 @@ private:
         std::unique_ptr<Variable> fTexture;
         std::unique_ptr<Variable> fSampler;
     };
-    skia_private::THashMap<const Variable*, std::unique_ptr<SynthesizedTextureSamplerPair>>
+    THashMap<const Variable*, std::unique_ptr<SynthesizedTextureSamplerPair>>
             fSynthesizedSamplerMap;
 
     // These caches map SpvIds to Instructions, and vice-versa. This enables us to deduplicate code
@@ -711,11 +692,11 @@ private:
     // it back to its source).
 
     // A map of instruction -> SpvId:
-    skia_private::THashMap<Instruction, SpvId, Instruction::Hash> fOpCache;
+    THashMap<Instruction, SpvId, Instruction::Hash> fOpCache;
     // A map of SpvId -> instruction:
-    skia_private::THashMap<SpvId, Instruction> fSpvIdCache;
+    THashMap<SpvId, Instruction> fSpvIdCache;
     // A map of SpvId -> value SpvId:
-    skia_private::THashMap<SpvId, SpvId> fStoreCache;
+    THashMap<SpvId, SpvId> fStoreCache;
 
     // "Reachable" ops are instructions which can safely be accessed from the current block.
     // For instance, if our SPIR-V contains `%3 = OpFAdd %1 %2`, we would be able to access and
@@ -743,8 +724,7 @@ private:
     // interface block.
     UniformBuffer fUniformBuffer;
     std::vector<const VarDeclaration*> fTopLevelUniforms;
-    skia_private::THashMap<const Variable*, int>
-            fTopLevelUniformMap;  // <var, UniformBuffer field index>
+    THashMap<const Variable*, int> fTopLevelUniformMap;  // <var, UniformBuffer field index>
     SpvId fUniformBufferId = NA;
 
     friend class PointerLValue;
@@ -2024,7 +2004,8 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
             argumentIds.reserve_exact(arguments.size());
             std::vector<TempVar> tempVars;
             for (int i = 0; i < arguments.size(); i++) {
-                argumentIds.push_back(this->writeFunctionCallArgument(c, i, &tempVars, out));
+                this->writeFunctionCallArgument(argumentIds, c, i, &tempVars,
+                                                /*specializedParams=*/nullptr, out);
             }
             this->writeOpCode(SpvOpExtInst, 5 + (int32_t) argumentIds.size(), out);
             this->writeWord(this->getType(c.type()), out);
@@ -2047,7 +2028,8 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
             argumentIds.reserve_exact(arguments.size());
             std::vector<TempVar> tempVars;
             for (int i = 0; i < arguments.size(); i++) {
-                argumentIds.push_back(this->writeFunctionCallArgument(c, i, &tempVars, out));
+                this->writeFunctionCallArgument(argumentIds, c, i, &tempVars,
+                                                /*specializedParams=*/nullptr, out);
             }
             if (!c.type().isVoid()) {
                 this->writeOpCode((SpvOp_) intrinsicId, 3 + (int32_t) arguments.size(), out);
@@ -2546,24 +2528,23 @@ SpvId SPIRVCodeGenerator::writeAtomicIntrinsic(const FunctionCall& c,
     return resultId;
 }
 
-SpvId SPIRVCodeGenerator::writeFunctionCallArgument(
-        const FunctionCall& call,
-        int argIndex,
-        std::vector<TempVar>* tempVars,
-        OutputStream& out,
-        const Analysis::SpecializedParameters* specializedParams,
-        SpvId* outSynthesizedSamplerId) {
+void SPIRVCodeGenerator::writeFunctionCallArgument(TArray<SpvId>& argumentList,
+                                                   const FunctionCall& call,
+                                                   int argIndex,
+                                                   std::vector<TempVar>* tempVars,
+                                                   const SkBitSet* specializedParams,
+                                                   OutputStream& out) {
     const FunctionDeclaration& funcDecl = call.function();
     const Expression& arg = *call.arguments()[argIndex];
     const Variable* param = funcDecl.parameters()[argIndex];
-    bool paramIsSpecialized = specializedParams && specializedParams->find(param);
+    bool paramIsSpecialized = specializedParams && specializedParams->test(argIndex);
     ModifierFlags paramFlags = param->modifierFlags();
 
     // Ignore the argument since it is specialized, if fUseTextureSamplerPairs is true and this
     // argument is a sampler, handle ignoring the sampler below when generating the texture and
     // sampler pair arguments.
     if (paramIsSpecialized && !(param->type().isSampler() && fUseTextureSamplerPairs)) {
-        return NA;
+        return;
     }
 
     if (arg.is<VariableReference>() && (arg.type().typeKind() == Type::TypeKind::kSampler ||
@@ -2581,24 +2562,25 @@ SpvId SPIRVCodeGenerator::writeFunctionCallArgument(
         // In Dawn-mode the texture and sampler arguments are forwarded to the helper function.
         if (fUseTextureSamplerPairs && var->type().isSampler()) {
             if (const auto* p = fSynthesizedSamplerMap.find(var)) {
-                SkASSERT(outSynthesizedSamplerId);
-
                 SpvId* img = fVariableMap.find((*p)->fTexture.get());
                 SkASSERT(img);
+
+                argumentList.push_back(*img);
 
                 if (!paramIsSpecialized) {
                     SpvId* sampler = fVariableMap.find((*p)->fSampler.get());
                     SkASSERT(sampler);
-                    *outSynthesizedSamplerId = *sampler;
+                    argumentList.push_back(*sampler);
                 }
-                return *img;
+                return;
             }
             SkDEBUGFAIL("sampler missing from fSynthesizedSamplerMap");
         }
 
         SpvId* entry = fVariableMap.find(var);
         SkASSERTF(entry, "%s", arg.description().c_str());
-        return *entry;
+        argumentList.push_back(*entry);
+        return;
     }
     SkASSERT(!paramIsSpecialized);
 
@@ -2621,7 +2603,8 @@ SpvId SPIRVCodeGenerator::writeFunctionCallArgument(
         tempVars->push_back(TempVar{tmpVar, &arg.type(), std::move(lv)});
     } else if (funcDecl.isIntrinsic()) {
         // Unlike user function calls, non-out intrinsic arguments don't need pointer parameters.
-        return this->writeExpression(arg, out);
+        argumentList.push_back(this->writeExpression(arg, out));
+        return;
     } else {
         // We always use pointer parameters when calling user functions.
         // See getFunctionParameterType for further explanation.
@@ -2636,7 +2619,7 @@ SpvId SPIRVCodeGenerator::writeFunctionCallArgument(
     if (tmpValueId != NA) {
         this->writeOpStore(StorageClass::kFunction, tmpVar, tmpValueId, out);
     }
-    return tmpVar;
+    argumentList.push_back(tmpVar);
 }
 
 void SPIRVCodeGenerator::copyBackTempVars(const std::vector<TempVar>& tempVars, OutputStream& out) {
@@ -2648,46 +2631,34 @@ void SPIRVCodeGenerator::copyBackTempVars(const std::vector<TempVar>& tempVars, 
 }
 
 SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream& out) {
+    // Handle intrinsics.
     const FunctionDeclaration& function = c.function();
     if (function.isIntrinsic() && !function.definition()) {
         return this->writeIntrinsicCall(c, out);
     }
-    const ExpressionArray& arguments = c.arguments();
 
-    const Analysis::SpecializationIndex* specializationIndex =
-            fSpecializationInfo.fSpecializedCallMap.find({&c, fInheritedSpecializationIndex});
-
-    SpvId* entry = fFunctionMap.find(
-            {&function, specializationIndex ? *specializationIndex : Analysis::kUnspecialized});
+    // Look up this function (or its specialization, if any) in our map of function SpvIds.
+    Analysis::SpecializationIndex specializationIndex = Analysis::FindSpecializationIndexForCall(
+            c, fSpecializationInfo, fInheritedSpecializationIndex);
+    SpvId* entry = fFunctionMap.find({&function, specializationIndex});
     if (!entry) {
         fContext.fErrors->error(c.fPosition, "function '" + function.description() +
-                "' is not defined");
+                                             "' is not defined");
         return NA;
     }
 
     // If we are calling a specialized function, we need to gather the specialized parameters
     // so we can remove them from the argument list.
-    const Analysis::SpecializedParameters* specializedParams = nullptr;
-    if (specializationIndex) {
-        Analysis::Specializations* specializations =
-                fSpecializationInfo.fSpecializationMap.find(&function);
-        SkASSERT(specializations);
-        specializedParams = &specializations->at(*specializationIndex);
-    }
+    SkBitSet specializedParams =
+            Analysis::FindSpecializedParametersForFunction(c.function(), fSpecializationInfo);
+
     // Temp variables are used to write back out-parameters after the function call is complete.
+    const ExpressionArray& arguments = c.arguments();
     std::vector<TempVar> tempVars;
     TArray<SpvId> argumentIds;
     argumentIds.reserve_exact(arguments.size());
     for (int i = 0; i < arguments.size(); i++) {
-        SpvId samplerId = NA;
-        SpvId argId = this->writeFunctionCallArgument(c, i, &tempVars, out,
-                                                      specializedParams, &samplerId);
-        if (argId != NA) {
-            argumentIds.push_back(argId);
-        }
-        if (samplerId != NA) {
-            argumentIds.push_back(samplerId);
-        }
+        this->writeFunctionCallArgument(argumentIds, c, i, &tempVars, &specializedParams, out);
     }
     SpvId result = this->nextId(nullptr);
     this->writeOpCode(SpvOpFunctionCall, 4 + (int32_t)argumentIds.size(), out);
@@ -4429,22 +4400,26 @@ void SPIRVCodeGenerator::writeFunctionStart(
     this->writeInstruction(SpvOpFunction, returnTypeId, result,
                            SpvFunctionControlMaskNone, functionTypeId, out);
     std::string mangledName = f.mangledName();
-    if (specializedParams) {
-        // Loop through parameters to construct the specialized name so the specialized name has
-        // a consistent order.
-        for (const Variable* parameter : f.parameters()) {
-            if (const Variable** uniform = specializedParams->find(parameter)) {
-                mangledName += "_" + std::string((*uniform)->name());
-            }
-        }
-    }
+
+    // For specialized functions, tack on `_param1_param2` to the function name.
+    Analysis::GetParameterMappingsForFunction(
+            f, fSpecializationInfo, specializationIndex,
+            [&](int, const Variable*, const Expression* expr) {
+                mangledName += '_';
+                mangledName += expr->description();
+            });
+
     this->writeInstruction(SpvOpName,
                            result,
                            std::string_view(mangledName.c_str(), mangledName.size()),
                            fNameBuffer);
     for (const Variable* parameter : f.parameters()) {
-        const Variable** specializedVar =
+        const Expression** specializedExpr =
                 specializedParams ? specializedParams->find(parameter) : nullptr;
+        const Variable* specializedVar =
+                specializedExpr && (*specializedExpr)->is<VariableReference>()
+                        ? (*specializedExpr)->as<VariableReference>().variable()
+                        : nullptr;
 
         if (fUseTextureSamplerPairs && parameter->type().isSampler()) {
             auto [texture, sampler] = this->synthesizeTextureAndSampler(*parameter);
@@ -4456,7 +4431,7 @@ void SPIRVCodeGenerator::writeFunctionStart(
             this->writeInstruction(SpvOpFunctionParameter, textureType, textureId, out);
 
             if (specializedVar) {
-                const auto* p = fSynthesizedSamplerMap.find(*specializedVar);
+                const auto* p = fSynthesizedSamplerMap.find(specializedVar);
                 SkASSERT(p);
                 const SpvId* uniformId = fVariableMap.find((*p)->fSampler.get());
                 SkASSERT(uniformId);
@@ -4471,7 +4446,7 @@ void SPIRVCodeGenerator::writeFunctionStart(
             }
         } else {
             if (specializedVar) {
-                const SpvId* uniformId = fVariableMap.find(*specializedVar);
+                const SpvId* uniformId = fVariableMap.find(specializedVar);
                 SkASSERT(uniformId);
                 fVariableMap.set(parameter, *uniformId);
             } else {
@@ -5141,8 +5116,8 @@ SPIRVCodeGenerator::EntrypointAdapter SPIRVCodeGenerator::writeEntrypointAdapter
         args.push_back(ConstructorCompound::MakeFromConstants(fContext, Position{},
                                                               *fContext.fTypes.fFloat2, kZero));
     }
-    auto callMainFn = std::make_unique<FunctionCall>(Position(), &main.returnType(), &main,
-                                                     std::move(args));
+    auto callMainFn = FunctionCall::Make(fContext, Position(), &main.returnType(),
+                                         main, std::move(args));
 
     // Synthesize `skFragColor = main()` as a BinaryExpression.
     auto assignmentStmt = std::make_unique<ExpressionStatement>(std::make_unique<BinaryExpression>(
@@ -5171,8 +5146,7 @@ SPIRVCodeGenerator::EntrypointAdapter SPIRVCodeGenerator::writeEntrypointAdapter
     adapter.entrypointDef = FunctionDefinition::Convert(fContext,
                                                         Position(),
                                                         *adapter.entrypointDecl,
-                                                        std::move(entrypointBlock),
-                                                        /*builtin=*/false);
+                                                        std::move(entrypointBlock));
 
     adapter.entrypointDecl->setDefinition(adapter.entrypointDef.get());
     return adapter;
@@ -5292,6 +5266,11 @@ std::tuple<const Variable*, const Variable*> SPIRVCodeGenerator::synthesizeTextu
         const Variable& combinedSampler) {
     SkASSERT(fUseTextureSamplerPairs);
     SkASSERT(combinedSampler.type().typeKind() == Type::TypeKind::kSampler);
+
+    if (std::unique_ptr<SynthesizedTextureSamplerPair>* existingData =
+            fSynthesizedSamplerMap.find(&combinedSampler)) {
+        return {(*existingData)->fTexture.get(), (*existingData)->fSampler.get()};
+    }
 
     auto data = std::make_unique<SynthesizedTextureSamplerPair>();
 
@@ -5505,7 +5484,8 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
     } else {
         SK_ABORT("cannot write this kind of program to SPIR-V\n");
     }
-    SpvId entryPoint = fFunctionMap[{main, Analysis::kUnspecialized}];
+    const Analysis::SpecializedFunctionKey mainKey{main, Analysis::kUnspecialized};
+    SpvId entryPoint = fFunctionMap[mainKey];
     this->writeWord(entryPoint, out);
     this->writeString(main->name(), out);
     for (int var : interfaceVars) {
@@ -5513,12 +5493,12 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
     }
     if (ProgramConfig::IsFragment(program.fConfig->fKind)) {
         this->writeInstruction(SpvOpExecutionMode,
-                               fFunctionMap[{main, Analysis::kUnspecialized}],
+                               fFunctionMap[mainKey],
                                SpvExecutionModeOriginUpperLeft,
                                out);
     } else if (ProgramConfig::IsCompute(program.fConfig->fKind)) {
         this->writeInstruction(SpvOpExecutionMode,
-                               fFunctionMap[{main, Analysis::kUnspecialized}],
+                               fFunctionMap[mainKey],
                                SpvExecutionModeLocalSize,
                                localSizeX, localSizeY, localSizeZ,
                                out);

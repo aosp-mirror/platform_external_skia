@@ -9,6 +9,7 @@
 
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkSpan_impl.h"
+#include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLDefines.h"
 #include "src/sksl/analysis/SkSLProgramVisitor.h"
 #include "src/sksl/ir/SkSLExpression.h"
@@ -24,30 +25,30 @@
 #include <memory>
 #include <vector>
 
-namespace SkSL {
-
 using namespace skia_private;
 
-template <typename K, typename V>
-static bool maps_are_equal(const THashMap<K, V>& left, const THashMap<K, V>& right) {
+namespace SkSL::Analysis {
+
+static bool parameter_mappings_are_equal(const SpecializedParameters& left,
+                                         const SpecializedParameters& right) {
     if (left.count() != right.count()) {
         return false;
     }
-    for (const auto& [key, leftValue] : left) {
-        const V* rightValue = right.find(key);
-        if (!rightValue) {
+    for (const auto& [key, leftExpr] : left) {
+        const Expression** rightExpr = right.find(key);
+        if (!rightExpr) {
             return false;
         }
-        if (leftValue != *rightValue) {
+        if (!Analysis::IsSameExpressionTree(*leftExpr, **rightExpr)) {
             return false;
         }
     }
     return true;
 }
 
-void Analysis::FindFunctionsToSpecialize(const Program& program,
-                                         SpecializationInfo* info,
-                                         const ParameterMatchesFn& parameterMatchesFn) {
+void FindFunctionsToSpecialize(const Program& program,
+                               SpecializationInfo* info,
+                               const ParameterMatchesFn& parameterMatchesFn) {
     class Searcher : public ProgramVisitor {
     public:
         using ProgramVisitor::visitProgramElement;
@@ -88,12 +89,12 @@ void Analysis::FindFunctionsToSpecialize(const Program& program,
                         }
 
                         if (var->storage() == Variable::Storage::kGlobal) {
-                            specialization[param] = var;
+                            specialization[param] = &arg;
                         } else if (var->storage() == Variable::Storage::kParameter) {
-                            const Variable** uniformVar = fInheritedSpecializations.find(var);
-                            SkASSERT(uniformVar);
+                            const Expression** uniformExpr = fInheritedSpecializations.find(var);
+                            SkASSERT(uniformExpr);
 
-                            specialization[param] = *uniformVar;
+                            specialization[param] = *uniformExpr;
                         } else {
                             // TODO(b/353532475): Report an error instead of aborting.
                             SK_ABORT("Specialization requires a uniform or parameter variable");
@@ -104,12 +105,14 @@ void Analysis::FindFunctionsToSpecialize(const Program& program,
                     // variables to specialize on.
                     if (specialization.count() > 0) {
                         Specializations& specializations = fSpecializationMap[&decl];
+                        SpecializedCallKey callKey{call.stablePointer(),
+                                                   fInheritedSpecializationIndex};
 
                         for (int i = 0; i < specializations.size(); i++) {
                             const SpecializedParameters& entry = specializations[i];
-                            if (maps_are_equal(specialization, entry)) {
+                            if (parameter_mappings_are_equal(specialization, entry)) {
                                 // This specialization has already been tracked.
-                                fSpecializedCallMap[{&call, fInheritedSpecializationIndex}] = i;
+                                fSpecializedCallMap[callKey] = i;
                                 return INHERITED::visitExpression(expr);
                             }
                         }
@@ -118,8 +121,7 @@ void Analysis::FindFunctionsToSpecialize(const Program& program,
                         // requires, also tracking the inherited specialization this function
                         // call is in so the right specialized function can be called.
                         SpecializationIndex specializationIndex = specializations.size();
-                        fSpecializedCallMap[{&call, fInheritedSpecializationIndex}] =
-                                specializationIndex;
+                        fSpecializedCallMap[callKey] = specializationIndex;
                         specializations.push_back(specialization);
 
                         // We swap so we don't lose when our last inherited specializations were
@@ -157,4 +159,49 @@ void Analysis::FindFunctionsToSpecialize(const Program& program,
     }
 }
 
-}  // namespace SkSL
+SpecializationIndex FindSpecializationIndexForCall(const FunctionCall& call,
+                                                   const SpecializationInfo& info,
+                                                   SpecializationIndex parentSpecializationIndex) {
+    SpecializedCallKey callKey{call.stablePointer(), parentSpecializationIndex};
+    SpecializationIndex* foundIndex = info.fSpecializedCallMap.find(callKey);
+    return foundIndex ? *foundIndex : kUnspecialized;
+}
+
+SkBitSet FindSpecializedParametersForFunction(const FunctionDeclaration& func,
+                                              const SpecializationInfo& info) {
+    SkBitSet result(func.parameters().size());
+    if (const Specializations* specializations = info.fSpecializationMap.find(&func)) {
+        const Analysis::SpecializedParameters& specializedParams = specializations->front();
+        const SkSpan<Variable* const> funcParams = func.parameters();
+
+        for (size_t index = 0; index < funcParams.size(); ++index) {
+            if (specializedParams.find(funcParams[index])) {
+                result.set(index);
+            }
+        }
+    }
+
+    return result;
+}
+
+void GetParameterMappingsForFunction(const FunctionDeclaration& func,
+                                     const SpecializationInfo& info,
+                                     SpecializationIndex specializationIndex,
+                                     const ParameterMappingCallback& callback) {
+    if (specializationIndex != Analysis::kUnspecialized) {
+        if (const Specializations* specializations = info.fSpecializationMap.find(&func)) {
+            const Analysis::SpecializedParameters& specializedParams =
+                    specializations->at(specializationIndex);
+            const SkSpan<Variable* const> funcParams = func.parameters();
+
+            for (size_t index = 0; index < funcParams.size(); ++index) {
+                const Variable* param = funcParams[index];
+                if (const Expression** expr = specializedParams.find(param)) {
+                    callback(index, param, *expr);
+                }
+            }
+        }
+    }
+}
+
+}  // namespace SkSL::Analysis
