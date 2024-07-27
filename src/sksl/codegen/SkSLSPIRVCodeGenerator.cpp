@@ -25,6 +25,7 @@
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLIntrinsicList.h"
 #include "src/sksl/SkSLMemoryLayout.h"
+#include "src/sksl/SkSLModule.h"
 #include "src/sksl/SkSLOperator.h"
 #include "src/sksl/SkSLOutputStream.h"
 #include "src/sksl/SkSLPool.h"
@@ -2650,7 +2651,7 @@ SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream&
     // If we are calling a specialized function, we need to gather the specialized parameters
     // so we can remove them from the argument list.
     SkBitSet specializedParams =
-            Analysis::FindSpecializedArgumentsForCall(c, fSpecializationInfo, specializationIndex);
+            Analysis::FindSpecializedParametersForFunction(c.function(), fSpecializationInfo);
 
     // Temp variables are used to write back out-parameters after the function call is complete.
     const ExpressionArray& arguments = c.arguments();
@@ -4400,18 +4401,15 @@ void SPIRVCodeGenerator::writeFunctionStart(
     this->writeInstruction(SpvOpFunction, returnTypeId, result,
                            SpvFunctionControlMaskNone, functionTypeId, out);
     std::string mangledName = f.mangledName();
-    if (specializedParams) {
-        // Loop through parameters to construct the specialized name so the specialized name has
-        // a consistent order.
-        for (const Variable* parameter : f.parameters()) {
-            if (const Expression** uniformExprPtr = specializedParams->find(parameter)) {
-                const Expression* uniformExpr = *uniformExprPtr;
-                SkASSERT(uniformExpr->is<VariableReference>());
 
-                mangledName += "_" + uniformExpr->description();
-            }
-        }
-    }
+    // For specialized functions, tack on `_param1_param2` to the function name.
+    Analysis::GetParameterMappingsForFunction(
+            f, fSpecializationInfo, specializationIndex,
+            [&](int, const Variable*, const Expression* expr) {
+                mangledName += '_';
+                mangledName += expr->description();
+            });
+
     this->writeInstruction(SpvOpName,
                            result,
                            std::string_view(mangledName.c_str(), mangledName.size()),
@@ -5119,8 +5117,9 @@ SPIRVCodeGenerator::EntrypointAdapter SPIRVCodeGenerator::writeEntrypointAdapter
         args.push_back(ConstructorCompound::MakeFromConstants(fContext, Position{},
                                                               *fContext.fTypes.fFloat2, kZero));
     }
-    auto callMainFn = FunctionCall::Make(fContext, Position(), &main.returnType(), main,
-                                         std::move(args));
+    uint32_t callMainStableID = FunctionCall::MakeStableID(ModuleType::unknown, Position());
+    auto callMainFn = FunctionCall::Make(fContext, Position(), &main.returnType(),
+                                         main, std::move(args), callMainStableID);
 
     // Synthesize `skFragColor = main()` as a BinaryExpression.
     auto assignmentStmt = std::make_unique<ExpressionStatement>(std::make_unique<BinaryExpression>(
@@ -5149,8 +5148,7 @@ SPIRVCodeGenerator::EntrypointAdapter SPIRVCodeGenerator::writeEntrypointAdapter
     adapter.entrypointDef = FunctionDefinition::Convert(fContext,
                                                         Position(),
                                                         *adapter.entrypointDecl,
-                                                        std::move(entrypointBlock),
-                                                        /*builtin=*/false);
+                                                        std::move(entrypointBlock));
 
     adapter.entrypointDecl->setDefinition(adapter.entrypointDef.get());
     return adapter;
