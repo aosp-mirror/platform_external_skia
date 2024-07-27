@@ -638,8 +638,7 @@ bool Parser::prototypeFunction(SkSL::FunctionDeclaration* decl) {
     if (!decl) {
         return false;
     }
-    fProgramElements.push_back(std::make_unique<SkSL::FunctionPrototype>(
-            decl->fPosition, decl, fCompiler.context().fConfig->isBuiltinCode()));
+    fProgramElements.push_back(std::make_unique<SkSL::FunctionPrototype>(decl->fPosition, decl));
     return true;
 }
 
@@ -675,8 +674,7 @@ bool Parser::defineFunction(SkSL::FunctionDeclaration* decl) {
     std::unique_ptr<FunctionDefinition> function = FunctionDefinition::Convert(context,
                                                                                pos,
                                                                                *decl,
-                                                                               std::move(block),
-                                                                               /*builtin=*/false);
+                                                                               std::move(block));
     if (!function) {
         return false;
     }
