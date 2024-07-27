@@ -14,7 +14,6 @@
 #include "src/utils/SkBitSet.h"
 
 #include <cstddef>
-#include <cstdint>
 #include <functional>
 
 namespace SkSL {
@@ -64,17 +63,17 @@ struct SpecializedFunctionKey {
 struct SpecializedCallKey {
     struct Hash {
         size_t operator()(const SpecializedCallKey& entry) {
-            return SkGoodHash()(entry.fStableID) ^
+            return SkGoodHash()(entry.fStablePointer) ^
                    SkGoodHash()(entry.fParentSpecializationIndex);
         }
     };
 
     bool operator==(const SpecializedCallKey& other) const {
-        return fStableID == other.fStableID &&
+        return fStablePointer == other.fStablePointer &&
                fParentSpecializationIndex == other.fParentSpecializationIndex;
     }
 
-    const uint32_t fStableID = 0;
+    const FunctionCall* fStablePointer = nullptr;
     SpecializationIndex fParentSpecializationIndex = Analysis::kUnspecialized;
 };
 
@@ -106,12 +105,22 @@ SpecializationIndex FindSpecializationIndexForCall(const FunctionCall& call,
                                                    const SpecializationInfo& info,
                                                    SpecializationIndex activeSpecializationIndex);
 
-// Given a function call and its specialization index (determined via FindSpecializationIndexForCall
-// above), returns a bit-mask corresponding to each argument of the call. If a bit is set, the
-// argument is specialized and should be excluded from the argument list.
-SkBitSet FindSpecializedArgumentsForCall(const FunctionCall& call,
-                                         const SpecializationInfo& info,
-                                         SpecializationIndex specIndex);
+// Given a function, returns a bit-mask corresponding to each parameter. If a bit is set, the
+// corresponding parameter is specialized and should be excluded from the argument/parameter list.
+SkBitSet FindSpecializedParametersForFunction(const FunctionDeclaration& func,
+                                              const SpecializationInfo& info);
+
+// Given a function and its specialization index, invokes a callback once per specialized parameter.
+// The callback will be passed the parameter's index, the parameter variable, and the specialized
+// value at the given specialization index.
+using ParameterMappingCallback = std::function<void(int paramIndex,
+                                                    const Variable* param,
+                                                    const Expression* value)>;
+
+void GetParameterMappingsForFunction(const FunctionDeclaration& func,
+                                     const SpecializationInfo& info,
+                                     SpecializationIndex specializationIndex,
+                                     const ParameterMappingCallback& callback);
 
 }  // namespace Analysis
 }  // namespace SkSL

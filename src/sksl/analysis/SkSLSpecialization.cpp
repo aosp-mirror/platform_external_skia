@@ -105,7 +105,8 @@ void FindFunctionsToSpecialize(const Program& program,
                     // variables to specialize on.
                     if (specialization.count() > 0) {
                         Specializations& specializations = fSpecializationMap[&decl];
-                        SpecializedCallKey callKey{call.stableID(), fInheritedSpecializationIndex};
+                        SpecializedCallKey callKey{call.stablePointer(),
+                                                   fInheritedSpecializationIndex};
 
                         for (int i = 0; i < specializations.size(); i++) {
                             const SpecializedParameters& entry = specializations[i];
@@ -161,22 +162,17 @@ void FindFunctionsToSpecialize(const Program& program,
 SpecializationIndex FindSpecializationIndexForCall(const FunctionCall& call,
                                                    const SpecializationInfo& info,
                                                    SpecializationIndex parentSpecializationIndex) {
-    SpecializedCallKey callKey{call.stableID(), parentSpecializationIndex};
+    SpecializedCallKey callKey{call.stablePointer(), parentSpecializationIndex};
     SpecializationIndex* foundIndex = info.fSpecializedCallMap.find(callKey);
     return foundIndex ? *foundIndex : kUnspecialized;
 }
 
-SkBitSet FindSpecializedArgumentsForCall(const FunctionCall& call,
-                                         const SpecializationInfo& info,
-                                         SpecializationIndex specIndex) {
-    SkBitSet result(call.arguments().size());
-    if (specIndex != Analysis::kUnspecialized) {
-        const FunctionDeclaration& func = call.function();
-        const Specializations* specializations = info.fSpecializationMap.find(&func);
-        SkASSERT(specializations);
-
+SkBitSet FindSpecializedParametersForFunction(const FunctionDeclaration& func,
+                                              const SpecializationInfo& info) {
+    SkBitSet result(func.parameters().size());
+    if (const Specializations* specializations = info.fSpecializationMap.find(&func)) {
+        const Analysis::SpecializedParameters& specializedParams = specializations->front();
         const SkSpan<Variable* const> funcParams = func.parameters();
-        const Analysis::SpecializedParameters& specializedParams = specializations->at(specIndex);
 
         for (size_t index = 0; index < funcParams.size(); ++index) {
             if (specializedParams.find(funcParams[index])) {
@@ -186,6 +182,26 @@ SkBitSet FindSpecializedArgumentsForCall(const FunctionCall& call,
     }
 
     return result;
+}
+
+void GetParameterMappingsForFunction(const FunctionDeclaration& func,
+                                     const SpecializationInfo& info,
+                                     SpecializationIndex specializationIndex,
+                                     const ParameterMappingCallback& callback) {
+    if (specializationIndex != Analysis::kUnspecialized) {
+        if (const Specializations* specializations = info.fSpecializationMap.find(&func)) {
+            const Analysis::SpecializedParameters& specializedParams =
+                    specializations->at(specializationIndex);
+            const SkSpan<Variable* const> funcParams = func.parameters();
+
+            for (size_t index = 0; index < funcParams.size(); ++index) {
+                const Variable* param = funcParams[index];
+                if (const Expression** expr = specializedParams.find(param)) {
+                    callback(index, param, *expr);
+                }
+            }
+        }
+    }
 }
 
 }  // namespace SkSL::Analysis
