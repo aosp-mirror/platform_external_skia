@@ -108,8 +108,6 @@ public:
     uint32_t width() const { return fWidth; }
     uint32_t height() const { return fHeight; }
 
-    virtual void freeAll() {}
-
 protected:
     // The 'transform' has been adjusted to draw the Shape into a logical image from (0,0) to
     // 'maskSize'. The actual rendering into the returned TextureProxy will need to be further
@@ -139,9 +137,7 @@ protected:
                                        AtlasLocator* locator);
         bool recordUploads(DrawContext*, Recorder*);
         void evict(PlotLocator) override;
-        void postFlush(Recorder*);
-
-        void freeAll();
+        void compact(Recorder*);
 
     protected:
         DrawAtlasMgr(size_t width, size_t height,
