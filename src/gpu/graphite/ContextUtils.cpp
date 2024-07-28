@@ -97,7 +97,12 @@ DstReadRequirement GetDstReadRequirement(const Caps* caps,
                                          Coverage coverage) {
     // If the blend mode is absent, this is assumed to be for a runtime blender, for which we always
     // do a dst read.
-    if (!blendMode || *blendMode > SkBlendMode::kLastCoeffMode) {
+    // If the blend mode is plus, always do in-shader blending since we may be drawing to an
+    // unsaturated surface (e.g. F16) and we don't want to let the hardware clamp the color output
+    // in that case. We could check the draw dst properties to only do in-shader blending with plus
+    // when necessary, but we can't detect that during shader precompilation.
+    if (!blendMode || *blendMode > SkBlendMode::kLastCoeffMode ||
+        *blendMode == SkBlendMode::kPlus) {
         return caps->getDstReadRequirement();
     }
 
@@ -371,12 +376,6 @@ std::string EmitUniformsFromStorageBuffer(const char* bufferNamePrefix,
     return result;
 }
 
-std::string EmitStorageBufferAccess(const char* bufferNamePrefix,
-                                    const char* ssboIndex,
-                                    const char* uniformName) {
-    return SkSL::String::printf("%sUniformData[%s].%s", bufferNamePrefix, ssboIndex, uniformName);
-}
-
 std::string EmitTexturesAndSamplers(const ResourceBindingRequirements& bindingReqs,
                                     SkSpan<const ShaderNode*> nodes,
                                     int* binding) {
@@ -575,17 +574,14 @@ FragSkSLInfo BuildFragmentSkSL(const Caps* caps,
         return {};
     }
 
-    const char* shadingSsboIndex =
-            useStorageBuffers && step->performsShading() ? "shadingSsboIndex" : nullptr;
-    ShaderInfo shaderInfo(paintID, dict, rteDict, shadingSsboIndex);
-
+    ShaderInfo shaderInfo(paintID, dict, rteDict, useStorageBuffers);
     result.fSkSL = shaderInfo.toSkSL(caps,
                                      step,
-                                     useStorageBuffers,
-                                     &result.fNumTexturesAndSamplers,
-                                     &result.fHasPaintUniforms,
-                                     &result.fHasGradientBuffer,
                                      writeSwizzle);
+
+    result.fNumTexturesAndSamplers = shaderInfo.numTexturesAndSamplers();
+    result.fHasPaintUniforms = shaderInfo.hasPaintUniforms();
+    result.fHasGradientBuffer = shaderInfo.hasGradientBuffer();
 
     // Extract blend info after integrating the RenderStep into the final fragment shader in case
     // that changes the HW blending choice to handle analytic coverage.

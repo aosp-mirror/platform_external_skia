@@ -189,4 +189,20 @@ bool DawnCompileWGSLShaderModule(const DawnSharedContext* sharedContext,
     return check_shader_module(sharedContext, module, wgsl.c_str(), errorHandler);
 }
 
+#if !defined(__EMSCRIPTEN__)
+namespace ycbcrUtils {
+
+bool DawnDescriptorIsValid(const wgpu::YCbCrVkDescriptor& desc) {
+    static const wgpu::YCbCrVkDescriptor kDefaultYcbcrDescriptor = {};
+    return !DawnDescriptorsAreEquivalent(desc, kDefaultYcbcrDescriptor);
+}
+
+bool DawnDescriptorUsesExternalFormat(const wgpu::YCbCrVkDescriptor& desc) {
+    SkASSERT(desc.externalFormat != 0 || desc.vkFormat != 0);
+    return desc.externalFormat != 0;
+}
+
+} // namespace ycbcrUtils
+#endif // !defined(__EMSCRIPTEN__)
+
 } // namespace skgpu::graphite
