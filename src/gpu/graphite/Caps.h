@@ -23,7 +23,7 @@
 #include "src/text/gpu/SDFTControl.h"
 
 #if defined(GRAPHITE_TEST_UTILS)
-#include "include/private/gpu/graphite/ContextOptionsPriv.h"
+#include "src/gpu/graphite/ContextOptionsPriv.h"
 #endif
 
 enum class SkBlendMode;
@@ -245,7 +245,7 @@ public:
     bool gradientBufferSupport() const {
         return fStorageBufferSupport &&
                (fResourceBindingReqs.fStorageBufferLayout == Layout::kStd430 ||
-                    fResourceBindingReqs.fStorageBufferLayout == Layout::kMetal);
+                fResourceBindingReqs.fStorageBufferLayout == Layout::kMetal);
     }
 
     // Returns whether a draw buffer can be mapped.

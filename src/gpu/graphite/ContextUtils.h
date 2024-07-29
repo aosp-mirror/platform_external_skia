@@ -46,8 +46,6 @@ struct VertSkSLInfo {
     std::string fSkSL;
 
     std::string fLabel;
-
-    int fRenderStepUniformsTotalBytes = 0;
 };
 
 struct FragSkSLInfo {
@@ -57,10 +55,8 @@ struct FragSkSLInfo {
     std::string fLabel;
 
     bool fRequiresLocalCoords = false;
-    int fNumTexturesAndSamplers = 0;
-    int fNumPaintUniforms = 0;
-    int fRenderStepUniformsTotalBytes = 0;
-    int fPaintUniformsTotalBytes = 0;
+    int  fNumTexturesAndSamplers = 0;
+    bool fHasPaintUniforms = false;
     bool fHasGradientBuffer = false;
     skia_private::TArray<uint32_t> fData = {};
 };
@@ -112,25 +108,21 @@ std::string BuildComputeSkSL(const Caps*, const ComputeStep*);
 std::string EmitPaintParamsUniforms(int bufferID,
                                     const Layout layout,
                                     SkSpan<const ShaderNode*> nodes,
-                                    int* numPaintUniforms,
-                                    int* paintUniformsTotalBytes,
+                                    bool* hasUniforms,
                                     bool* wrotePaintColor);
 std::string EmitRenderStepUniforms(int bufferID,
                                    const Layout layout,
-                                   SkSpan<const Uniform> uniforms,
-                                   int* renderStepUniformsTotalBytes);
+                                   SkSpan<const Uniform> uniforms);
 std::string EmitPaintParamsStorageBuffer(int bufferID,
                                          SkSpan<const ShaderNode*> nodes,
-                                         int* numPaintUniforms,
+                                         bool* hasUniforms,
                                          bool* wrotePaintColor);
 std::string EmitRenderStepStorageBuffer(int bufferID,
                                         SkSpan<const Uniform> uniforms);
 std::string EmitUniformsFromStorageBuffer(const char* bufferNamePrefix,
                                           const char* ssboIndex,
                                           SkSpan<const Uniform> uniforms);
-std::string EmitStorageBufferAccess(const char* bufferNamePrefix,
-                                    const char* ssboIndex,
-                                    const char* uniformName);
+
 std::string EmitTexturesAndSamplers(const ResourceBindingRequirements&,
                                     SkSpan<const ShaderNode*> nodes,
                                     int* binding);

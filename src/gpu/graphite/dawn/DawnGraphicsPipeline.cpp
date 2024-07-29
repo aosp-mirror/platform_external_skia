@@ -8,7 +8,7 @@
 #include "src/gpu/graphite/dawn/DawnGraphicsPipeline.h"
 
 #include "include/gpu/graphite/TextureInfo.h"
-#include "src/gpu/PipelineUtils.h"
+#include "src/gpu/SkSLToBackend.h"
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/Attribute.h"
 #include "src/gpu/graphite/ContextUtils.h"
@@ -595,7 +595,7 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
                                      step->primitiveType(),
                                      depthStencilSettings.fStencilReferenceValue,
                                      /*hasStepUniforms=*/!step->uniforms().empty(),
-                                     /*hasPaintUniforms=*/fsSkSLInfo.fNumPaintUniforms > 0,
+                                     /*hasPaintUniforms=*/fsSkSLInfo.fHasPaintUniforms,
                                      /*hasGradientbuffer=*/fsSkSLInfo.fHasGradientBuffer,
                                      numTexturesAndSamplers));
 }

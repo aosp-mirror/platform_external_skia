@@ -17,7 +17,7 @@
 #include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/dawn/DawnBackendContext.h"
 #include "include/gpu/graphite/dawn/DawnUtils.h"
-#include "include/private/gpu/graphite/ContextOptionsPriv.h"
+#include "src/gpu/graphite/ContextOptionsPriv.h"
 #include "tools/ToolUtils.h"
 #include "tools/GpuToolUtils.h"
 
@@ -114,19 +114,19 @@ wgpu::Device GraphiteDawnWindowContext::createDevice(wgpu::BackendType type) {
     DawnProcTable backendProcs = dawn::native::GetProcs();
     dawnProcSetProcs(&backendProcs);
 
-    static constexpr const char* kAdapterToggles[] = {
+    static constexpr const char* kToggles[] = {
         "allow_unsafe_apis",  // Needed for dual-source blending, BufferMapExtendedUsages.
         "use_user_defined_labels_in_backend",
     };
-    wgpu::DawnTogglesDescriptor adapterTogglesDesc;
-    adapterTogglesDesc.enabledToggleCount  = std::size(kAdapterToggles);
-    adapterTogglesDesc.enabledToggles      = kAdapterToggles;
+    wgpu::DawnTogglesDescriptor togglesDesc;
+    togglesDesc.enabledToggleCount  = std::size(kToggles);
+    togglesDesc.enabledToggles      = kToggles;
 
     wgpu::RequestAdapterOptions adapterOptions;
     adapterOptions.backendType = type;
     adapterOptions.compatibilityMode =
             type == wgpu::BackendType::OpenGL || type == wgpu::BackendType::OpenGLES;
-    adapterOptions.nextInChain = &adapterTogglesDesc;
+    adapterOptions.nextInChain = &togglesDesc;
 
     std::vector<dawn::native::Adapter> adapters = fInstance->EnumerateAdapters(&adapterOptions);
     if (adapters.empty()) {
@@ -171,13 +171,20 @@ wgpu::Device GraphiteDawnWindowContext::createDevice(wgpu::BackendType type) {
     wgpu::DeviceDescriptor deviceDescriptor;
     deviceDescriptor.requiredFeatures = features.data();
     deviceDescriptor.requiredFeatureCount = features.size();
-    deviceDescriptor.deviceLostCallbackInfo.callback =
-        [](WGPUDeviceImpl *const *, WGPUDeviceLostReason reason, const char* message, void*) {
-            if (reason != WGPUDeviceLostReason_Destroyed &&
-                reason != WGPUDeviceLostReason_InstanceDropped) {
-                SK_ABORT("Device lost: %s\n", message);
-            }
-        };
+    deviceDescriptor.nextInChain = &togglesDesc;
+    deviceDescriptor.SetDeviceLostCallback(
+            wgpu::CallbackMode::AllowSpontaneous,
+            [](const wgpu::Device&, wgpu::DeviceLostReason reason, const char* message) {
+                if (reason != wgpu::DeviceLostReason::Destroyed &&
+                    reason != wgpu::DeviceLostReason::InstanceDropped) {
+                    SK_ABORT("Device lost: %s\n", message);
+                }
+            });
+    deviceDescriptor.SetUncapturedErrorCallback(
+            [](const wgpu::Device&, wgpu::ErrorType, const char* message) {
+                SkDebugf("Device error: %s\n", message);
+                SkASSERT(false);
+            });
 
     wgpu::DawnTogglesDescriptor deviceTogglesDesc;
 
@@ -199,12 +206,6 @@ wgpu::Device GraphiteDawnWindowContext::createDevice(wgpu::BackendType type) {
         return nullptr;
     }
 
-    device.SetUncapturedErrorCallback(
-            [](WGPUErrorType type, const char* message, void*) {
-                SkDebugf("Device error: %s\n", message);
-                SkASSERT(false);
-            },
-            nullptr);
     return device;
 }
 

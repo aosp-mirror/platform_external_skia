@@ -90,8 +90,13 @@ RendererProvider::RendererProvider(const Caps* caps, StaticBufferManager* buffer
                                   DrawTypeFlags::kSimpleShape);
     fPerEdgeAAQuad = makeFromStep(std::make_unique<PerEdgeAAQuadRenderStep>(bufferManager),
                                   DrawTypeFlags::kSimpleShape);
+    fNonAABoundsFill = makeFromStep(std::make_unique<CoverBoundsRenderStep>(
+                                            "non-aa-fill", kDirectDepthGreaterPass),
+                                    DrawTypeFlags::kSimpleShape);
     fAnalyticBlur = makeFromStep(std::make_unique<AnalyticBlurRenderStep>(),
                                  DrawTypeFlags::kSimpleShape);
+
+    // vertices
     for (PrimitiveType primType : {PrimitiveType::kTriangles, PrimitiveType::kTriangleStrip}) {
         for (bool color : {false, true}) {
             for (bool texCoords : {false, true}) {
@@ -104,8 +109,8 @@ RendererProvider::RendererProvider(const Caps* caps, StaticBufferManager* buffer
     }
 
     // The tessellating path renderers that use stencil can share the cover steps.
-    auto coverFill = std::make_unique<CoverBoundsRenderStep>(false);
-    auto coverInverse = std::make_unique<CoverBoundsRenderStep>(true);
+    auto coverFill = std::make_unique<CoverBoundsRenderStep>("regular-cover", kRegularCoverPass);
+    auto coverInverse = std::make_unique<CoverBoundsRenderStep>("inverse-cover", kInverseCoverPass);
 
     for (bool evenOdd : {false, true}) {
         // These steps can be shared by regular and inverse fills
