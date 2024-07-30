@@ -275,7 +275,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{"//src/pdf:jpeg_info_none"}},
 	}},
 	{GNI: "gn/sksl.gni", Vars: []exporter.GNIFileListExportDesc{
-		{Var: "skia_sksl_sources",
+		{Var: "skia_sksl_core_sources",
 			Rules: []string{
 				"//include/private:sksl_private_hdrs",
 				"//include/sksl:public_hdrs",
@@ -293,15 +293,37 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/sksl:sksl_hdrs",
 				"//src/sksl:sksl_srcs",
 			}},
+		{Var: "skia_sksl_default_module_sources",
+			Rules: []string{
+				"//src/sksl:sksl_default_module_srcs",
+			}},
 		{Var: "skia_sksl_tracing_sources",
 			Rules: []string{
 				"//src/sksl/tracing:enabled_hdrs",
 				"//src/sksl/tracing:enabled_srcs",
 			}},
-		{Var: "skia_sksl_gpu_sources",
+		{Var: "skia_sksl_pipeline_sources",
 			Rules: []string{
-				"//src/sksl/codegen:legacy_gpu_hdrs",
-				"//src/sksl/codegen:legacy_gpu_srcs",
+				"//src/sksl/codegen:gpu",
+			}},
+		{Var: "skia_sksl_codegen_sources",
+			Rules: []string{
+				"//src/sksl/codegen:glsl",
+				"//src/sksl/codegen:metal",
+				"//src/sksl/codegen:spirv",
+				"//src/sksl/codegen:wgsl",
+			}},
+		{Var: "skia_sksl_hlsl_sources",
+			Rules: []string{
+				"//src/sksl/codegen:hlsl",
+			}},
+		{Var: "skia_sksl_validate_spirv_sources",
+			Rules: []string{
+				"//src/sksl/codegen:spirv_validator",
+			}},
+		{Var: "skia_sksl_validate_wgsl_sources",
+			Rules: []string{
+				"//src/sksl/codegen:wgsl_validator",
 			}},
 		{Var: "skslc_deps",
 			Rules: []string{
@@ -312,6 +334,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/gpu/ganesh:core_skslc_srcs",
 				"//src/ports:malloc",
 				"//src/ports:osfile",
+				"//src/sksl:sksl_skslc_module_srcs",
 				"//src/utils:utils_skslc_hdrs",
 				"//src/utils:utils_skslc_srcs",
 				"//src/utils:json_srcs",
@@ -528,12 +551,12 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_shared_vk_sources",
 			Rules: []string{
 				"//include/private/gpu/vk:private_hdrs",
-				"//src/gpu/vk:vk_hdrs",
-				"//src/gpu/vk:vk_srcs"}},
+				"//src/gpu/vk:_vk_hdrs",
+				"//src/gpu/vk:_vk_srcs"}},
 		{Var: "skia_vma_sources",
 			Rules: []string{
-				"//src/gpu/vk:vma_srcs",
-				"//src/gpu/vk:vma_hdrs"}},
+				"//src/gpu/vk/vulkanmemoryallocator:vma_srcs",
+				"//src/gpu/vk/vulkanmemoryallocator:vma_hdrs"}},
 		{Var: "skia_shared_mtl_sources",
 			Rules: []string{
 				"//include/gpu/mtl:public_hdrs",

@@ -15,6 +15,7 @@
 #include "src/gpu/graphite/dawn/DawnCaps.h"
 #include "src/gpu/graphite/dawn/DawnComputePipeline.h"
 #include "src/gpu/graphite/dawn/DawnGraphicsPipeline.h"
+#include "src/gpu/graphite/dawn/DawnGraphiteTypesPriv.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
 #include "src/gpu/graphite/dawn/DawnQueueManager.h"
 #include "src/gpu/graphite/dawn/DawnResourceProvider.h"
@@ -236,7 +237,7 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
     auto& depthStencilInfo = renderPassDesc.fDepthStencilAttachment;
     if (depthStencilTexture) {
         const auto* dawnDepthStencilTexture = static_cast<const DawnTexture*>(depthStencilTexture);
-        auto format = dawnDepthStencilTexture->textureInfo().dawnTextureSpec().getViewFormat();
+        auto format = TextureInfos::GetDawnViewFormat(dawnDepthStencilTexture->textureInfo());
         SkASSERT(DawnFormatIsDepthOrStencil(format));
 
         // TODO: check Texture matches RenderPassDesc
@@ -511,6 +512,9 @@ void DawnCommandBuffer::bindUniformBuffer(const BindUniformBufferInfo& info, Uni
         case UniformSlot::kPaint:
             bufferIndex = DawnGraphicsPipeline::kPaintUniformBufferIndex;
             break;
+        case UniformSlot::kGradient:
+            bufferIndex = DawnGraphicsPipeline::kGradientBufferIndex;
+            break;
         default:
             SkASSERT(false);
     }
@@ -607,8 +611,8 @@ void DawnCommandBuffer::syncUniformBuffers() {
     if (fBoundUniformBuffersDirty) {
         fBoundUniformBuffersDirty = false;
 
-        std::array<uint32_t, 3> dynamicOffsets;
-        std::array<std::pair<const DawnBuffer*, uint32_t>, 3> boundBuffersAndSizes;
+        std::array<uint32_t, 4> dynamicOffsets;
+        std::array<std::pair<const DawnBuffer*, uint32_t>, 4> boundBuffersAndSizes;
         boundBuffersAndSizes[0].first = fIntrinsicConstantBuffer.get();
         boundBuffersAndSizes[0].second = sizeof(IntrinsicConstant);
 
@@ -641,6 +645,20 @@ void DawnCommandBuffer::syncUniformBuffers() {
             // Unused buffer entry
             boundBuffersAndSizes[2].first = nullptr;
             dynamicOffsets[2] = 0;
+        }
+
+        if (fActiveGraphicsPipeline->hasGradientBuffer() &&
+            fBoundUniformBuffers[DawnGraphicsPipeline::kGradientBufferIndex]) {
+            boundBuffersAndSizes[3].first =
+                    fBoundUniformBuffers[DawnGraphicsPipeline::kGradientBufferIndex];
+            boundBuffersAndSizes[3].second =
+                    fBoundUniformBufferSizes[DawnGraphicsPipeline::kGradientBufferIndex];
+            dynamicOffsets[3] =
+                    fBoundUniformBufferOffsets[DawnGraphicsPipeline::kGradientBufferIndex];
+        } else {
+            // Unused buffer entry
+            boundBuffersAndSizes[3].first = nullptr;
+            dynamicOffsets[3] = 0;
         }
 
         auto bindGroup =
@@ -911,7 +929,7 @@ bool DawnCommandBuffer::onCopyTextureToBuffer(const Texture* texture,
     src.texture = wgpuTexture->dawnTexture();
     src.origin.x = srcRect.x();
     src.origin.y = srcRect.y();
-    src.aspect = wgpuTexture->textureInfo().dawnTextureSpec().fAspect;
+    src.aspect = TextureInfos::GetDawnAspect(wgpuTexture->textureInfo());
 
     wgpu::ImageCopyBuffer dst;
     dst.buffer = wgpuBuffer;

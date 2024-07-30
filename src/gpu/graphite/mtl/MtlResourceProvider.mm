@@ -13,7 +13,7 @@
 
 #include "src/core/SkSLTypeShared.h"
 #include "src/gpu/Blend.h"
-#include "src/gpu/PipelineUtils.h"
+#include "src/gpu/SkSLToBackend.h"
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/ComputePipelineDesc.h"
 #include "src/gpu/graphite/ContextUtils.h"
@@ -124,7 +124,7 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
 
     const RenderStep* step =
             fSharedContext->rendererProvider()->lookup(pipelineDesc.renderStepID());
-    const bool useStorageBuffers = fSharedContext->caps()->storageBufferPreferred();
+    const bool useStorageBuffers = fSharedContext->caps()->storageBufferSupport();
 
     UniquePaintParamsID paintID = pipelineDesc.paintParamsID();
     FragSkSLInfo fsSkSLInfo = BuildFragmentSkSL(fSharedContext->caps(),
@@ -246,7 +246,7 @@ sk_sp<Texture> MtlResourceProvider::createTexture(SkISize dimensions,
 }
 
 sk_sp<Texture> MtlResourceProvider::onCreateWrappedTexture(const BackendTexture& texture) {
-    CFTypeRef mtlHandleTexture = texture.getMtlTexture();
+    CFTypeRef mtlHandleTexture = BackendTextures::GetMtlTexture(texture);
     if (!mtlHandleTexture) {
         return nullptr;
     }
@@ -356,12 +356,12 @@ BackendTexture MtlResourceProvider::onCreateBackendTexture(SkISize dimensions,
     if (!texture) {
         return {};
     }
-    return BackendTexture(dimensions, (CFTypeRef)texture.release());
+    return BackendTextures::MakeMetal(dimensions, (CFTypeRef)texture.release());
 }
 
 void MtlResourceProvider::onDeleteBackendTexture(const BackendTexture& texture) {
     SkASSERT(texture.backend() == BackendApi::kMetal);
-    CFTypeRef texHandle = texture.getMtlTexture();
+    CFTypeRef texHandle = BackendTextures::GetMtlTexture(texture);
     SkCFSafeRelease(texHandle);
 }
 

@@ -4,8 +4,8 @@ use ffi::{FillLinearParams, FillRadialParams};
 // in the LICENSE file.
 use font_types::{BoundingBox, GlyphId, Pen};
 use read_fonts::{
-    tables::colr::CompositeMode, tables::os2::SelectionFlags, FileRef, FontRef, ReadError,
-    TableProvider,
+    tables::{colr::CompositeMode, cpal::Cpal, os2::SelectionFlags},
+    FileRef, FontRef, ReadError, TableProvider,
 };
 use skrifa::{
     attribute::Style,
@@ -578,25 +578,30 @@ fn resolve_palette(
     base_palette: u16,
     palette_overrides: &[PaletteOverride],
 ) -> Vec<u32> {
-    font_ref
-        .with_font(|f| {
-            let cpal = f.cpal().ok()?;
-
-            let start_index: usize = cpal
-                .color_record_indices()
-                .get(usize::from(base_palette))?
-                .get()
-                .into();
-            let num_entries: usize = cpal.num_palette_entries().into();
-
-            let color_records = cpal.color_records_array()?.ok()?;
-            let mut palette: Vec<u32> = color_records
+    let cpal_to_vector = |cpal: &Cpal, palette_index| -> Option<Vec<u32>> {
+        let start_index: usize = cpal
+            .color_record_indices()
+            .get(usize::from(palette_index))?
+            .get()
+            .into();
+        let num_entries: usize = cpal.num_palette_entries().into();
+        let color_records = cpal.color_records_array()?.ok()?;
+        Some(
+            color_records
                 .get(start_index..start_index + num_entries)?
                 .iter()
                 .map(|record| {
                     u32::from_be_bytes([record.alpha, record.red, record.green, record.blue])
                 })
-                .collect();
+                .collect(),
+        )
+    };
+
+    font_ref
+        .with_font(|f| {
+            let cpal = f.cpal().ok()?;
+
+            let mut palette = cpal_to_vector(&cpal, base_palette).or(cpal_to_vector(&cpal, 0))?;
 
             for override_entry in palette_overrides {
                 let index = override_entry.index as usize;
@@ -763,6 +768,12 @@ fn coordinates_for_shifted_named_instance_index(
         .unwrap_or(-1)
 }
 
+fn num_axes(font_ref: &BridgeFontRef) -> usize {
+    font_ref
+        .with_font(|f| Some(f.axes().len()))
+        .unwrap_or_default()
+}
+
 fn populate_axes(font_ref: &BridgeFontRef, mut axis_wrapper: Pin<&mut AxisWrapper>) -> isize {
     font_ref
         .with_font(|f| {
@@ -836,6 +847,12 @@ fn font_or_collection<'a>(font_data: &'a [u8], num_fonts: &mut u32) -> bool {
         }
         _ => false,
     }
+}
+
+fn num_named_instances(font_ref: &BridgeFontRef) -> usize {
+    font_ref
+        .with_font(|f| Some(f.named_instances().len()))
+        .unwrap_or_default()
 }
 
 fn resolve_into_normalized_coords(
@@ -1439,6 +1456,8 @@ mod ffi {
         /// Returns false if the data cannot be interpreted as a font or collection.
         unsafe fn font_or_collection<'a>(font_data: &'a [u8], num_fonts: &mut u32) -> bool;
 
+        unsafe fn num_named_instances(font_ref: &BridgeFontRef) -> usize;
+
         type BridgeMappingIndex;
         unsafe fn make_mapping_index<'a>(font_ref: &'a BridgeFontRef) -> Box<BridgeMappingIndex>;
 
@@ -1549,6 +1568,8 @@ mod ffi {
             shifted_index: u32,
             coords: &mut [SkiaDesignCoordinate],
         ) -> isize;
+
+        fn num_axes(font_ref: &BridgeFontRef) -> usize;
 
         fn populate_axes(font_ref: &BridgeFontRef, axis_wrapper: Pin<&mut AxisWrapper>) -> isize;
 
@@ -1710,16 +1731,17 @@ mod ffi {
 #[cfg(test)]
 mod test {
     use crate::{
-        coordinates_for_shifted_named_instance_index,
+        coordinates_for_shifted_named_instance_index, num_axes,
         ffi::{BridgeFontStyle, PaletteOverride, SkiaDesignCoordinate},
-        font_or_collection, font_ref_is_valid, get_font_style, make_font_ref, resolve_palette,
+        font_or_collection, font_ref_is_valid, get_font_style, make_font_ref,
+        num_named_instances, resolve_into_normalized_coords, resolve_palette,
     };
     use std::fs;
 
     const TEST_FONT_FILENAME: &str = "resources/fonts/test_glyphs-glyf_colr_1_variable.ttf";
     const TEST_COLLECTION_FILENAME: &str = "resources/fonts/test.ttc";
     const TEST_CONDENSED_BOLD_ITALIC: &str = "resources/fonts/cond-bold-italic.ttf";
-    const TEST_VARIABLE: &str = "resources/fonts/Variable.ttf";
+    const TEST_VARIABLE: &str = "/usr/local/google/home/jlavrova/Sources/skia/resources/fonts/Variable.ttf";
 
     #[test]
     fn test_palette_override() {
@@ -1773,9 +1795,20 @@ mod test {
             (palette[11], palette[12], palette[13],),
             (0xff68c7e8, 0xffffdc01, 0xff808080)
         );
+    }
 
-        let no_palette = resolve_palette(&font_ref, 10, &out_of_bounds_overrides);
-        assert_eq!(no_palette.len(), 0);
+    #[test]
+    fn test_default_palette_for_invalid_index() {
+        let file_buffer =
+            fs::read(TEST_FONT_FILENAME).expect("COLRv0/v1 test font could not be opened.");
+        let font_ref = make_font_ref(&file_buffer, 0);
+        assert!(font_ref_is_valid(&font_ref));
+        let palette = resolve_palette(&font_ref, 65535, &[]);
+        assert_eq!(palette.len(), 14);
+        assert_eq!(
+            (palette[0], palette[6], palette[13],),
+            (0xFFFF0000, 0xFFEE82EE, 0xFF808080)
+        );
     }
 
     #[test]
@@ -1805,11 +1838,12 @@ mod test {
         let file_buffer = fs::read(TEST_CONDENSED_BOLD_ITALIC)
             .expect("Font to test font styles could not be opened.");
         let font_ref = make_font_ref(&file_buffer, 0);
+        let coords = resolve_into_normalized_coords(&font_ref, &[]);
         assert!(font_ref_is_valid(&font_ref));
 
         let mut font_style = BridgeFontStyle::default();
 
-        if get_font_style(font_ref.as_ref(), &mut font_style) {
+        if get_font_style(font_ref.as_ref(), &coords, &mut font_style) {
             assert_eq!(font_style.width, 5); // The font should have condenced width attribute but
                                              // it's condenced itself so we have the normal width
             assert_eq!(font_style.slant, 1); // Skia italic
@@ -1824,14 +1858,84 @@ mod test {
         let file_buffer =
             fs::read(TEST_VARIABLE).expect("Font to test font styles could not be opened.");
         let font_ref = make_font_ref(&file_buffer, 0);
+        let coords = resolve_into_normalized_coords(&font_ref, &[]);
         assert!(font_ref_is_valid(&font_ref));
 
         let mut font_style = BridgeFontStyle::default();
 
-        assert!(get_font_style(font_ref.as_ref(), &mut font_style));
+        assert!(get_font_style(font_ref.as_ref(), &coords, &mut font_style));
         assert_eq!(font_style.width, 5); // Skia normal
         assert_eq!(font_style.slant, 0); // Skia upright
         assert_eq!(font_style.weight, 400); // Skia normal
+    }
+
+    #[test]
+    fn test_no_instances() {
+        let font_buffer =
+            fs::read(TEST_CONDENSED_BOLD_ITALIC).expect("Font to test font styles could not be opened.");
+        let font_ref = make_font_ref(&font_buffer, 0);
+        let num_instances = num_named_instances(font_ref.as_ref());
+        assert!(num_instances == 0);
+    }
+
+    #[test]
+    fn test_no_axes() {
+        let font_buffer =
+            fs::read(TEST_CONDENSED_BOLD_ITALIC).expect("Font to test font styles could not be opened.");
+        let font_ref = make_font_ref(&font_buffer, 0);
+        let size = num_axes(&font_ref);
+        assert_eq!(0, size);
+    }
+
+    #[test]
+    fn test_named_instances() {
+        let font_buffer =
+            fs::read(TEST_VARIABLE).expect("Font to test font styles could not be opened.");
+
+        let font_ref = make_font_ref(&font_buffer, 0);
+        let num_instances = num_named_instances(font_ref.as_ref());
+        assert!(num_instances == 5);
+
+        let mut index = 0;
+        loop {
+            if index >= num_instances {
+                break;
+            }
+            let named_instance_index : u32 = ((index + 1) << 16) as u32;
+            let num_coords = coordinates_for_shifted_named_instance_index(
+                &font_ref,
+                named_instance_index,
+                &mut [],
+            );
+            assert_eq!(num_coords, 2);
+
+            let mut received_coords: [SkiaDesignCoordinate; 2] = Default::default();
+            let num_coords = coordinates_for_shifted_named_instance_index(
+                &font_ref,
+                named_instance_index,
+                &mut received_coords,
+            );
+            let size = num_axes(&font_ref) as isize;
+            assert_eq!(num_coords, size);
+            if (index + 1) == 5 {
+                assert_eq!(num_coords, 2);
+                assert_eq!(
+                    received_coords[0],
+                    SkiaDesignCoordinate {
+                        axis: u32::from_be_bytes([b'w', b'g', b'h', b't']),
+                        value: 400.0
+                    }
+                );
+                assert_eq!(
+                    received_coords[1],
+                    SkiaDesignCoordinate {
+                        axis: u32::from_be_bytes([b'w', b'd', b't', b'h']),
+                        value: 200.0
+                    }
+                );
+            };
+            index += 1;
+        }
     }
 
     #[test]
