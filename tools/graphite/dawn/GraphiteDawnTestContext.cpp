@@ -12,7 +12,7 @@
 #include "include/gpu/graphite/dawn/DawnTypes.h"
 #include "include/gpu/graphite/dawn/DawnUtils.h"
 #include "include/private/base/SkOnce.h"
-#include "include/private/gpu/graphite/ContextOptionsPriv.h"
+#include "src/gpu/graphite/ContextOptionsPriv.h"
 #include "tools/gpu/ContextType.h"
 #include "tools/graphite/TestOptions.h"
 
@@ -130,21 +130,19 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType bac
     desc.requiredFeatureCount  = features.size();
     desc.requiredFeatures      = features.data();
     desc.nextInChain           = &togglesDesc;
-    desc.deviceLostCallbackInfo.mode = wgpu::CallbackMode::AllowSpontaneous;
-    desc.deviceLostCallbackInfo.callback =
-        [](WGPUDeviceImpl *const *, WGPUDeviceLostReason reason, const char* message, void*) {
-            if (reason != WGPUDeviceLostReason_Destroyed) {
-                SK_ABORT("Device lost: %s\n", message);
-            }
-        };
+    desc.SetDeviceLostCallback(
+            wgpu::CallbackMode::AllowSpontaneous,
+            [](const wgpu::Device&, wgpu::DeviceLostReason reason, const char* message) {
+                if (reason != wgpu::DeviceLostReason::Destroyed) {
+                    SK_ABORT("Device lost: %s\n", message);
+                }
+            });
+    desc.SetUncapturedErrorCallback([](const wgpu::Device&, wgpu::ErrorType, const char* message) {
+        SkDebugf("Device error: %s\n", message);
+    });
 
     wgpu::Device device = wgpu::Device::Acquire(matchedAdaptor.CreateDevice(&desc));
     SkASSERT(device);
-    device.SetUncapturedErrorCallback(
-            [](WGPUErrorType type, const char* message, void*) {
-                SkDebugf("Device error: %s\n", message);
-            },
-            /*userdata=*/nullptr);
 
     skgpu::graphite::DawnBackendContext backendContext;
     backendContext.fInstance = wgpu::Instance(sInstance->Get());
