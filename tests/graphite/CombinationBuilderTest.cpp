@@ -13,9 +13,9 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
+#include "include/gpu/graphite/precompile/PrecompileRuntimeEffect.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/gpu/graphite/ContextPriv.h"
-#include "src/gpu/graphite/FactoryFunctions.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/PrecompileInternal.h"
@@ -185,13 +185,16 @@ std::vector<sk_sp<T>> create_runtime_combos(
                                    SkSpan<const PrecompileChildOptions> childOptions),
         const char* redCode,
         const char* greenCode,
+        const char* blueCode,
         const char* combineCode) {
     auto [redEffect, error1] = effectFactory(SkString(redCode));
     REPORTER_ASSERT(reporter, redEffect, "%s", error1.c_str());
     auto [greenEffect, error2] = effectFactory(SkString(greenCode));
     REPORTER_ASSERT(reporter, greenEffect, "%s", error2.c_str());
-    auto [combineEffect, error3] = effectFactory(SkString(combineCode));
-    REPORTER_ASSERT(reporter, combineEffect, "%s", error3.c_str());
+    auto [blueEffect, error3] = effectFactory(SkString(blueCode));
+    REPORTER_ASSERT(reporter, blueEffect, "%s", error3.c_str());
+    auto [combineEffect, error4] = effectFactory(SkString(combineCode));
+    REPORTER_ASSERT(reporter, combineEffect, "%s", error4.c_str());
 
     sk_sp<T> red = precompileFactory(redEffect, {});
     REPORTER_ASSERT(reporter, red);
@@ -199,7 +202,11 @@ std::vector<sk_sp<T>> create_runtime_combos(
     sk_sp<T> green = precompileFactory(greenEffect, {});
     REPORTER_ASSERT(reporter, green);
 
-    sk_sp<T> combine = precompileFactory(combineEffect, { { red, green }, { green, red } });
+    sk_sp<T> blue = precompileFactory(blueEffect, {});
+    REPORTER_ASSERT(reporter, blue);
+
+    sk_sp<T> combine = precompileFactory(combineEffect, { { red, green },
+                                                          { blue, sk_sp<T>(nullptr) } });
     REPORTER_ASSERT(reporter, combine);
 
     return { combine };
@@ -208,18 +215,18 @@ std::vector<sk_sp<T>> create_runtime_combos(
 void runtime_effect_test(const KeyContext& keyContext,
                          PipelineDataGatherer* gatherer,
                          skiatest::Reporter* reporter) {
-    // paintOptions (8 = 2*2*2)
-    //  |- combineShader (2)
-    //  |       0: redShader   | greenShader
-    //  |       1: greenShader | redShader
+    // paintOptions (64 = 4*4*4)
+    //  |- combineShader (4)
+    //  |       0: redShader  | greenShader
+    //  |       1: blueShader | nullptr
     //  |
-    //  |- combineColorFilter (2)
-    //  |       0: redColorFilter   | greenColorFilter
-    //  |       1: greenColorFilter | redColorFilter
+    //  |- combineColorFilter (4)
+    //  |       0: redColorFilter  | greenColorFilter
+    //  |       1: blueColorFilter | nullptr
     //  |
-    //  |- combineBlender (2)
-    //  |       0: redBlender   | greenBlender
-    //  |       1: greenBlender | redBlender
+    //  |- combineBlender (4)
+    //  |       0: redBlender  | greenBlender
+    //  |       1: blueBlender | nullptr
 
     PaintOptions paintOptions;
 
@@ -231,6 +238,9 @@ void runtime_effect_test(const KeyContext& keyContext,
         static const char* kGreenS = R"(
             half4 main(vec2 fragcoord) { return half4(0, .5, 0, .5); }
         )";
+        static const char* kBlueS = R"(
+            half4 main(vec2 fragcoord) { return half4(0, 0, .5, .5); }
+        )";
 
         static const char* kCombineS = R"(
             uniform shader first;
@@ -241,12 +251,13 @@ void runtime_effect_test(const KeyContext& keyContext,
         )";
 
         std::vector<sk_sp<PrecompileShader>> combinations =
-                create_runtime_combos<PrecompileShader>(reporter,
-                                                        SkRuntimeEffect::MakeForShader,
-                                                        MakePrecompileShader,
-                                                        kRedS,
-                                                        kGreenS,
-                                                        kCombineS);
+            create_runtime_combos<PrecompileShader>(reporter,
+                                                    SkRuntimeEffect::MakeForShader,
+                                                    PrecompileRuntimeEffects::MakePrecompileShader,
+                                                    kRedS,
+                                                    kGreenS,
+                                                    kBlueS,
+                                                    kCombineS);
         paintOptions.setShaders(combinations);
     }
 
@@ -258,6 +269,9 @@ void runtime_effect_test(const KeyContext& keyContext,
         static const char* kGreenCF = R"(
             half4 main(half4 color) { return half4(0, .5, 0, .5); }
         )";
+        static const char* kBlueCF = R"(
+            half4 main(half4 color) { return half4(0, 0, .5, .5); }
+        )";
 
         static const char* kCombineCF = R"(
             uniform colorFilter first;
@@ -266,12 +280,14 @@ void runtime_effect_test(const KeyContext& keyContext,
         )";
 
         std::vector<sk_sp<PrecompileColorFilter>> combinations =
-                create_runtime_combos<PrecompileColorFilter>(reporter,
-                                                             SkRuntimeEffect::MakeForColorFilter,
-                                                             MakePrecompileColorFilter,
-                                                             kRedCF,
-                                                             kGreenCF,
-                                                             kCombineCF);
+            create_runtime_combos<PrecompileColorFilter>(
+                    reporter,
+                    SkRuntimeEffect::MakeForColorFilter,
+                    PrecompileRuntimeEffects::MakePrecompileColorFilter,
+                    kRedCF,
+                    kGreenCF,
+                    kBlueCF,
+                    kCombineCF);
         paintOptions.setColorFilters(combinations);
     }
 
@@ -283,6 +299,9 @@ void runtime_effect_test(const KeyContext& keyContext,
         static const char* kGreenB = R"(
             half4 main(half4 src, half4 dst) { return half4(0, .5, 0, .5); }
         )";
+        static const char* kBlueB = R"(
+            half4 main(half4 src, half4 dst) { return half4(0, 0, .5, .5); }
+        )";
 
         static const char* kCombineB = R"(
             uniform blender first;
@@ -293,16 +312,18 @@ void runtime_effect_test(const KeyContext& keyContext,
         )";
 
         std::vector<sk_sp<PrecompileBlender>> combinations =
-                create_runtime_combos<PrecompileBlender>(reporter,
-                                                         SkRuntimeEffect::MakeForBlender,
-                                                         MakePrecompileBlender,
-                                                         kRedB,
-                                                         kGreenB,
-                                                         kCombineB);
+            create_runtime_combos<PrecompileBlender>(
+                    reporter,
+                    SkRuntimeEffect::MakeForBlender,
+                    PrecompileRuntimeEffects::MakePrecompileBlender,
+                    kRedB,
+                    kGreenB,
+                    kBlueB,
+                    kCombineB);
         paintOptions.setBlenders(combinations);
     }
 
-    REPORTER_ASSERT(reporter, paintOptions.priv().numCombinations() == 8);
+    REPORTER_ASSERT(reporter, paintOptions.priv().numCombinations() == 64);
 
     std::vector<UniquePaintParamsID> precompileIDs;
     paintOptions.priv().buildCombinations(keyContext,
@@ -317,7 +338,7 @@ void runtime_effect_test(const KeyContext& keyContext,
                                                                precompileIDs.push_back(id);
                                                            });
 
-    SkASSERT(precompileIDs.size() == 8);
+    SkASSERT(precompileIDs.size() == 64);
 }
 
 // Exercise all the PrecompileBlenders factories
