@@ -80,58 +80,49 @@ $pure float $apply_xfer_fn(int kind, float x, half4 cs[2]) {
     return s * x;
 }
 
+$pure half4 sk_premul_alpha(float4 color) {
+    return half4(color.rgb*color.a, color.a);
+}
+
 $pure half4 sk_color_space_transform(half4 halfColor,
                                      int flags,
                                      int srcKind,
                                      half3x3 gamutTransform,
                                      int dstKind,
                                      half4x4 coeffs) {
-    float4 color = float4(halfColor);
+    if (flags != 0) {
+        float4 color = float4(halfColor);
 
-    if (bool(flags & $kColorSpaceXformFlagUnpremul)) {
-        color = unpremul(color);
-    }
-
-    if (bool(flags & $kColorSpaceXformFlagLinearize)) {
-        half4 srcCoeffs[2];
-        srcCoeffs[0] = coeffs[0];
-        srcCoeffs[1] = coeffs[1];
-        color.r = $apply_xfer_fn(srcKind, color.r, srcCoeffs);
-        color.g = $apply_xfer_fn(srcKind, color.g, srcCoeffs);
-        color.b = $apply_xfer_fn(srcKind, color.b, srcCoeffs);
-    }
-    if (bool(flags & $kColorSpaceXformFlagGamutTransform)) {
-        color.rgb = gamutTransform * color.rgb;
-    }
-    if (bool(flags & $kColorSpaceXformFlagEncode)) {
-        half4 dstCoeffs[2];
-        dstCoeffs[0] = coeffs[2];
-        dstCoeffs[1] = coeffs[3];
-        color.r = $apply_xfer_fn(dstKind, color.r, dstCoeffs);
-        color.g = $apply_xfer_fn(dstKind, color.g, dstCoeffs);
-        color.b = $apply_xfer_fn(dstKind, color.b, dstCoeffs);
-    }
-
-    if (bool(flags & $kColorSpaceXformFlagPremul)) {
-        color.rgb *= color.a;
-    }
-    return half4(color);
-}
-
-$pure half4 $color_space_transform_swizzle(half4 halfColor,
-                                           int flags,
-                                           int srcKind,
-                                           half3x3 gamutTransform,
-                                           int dstKind,
-                                           half4x4 coeffs) {
-    if (flags == 0) {
-        return halfColor;
-    } else {
         if (bool(flags & $kColorSpaceXformFlagAlphaSwizzle)) {
-            halfColor.a = dot(halfColor.r1, half2(coeffs[1][3], coeffs[3][3]));
+            color.a = dot(color.r1, float2(coeffs[1][3], coeffs[3][3]));
         }
-        return sk_color_space_transform(halfColor, flags, srcKind, gamutTransform, dstKind, coeffs);
+        if (bool(flags & $kColorSpaceXformFlagUnpremul)) {
+            color = unpremul(color);
+        }
+        if (bool(flags & $kColorSpaceXformFlagLinearize)) {
+            half4 srcCoeffs[2];
+            srcCoeffs[0] = coeffs[0];
+            srcCoeffs[1] = coeffs[1];
+            color.r = $apply_xfer_fn(srcKind, color.r, srcCoeffs);
+            color.g = $apply_xfer_fn(srcKind, color.g, srcCoeffs);
+            color.b = $apply_xfer_fn(srcKind, color.b, srcCoeffs);
+        }
+        if (bool(flags & $kColorSpaceXformFlagGamutTransform)) {
+            color.rgb = gamutTransform * color.rgb;
+        }
+        if (bool(flags & $kColorSpaceXformFlagEncode)) {
+            half4 dstCoeffs[2];
+            dstCoeffs[0] = coeffs[2];
+            dstCoeffs[1] = coeffs[3];
+            color.r = $apply_xfer_fn(dstKind, color.r, dstCoeffs);
+            color.g = $apply_xfer_fn(dstKind, color.g, dstCoeffs);
+            color.b = $apply_xfer_fn(dstKind, color.b, dstCoeffs);
+        }
+
+        halfColor = bool(flags & $kColorSpaceXformFlagPremul) ? sk_premul_alpha(color)
+                                                              : half4(color);
     }
+    return halfColor;
 }
 
 $pure float $tile(int tileMode, float f, float low, float high) {
@@ -287,16 +278,9 @@ $pure half4 sk_image_shader(float2 coords,
                             int tileModeX,
                             int tileModeY,
                             int filterMode,
-                            int csXformFlags,
-                            int csXformSrcKind,
-                            half3x3 csXformGamutTransform,
-                            int csXformDstKind,
-                            half4x4 csXformCoeffs,
                             sampler2D s) {
-    half4 sampleColor = $sample_image_subset(coords, invImgSize, subset, tileModeX, tileModeY,
-                                             filterMode, float2($kLinearInset), s);
-    return $color_space_transform_swizzle(sampleColor, csXformFlags, csXformSrcKind,
-                                          csXformGamutTransform, csXformDstKind, csXformCoeffs);
+    return $sample_image_subset(coords, invImgSize, subset, tileModeX, tileModeY,
+                                filterMode, float2($kLinearInset), s);
 }
 
 $pure half4 sk_cubic_image_shader(float2 coords,
@@ -305,29 +289,14 @@ $pure half4 sk_cubic_image_shader(float2 coords,
                                   int tileModeX,
                                   int tileModeY,
                                   half4x4 cubicCoeffs,
-                                  int csXformFlags,
-                                  int csXformSrcKind,
-                                  half3x3 csXformGamutTransform,
-                                  int csXformDstKind,
-                                  half4x4 csXformCoeffs,
                                   sampler2D s) {
-    half4 sampleColor = $cubic_filter_image(coords, invImgSize, subset, tileModeX, tileModeY,
-                                            cubicCoeffs, s);
-    return $color_space_transform_swizzle(sampleColor, csXformFlags, csXformSrcKind,
-                                          csXformGamutTransform, csXformDstKind, csXformCoeffs);
+    return $cubic_filter_image(coords, invImgSize, subset, tileModeX, tileModeY, cubicCoeffs, s);
 }
 
 $pure half4 sk_hw_image_shader(float2 coords,
                                float2 invImgSize,
-                               int csXformFlags,
-                               int csXformSrcKind,
-                               half3x3 csXformGamutTransform,
-                               int csXformDstKind,
-                               half4x4 csXformCoeffs,
                                sampler2D s) {
-    half4 sampleColor = $sample_image(coords, invImgSize, s);
-    return $color_space_transform_swizzle(sampleColor, csXformFlags, csXformSrcKind,
-                                          csXformGamutTransform, csXformDstKind, csXformCoeffs);
+    return $sample_image(coords, invImgSize, s);
 }
 
 $pure half4 $yuv_to_rgb_no_swizzle(half Y,
@@ -340,9 +309,8 @@ $pure half4 $yuv_to_rgb_no_swizzle(half Y,
     half4 sampleColor;
     sampleColor.rgb = saturate(yuvToRGBMatrix * preColor.rgb + yuvToRGBTranslate);
     sampleColor.a = alpha;
-    // premul alpha
-    sampleColor.rgb *= sampleColor.a;
 
+    // We always return an unpremul color here to skip work when transforming colorspaces
     return sampleColor;
 }
 
@@ -619,7 +587,7 @@ $pure half4 $colorize_grad_8(float4 colorsParam[8], float4 offsetsParam[2], floa
     }
 }
 
-half4 $colorize_grad_tex(sampler2D colorsAndOffsetsSampler, int numStops, float2 t) {
+$pure half4 $colorize_grad_tex(sampler2D colorsAndOffsetsSampler, int numStops, float2 t) {
     const float kColorCoord = 0.25;
     const float kOffsetCoord = 0.75;
 
@@ -664,22 +632,23 @@ half4 $colorize_grad_tex(sampler2D colorsAndOffsetsSampler, int numStops, float2
     }
 }
 
-half4 $colorize_grad_buf(int bufferOffset, int numStops, float2 t) {
+$pure half4 $half4_from_array(float[] arr, int offset) {
+    return half4(arr[offset + 0],
+                 arr[offset + 1],
+                 arr[offset + 2],
+                 arr[offset + 3]);
+}
+
+$pure half4 $colorize_grad_buf(float[] arr, int bufferOffset, int numStops, float2 t) {
     if (t.y < 0) {
         return half4(0);
     } else if (t.x == 0) {
         // Start from 1 since bufferOffset + 0 is holding the
         // color stop's offset value.
-        return half4(loadFloatBuffer(bufferOffset + 1),
-                     loadFloatBuffer(bufferOffset + 2),
-                     loadFloatBuffer(bufferOffset + 3),
-                     loadFloatBuffer(bufferOffset + 4));
+        return $half4_from_array(arr, bufferOffset + 1);
     } else if (t.x == 1) {
-        int endBufferIdx = bufferOffset + numStops * 5;
-        return half4(loadFloatBuffer(endBufferIdx - 4),
-                     loadFloatBuffer(endBufferIdx - 3),
-                     loadFloatBuffer(endBufferIdx - 2),
-                     loadFloatBuffer(endBufferIdx - 1));
+        int lastBufferIdx = bufferOffset + (numStops - 1) * 5;
+        return $half4_from_array(arr, lastBufferIdx + 1);
     } else {
         // Binary search for the matching adjacent offsets
         // running log(numStops).
@@ -687,7 +656,7 @@ half4 $colorize_grad_buf(int bufferOffset, int numStops, float2 t) {
         int high = numStops - 1;
         for (int i = 1; i < numStops; i += i) {
             int mid = (low + high) / 2;
-            float offset = loadFloatBuffer(bufferOffset + mid * 5);
+            float offset = arr[bufferOffset + mid * 5];
             if (t.x < offset) {
                 high = mid;
             } else {
@@ -695,24 +664,18 @@ half4 $colorize_grad_buf(int bufferOffset, int numStops, float2 t) {
             }
         }
         int lowBufferIdx = bufferOffset + low * 5;
-        float lowOffset = loadFloatBuffer(lowBufferIdx);
-        half4 lowColor = half4(loadFloatBuffer(lowBufferIdx + 1),
-                               loadFloatBuffer(lowBufferIdx + 2),
-                               loadFloatBuffer(lowBufferIdx + 3),
-                               loadFloatBuffer(lowBufferIdx + 4));
+        float lowOffset = arr[lowBufferIdx];
+        half4 lowColor = $half4_from_array(arr, lowBufferIdx + 1);
 
         int highBufferIdx = bufferOffset + high * 5;
-        float highOffset = loadFloatBuffer(highBufferIdx);
+        float highOffset = arr[highBufferIdx];
         if (highOffset == lowOffset) {
             // If the t value falls exactly on a color stop, both lowOffset
             // and highOffset will be exactly the same so we avoid having
             // 0/0=NaN as our mix value.
             return lowColor;
         } else {
-            half4 highColor = half4(loadFloatBuffer(highBufferIdx + 1),
-                                    loadFloatBuffer(highBufferIdx + 2),
-                                    loadFloatBuffer(highBufferIdx + 3),
-                                    loadFloatBuffer(highBufferIdx + 4));
+            half4 highColor = $half4_from_array(arr, highBufferIdx + 1);
 
             return half4(mix(lowColor,
                               highColor,
@@ -842,10 +805,11 @@ $pure half4 sk_linear_grad_buf_shader(float2 coords,
                                       int bufferOffset,
                                       int tileMode,
                                       int colorSpace,
-                                      int doUnpremul) {
+                                      int doUnpremul,
+                                      float[] colorAndOffsetData) {
     float2 t = $linear_grad_layout(coords);
     t = $tile_grad(tileMode, t);
-    half4 color = $colorize_grad_buf(bufferOffset, numStops, t);
+    half4 color = $colorize_grad_buf(colorAndOffsetData, bufferOffset, numStops, t);
     return $interpolated_to_rgb_unpremul(color, colorSpace, doUnpremul);
 }
 
@@ -890,10 +854,11 @@ $pure half4 sk_radial_grad_buf_shader(float2 coords,
                                       int bufferOffset,
                                       int tileMode,
                                       int colorSpace,
-                                      int doUnpremul) {
+                                      int doUnpremul,
+                                      float[] colorAndOffsetData) {
     float2 t = $radial_grad_layout(coords);
     t = $tile_grad(tileMode, t);
-    half4 color = $colorize_grad_buf(bufferOffset, numStops, t);
+    half4 color = $colorize_grad_buf(colorAndOffsetData, bufferOffset, numStops, t);
     return $interpolated_to_rgb_unpremul(color, colorSpace, doUnpremul);
 }
 
@@ -946,10 +911,11 @@ $pure half4 sk_sweep_grad_buf_shader(float2 coords,
                                      int bufferOffset,
                                      int tileMode,
                                      int colorSpace,
-                                     int doUnpremul) {
+                                     int doUnpremul,
+                                     float[] colorAndOffsetData) {
     float2 t = $sweep_grad_layout(biasParam, scaleParam, coords);
     t = $tile_grad(tileMode, t);
-    half4 color = $colorize_grad_buf(bufferOffset, numStops, t);
+    half4 color = $colorize_grad_buf(colorAndOffsetData, bufferOffset, numStops, t);
     return $interpolated_to_rgb_unpremul(color, colorSpace, doUnpremul);
 }
 
@@ -1010,10 +976,11 @@ $pure half4 sk_conical_grad_buf_shader(float2 coords,
                                        int bufferOffset,
                                        int tileMode,
                                        int colorSpace,
-                                       int doUnpremul) {
+                                       int doUnpremul,
+                                       float[] colorAndOffsetData) {
     float2 t = $conical_grad_layout(radius0Param, dRadiusParam, aParam, invAParam, coords);
     t = $tile_grad(tileMode, t);
-    half4 color = $colorize_grad_buf(bufferOffset, numStops, t);
+    half4 color = $colorize_grad_buf(colorAndOffsetData, bufferOffset, numStops, t);
     return $interpolated_to_rgb_unpremul(color, colorSpace, doUnpremul);
 }
 
@@ -1183,7 +1150,7 @@ $pure half4 sk_perlin_noise_shader(float2 coords,
     color = saturate(color);
 
     // Pre-multiply the result
-    return half4(color.rgb * color.aaa, color.a);
+    return sk_premul_alpha(color);
 }
 
 $pure half4 sk_blend(half4 src, half4 dst, int blendMode) {
@@ -1230,7 +1197,7 @@ $pure half4 sk_blend(half4 src, half4 dst, int blendMode) {
         case kSrcATop:    return blend_porter_duff(half4(0, 0,  1, -1), src, dst);
         case kDstATop:    return blend_porter_duff(half4(0, 0, -1,  1), src, dst);
         case kXor:        return blend_porter_duff(half4(0, 0, -1, -1), src, dst);
-        case kPlus:       return blend_porter_duff(half4(1, 1,  0,  0), src, dst);
+        case kPlus:       return blend_plus(src, dst);
         case kModulate:   return blend_modulate(src, dst);
         case kScreen:     return blend_screen(src, dst);
         case kOverlay:    return blend_overlay(/*flip=*/0, src, dst);
