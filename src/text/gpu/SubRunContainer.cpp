@@ -52,8 +52,8 @@
 #include "src/text/gpu/Glyph.h"
 #include "src/text/gpu/GlyphVector.h"
 #include "src/text/gpu/SDFMaskFilter.h"
-#include "src/text/gpu/SDFTControl.h"
 #include "src/text/gpu/SubRunAllocator.h"
+#include "src/text/gpu/SubRunControl.h"
 #include "src/text/gpu/VertexFiller.h"
 
 #include <algorithm>
@@ -510,7 +510,10 @@ std::optional<DrawableOpSubmitter> DrawableOpSubmitter::MakeFromBuffer(
         idsOrDrawables[i].fGlyphID = SkTo<SkGlyphID>(buffer.readInt());
     }
 
-    SkASSERT(buffer.isValid());
+    if (!buffer.isValid()) {
+        return std::nullopt;
+    }
+
     return DrawableOpSubmitter{strikeToSourceScale,
                                positions,
                                SkSpan(idsOrDrawables, glyphCount),
@@ -1351,7 +1354,6 @@ SubRunOwner SubRun::MakeFromBuffer(SkReadBuffer& buffer,
             DrawableSubRun::MakeFromBuffer,
     };
     int subRunTypeInt = buffer.readInt();
-    SkASSERT(kBad < subRunTypeInt && subRunTypeInt < kSubRunStreamTagCount);
     if (!buffer.validate(kBad < subRunTypeInt && subRunTypeInt < kSubRunStreamTagCount)) {
         return nullptr;
     }
@@ -1404,7 +1406,6 @@ SubRunContainerOwner SubRunContainer::MakeFromBufferInAlloc(SkReadBuffer& buffer
     SubRunContainerOwner container = alloc->makeUnique<SubRunContainer>(positionMatrix);
 
     int subRunCount = buffer.readInt();
-    SkASSERT(subRunCount > 0);
     if (!buffer.validate(subRunCount > 0)) { return nullptr; }
     for (int i = 0; i < subRunCount; ++i) {
         auto subRunOwner = SubRun::MakeFromBuffer(buffer, alloc, client);
@@ -1636,7 +1637,7 @@ std::tuple<SkZip<const SkGlyphID, const SkPoint>, SkZip<SkGlyphID, SkPoint>>
 static std::tuple<SkStrikeSpec, SkScalar, sktext::gpu::SDFTMatrixRange>
 make_sdft_strike_spec(const SkFont& font, const SkPaint& paint,
                       const SkSurfaceProps& surfaceProps, const SkMatrix& deviceMatrix,
-                      const SkPoint& textLocation, const sktext::gpu::SDFTControl& control) {
+                      const SkPoint& textLocation, const sktext::gpu::SubRunControl& control) {
     // Add filter to the paint which creates the SDFT data for A8 masks.
     SkPaint dfPaint{paint};
     dfPaint.setMaskFilter(sktext::gpu::SDFMaskFilter::Make());
@@ -1688,19 +1689,19 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
         SubRunCreationBehavior creationBehavior,
         const char* tag) {
     SkASSERT(alloc != nullptr);
-    SkASSERT(strikeDeviceInfo.fSDFTControl != nullptr);
+    SkASSERT(strikeDeviceInfo.fSubRunControl != nullptr);
 
     SubRunContainerOwner container = alloc->makeUnique<SubRunContainer>(positionMatrix);
-    // If there is no SDFT description ignore all SubRuns.
-    if (strikeDeviceInfo.fSDFTControl == nullptr) {
+    // If there is no SubRunControl description ignore all SubRuns.
+    if (strikeDeviceInfo.fSubRunControl == nullptr) {
         return container;
     }
 
     const SkSurfaceProps deviceProps = strikeDeviceInfo.fSurfaceProps;
     const SkScalerContextFlags scalerContextFlags = strikeDeviceInfo.fScalerContextFlags;
+    const SubRunControl* subRunControl = strikeDeviceInfo.fSubRunControl;
 #if !defined(SK_DISABLE_SDF_TEXT)
-    const SDFTControl SDFTControl = *strikeDeviceInfo.fSDFTControl;
-    const SkScalar maxMaskSize = SDFTControl.maxSize();
+    const SkScalar maxMaskSize = subRunControl->maxSize();
 #else
     const SkScalar maxMaskSize = 256;
 #endif
@@ -1746,12 +1747,12 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
 
 #if !defined(SK_DISABLE_SDF_TEXT)
             // SDFT case
-            if (SDFTControl.isSDFT(approximateDeviceTextSize, runPaint, positionMatrix)) {
+            if (subRunControl->isSDFT(approximateDeviceTextSize, runPaint, positionMatrix)) {
                 // Process SDFT - This should be the .009% case.
                 const auto& [strikeSpec, strikeToSourceScale, matrixRange] =
                         make_sdft_strike_spec(
                                 runFont, runPaint, deviceProps, positionMatrix,
-                                glyphRunListLocation, SDFTControl);
+                                glyphRunListLocation, *subRunControl);
 
                 if (!SkScalarNearlyZero(strikeToSourceScale)) {
                     sk_sp<StrikeForGPU> strike = strikeSpec.findOrCreateScopedStrike(strikeCache);
@@ -1863,9 +1864,11 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
                 source = rejected;
 
                 if (creationBehavior == kAddSubRuns && !accepted.empty()) {
+                    const bool isAntiAliased =
+                            subRunControl->forcePathAA() || has_some_antialiasing(runFont);
                     container->fSubRuns.append(
                             PathSubRun::Make(accepted,
-                                             has_some_antialiasing(runFont),
+                                             isAntiAliased,
                                              strikeToSourceScale,
                                              strike->strikePromise(),
                                              alloc));
