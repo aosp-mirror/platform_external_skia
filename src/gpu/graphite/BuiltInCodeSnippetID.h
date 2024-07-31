@@ -43,6 +43,7 @@ enum class BuiltInCodeSnippetID : int32_t {
     kConicalGradientShaderBuffer,
 
     kLocalMatrixShader,
+    kLocalMatrixShaderPersp,
     kImageShader,
     kCubicImageShader,
     kHWImageShader,
@@ -53,13 +54,13 @@ enum class BuiltInCodeSnippetID : int32_t {
     kCoordClampShader,
     kDitherShader,
     kPerlinNoiseShader,
-    kRuntimeShader,
 
     // SkColorFilter code snippets
     kMatrixColorFilter,
     kTableColorFilter,
     kGaussianColorFilter,
     kColorSpaceXformColorFilter,
+    kPremulAlphaColorFilter,
 
     // SkBlender code snippets
     kBlendShader,

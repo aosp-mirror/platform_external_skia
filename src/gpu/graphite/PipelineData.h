@@ -116,6 +116,9 @@ public:
 
     void writePaintColor(const SkPMColor4f& color) { fUniformManager.writePaintColor(color); }
 
+    void beginStruct(int baseAligment) { fUniformManager.beginStruct(baseAligment); }
+    void endStruct() { fUniformManager.endStruct(); }
+
     bool hasUniforms() const { return fUniformManager.size(); }
 
     bool hasGradientBufferData() const { return !fGradientStorage.empty(); }
@@ -124,7 +127,7 @@ public:
 
     // Returns the uniform data written so far. Will automatically pad the end of the data as needed
     // to the overall required alignment, and so should only be called when all writing is done.
-    UniformDataBlock finishUniformDataBlock() { return fUniformManager.finishUniformDataBlock(); }
+    UniformDataBlock finishUniformDataBlock() { return UniformDataBlock(fUniformManager.finish()); }
 
     // Checks if data already exists for the requested gradient shader, and returns a nullptr
     // and the offset the data begins at. If it doesn't exist, it allocates the data for the
@@ -153,12 +156,7 @@ private:
         return std::make_pair(startPtr, lastSize);
     }
 
-#ifdef SK_DEBUG
-    friend class UniformExpectationsValidator;
-
-    void setExpectedUniforms(SkSpan<const Uniform> expectedUniforms);
-    void doneWithExpectedUniforms() { fUniformManager.doneWithExpectedUniforms(); }
-#endif // SK_DEBUG
+    SkDEBUGCODE(friend class UniformExpectationsValidator;)
 
     TextureDataBlock  fTextureDataBlock;
     UniformManager    fUniformManager;
@@ -172,15 +170,19 @@ private:
 #ifdef SK_DEBUG
 class UniformExpectationsValidator {
 public:
-    UniformExpectationsValidator(PipelineDataGatherer *gatherer,
-                                 SkSpan<const Uniform> expectedUniforms);
+    UniformExpectationsValidator(PipelineDataGatherer* gatherer,
+                                 SkSpan<const Uniform> expectedUniforms,
+                                 bool isSubstruct=false)
+            : fGatherer(gatherer) {
+        fGatherer->fUniformManager.setExpectedUniforms(expectedUniforms, isSubstruct);
+    }
 
     ~UniformExpectationsValidator() {
-        fGatherer->doneWithExpectedUniforms();
+        fGatherer->fUniformManager.doneWithExpectedUniforms();
     }
 
 private:
-    PipelineDataGatherer *fGatherer;
+    PipelineDataGatherer* fGatherer;
 
     UniformExpectationsValidator(UniformExpectationsValidator &&) = delete;
     UniformExpectationsValidator(const UniformExpectationsValidator &) = delete;

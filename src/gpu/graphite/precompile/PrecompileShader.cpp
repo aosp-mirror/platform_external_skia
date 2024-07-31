@@ -31,17 +31,8 @@ namespace skgpu::graphite {
 
 PrecompileShader::~PrecompileShader() = default;
 
-sk_sp<PrecompileShader> PrecompileShader::makeWithLocalMatrix() {
-    if (this->priv().isALocalMatrixShader()) {
-        // SkShader::makeWithLocalMatrix collapses chains of localMatrix shaders so we need to
-        // follow suit here
-        return sk_ref_sp(this);
-    }
-
-    return PrecompileShaders::LocalMatrix({ sk_ref_sp(this) });
-}
-
-sk_sp<PrecompileShader> PrecompileShader::makeWithColorFilter(sk_sp<PrecompileColorFilter> cf) {
+sk_sp<PrecompileShader> PrecompileShader::makeWithColorFilter(
+        sk_sp<PrecompileColorFilter> cf) const {
     if (!cf) {
         return sk_ref_sp(this);
     }
@@ -49,7 +40,7 @@ sk_sp<PrecompileShader> PrecompileShader::makeWithColorFilter(sk_sp<PrecompileCo
     return PrecompileShaders::ColorFilter({ sk_ref_sp(this) }, { std::move(cf) });
 }
 
-sk_sp<PrecompileShader> PrecompileShader::makeWithWorkingColorSpace(sk_sp<SkColorSpace> cs) {
+sk_sp<PrecompileShader> PrecompileShader::makeWithWorkingColorSpace(sk_sp<SkColorSpace> cs) const {
     if (!cs) {
         return sk_ref_sp(this);
     }
@@ -330,7 +321,6 @@ sk_sp<PrecompileShader> PrecompileShaders::CoordClamp(SkSpan<const sk_sp<Precomp
 }
 
 //--------------------------------------------------------------------------------------------------
-// TODO: Investigate the YUV-image use case
 class PrecompileImageShader final : public PrecompileShader {
 public:
     PrecompileImageShader(SkEnumBitMask<PrecompileImageShaderFlags> flags) : fFlags(flags) {}
@@ -394,7 +384,8 @@ private:
                                                             : kDefaultSampling,
                 SkTileMode::kClamp, SkTileMode::kClamp,
                 desiredSamplingTilingCombo == kHWTiled ? kHWTileableSize : kShaderTileableSize,
-                kSubset, kIgnoredSwizzle);
+                kSubset);
+        ColorSpaceTransformBlock::ColorSpaceTransformData colorXformData(kIgnoredSwizzle);
 
         if (desiredAlphaCombo == kAlphaOnly) {
             SkASSERT(!(fFlags & PrecompileImageShaderFlags::kExcludeAlpha));
@@ -404,13 +395,28 @@ private:
                       AddKnownModeBlend(keyContext, builder, gatherer, SkBlendMode::kDstIn);
                   },
                   /* addSrcToKey= */ [&] () -> void {
-                      ImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                      Compose(keyContext, builder, gatherer,
+                              /* addInnerToKey= */ [&]() -> void {
+                                  ImageShaderBlock::AddBlock(keyContext, builder, gatherer,
+                                                             imgData);
+                              },
+                              /* addOuterToKey= */ [&]() -> void {
+                                  ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer,
+                                                                     colorXformData);
+                              });
                   },
                   /* addDstToKey= */ [&]() -> void {
                       RGBPaintColorBlock::AddBlock(keyContext, builder, gatherer);
                   });
         } else {
-            ImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+            Compose(keyContext, builder, gatherer,
+                    /* addInnerToKey= */ [&]() -> void {
+                        ImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                    },
+                    /* addOuterToKey= */ [&]() -> void {
+                        ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer,
+                                                           colorXformData);
+                    });
         }
     }
 
@@ -439,6 +445,100 @@ sk_sp<PrecompileShader> PrecompileShadersPriv::RawImage(
     return PrecompileShaders::LocalMatrix(
             { sk_make_sp<PrecompileImageShader>(flags |
                                                 PrecompileImageShaderFlags::kExcludeAlpha) });
+}
+
+//--------------------------------------------------------------------------------------------------
+class PrecompileYUVImageShader : public PrecompileShader {
+public:
+    PrecompileYUVImageShader() {}
+
+private:
+    // There are 8 intrinsic YUV shaders:
+    //  4 tiling modes
+    //    HW tiling w/o swizzle
+    //    HW tiling w/ swizzle
+    //    cubic shader tiling
+    //    non-cubic shader tiling
+    //  crossed with two postambles:
+    //    just premul
+    //    full-blown colorSpace transform
+    inline static constexpr int kNumTilingModes     = 4;
+    inline static constexpr int kHWTiledNoSwizzle   = 3;
+    inline static constexpr int kHWTiledWithSwizzle = 2;
+    inline static constexpr int kCubicShaderTiled   = 1;
+    inline static constexpr int kShaderTiled        = 0;
+
+    inline static constexpr int kNumPostambles       = 2;
+    inline static constexpr int kWithColorSpaceXform = 1;
+    inline static constexpr int kJustPremul          = 0;
+
+    inline static constexpr int kNumIntrinsicCombinations = kNumTilingModes * kNumPostambles;
+
+    int numIntrinsicCombinations() const override { return kNumIntrinsicCombinations; }
+
+    void addToKey(const KeyContext& keyContext,
+                  PaintParamsKeyBuilder* builder,
+                  PipelineDataGatherer* gatherer,
+                  int desiredCombination) const override {
+        SkASSERT(desiredCombination < kNumIntrinsicCombinations);
+
+        int desiredPostamble = desiredCombination % kNumPostambles;
+        int desiredTiling = desiredCombination / kNumPostambles;
+        SkASSERT(desiredTiling < kNumTilingModes);
+
+        static constexpr SkSamplingOptions kDefaultCubicSampling(SkCubicResampler::Mitchell());
+        static constexpr SkSamplingOptions kDefaultSampling;
+
+        YUVImageShaderBlock::ImageData imgData(desiredTiling == kCubicShaderTiled
+                                                                       ? kDefaultCubicSampling
+                                                                       : kDefaultSampling,
+                                               SkTileMode::kClamp, SkTileMode::kClamp,
+                                               /* imgSize= */ { 1, 1 },
+                                               /* subset= */ desiredTiling == kShaderTiled
+                                                                     ? SkRect::MakeEmpty()
+                                                                     : SkRect::MakeWH(1, 1));
+
+        static constexpr SkV4 kRedChannel{ 1.f, 0.f, 0.f, 0.f };
+        imgData.fChannelSelect[0] = kRedChannel;
+        imgData.fChannelSelect[1] = kRedChannel;
+        if (desiredTiling == kHWTiledNoSwizzle) {
+            imgData.fChannelSelect[2] = kRedChannel;
+        } else {
+            // Having a non-red channel selector forces a swizzle
+            imgData.fChannelSelect[2] = { 0.f, 1.f, 0.f, 0.f};
+        }
+        imgData.fChannelSelect[3] = kRedChannel;
+
+        imgData.fYUVtoRGBMatrix.setAll(1, 0, 0, 0, 1, 0, 0, 0, 0);
+        imgData.fYUVtoRGBTranslate = { 0, 0, 0 };
+
+        ColorSpaceTransformBlock::ColorSpaceTransformData colorXformData(
+                                      skgpu::graphite::ReadSwizzle::kRGBA);
+
+        if (desiredPostamble == kJustPremul) {
+            Compose(keyContext, builder, gatherer,
+                    /* addInnerToKey= */ [&]() -> void {
+                        YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                    },
+                    /* addOuterToKey= */ [&]() -> void {
+                        builder->addBlock(BuiltInCodeSnippetID::kPremulAlphaColorFilter);
+                    });
+        } else {
+            Compose(keyContext, builder, gatherer,
+                    /* addInnerToKey= */ [&]() -> void {
+                        YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                    },
+                    /* addOuterToKey= */ [&]() -> void {
+                        ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer,
+                                                           colorXformData);
+                    });
+        }
+
+    }
+};
+
+sk_sp<PrecompileShader> PrecompileShaders::YUVImage() {
+    return PrecompileShaders::LocalMatrix({ sk_make_sp<PrecompileYUVImageShader>() });
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -569,12 +669,13 @@ sk_sp<PrecompileShader> PrecompileShadersPriv::Picture(bool withLM) {
 class PrecompileLocalMatrixShader final : public PrecompileShader {
 public:
     enum class Flags {
-        kNone,
-        kIncludeWithOutVariant,
+        kNone                  = 0b00,
+        kIsPerspective         = 0b01,
+        kIncludeWithOutVariant = 0b10,
     };
 
     PrecompileLocalMatrixShader(SkSpan<const sk_sp<PrecompileShader>> wrapped,
-                                Flags flags = Flags::kNone)
+                                SkEnumBitMask<Flags> flags = Flags::kNone)
             : fWrapped(wrapped.begin(), wrapped.end())
             , fFlags(flags) {
         fNumWrappedCombos = 0;
@@ -602,8 +703,16 @@ public:
         return false;
     }
 
+    SkSpan<const sk_sp<PrecompileShader>> getWrapped() const {
+        return fWrapped;
+    }
+
+    SkEnumBitMask<Flags> getFlags() const { return fFlags; }
+
 private:
     // The LocalMatrixShader has two potential variants: with and without the LocalMatrixShader
+    // In the "with" variant, the kIsPerspective flag will determine if the shader performs
+    // the perspective division or not.
     inline static constexpr int kNumIntrinsicCombinations = 2;
     inline static constexpr int kWithLocalMatrix    = 1;
     inline static constexpr int kWithoutLocalMatrix = 0;
@@ -611,7 +720,7 @@ private:
     bool isALocalMatrixShader() const override { return true; }
 
     int numIntrinsicCombinations() const override {
-        if (fFlags != Flags::kIncludeWithOutVariant) {
+        if (!(fFlags & Flags::kIncludeWithOutVariant)) {
             return 1;   // just kWithLocalMatrix
         }
         return kNumIntrinsicCombinations;
@@ -627,7 +736,7 @@ private:
 
         int desiredLMCombination, desiredWrappedCombination;
 
-        if (fFlags != Flags::kIncludeWithOutVariant) {
+        if (!(fFlags & Flags::kIncludeWithOutVariant)) {
             desiredLMCombination = kWithLocalMatrix;
             desiredWrappedCombination = desiredCombination;
         } else {
@@ -637,13 +746,17 @@ private:
         SkASSERT(desiredWrappedCombination < fNumWrappedCombos);
 
         if (desiredLMCombination == kWithLocalMatrix) {
-            LocalMatrixShaderBlock::LMShaderData kIgnoredLMShaderData(SkMatrix::I());
+            SkMatrix matrix = SkMatrix::I();
+            if (fFlags & Flags::kIsPerspective) {
+                matrix.setPerspX(0.1f);
+            }
+            LocalMatrixShaderBlock::LMShaderData lmShaderData(matrix);
 
-            LocalMatrixShaderBlock::BeginBlock(keyContext, builder, gatherer, kIgnoredLMShaderData);
+            LocalMatrixShaderBlock::BeginBlock(keyContext, builder, gatherer, matrix);
         }
 
-            AddToKey<PrecompileShader>(keyContext, builder, gatherer, fWrapped,
-                                       desiredWrappedCombination);
+        AddToKey<PrecompileShader>(keyContext, builder, gatherer, fWrapped,
+                                   desiredWrappedCombination);
 
         if (desiredLMCombination == kWithLocalMatrix) {
             builder->endBlock();
@@ -652,12 +765,16 @@ private:
 
     std::vector<sk_sp<PrecompileShader>> fWrapped;
     int fNumWrappedCombos;
-    Flags fFlags;
+    SkEnumBitMask<Flags> fFlags;
 };
 
 sk_sp<PrecompileShader> PrecompileShaders::LocalMatrix(
-        SkSpan<const sk_sp<PrecompileShader>> wrapped) {
-    return sk_make_sp<PrecompileLocalMatrixShader>(std::move(wrapped));
+        SkSpan<const sk_sp<PrecompileShader>> wrapped,
+        bool isPerspective) {
+    return sk_make_sp<PrecompileLocalMatrixShader>(
+            std::move(wrapped),
+            isPerspective ? PrecompileLocalMatrixShader::Flags::kIsPerspective
+                          : PrecompileLocalMatrixShader::Flags::kNone);
 }
 
 sk_sp<PrecompileShader> PrecompileShadersPriv::LocalMatrixBothVariants(
@@ -665,6 +782,24 @@ sk_sp<PrecompileShader> PrecompileShadersPriv::LocalMatrixBothVariants(
     return sk_make_sp<PrecompileLocalMatrixShader>(
             std::move(wrapped),
             PrecompileLocalMatrixShader::Flags::kIncludeWithOutVariant);
+}
+
+sk_sp<PrecompileShader> PrecompileShader::makeWithLocalMatrix(bool isPerspective) const {
+    if (this->priv().isALocalMatrixShader()) {
+        // SkShader::makeWithLocalMatrix collapses chains of localMatrix shaders so we need to
+        // follow suit here, folding in any new perspective flag if needed.
+        auto thisAsLMShader = static_cast<const PrecompileLocalMatrixShader*>(this);
+        if (isPerspective && !(thisAsLMShader->getFlags() &
+                PrecompileLocalMatrixShader::Flags::kIsPerspective)) {
+            return sk_make_sp<PrecompileLocalMatrixShader>(
+                thisAsLMShader->getWrapped(),
+                thisAsLMShader->getFlags() | PrecompileLocalMatrixShader::Flags::kIsPerspective);
+        }
+
+        return sk_ref_sp(this);
+    }
+
+    return PrecompileShaders::LocalMatrix({ sk_ref_sp(this) }, isPerspective);
 }
 
 //--------------------------------------------------------------------------------------------------

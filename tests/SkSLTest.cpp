@@ -26,6 +26,7 @@
 #include "include/sksl/SkSLVersion.h"
 #include "src/base/SkArenaAlloc.h"
 #include "src/base/SkEnumBitMask.h"
+#include "src/base/SkNoDestructor.h"
 #include "src/base/SkStringView.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkRasterPipelineOpContexts.h"
@@ -509,12 +510,6 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
         }
 
         disables["LoopFloat"].push_back({regex("Intel.*(Iris|6000)"), _, _, kMac});  // b/40043507
-
-        // - Samsung ------------------------------------------------------------------------------
-        // Swizzled-index store is broken on Samsung GPU. (b/349274975)
-        for (const char* test : {"SwizzleIndexStore"}) {
-            disables[test].push_back({regex("Samsung"), "OpenGLES", _, kAndroid});
-        }
 
         #undef ADRENO
         #undef NVIDIA
@@ -1098,6 +1093,7 @@ SKSL_TEST(CPU | GPU,     kApiLevel_T, LoopInt,                         "runtime/
 SKSL_TEST(CPU | GPU,     kApiLevel_U, Ossfuzz52603,                    "runtime/Ossfuzz52603.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, QualifierOrder,                  "runtime/QualifierOrder.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, PrecisionQualifiers,             "runtime/PrecisionQualifiers.rts")
+SKSL_TEST(CPU | GPU,     kNextRelease,SharedFunctions,                 "runtime/SharedFunctions.rts")
 
 SKSL_TEST(ES3 | GPU_ES3 | UsesNaN, kNever, RecursiveComparison_Arrays,  "runtime/RecursiveComparison_Arrays.rts")
 SKSL_TEST(ES3 | GPU_ES3 | UsesNaN, kNever, RecursiveComparison_Structs, "runtime/RecursiveComparison_Structs.rts")
@@ -1174,6 +1170,7 @@ SKSL_TEST(CPU | GPU,     kApiLevel_T, OutParamsDoubleSwizzle,          "shared/O
 SKSL_TEST(CPU | GPU,     kNextRelease,PostfixExpressions,              "shared/PostfixExpressions.sksl")
 SKSL_TEST(CPU | GPU,     kNextRelease,PrefixExpressionsES2,            "shared/PrefixExpressionsES2.sksl")
 SKSL_TEST(ES3 | GPU_ES3, kNever,      PrefixExpressionsES3,            "shared/PrefixExpressionsES3.sksl")
+SKSL_TEST(CPU | GPU,     kNextRelease,ReservedInGLSLButAllowedInSkSL,  "shared/ReservedInGLSLButAllowedInSkSL.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, ResizeMatrix,                    "shared/ResizeMatrix.sksl")
 SKSL_TEST(ES3 | GPU_ES3, kNever,      ResizeMatrixNonsquare,           "shared/ResizeMatrixNonsquare.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, ReturnsValueOnEveryPathES2,      "shared/ReturnsValueOnEveryPathES2.sksl")
