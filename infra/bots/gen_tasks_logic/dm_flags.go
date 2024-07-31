@@ -283,6 +283,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "EGLImageTest")
 			skip(ALL, "test", ALL, "ES2BlendWithNoTexture")
 			skip(ALL, "test", ALL, "ExtendedSkColorTypeTests_gpu")
+			skip(ALL, "test", ALL, "F16DrawTest")
 			skip(ALL, "test", ALL, "FilterResult_ganesh") // knocks out a bunch
 			skip(ALL, "test", ALL, "FullScreenClearWithLayers")
 			skip(ALL, "test", ALL, "GLBackendAllocationTest")
@@ -401,6 +402,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		// Graphite task *only* runs the gr*** configs
 		if b.extraConfig("Graphite") {
 			args = append(args, "--nogpu") // disable non-Graphite tests
+
+			// This gm is just meant for local debugging
+			skip(ALL, "test", ALL, "PaintParamsKeyTestReduced")
 
 			if b.extraConfig("Dawn") {
 				if b.extraConfig("D3D11") {
