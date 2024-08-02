@@ -14,29 +14,23 @@
 #include "include/private/base/SkAPI.h"
 #include "include/private/base/SkAnySubclass.h"
 
-#ifdef SK_DAWN
-#include "include/private/gpu/graphite/DawnTypesPriv.h"
-#endif
-
-#ifdef SK_VULKAN
-#include "include/private/gpu/graphite/VulkanGraphiteTypesPriv.h"
-#endif
-
 struct SkISize;
 
 namespace skgpu::graphite {
 
 class TextureInfoData;
 
+#if defined(SK_DAWN) && !defined(SK_DISABLE_LEGACY_DAWN_TEXTURE_INFO_FUNCS)
+struct DawnTextureInfo;
+#endif
+
 class SK_API TextureInfo {
 public:
     TextureInfo();
-#ifdef SK_DAWN
+#if defined(SK_DAWN) && !defined(SK_DISABLE_LEGACY_DAWN_TEXTURE_INFO_FUNCS)
     TextureInfo(const DawnTextureInfo& dawnInfo);
-#endif
 
-#ifdef SK_VULKAN
-    TextureInfo(const VulkanTextureInfo& vkInfo);
+    bool getDawnTextureInfo(DawnTextureInfo* info) const;
 #endif
 
     ~TextureInfo();
@@ -54,20 +48,6 @@ public:
     Protected isProtected() const { return fProtected; }
     SkTextureCompressionType compressionType() const;
 
-#ifdef SK_DAWN
-    bool getDawnTextureInfo(DawnTextureInfo* info) const;
-#endif
-
-#ifdef SK_VULKAN
-    bool getVulkanTextureInfo(VulkanTextureInfo* info) const {
-        if (!this->isValid() || fBackend != BackendApi::kVulkan) {
-            return false;
-        }
-        *info = VulkanTextureSpecToTextureInfo(fVkSpec, fSampleCount, fMipmapped);
-        return true;
-    }
-#endif
-
     bool isCompatible(const TextureInfo& that) const;
     // Return a string containing the full description of this TextureInfo.
     SkString toString() const;
@@ -80,7 +60,7 @@ private:
 
     // Size determined by looking at the TextureInfoData subclasses, then guessing-and-checking.
     // Compiler will complain if this is too small - in that case, just increase the number.
-    inline constexpr static size_t kMaxSubclassSize = 40;
+    inline constexpr static size_t kMaxSubclassSize = 112;
     using AnyTextureInfoData = SkAnySubclass<TextureInfoData, kMaxSubclassSize>;
 
     template <typename SomeTextureInfoData>
@@ -101,32 +81,6 @@ private:
 
     size_t bytesPerPixel() const;
 
-#ifdef SK_DAWN
-    friend class DawnCaps;
-    friend class DawnCommandBuffer;
-    friend class DawnComputePipeline;
-    friend class DawnGraphicsPipeline;
-    friend class DawnResourceProvider;
-    friend class DawnTexture;
-    const DawnTextureSpec& dawnTextureSpec() const {
-        SkASSERT(fValid && fBackend == BackendApi::kDawn);
-        return fDawnSpec;
-    }
-#endif
-
-#ifdef SK_VULKAN
-    friend class VulkanCaps;
-    friend class VulkanResourceProvider;
-    friend class VulkanTexture;
-    // For querying texture for YCbCr information when generating a PaintParamsKey
-    friend class PaintParamsKey;
-
-    const VulkanTextureSpec& vulkanTextureSpec() const {
-        SkASSERT(fValid && fBackend == BackendApi::kVulkan);
-        return fVkSpec;
-    }
-#endif
-
     BackendApi fBackend = BackendApi::kMock;
     bool fValid = false;
 
@@ -135,16 +89,6 @@ private:
     Protected fProtected = Protected::kNo;
 
     AnyTextureInfoData fTextureInfoData;
-
-    union {
-#ifdef SK_DAWN
-        DawnTextureSpec fDawnSpec;
-#endif
-#ifdef SK_VULKAN
-        VulkanTextureSpec fVkSpec;
-#endif
-        void* fEnsureUnionNonEmpty;
-    };
 };
 
 }  // namespace skgpu::graphite

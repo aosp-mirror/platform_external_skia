@@ -14,27 +14,19 @@
 #include "include/gpu/graphite/TextureInfo.h"
 #include "include/private/base/SkAnySubclass.h"
 
-#ifdef SK_DAWN
+#if defined(SK_DAWN) && !defined(SK_DISABLE_LEGACY_DAWN_BACKEND_TEXTURE_FUNCS)
 #include "include/gpu/graphite/dawn/DawnTypes.h"
 #endif
-
-#ifdef SK_VULKAN
-#include "include/gpu/vk/VulkanTypes.h"
-#include "include/private/gpu/vk/SkiaVulkan.h"
-#endif
-
-namespace skgpu {
-class MutableTextureState;
-}
 
 namespace skgpu::graphite {
 
 class BackendTextureData;
+struct VulkanTextureInfo;
 
 class SK_API BackendTexture {
 public:
     BackendTexture();
-#ifdef SK_DAWN
+#if defined(SK_DAWN) && !defined(SK_DISABLE_LEGACY_DAWN_BACKEND_TEXTURE_FUNCS)
     // Create a BackendTexture from a WGPUTexture. Texture info will be queried from the texture.
     //
     // This is the recommended way of specifying a BackendTexture for Dawn. See the note below on
@@ -72,15 +64,6 @@ public:
     BackendTexture(SkISize dimensions, const DawnTextureInfo& info, WGPUTextureView textureView);
 #endif
 
-#ifdef SK_VULKAN
-    BackendTexture(SkISize dimensions,
-                   const VulkanTextureInfo&,
-                   VkImageLayout,
-                   uint32_t queueFamilyIndex,
-                   VkImage,
-                   VulkanAlloc);
-#endif
-
     BackendTexture(const BackendTexture&);
 
     ~BackendTexture();
@@ -97,32 +80,13 @@ public:
 
     const TextureInfo& info() const { return fInfo; }
 
-    // If the client changes any of the mutable backend of the GrBackendTexture they should call
-    // this function to inform Skia that those values have changed. The backend API specific state
-    // that can be set from this function are:
-    //
-    // Vulkan: VkImageLayout and QueueFamilyIndex
-    void setMutableState(const skgpu::MutableTextureState&);
-
-#ifdef SK_DAWN
-    WGPUTexture getDawnTexturePtr() const;
-    WGPUTextureView getDawnTextureViewPtr() const;
-#endif
-
-#ifdef SK_VULKAN
-    VkImage getVkImage() const;
-    VkImageLayout getVkImageLayout() const;
-    uint32_t getVkQueueFamilyIndex() const;
-    const VulkanAlloc* getMemoryAlloc() const;
-#endif
-
 private:
     friend class BackendTextureData;
     friend class BackendTexturePriv;
 
     // Size determined by looking at the BackendTextureData subclasses, then guessing-and-checking.
     // Compiler will complain if this is too small - in that case, just increase the number.
-    inline constexpr static size_t kMaxSubclassSize = 16;
+    inline constexpr static size_t kMaxSubclassSize = 72;
     using AnyBackendTextureData = SkAnySubclass<BackendTextureData, kMaxSubclassSize>;
 
     template <typename SomeBackendTextureData>
@@ -131,34 +95,9 @@ private:
         fTextureData.emplace<SomeBackendTextureData>(textureData);
     }
 
-    friend class VulkanResourceProvider;    // for getMutableState
-    sk_sp<MutableTextureState> getMutableState() const;
-
     SkISize fDimensions;
     TextureInfo fInfo;
     AnyBackendTextureData fTextureData;
-
-    sk_sp<MutableTextureState> fMutableState;
-
-#ifdef SK_VULKAN
-    // fMemoryAlloc == VulkanAlloc() if the client has already created their own VkImage and
-    // will destroy it themselves as opposed to having Skia create/destroy it via
-    // Recorder::createBackendTexture and Context::deleteBackendTexture.
-    VulkanAlloc fMemoryAlloc = VulkanAlloc();
-#endif
-
-    union {
-#ifdef SK_DAWN
-        struct {
-            WGPUTexture fDawnTexture;
-            WGPUTextureView fDawnTextureView;
-        };
-#endif
-#ifdef SK_VULKAN
-        VkImage fVkImage = VK_NULL_HANDLE;
-#endif
-        void* fEnsureUnionNonEmpty;
-    };
 };
 
 } // namespace skgpu::graphite
