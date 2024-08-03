@@ -16,6 +16,7 @@
 #include "include/gpu/graphite/Recording.h"
 #include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/TextureInfo.h"
+#include "include/private/base/SkOnce.h"
 #include "src/base/SkRectMemcpy.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkColorFilterPriv.h"
@@ -52,8 +53,8 @@
 #include "src/gpu/graphite/task/CopyTask.h"
 #include "src/gpu/graphite/task/SynchronizeToCpuTask.h"
 #include "src/gpu/graphite/task/UploadTask.h"
-
 #include "src/image/SkSurface_Base.h"
+#include "src/sksl/SkSLGraphiteModules.h"
 
 #if defined(GRAPHITE_TEST_UTILS)
 #include "src/gpu/graphite/ContextOptionsPriv.h"
@@ -83,6 +84,12 @@ Context::Context(sk_sp<SharedContext> sharedContext,
         : fSharedContext(std::move(sharedContext))
         , fQueueManager(std::move(queueManager))
         , fContextID(ContextID::Next()) {
+    // We need to move the Graphite SkSL code into the central SkSL data loader at least once
+    // (but preferrably only once) before we try to use it. We assume that there's no way to
+    // use the SkSL code without making a context, so we initialize it here.
+    static SkOnce once;
+    once([] { SkSL::Loader::SetGraphiteModuleData(SkSL::Loader::GetGraphiteModules()); });
+
     // We have to create this outside the initializer list because we need to pass in the Context's
     // SingleOwner object and it is declared last
     fResourceProvider = fSharedContext->makeResourceProvider(&fSingleOwner,
@@ -242,7 +249,7 @@ void Context::asyncRescaleAndReadImpl(ReadFn Context::* asyncRead,
                        extraParams...);
 }
 
-void Context::asyncRescaleAndReadPixels(const SkImage* image,
+void Context::asyncRescaleAndReadPixels(const SkImage* src,
                                         const SkImageInfo& dstImageInfo,
                                         const SkIRect& srcRect,
                                         SkImage::RescaleGamma rescaleGamma,
@@ -251,25 +258,26 @@ void Context::asyncRescaleAndReadPixels(const SkImage* image,
                                         SkImage::ReadPixelsContext callbackContext) {
     this->asyncRescaleAndReadImpl(&Context::asyncReadPixels,
                                   rescaleGamma, rescaleMode,
-                                  {image, srcRect, dstImageInfo, callback, callbackContext});
+                                  {src, srcRect, dstImageInfo, callback, callbackContext});
 }
 
-void Context::asyncRescaleAndReadPixels(const SkSurface* surface,
+void Context::asyncRescaleAndReadPixels(const SkSurface* src,
                                         const SkImageInfo& dstImageInfo,
                                         const SkIRect& srcRect,
                                         SkImage::RescaleGamma rescaleGamma,
                                         SkImage::RescaleMode rescaleMode,
                                         SkImage::ReadPixelsCallback callback,
                                         SkImage::ReadPixelsContext callbackContext) {
-    sk_sp<SkImage> surfaceImage = SkSurfaces::AsImage(sk_ref_sp(surface));
+    sk_sp<SkImage> surfaceImage = SkSurfaces::AsImage(sk_ref_sp(src));
     if (!surfaceImage) {
-        // The surface is not texturable, so the only supported readback is if there's no rescaling
-        if (surface && asConstSB(surface)->isGraphiteBacked() &&
+        // The source surface is not texturable, so the only supported readback is if there's
+        // no rescaling
+        if (src && asConstSB(src)->isGraphiteBacked() &&
             srcRect.size() == dstImageInfo.dimensions()) {
-            TextureProxy* proxy = static_cast<const Surface*>(surface)->backingTextureProxy();
+            TextureProxy* proxy = static_cast<const Surface*>(src)->backingTextureProxy();
             return this->asyncReadTexture(/*recorder=*/nullptr,
                                           {proxy, srcRect, dstImageInfo, callback, callbackContext},
-                                          surface->imageInfo().colorInfo());
+                                          src->imageInfo().colorInfo());
         }
         // else fall through and let asyncRescaleAndReadPixels() invoke the callback when it detects
         // the null image.
@@ -348,7 +356,7 @@ void Context::asyncReadTexture(std::unique_ptr<Recorder> recorder,
                                   params.fCallbackContext);
 }
 
-void Context::asyncRescaleAndReadPixelsYUV420(const SkImage* image,
+void Context::asyncRescaleAndReadPixelsYUV420(const SkImage* src,
                                               SkYUVColorSpace yuvColorSpace,
                                               sk_sp<SkColorSpace> dstColorSpace,
                                               const SkIRect& srcRect,
@@ -364,11 +372,11 @@ void Context::asyncRescaleAndReadPixelsYUV420(const SkImage* image,
                                                  std::move(dstColorSpace));
     this->asyncRescaleAndReadImpl(&Context::asyncReadPixelsYUV420,
                                   rescaleGamma, rescaleMode,
-                                  {image, srcRect, dstImageInfo, callback, callbackContext},
+                                  {src, srcRect, dstImageInfo, callback, callbackContext},
                                   yuvColorSpace);
 }
 
-void Context::asyncRescaleAndReadPixelsYUV420(const SkSurface* surface,
+void Context::asyncRescaleAndReadPixelsYUV420(const SkSurface* src,
                                               SkYUVColorSpace yuvColorSpace,
                                               sk_sp<SkColorSpace> dstColorSpace,
                                               const SkIRect& srcRect,
@@ -381,7 +389,7 @@ void Context::asyncRescaleAndReadPixelsYUV420(const SkSurface* surface,
     // by draws. If AsImage() returns null, the image version of asyncRescaleAndReadback will
     // automatically fail.
     // TODO: Is it worth performing an extra copy from 'surface' into a texture in order to succeed?
-    sk_sp<SkImage> surfaceImage = SkSurfaces::AsImage(sk_ref_sp(surface));
+    sk_sp<SkImage> surfaceImage = SkSurfaces::AsImage(sk_ref_sp(src));
     this->asyncRescaleAndReadPixelsYUV420(surfaceImage.get(),
                                           yuvColorSpace,
                                           dstColorSpace,
@@ -393,7 +401,7 @@ void Context::asyncRescaleAndReadPixelsYUV420(const SkSurface* surface,
                                           callbackContext);
 }
 
-void Context::asyncRescaleAndReadPixelsYUVA420(const SkImage* image,
+void Context::asyncRescaleAndReadPixelsYUVA420(const SkImage* src,
                                                SkYUVColorSpace yuvColorSpace,
                                                sk_sp<SkColorSpace> dstColorSpace,
                                                const SkIRect& srcRect,
@@ -408,11 +416,11 @@ void Context::asyncRescaleAndReadPixelsYUVA420(const SkImage* image,
                                                  std::move(dstColorSpace));
     this->asyncRescaleAndReadImpl(&Context::asyncReadPixelsYUV420,
                                   rescaleGamma, rescaleMode,
-                                  {image, srcRect, dstImageInfo, callback, callbackContext},
+                                  {src, srcRect, dstImageInfo, callback, callbackContext},
                                   yuvColorSpace);
 }
 
-void Context::asyncRescaleAndReadPixelsYUVA420(const SkSurface* surface,
+void Context::asyncRescaleAndReadPixelsYUVA420(const SkSurface* src,
                                                SkYUVColorSpace yuvColorSpace,
                                                sk_sp<SkColorSpace> dstColorSpace,
                                                const SkIRect& srcRect,
@@ -421,7 +429,7 @@ void Context::asyncRescaleAndReadPixelsYUVA420(const SkSurface* surface,
                                                SkImage::RescaleMode rescaleMode,
                                                SkImage::ReadPixelsCallback callback,
                                                SkImage::ReadPixelsContext callbackContext) {
-    sk_sp<SkImage> surfaceImage = SkSurfaces::AsImage(sk_ref_sp(surface));
+    sk_sp<SkImage> surfaceImage = SkSurfaces::AsImage(sk_ref_sp(src));
     this->asyncRescaleAndReadPixelsYUVA420(surfaceImage.get(),
                                            yuvColorSpace,
                                            dstColorSpace,

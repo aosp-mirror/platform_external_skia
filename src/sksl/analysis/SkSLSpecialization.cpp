@@ -13,6 +13,7 @@
 #include "src/sksl/SkSLDefines.h"
 #include "src/sksl/analysis/SkSLProgramVisitor.h"
 #include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
@@ -23,7 +24,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <vector>
 
 using namespace skia_private;
 
@@ -74,13 +74,20 @@ void FindFunctionsToSpecialize(const Program& program,
                         const Expression& arg = *call.arguments()[i];
 
                         // Specializations can only be made on arguments that are not complex
-                        // expressions but only a variable reference since this reference will
-                        // be inlined in the generated specialized functions.
-                        if (!arg.is<VariableReference>()) {
+                        // expressions but only a variable reference or field access since these
+                        // references will be inlined in the generated specialized functions.
+                        const Variable* argBase = nullptr;
+                        if (arg.is<VariableReference>()) {
+                            argBase = arg.as<VariableReference>().variable();
+                        } else if (arg.is<FieldAccess>() &&
+                                   arg.as<FieldAccess>().base()->is<VariableReference>()) {
+                            argBase =
+                                arg.as<FieldAccess>().base()->as<VariableReference>().variable();
+                        } else {
                             continue;
                         }
+                        SkASSERT(argBase);
 
-                        const Variable* var = arg.as<VariableReference>().variable();
                         const Variable* param = decl.parameters()[i];
 
                         // Check that this parameter fits the criteria to create a specialization.
@@ -88,10 +95,11 @@ void FindFunctionsToSpecialize(const Program& program,
                             continue;
                         }
 
-                        if (var->storage() == Variable::Storage::kGlobal) {
+                        if (argBase->storage() == Variable::Storage::kGlobal) {
                             specialization[param] = &arg;
-                        } else if (var->storage() == Variable::Storage::kParameter) {
-                            const Expression** uniformExpr = fInheritedSpecializations.find(var);
+                        } else if (argBase->storage() == Variable::Storage::kParameter) {
+                            const Expression** uniformExpr =
+                                fInheritedSpecializations.find(argBase);
                             SkASSERT(uniformExpr);
 
                             specialization[param] = *uniformExpr;
@@ -133,6 +141,14 @@ void FindFunctionsToSpecialize(const Program& program,
 
                         std::swap(fInheritedSpecializationIndex, specializationIndex);
                         fInheritedSpecializations.swap(specialization);
+                    } else {
+                        // The function being called isn't specialized, but we need to walk the
+                        // entire call graph or we may miss a specialized call entirely. Since
+                        // nothing is specialized, it is safe to skip over repeated traversals.
+                        if (!fVisitedFunctions.find(&decl)) {
+                            fVisitedFunctions.add(&decl);
+                            this->visitProgramElement(*decl.definition());
+                        }
                     }
                 }
             }
@@ -143,18 +159,39 @@ void FindFunctionsToSpecialize(const Program& program,
         SpecializationMap& fSpecializationMap;
         SpecializedCallMap& fSpecializedCallMap;
         const ParameterMatchesFn& fParameterMatchesFn;
+        THashSet<const FunctionDeclaration*> fVisitedFunctions;
 
         SpecializedParameters fInheritedSpecializations;
         SpecializationIndex fInheritedSpecializationIndex = kUnspecialized;
     };
 
-    for (const std::unique_ptr<ProgramElement>& elem : program.fOwnedElements) {
-        if (elem->is<FunctionDefinition>() &&
-            elem->as<FunctionDefinition>().declaration().isMain()) {
-            // Visit through the program call stack and aggregates any necessary
-            // function specializations.
-            Searcher(*info, parameterMatchesFn).visitProgramElement(*elem);
-            break;
+    for (const ProgramElement* elem : program.elements()) {
+        if (elem->is<FunctionDefinition>()) {
+            const FunctionDeclaration& decl = elem->as<FunctionDefinition>().declaration();
+
+            if (decl.isMain()) {
+                // Visit through the program call stack and aggregates any necessary
+                // function specializations.
+                Searcher(*info, parameterMatchesFn).visitProgramElement(*elem);
+                continue;
+            }
+
+            // Look for any function parameter which needs specialization.
+            for (const Variable* param : decl.parameters()) {
+                if (parameterMatchesFn(*param)) {
+                    // We found a function that requires specialization. Ensure that this function
+                    // ends up in the specialization map, whether or not it is reachable from
+                    // main().
+                    //
+                    // Doing this here allows unreachable specialized functions to be discarded,
+                    // because it will be in the specialization map with an array of zero necessary
+                    // specializations to emit. If we didn't add this function to the specialization
+                    // map at all, the code generator would try to emit it without applying
+                    // specializations, and generally this would lead to invalid code.
+                    info->fSpecializationMap[&decl];
+                    break;
+                }
+            }
         }
     }
 }
