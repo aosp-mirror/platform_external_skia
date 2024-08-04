@@ -176,7 +176,6 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
     // cannot handle mixed array strides being passed into functions.
     fShaderCaps->fForceStd430ArrayLayout =
             fStorageBufferSupport && fResourceBindingReqs.fStorageBufferLayout == Layout::kStd430;
-    fShaderCaps->fFloatBufferArrayName = "fsGradientBuffer";
 
     // Note that format table initialization should be performed at the end of this method to ensure
     // all capability determinations are completed prior to populating the format tables.
@@ -1287,7 +1286,10 @@ bool VulkanCaps::onIsTexturable(const TextureInfo& texInfo) const {
     if (!TextureInfos::GetVulkanTextureInfo(texInfo, &vkInfo)) {
         return false;
     }
+    return this->isTexturable(vkInfo);
+}
 
+bool VulkanCaps::isTexturable(const VulkanTextureInfo& vkInfo) const {
     // All images using external formats are required to be able to be sampled per Vulkan spec.
     // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkAndroidHardwareBufferFormatPropertiesANDROID.html#_description
     if (vkInfo.fFormat == VK_FORMAT_UNDEFINED && vkInfo.fYcbcrConversionInfo.isValid()) {
@@ -1304,9 +1306,12 @@ bool VulkanCaps::isRenderable(const TextureInfo& texInfo) const {
     if (!TextureInfos::GetVulkanTextureInfo(texInfo, &vkInfo)) {
         return false;
     }
+    return this->isRenderable(vkInfo);
+}
 
+bool VulkanCaps::isRenderable(const VulkanTextureInfo& vkInfo) const {
     const FormatInfo& info = this->getFormatInfo(vkInfo.fFormat);
-    return info.isRenderable(vkInfo.fImageTiling, texInfo.numSamples());
+    return info.isRenderable(vkInfo.fImageTiling, vkInfo.fSampleCount);
 }
 
 bool VulkanCaps::isStorage(const TextureInfo& texInfo) const {
@@ -1424,7 +1429,7 @@ std::pair<SkColorType, bool /*isRGBFormat*/> VulkanCaps::supportedReadPixelsColo
 
     // TODO: handle compressed formats
     if (VkFormatIsCompressed(vkInfo.fFormat)) {
-        SkASSERT(this->isTexturable(TextureInfos::MakeVulkan(vkInfo)));
+        SkASSERT(this->isTexturable(vkInfo));
         return {kUnknown_SkColorType, false};
     }
 

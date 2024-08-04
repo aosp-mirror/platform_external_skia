@@ -27,7 +27,7 @@ private:
     VkSemaphore fVkSemaphore;
 
     void copyTo(AnyBackendSemaphoreData& dstData) const override {
-        // Don't assert that dstData is a metal type because it could be
+        // Don't assert that dstData has a Vulkan type() because it could be
         // uninitialized and that assert would fail.
         dstData.emplace<VulkanBackendSemaphoreData>(fVkSemaphore);
     }
@@ -54,20 +54,5 @@ VkSemaphore GetVkSemaphore(const BackendSemaphore& sem) {
 }
 
 }  // namespace BackendSemaphores
-
-#if defined(SK_VULKAN) && !defined(SK_DISABLE_LEGACY_VK_BACKEND_SEMAPHORE_FUNCS)
-BackendSemaphore::BackendSemaphore(VkSemaphore semaphore)
-        : fBackend(skgpu::BackendApi::kVulkan), fIsValid(true) {
-    fSemaphoreData.emplace<VulkanBackendSemaphoreData>(VulkanBackendSemaphoreData(semaphore));
-}
-
-VkSemaphore BackendSemaphore::getVkSemaphore() const {
-    SkASSERT(fSemaphoreData->type() == skgpu::BackendApi::kVulkan);
-    const VulkanBackendSemaphoreData* vkData =
-            static_cast<const VulkanBackendSemaphoreData*>(fSemaphoreData.get());
-    SkASSERT(vkData);
-    return vkData->semaphore();
-}
-#endif
 
 }  // namespace skgpu::graphite

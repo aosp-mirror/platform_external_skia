@@ -44,7 +44,7 @@ private:
     }
 
     void copyTo(AnyTextureInfoData& dstData) const override {
-        // Don't assert that dstData is a metal type because it could be
+        // Don't assert that dstData has a Vulkan type() because it could be
         // uninitialized and that assert would fail.
         dstData.emplace<VulkanTextureInfoData>(fVkSpec);
     }
@@ -127,19 +127,5 @@ VulkanYcbcrConversionInfo GetVulkanYcbcrConversionInfo(const TextureInfo& info) 
 }
 
 }  // namespace TextureInfos
-
-#if defined(SK_VULKAN) && !defined(SK_DISABLE_LEGACY_VK_TEXTURE_INFO_FUNCS)
-TextureInfo::TextureInfo(const VulkanTextureInfo& vkInfo)
-        : fBackend(BackendApi::kVulkan)
-        , fValid(true)
-        , fSampleCount(vkInfo.fSampleCount)
-        , fMipmapped(vkInfo.fMipmapped)
-        , fProtected(Protected::kNo) {
-    if (vkInfo.fFlags & VK_IMAGE_CREATE_PROTECTED_BIT) {
-        fProtected = Protected::kYes;
-    }
-    fTextureInfoData.emplace<VulkanTextureInfoData>(VulkanTextureInfoData(vkInfo));
-}
-#endif
 
 }  // namespace skgpu::graphite

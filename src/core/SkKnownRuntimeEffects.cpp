@@ -273,6 +273,39 @@ const SkRuntimeEffect* GetKnownRuntimeEffect(StableKey stableKey) {
                                         options);
             return sBlendEffect;
         }
+        case StableKey::kLerp: {
+            static constexpr char kLerpFilterCode[] =
+                "uniform colorFilter cf0;"
+                "uniform colorFilter cf1;"
+                "uniform half weight;"
+
+                "half4 main(half4 color) {"
+                    "return mix(cf0.eval(color), cf1.eval(color), weight);"
+                "}";
+
+            static const SkRuntimeEffect* sLerpEffect =
+                    SkMakeRuntimeEffect(SkRuntimeEffect::MakeForColorFilter,
+                                        kLerpFilterCode,
+                                        options);
+            return sLerpEffect;
+        }
+        case StableKey::kMatrixConvUniforms: {
+            static const SkRuntimeEffect* sMatrixConvUniformsEffect =
+                    make_matrix_conv_effect(MatrixConvolutionImpl::kUniformBased, options);
+            return sMatrixConvUniformsEffect;
+        }
+
+        case StableKey::kMatrixConvTexSm: {
+            static const SkRuntimeEffect* sMatrixConvTexSmEffect =
+                    make_matrix_conv_effect(MatrixConvolutionImpl::kTextureBasedSm, options);
+            return sMatrixConvTexSmEffect;
+        }
+
+        case StableKey::kMatrixConvTexLg: {
+            static const SkRuntimeEffect* sMatrixConvTexMaxEffect =
+                    make_matrix_conv_effect(MatrixConvolutionImpl::kTextureBasedLg, options);
+            return sMatrixConvTexMaxEffect;
+        }
         case StableKey::kDecal: {
             static constexpr char kDecalShaderCode[] =
                 "uniform shader image;"
@@ -347,7 +380,7 @@ const SkRuntimeEffect* GetKnownRuntimeEffect(StableKey stableKey) {
                 "uniform shader child;"
                 "uniform half2 offset;"
                 "uniform half flip;" // -1 converts the max() calls to min()
-                "uniform half radius;"
+                "uniform int radius;"
 
                 "half4 main(float2 coord) {"
                     "return sk_linear_morphology(child, coord, offset, flip, radius);"
@@ -377,25 +410,6 @@ const SkRuntimeEffect* GetKnownRuntimeEffect(StableKey stableKey) {
                                         options);
             return sMagnifierEffect;
         }
-
-        case StableKey::kMatrixConvUniforms: {
-            static const SkRuntimeEffect* sMatrixConvUniformsEffect =
-                    make_matrix_conv_effect(MatrixConvolutionImpl::kUniformBased, options);
-            return sMatrixConvUniformsEffect;
-        }
-
-        case StableKey::kMatrixConvTexSm: {
-            static const SkRuntimeEffect* sMatrixConvTexSmEffect =
-                    make_matrix_conv_effect(MatrixConvolutionImpl::kTextureBasedSm, options);
-            return sMatrixConvTexSmEffect;
-        }
-
-        case StableKey::kMatrixConvTexLg: {
-            static const SkRuntimeEffect* sMatrixConvTexMaxEffect =
-                    make_matrix_conv_effect(MatrixConvolutionImpl::kTextureBasedLg, options);
-            return sMatrixConvTexMaxEffect;
-        }
-
         case StableKey::kNormal: {
             static constexpr char kNormalShaderCode[] =
                 "uniform shader alphaMap;"
@@ -460,23 +474,6 @@ const SkRuntimeEffect* GetKnownRuntimeEffect(StableKey stableKey) {
                                         kHighContrastFilterCode,
                                         options);
             return sHighContrastEffect;
-        }
-
-        case StableKey::kLerp: {
-            static constexpr char kLerpFilterCode[] =
-                "uniform colorFilter cf0;"
-                "uniform colorFilter cf1;"
-                "uniform half weight;"
-
-                "half4 main(half4 color) {"
-                    "return mix(cf0.eval(color), cf1.eval(color), weight);"
-                "}";
-
-            static const SkRuntimeEffect* sLerpEffect =
-                    SkMakeRuntimeEffect(SkRuntimeEffect::MakeForColorFilter,
-                                        kLerpFilterCode,
-                                        options);
-            return sLerpEffect;
         }
 
         case StableKey::kLuma: {

@@ -34,7 +34,7 @@ private:
     VkImage fVkImage;
 
     void copyTo(AnyBackendTextureData& dstData) const override {
-        // Don't assert that dstData is a metal type because it could be
+        // Don't assert that dstData has a Vulkan type() because it could be
         // uninitialized and that assert would fail.
         dstData.emplace<VulkanBackendTextureData>(fMemoryAlloc, fMutableState, fVkImage);
     }
@@ -134,21 +134,5 @@ void SetMutableState(BackendTexture* tex, const skgpu::MutableTextureState& newS
 }
 
 }  // namespace BackendTextures
-
-#if defined(SK_VULKAN) && !defined(SK_DISABLE_LEGACY_VK_BACKEND_SEMAPHORE_FUNCS)
-BackendTexture::BackendTexture(SkISize dimensions,
-                               const VulkanTextureInfo& info,
-                               VkImageLayout layout,
-                               uint32_t queueFamilyIndex,
-                               VkImage image,
-                               VulkanAlloc vulkanMemoryAllocation)
-        : fDimensions(dimensions), fInfo(TextureInfos::MakeVulkan(info)) {
-    fTextureData.emplace<VulkanBackendTextureData>(
-            vulkanMemoryAllocation,
-            sk_make_sp<skgpu::MutableTextureState>(
-                    skgpu::MutableTextureStates::MakeVulkan(layout, queueFamilyIndex)),
-            image);
-}
-#endif
 
 }  // namespace skgpu::graphite
