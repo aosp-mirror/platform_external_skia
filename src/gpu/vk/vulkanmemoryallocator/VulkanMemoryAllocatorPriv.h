@@ -11,6 +11,9 @@
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/private/base/SkAPI.h"
+#include "include/private/gpu/vk/SkiaVulkan.h"
+
+#include <optional>
 
 namespace skgpu {
 
