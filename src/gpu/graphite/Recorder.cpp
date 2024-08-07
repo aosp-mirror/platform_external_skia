@@ -176,7 +176,12 @@ std::unique_ptr<Recording> Recorder::snap() {
 
     std::unique_ptr<Recording::LazyProxyData> targetProxyData;
     if (fTargetProxyData) {
+        // The deferred canvas's target proxy moves with the Recording; future deferred canvases
+        // use a new texture proxy.
         targetProxyData = std::move(fTargetProxyData);
+        // Normally devices are marked immutable when their owning Surface goes away, but the
+        // deferred canvas+device do not have a surface so mimic that operation.
+        fTargetProxyDevice->setImmutable();
         fTargetProxyDevice.reset();
         fTargetProxyCanvas.reset();
     }
@@ -195,6 +200,7 @@ std::unique_ptr<Recording> Recorder::snap() {
                                         fRuntimeEffectDict.get()) == Task::Status::kFail) {
         // Leaving 'fTrackedDevices' alone since they were flushed earlier and could still be
         // attached to extant SkSurfaces.
+        fAtlasProvider->invalidateAtlases();
         fDrawBufferManager = std::make_unique<DrawBufferManager>(fResourceProvider,
                                                                  fSharedContext->caps(),
                                                                  fUploadBufferManager.get());
