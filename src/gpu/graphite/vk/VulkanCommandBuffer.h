@@ -69,13 +69,15 @@ private:
                                       const MutableTextureState* newState) override;
 
     bool onAddRenderPass(const RenderPassDesc&,
-                        const Texture* colorTexture,
-                        const Texture* resolveTexture,
-                        const Texture* depthStencilTexture,
-                        SkRect viewport,
-                        const DrawPassList&) override;
+                         SkIRect renderPassBounds,
+                         const Texture* colorTexture,
+                         const Texture* resolveTexture,
+                         const Texture* depthStencilTexture,
+                         SkRect viewport,
+                         const DrawPassList&) override;
 
     bool beginRenderPass(const RenderPassDesc&,
+                         SkIRect renderPassBounds,
                          const Texture* colorTexture,
                          const Texture* resolveTexture,
                          const Texture* depthStencilTexture);
