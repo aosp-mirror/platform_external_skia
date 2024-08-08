@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "b0c9611bdf790deeceb19781bb5ba2ca665bce72",
+        commit = "d07d6ba280ba2e4a6340bcd39eb94249eba986d4",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -185,7 +185,7 @@ def c_plus_plus_deps(ws = "@skia"):
 
     git_repository(
         name = "spirv_tools",
-        commit = "246daf246bb17336afcf4482680bba434b1e5557",
+        commit = "b64a423b44f448df5464978173e28be12069b73c",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
