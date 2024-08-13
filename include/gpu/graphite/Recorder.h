@@ -55,6 +55,7 @@ class TextureDataBlock;
 class TextureInfo;
 class UniformDataBlock;
 class UploadBufferManager;
+class UploadList;
 
 template<typename T> class PipelineDataCache;
 using UniformDataCache = PipelineDataCache<UniformDataBlock>;
@@ -193,6 +194,11 @@ public:
     size_t currentBudgetedBytes() const;
 
     /**
+     * Returns the number of bytes of the Recorder's resource cache that are currently purgeable.
+     */
+    size_t currentPurgeableBytes() const;
+
+    /**
      * Returns the size of Recorder's gpu memory cache budget in bytes.
      */
     size_t maxBudgetedBytes() const;
@@ -246,6 +252,9 @@ private:
 
     // NOTE: These are stored by pointer to allow them to be forward declared.
     std::unique_ptr<TaskList> fRootTaskList;
+    // Aggregated one-time uploads that preceed all tasks in the root task list.
+    std::unique_ptr<UploadList> fRootUploads;
+
     std::unique_ptr<UniformDataCache> fUniformDataCache;
     std::unique_ptr<TextureDataCache> fTextureDataCache;
     std::unique_ptr<DrawBufferManager> fDrawBufferManager;
