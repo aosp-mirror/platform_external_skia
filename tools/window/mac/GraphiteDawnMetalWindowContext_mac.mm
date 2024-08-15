@@ -4,9 +4,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "tools/window/mac/GraphiteDawnMetalWindowContext_mac.h"
 
 #include "tools/window/GraphiteDawnWindowContext.h"
-#include "tools/window/mac/WindowContextFactory_mac.h"
+#include "tools/window/mac/MacWindowInfo.h"
 
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAConstraintLayoutManager.h>
@@ -89,11 +90,7 @@ bool GraphiteDawnMetalWindowContext_mac::onInitializeContext() {
     return true;
 }
 
-void GraphiteDawnMetalWindowContext_mac::onDestroyContext() {
-    fMetalLayer = nil;
-    fMainView.layer = nil;
-    fMainView.wantsLayer = NO;
-}
+void GraphiteDawnMetalWindowContext_mac::onDestroyContext() {}
 
 void GraphiteDawnMetalWindowContext_mac::resize(int w, int h) {
     if (!this->resizeInternal()) {

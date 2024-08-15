@@ -13,6 +13,7 @@
 #include "src/core/SkIPoint16.h"
 #include "src/gpu/ganesh/GrDeferredUpload.h"
 #include "src/gpu/ganesh/GrPipeline.h"
+#include "src/gpu/ganesh/GrProcessorSet.h"
 #include "src/gpu/ganesh/ops/GrOp.h"
 
 class GrAppliedClip;
@@ -91,7 +92,7 @@ public:
     }
 #endif
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     // This is really only intended for TextureOp and FillRectOp to override
     virtual int numQuads() const { return -1; }
 #endif

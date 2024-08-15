@@ -99,11 +99,8 @@ config("skia_private") {
   if (is_skia_dev_build && !is_wasm) {
     defines += [
       "SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1",
-      "GR_TEST_UTILS=1",
+      "GPU_TEST_UTILS=1",
     ]
-    if (skia_enable_graphite) {
-      defines += [ "GRAPHITE_TEST_UTILS=1" ]
-    }
   }
   libs = []
   lib_dirs = []
@@ -167,6 +164,7 @@ template("opts") {
 }
 
 is_x86 = current_cpu == "x64" || current_cpu == "x86"
+is_loong64 = current_cpu == "loong64"
 
 opts("hsw") {
   enabled = is_x86
@@ -186,6 +184,12 @@ opts("skx") {
   } else {
     cflags = [ "-march=skylake-avx512" ]
   }
+}
+
+opts("lasx") {
+  enabled = is_loong64
+  sources = skia_opts.lasx_sources
+  cflags = [ "-mlasx" ]
 }
 
 # Any feature of Skia that requires third-party code should be optional and use this template.
@@ -307,12 +311,8 @@ optional("fontmgr_android") {
     "//third_party/expat",
   ]
   public_defines = [ "SK_FONTMGR_ANDROID_AVAILABLE" ]
-  public = [ "include/ports/SkFontMgr_android.h" ]
-  sources = [
-    "src/ports/SkFontMgr_android.cpp",
-    "src/ports/SkFontMgr_android_parser.cpp",
-    "src/ports/SkFontMgr_android_parser.h",
-  ]
+  public = skia_ports_fontmgr_android_public
+  sources = skia_ports_fontmgr_android_sources
   sources_for_tests = [ "tests/FontMgrAndroidParserTest.cpp" ]
 }
 
@@ -322,8 +322,7 @@ optional("fontmgr_custom") {
       skia_enable_fontmgr_custom_embedded || skia_enable_fontmgr_custom_empty
 
   deps = [ ":typeface_freetype" ]
-  public = [ "src/ports/SkFontMgr_custom.h" ]
-  sources = [ "src/ports/SkFontMgr_custom.cpp" ]
+  sources = skia_ports_fontmgr_custom_sources
 }
 
 optional("fontmgr_custom_directory") {
@@ -333,8 +332,8 @@ optional("fontmgr_custom_directory") {
     ":fontmgr_custom",
     ":typeface_freetype",
   ]
-  public = [ "include/ports/SkFontMgr_directory.h" ]
-  sources = [ "src/ports/SkFontMgr_custom_directory.cpp" ]
+  public = skia_ports_fontmgr_directory_public
+  sources = skia_ports_fontmgr_directory_sources
 }
 
 optional("fontmgr_custom_embedded") {
@@ -344,7 +343,8 @@ optional("fontmgr_custom_embedded") {
     ":fontmgr_custom",
     ":typeface_freetype",
   ]
-  sources = [ "src/ports/SkFontMgr_custom_embedded.cpp" ]
+  public = skia_ports_fontmgr_embedded_public
+  sources = skia_ports_fontmgr_embedded_sources
 }
 
 optional("fontmgr_custom_empty") {
@@ -354,8 +354,8 @@ optional("fontmgr_custom_empty") {
     ":fontmgr_custom",
     ":typeface_freetype",
   ]
-  public = [ "include/ports/SkFontMgr_empty.h" ]
-  sources = [ "src/ports/SkFontMgr_custom_empty.cpp" ]
+  public = skia_ports_fontmgr_empty_public
+  sources = skia_ports_fontmgr_empty_sources
 }
 
 optional("fontmgr_fontconfig") {
@@ -364,9 +364,9 @@ optional("fontmgr_fontconfig") {
 
   # The public header includes fontconfig.h and uses FcConfig*
   public_deps = [ "//third_party:fontconfig" ]
-  public = [ "include/ports/SkFontMgr_fontconfig.h" ]
+  public = skia_ports_fontmgr_fontconfig_public
   deps = [ ":typeface_freetype" ]
-  sources = [ "src/ports/SkFontMgr_fontconfig.cpp" ]
+  sources = skia_ports_fontmgr_fontconfig_sources
   sources_for_tests = [ "tests/FontMgrFontConfigTest.cpp" ]
 }
 
@@ -377,17 +377,8 @@ optional("fontmgr_FontConfigInterface") {
     ":typeface_freetype",
     "//third_party:fontconfig",
   ]
-  public = [
-    "include/ports/SkFontConfigInterface.h",
-    "include/ports/SkFontMgr_FontConfigInterface.h",
-  ]
-  sources = [
-    "src/ports/SkFontConfigInterface.cpp",
-    "src/ports/SkFontConfigInterface_direct.cpp",
-    "src/ports/SkFontConfigInterface_direct_factory.cpp",
-    "src/ports/SkFontConfigTypeface.h",
-    "src/ports/SkFontMgr_FontConfigInterface.cpp",
-  ]
+  public = skia_ports_fci_public
+  sources = skia_ports_fci_sources
   sources_for_tests = [ "tests/FCITest.cpp" ]
 }
 
@@ -396,11 +387,8 @@ optional("fontmgr_fontations_empty") {
   public_defines = [ "SK_FONTMGR_FONTATIONS_AVAILABLE" ]
 
   deps = [ ":typeface_fontations" ]
-  public = [ "include/ports/SkFontMgr_Fontations.h" ]
-  sources = [
-    "src/ports/SkFontMgr_fontations_empty.cpp",
-    "src/ports/SkFontMgr_fontations_empty.h",
-  ]
+  public = skia_ports_fontmgr_fontations_public
+  sources = skia_ports_fontmgr_fontations_sources
 }
 
 optional("fontmgr_fuchsia") {
@@ -413,8 +401,8 @@ optional("fontmgr_fuchsia") {
   } else {
     deps = [ "//sdk/fidl/fuchsia.fonts" ]
   }
-  public = [ "src/ports/SkFontMgr_fuchsia.h" ]
-  sources = [ "src/ports/SkFontMgr_fuchsia.cpp" ]
+  public = skia_ports_fontmgr_fuchsia_public
+  sources = skia_ports_fontmgr_fuchsia_sources
 }
 
 optional("fontmgr_mac_ct") {
@@ -424,17 +412,8 @@ optional("fontmgr_mac_ct") {
     "SK_TYPEFACE_FACTORY_CORETEXT",
     "SK_FONTMGR_CORETEXT_AVAILABLE",
   ]
-  public = [
-    "include/ports/SkFontMgr_mac_ct.h",
-    "include/ports/SkTypeface_mac.h",
-  ]
-  sources = [
-    "src/ports/SkFontMgr_mac_ct.cpp",
-    "src/ports/SkScalerContext_mac_ct.cpp",
-    "src/ports/SkScalerContext_mac_ct.h",
-    "src/ports/SkTypeface_mac_ct.cpp",
-    "src/ports/SkTypeface_mac_ct.h",
-  ]
+  public = skia_ports_fontmgr_coretext_public
+  sources = skia_ports_fontmgr_coretext_sources
   sources_for_tests = [ "tests/TypefaceMacTest.cpp" ]
 
   if (is_mac) {
@@ -464,14 +443,8 @@ optional("fontmgr_win") {
     "SK_TYPEFACE_FACTORY_DIRECTWRITE",
     "SK_FONTMGR_DIRECTWRITE_AVAILABLE",
   ]
-  public = [ "include/ports/SkTypeface_win.h" ]
-  sources = [
-    "src/ports/SkFontMgr_win_dw.cpp",
-    "src/ports/SkScalerContext_win_dw.cpp",
-    "src/ports/SkScalerContext_win_dw.h",
-    "src/ports/SkTypeface_win_dw.cpp",
-    "src/ports/SkTypeface_win_dw.h",
-  ]
+  public = skia_ports_windows_fonts_public
+  sources = skia_ports_windows_fonts_sources
   if (skia_dwritecore_sdk != "") {
     defines = [ "DWRITE_CORE" ]
     if (is_win && is_clang) {
@@ -493,8 +466,8 @@ optional("fontmgr_win") {
 optional("fontmgr_win_gdi") {
   enabled = skia_enable_fontmgr_win_gdi
   public_defines = [ "SK_FONTMGR_GDI_AVAILABLE" ]
-  public = [ "include/ports/SkTypeface_win.h" ]
-  sources = [ "src/ports/SkFontHost_win.cpp" ]
+  public = skia_ports_windows_fonts_public
+  sources = skia_ports_fonthost_win_sources
   libs = [ "Gdi32.lib" ]
 }
 
@@ -587,20 +560,20 @@ if (skia_compile_modules) {
     ]
     libs = []
     if (is_win) {
-      sources += [ "tools/SkGetExecutablePath_win.cpp" ]
+      sources += [ "src/utils/SkGetExecutablePath_win.cpp" ]
     } else if (is_mac || is_ios) {
-      sources += [ "tools/SkGetExecutablePath_mac.cpp" ]
+      sources += [ "src/utils/SkGetExecutablePath_mac.cpp" ]
     } else if (is_linux || is_android) {
-      sources += [ "tools/SkGetExecutablePath_linux.cpp" ]
+      sources += [ "src/utils/SkGetExecutablePath_linux.cpp" ]
     }
     if (is_win) {
-      sources += [ "src/ports/SkOSFile_win.cpp" ]
+      sources += skia_ports_windows_sources
     } else {
       sources += [ "src/ports/SkOSFile_posix.cpp" ]
       libs += [ "dl" ]
     }
-    sources += skia_sksl_sources
-    sources += skia_sksl_gpu_sources
+    sources += skia_sksl_core_sources
+    sources += skia_sksl_codegen_sources
     include_dirs = [ "." ]
     deps = [ ":run_sksllex" ]
   }
@@ -704,9 +677,7 @@ if (skia_compile_sksl_tests) {
     defines = [
       "SKSL_STANDALONE",
       "SK_DISABLE_TRACING",
-      "SK_ENABLE_SPIRV_CROSS",
-      "SK_ENABLE_SPIRV_VALIDATION",
-      "SK_ENABLE_WGSL_VALIDATION",
+      "SK_COMPILE_WITH_GN",
     ]
     sources = skslc_deps
     sources += [
@@ -716,21 +687,25 @@ if (skia_compile_sksl_tests) {
     ]
     libs = []
     if (is_win) {
-      sources += [ "tools/SkGetExecutablePath_win.cpp" ]
+      sources += [ "src/utils/SkGetExecutablePath_win.cpp" ]
     } else if (is_mac || is_ios) {
-      sources += [ "tools/SkGetExecutablePath_mac.cpp" ]
+      sources += [ "src/utils/SkGetExecutablePath_mac.cpp" ]
     } else if (is_linux || is_android) {
-      sources += [ "tools/SkGetExecutablePath_linux.cpp" ]
+      sources += [ "src/utils/SkGetExecutablePath_linux.cpp" ]
     }
     if (is_win) {
-      sources += [ "src/ports/SkOSFile_win.cpp" ]
+      sources += skia_ports_windows_sources
     } else {
       sources += [ "src/ports/SkOSFile_posix.cpp" ]
       libs += [ "dl" ]
     }
-    sources += skia_sksl_sources
-    sources += skia_sksl_gpu_sources
+    sources += skia_sksl_codegen_sources
+    sources += skia_sksl_core_sources
+    sources += skia_sksl_hlsl_sources
+    sources += skia_sksl_pipeline_sources
     sources += skia_sksl_tracing_sources
+    sources += skia_sksl_validate_spirv_sources
+    sources += skia_sksl_validate_wgsl_sources
     include_dirs = [ "." ]
     deps = [
       ":run_sksllex",
@@ -865,6 +840,18 @@ if (skia_compile_sksl_tests) {
   }
 }
 
+group("compile_all_sksl_tests") {
+  deps = [
+    ":compile_sksl_glsl_nosettings_tests",
+    ":compile_sksl_glsl_tests",
+    ":compile_sksl_hlsl_tests",
+    ":compile_sksl_metal_tests",
+    ":compile_sksl_skrp_tests",
+    ":compile_sksl_spirv_tests",
+    ":compile_sksl_wgsl_tests",
+  ]
+}
+
 optional("gpu_shared") {
   enabled = skia_enable_ganesh || skia_enable_graphite
 
@@ -874,7 +861,9 @@ optional("gpu_shared") {
   public_deps = []
   frameworks = []
 
-  sources = skia_shared_gpu_sources + skia_sksl_gpu_sources
+  sources = skia_shared_gpu_sources
+  sources += skia_sksl_pipeline_sources
+  sources += skia_sksl_codegen_sources
 
   if (skia_use_dawn) {
     public_defines += [ "SK_DAWN" ]
@@ -905,9 +894,7 @@ optional("gpu_shared") {
   }
 
   if (skia_use_direct3d) {
-    # Must be defined when 'skia_sksl_gpu_sources' is built, even if the rest of skia_use_direct3d
-    # is handled only in the 'gpu' component.
-    public_defines += [ "SK_ENABLE_SPIRV_CROSS" ]
+    sources += skia_sksl_hlsl_sources
     deps += [ "//third_party/spirv-cross:spirv_cross" ]
   }
 
@@ -918,6 +905,7 @@ optional("gpu_shared") {
       public_defines += [ "SK_ENABLE_VK_LAYERS" ]
     }
     if (skia_use_vma) {
+      sources += skia_vma_sources
       public_deps += [ "src/gpu/vk/vulkanmemoryallocator" ]
     }
   }
@@ -935,11 +923,6 @@ optional("gpu_shared") {
 optional("gpu") {
   enabled = skia_enable_ganesh
   deps = [
-    ":compile_sksl_glsl_nosettings_tests",
-    ":compile_sksl_glsl_tests",
-    ":compile_sksl_metal_tests",
-    ":compile_sksl_skrp_tests",
-    ":compile_sksl_spirv_tests",
     ":gpu_shared",
     ":minify_sksl",
     ":run_sksllex",
@@ -989,7 +972,6 @@ optional("gpu") {
           "src/gpu/ganesh/gl/egl/GrGLMakeNativeInterface_egl.cpp",
         ]
         libs += [ "EGL" ]
-        public_defines += [ "SK_EGL" ]
       }
     } else if (skia_use_webgl) {
       sources += [ "src/gpu/ganesh/gl/webgl/GrGLMakeNativeInterface_webgl.cpp" ]
@@ -999,7 +981,6 @@ optional("gpu") {
         "src/gpu/ganesh/gl/glx/GrGLMakeNativeInterface_glx.cpp",
       ]
       libs += [ "GL" ]
-      public_defines += [ "SK_GLX" ]
     } else if (is_mac) {
       sources += [ "src/gpu/ganesh/gl/mac/GrGLMakeNativeInterface_mac.cpp" ]
     } else if (is_ios) {
@@ -1174,6 +1155,7 @@ optional("graphite") {
   ]
   public = skia_graphite_public
   sources = skia_graphite_sources
+  sources += skia_sksl_graphite_modules_sources
 
   if (is_android) {
     sources += skia_graphite_android_private
@@ -1280,12 +1262,7 @@ optional("typeface_freetype") {
 
   public_defines = [ "SK_TYPEFACE_FACTORY_FREETYPE" ]
   deps = [ "//third_party/freetype2" ]
-  sources = [
-    "src/ports/SkFontHost_FreeType.cpp",
-    "src/ports/SkFontHost_FreeType_common.cpp",
-    "src/ports/SkFontHost_FreeType_common.h",
-    "src/ports/SkTypeface_FreeType.h",
-  ]
+  sources = skia_ports_freetype_sources
 }
 
 if (skia_use_fontations) {
@@ -1297,7 +1274,9 @@ if (skia_use_fontations) {
       # right thing but may not be the right build configuration in the long run.
       bazel_args += [ "--host_platform=//bazel/platform:mac_arm64_hermetic" ]
     }
-    if (!is_debug) {
+    if (is_debug) {
+      bazel_args += [ "--compilation_mode=dbg" ]
+    } else {
       bazel_args += [ "--compilation_mode=opt" ]
     }
     script = "gn/bazel_build.py"
@@ -1322,7 +1301,9 @@ if (skia_use_fontations) {
       # right thing but may not be the right build configuration in the long run.
       bazel_args += [ "--host_platform=//bazel/platform:mac_arm64_hermetic" ]
     }
-    if (!is_debug) {
+    if (is_debug) {
+      bazel_args += [ "--compilation_mode=dbg" ]
+    } else {
       bazel_args += [ "--compilation_mode=opt" ]
     }
     script = "gn/bazel_build.py"
@@ -1364,12 +1345,10 @@ optional("typeface_fontations") {
     "$root_out_dir/libfontations_ffi.a",
     "$root_out_dir/libbridge_rust_side.a",
   ]
-  sources = [
-    "src/ports/SkFontScanner_fontations.cpp",
-    "src/ports/SkFontScanner_fontations.h",
-    "src/ports/SkTypeface_fontations.cpp",
-    "src/ports/SkTypeface_fontations_priv.h",
-  ]
+  sources = skia_ports_typeface_fontations_sources + [
+              "src/ports/SkFontScanner_fontations.cpp",
+              "src/ports/SkFontScanner_fontations.h",
+            ]
 
   sources_for_tests = [
     "tests/FontationsTest.cpp",
@@ -1472,6 +1451,7 @@ skia_component("skia") {
     ":hsw",
     ":jpeg_decode",
     ":jpegxl_decode",
+    ":lasx",
     ":minify_sksl",
     ":ndk_images",
     ":png_decode",
@@ -1501,8 +1481,10 @@ skia_component("skia") {
   sources += skia_codec_core
   sources += skia_codec_decode_bmp
   sources += skia_encode_srcs
-  sources += skia_sksl_sources
+  sources += skia_sksl_core_sources
+  sources += skia_sksl_core_module_sources
   sources += skia_sksl_tracing_sources
+  sources += skia_ports_sources
   sources += [
     "src/android/SkAndroidFrameworkUtils.cpp",
     "src/android/SkAnimatedImage.cpp",
@@ -1512,9 +1494,7 @@ skia_component("skia") {
     "src/codec/SkParseEncodedOrigin.cpp",
     "src/codec/SkSampledCodec.cpp",
     "src/ports/SkDiscardableMemory_none.cpp",
-    "src/ports/SkGlobalInitialization_default.cpp",
     "src/ports/SkMemory_malloc.cpp",
-    "src/ports/SkOSFile_stdio.cpp",
     "src/sfnt/SkOTTable_name.cpp",
     "src/sfnt/SkOTUtils.cpp",
   ]
@@ -1537,12 +1517,10 @@ skia_component("skia") {
   }
 
   if (is_win) {
-    sources += [
-      "src/ports/SkDebug_win.cpp",
-      "src/ports/SkImageGeneratorWIC.cpp",
-      "src/ports/SkOSFile_win.cpp",
-      "src/ports/SkOSLibrary_win.cpp",
-    ]
+    sources += skia_ports_windows_sources + [
+                 "src/ports/SkDebug_win.cpp",
+                 "src/ports/SkImageGeneratorWIC.cpp",
+               ]
     libs += [
       "Ole32.lib",
       "OleAut32.lib",
@@ -1556,10 +1534,10 @@ skia_component("skia") {
       ]
     }
   } else {
-    sources += [
-      "src/ports/SkOSFile_posix.cpp",
-      "src/ports/SkOSLibrary_posix.cpp",
-    ]
+    sources += [ "src/ports/SkOSFile_posix.cpp" ]
+    if (is_ios) {
+      sources += [ "src/ports/SkOSFile_ios.h" ]
+    }
     libs += [ "dl" ]
   }
 
@@ -1928,6 +1906,17 @@ if (skia_enable_tools) {
     }
   }
 
+  test_lib("load_dynamic_library") {
+    configs = [ ":skia_private" ]
+    deps = [ ":skia" ]
+    sources = [ "tools/library/LoadDynamicLibrary.h" ]
+    if (is_win) {
+      sources += [ "tools/library/LoadDynamicLibrary_win.cpp" ]
+    } else {
+      sources += [ "tools/library/LoadDynamicLibrary_posix.cpp" ]
+    }
+  }
+
   test_lib("gpu_tool_utils") {
     public_defines = []
 
@@ -1940,7 +1929,7 @@ if (skia_enable_tools) {
       defines += [ "SK_ENABLE_DISCRETE_GPU" ]
     }
 
-    deps = []
+    deps = [ ":load_dynamic_library" ]
     public_deps = []
     sources = [
       "tools/gpu/BackendSurfaceFactory.cpp",
@@ -2096,7 +2085,7 @@ if (skia_enable_tools) {
     public_deps = [ ":gpu_tool_utils" ]
   }
   test_lib("common_flags_gpu") {
-    sources = [ "tools/flags/CommonFlagsGpu.cpp" ]
+    sources = [ "tools/flags/CommonFlagsGanesh.cpp" ]
     deps = [ ":flags" ]
     public_deps = [ ":gpu_tool_utils" ]
   }
@@ -2417,6 +2406,7 @@ if (skia_enable_tools) {
         ":common_flags_config",
         ":common_flags_gpu",
         ":common_flags_images",
+        ":compile_all_sksl_tests",
         ":flags",
         ":gm",
         ":gpu_tool_utils",
@@ -2805,7 +2795,6 @@ if (skia_enable_tools) {
 
     if (is_android) {
       sources += [
-        "tools/SkGetExecutablePath_linux.cpp",
         "tools/sk_app/android/Window_android.cpp",
         "tools/sk_app/android/Window_android.h",
         "tools/sk_app/android/main_android.cpp",
@@ -2815,7 +2804,6 @@ if (skia_enable_tools) {
       libs += [ "android" ]
     } else if (is_linux) {
       sources += [
-        "tools/SkGetExecutablePath_linux.cpp",
         "tools/sk_app/unix/Window_unix.cpp",
         "tools/sk_app/unix/Window_unix.h",
         "tools/sk_app/unix/keysym2ucs.c",
@@ -2828,14 +2816,12 @@ if (skia_enable_tools) {
       ]
     } else if (is_win) {
       sources += [
-        "tools/SkGetExecutablePath_win.cpp",
         "tools/sk_app/win/Window_win.cpp",
         "tools/sk_app/win/Window_win.h",
         "tools/sk_app/win/main_win.cpp",
       ]
     } else if (is_mac) {
       sources += [
-        "tools/SkGetExecutablePath_mac.cpp",
         "tools/sk_app/mac/Window_mac.h",
         "tools/sk_app/mac/Window_mac.mm",
         "tools/sk_app/mac/main_mac.mm",
@@ -2847,7 +2833,6 @@ if (skia_enable_tools) {
       ]
     } else if (is_ios) {
       sources += [
-        "tools/SkGetExecutablePath_mac.cpp",
         "tools/sk_app/ios/Window_ios.h",
         "tools/sk_app/ios/Window_ios.mm",
         "tools/sk_app/ios/main_ios.mm",
@@ -2984,6 +2969,7 @@ if (skia_enable_tools) {
         "tools/viewer/TimingSlide.cpp",
         "tools/viewer/TouchGesture.cpp",
         "tools/viewer/TouchGesture.h",
+        "tools/viewer/TypefaceSlide.cpp",
         "tools/viewer/VariableWidthStrokerSlide.cpp",
         "tools/viewer/Viewer.cpp",
         "tools/viewer/Viewer.h",
@@ -3022,21 +3008,6 @@ if (skia_enable_tools) {
     }
   }
 
-  if (skia_use_gl && !skia_use_angle && (is_linux || is_win || is_mac)) {
-    test_app("HelloWorld") {
-      sources = [ "example/HelloWorld.cpp" ]
-      libs = []
-
-      deps = [
-        ":flags",
-        ":gpu_tool_utils",
-        ":sk_app",
-        ":skia",
-        ":tool_utils",
-      ]
-    }
-  }
-
   if (skia_use_vulkan) {
     test_app("VulkanBasic") {
       # Bots and even devs may not have Vulkan headers, so put
@@ -3051,7 +3022,10 @@ if (skia_enable_tools) {
       sources += [ "tools/gpu/vk/VkTestMemoryAllocator.cpp" ]
       sources += [ "tools/gpu/vk/VkTestUtils.h" ]
       sources += [ "tools/gpu/vk/VkTestUtils.cpp" ]
-      deps = [ ":skia" ]
+      deps = [
+        ":load_dynamic_library",
+        ":skia",
+      ]
     }
   }
 

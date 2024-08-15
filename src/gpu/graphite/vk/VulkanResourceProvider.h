@@ -9,8 +9,11 @@
 #define skgpu_graphite_VulkanResourceProvider_DEFINED
 
 #include "src/gpu/graphite/ResourceProvider.h"
+#include "src/gpu/graphite/vk/VulkanGraphicsPipeline.h"
 
 #include "include/gpu/vk/VulkanTypes.h"
+#include "src/core/SkLRUCache.h"
+#include "src/core/SkTHash.h"
 #include "src/gpu/graphite/DescriptorData.h"
 
 #ifdef  SK_BUILD_FOR_ANDROID
@@ -33,6 +36,8 @@ class VulkanResourceProvider final : public ResourceProvider {
 public:
     static constexpr size_t kIntrinsicConstantSize = sizeof(float) * 4;
     static constexpr size_t kLoadMSAAVertexBufferSize = sizeof(float) * 8; // 4 points of 2 floats
+
+    using UniformBindGroupKey = FixedSizeKey<2 * VulkanGraphicsPipeline::kNumUniformBuffers>;
 
     VulkanResourceProvider(SharedContext* sharedContext,
                            SingleOwner*,
@@ -84,6 +89,10 @@ private:
 
     sk_sp<VulkanDescriptorSet> findOrCreateDescriptorSet(SkSpan<DescriptorData>);
 
+    sk_sp<VulkanDescriptorSet> findOrCreateUniformBuffersDescriptorSet(
+            SkSpan<DescriptorData> requestedDescriptors,
+            SkSpan<BindBufferInfo> bindUniformBufferInfo);
+
     sk_sp<VulkanGraphicsPipeline> findOrCreateLoadMSAAPipeline(const RenderPassDesc&);
 
     // Find or create a compatible (needed when creating a framebuffer and graphics pipeline) or
@@ -97,6 +106,7 @@ private:
     VkPipelineCache pipelineCache();
 
     friend class VulkanCommandBuffer;
+    friend class VulkanGraphicsPipeline;
     VkPipelineCache fPipelineCache = VK_NULL_HANDLE;
 
     // Each render pass will need buffer space to record rtAdjust information. To minimize costly
@@ -118,6 +128,9 @@ private:
     VkShaderModule fMSAALoadFragShaderModule = VK_NULL_HANDLE;
     VkPipelineShaderStageCreateInfo fMSAALoadShaderStageInfo[2];
     VkPipelineLayout fMSAALoadPipelineLayout = VK_NULL_HANDLE;
+
+    SkLRUCache<UniformBindGroupKey, sk_sp<VulkanDescriptorSet>,
+               UniformBindGroupKey::Hash> fUniformBufferDescSetCache;
 };
 
 } // namespace skgpu::graphite

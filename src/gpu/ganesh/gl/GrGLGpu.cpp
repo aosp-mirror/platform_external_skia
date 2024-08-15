@@ -1771,11 +1771,13 @@ int GrGLGpu::getCompatibleStencilIndex(GrGLFormat format) {
         // Default to unsupported, set this if we find a stencil format that works.
         int firstWorkingStencilFormatIndex = -1;
 
+        GrProtected isProtected = GrProtected(this->glCaps().supportsProtectedContent());
+
         GrGLuint colorID = this->createTexture({kSize, kSize}, format, GR_GL_TEXTURE_2D,
                                                GrRenderable::kYes,
                                                nullptr,
                                                1,
-                                               GrProtected::kNo,
+                                               isProtected,
                                                /*label=*/"Skia");
         if (!colorID) {
             return -1;
@@ -4035,7 +4037,7 @@ bool GrGLGpu::compile(const GrProgramDesc& desc, const GrProgramInfo& programInf
     return stat != GrThreadSafePipelineBuilder::Stats::ProgramCacheResult::kHit;
 }
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
 
 bool GrGLGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     SkASSERT(GrBackendApi::kOpenGL == tex.backend());

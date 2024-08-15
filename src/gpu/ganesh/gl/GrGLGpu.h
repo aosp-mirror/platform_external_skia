@@ -223,7 +223,7 @@ public:
         return fProgramCache->precompileShader(this->getContext(), key, data);
     }
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
     GrBackendRenderTarget createTestingOnlyBackendRenderTarget(SkISize dimensions,
@@ -636,7 +636,7 @@ private:
         }
     } fHWScissorSettings;
 
-    class {
+    class HWWindowRectsState {
     public:
         bool valid() const { return kInvalidSurfaceOrigin != fRTOrigin; }
         void invalidate() { fRTOrigin = kInvalidSurfaceOrigin; }
@@ -667,13 +667,14 @@ private:
         }
 
     private:
-        enum { kInvalidSurfaceOrigin = -1 };
+        static constexpr int kInvalidSurfaceOrigin = -1;
 
         int                  fRTOrigin;
         int                  fWidth;
         int                  fHeight;
         GrWindowRectsState   fWindowState;
-    } fHWWindowRectsState;
+    };
+    HWWindowRectsState fHWWindowRectsState;
 
     GrNativeRect fHWViewport;
 
