@@ -12,6 +12,7 @@
 #include "include/gpu/graphite/dawn/DawnTypes.h"
 #include "src/core/SkMipmap.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/TextureUtils.h"
 #include "src/gpu/graphite/dawn/DawnCaps.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteTypesPriv.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"

@@ -34,6 +34,8 @@ private:
         return VkFormatToCompressionType(fVkSpec.fFormat);
     }
 
+    bool isMemoryless() const override { return false; }
+
     SkString toString() const override {
         return SkStringPrintf("Vulkan(%s,", fVkSpec.toString().c_str());
     }
@@ -127,19 +129,5 @@ VulkanYcbcrConversionInfo GetVulkanYcbcrConversionInfo(const TextureInfo& info) 
 }
 
 }  // namespace TextureInfos
-
-#if !defined(SK_DISABLE_LEGACY_VK_TEXTURE_INFO_FUNCS)
-TextureInfo::TextureInfo(const VulkanTextureInfo& vkInfo)
-        : fBackend(BackendApi::kVulkan)
-        , fValid(true)
-        , fSampleCount(vkInfo.fSampleCount)
-        , fMipmapped(vkInfo.fMipmapped)
-        , fProtected(Protected::kNo) {
-    if (vkInfo.fFlags & VK_IMAGE_CREATE_PROTECTED_BIT) {
-        fProtected = Protected::kYes;
-    }
-    fTextureInfoData.emplace<VulkanTextureInfoData>(VulkanTextureInfoData(vkInfo));
-}
-#endif
 
 }  // namespace skgpu::graphite

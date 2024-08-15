@@ -67,7 +67,7 @@ BackendTexture MakeDawn(WGPUTexture texture) {
                     static_cast<int32_t>(wgpuTextureGetWidth(texture)),
                     static_cast<int32_t>(wgpuTextureGetHeight(texture)),
             },
-            DawnTextureInfoFromWGPUTexture(texture),
+            TextureInfos::MakeDawn(DawnTextureInfoFromWGPUTexture(texture)),
             DawnBackendTextureData(texture, nullptr));
 }
 
@@ -80,15 +80,17 @@ BackendTexture MakeDawn(SkISize planeDimensions, const DawnTextureInfo& info, WG
              info.fAspect == wgpu::TextureAspect::Plane1Only ||
              info.fAspect == wgpu::TextureAspect::Plane2Only);
 #endif
-    return BackendTexturePriv::Make(
-            planeDimensions, info, DawnBackendTextureData(texture, nullptr));
+    return BackendTexturePriv::Make(planeDimensions,
+                                    TextureInfos::MakeDawn(info),
+                                    DawnBackendTextureData(texture, nullptr));
 }
 
 BackendTexture MakeDawn(SkISize dimensions,
                         const DawnTextureInfo& info,
                         WGPUTextureView textureView) {
-    return BackendTexturePriv::Make(
-            dimensions, strip_copy_usage(info), DawnBackendTextureData(nullptr, textureView));
+    return BackendTexturePriv::Make(dimensions,
+                                    TextureInfos::MakeDawn(strip_copy_usage(info)),
+                                    DawnBackendTextureData(nullptr, textureView));
 }
 
 WGPUTexture GetDawnTexturePtr(const BackendTexture& tex) {
@@ -110,38 +112,5 @@ WGPUTextureView GetDawnTextureViewPtr(const BackendTexture& tex) {
 }
 
 }  // namespace BackendTextures
-
-#if !defined(SK_DISABLE_LEGACY_DAWN_BACKEND_TEXTURE_FUNCS)
-BackendTexture::BackendTexture(WGPUTexture texture)
-        : fDimensions({
-                  static_cast<int32_t>(wgpuTextureGetWidth(texture)),
-                  static_cast<int32_t>(wgpuTextureGetHeight(texture)),
-          })
-        , fInfo(DawnTextureInfoFromWGPUTexture(texture)) {
-    fTextureData.emplace<DawnBackendTextureData>(DawnBackendTextureData(texture, nullptr));
-}
-
-BackendTexture::BackendTexture(SkISize planeDimensions,
-                               const DawnTextureInfo& info,
-                               WGPUTexture texture)
-        : fDimensions(planeDimensions), fInfo(info) {
-#if defined(__EMSCRIPTEN__)
-    SkASSERT(info.fAspect == wgpu::TextureAspect::All);
-#else
-    SkASSERT(info.fAspect == wgpu::TextureAspect::All ||
-             info.fAspect == wgpu::TextureAspect::Plane0Only ||
-             info.fAspect == wgpu::TextureAspect::Plane1Only ||
-             info.fAspect == wgpu::TextureAspect::Plane2Only);
-#endif
-    fTextureData.emplace<DawnBackendTextureData>(DawnBackendTextureData(texture, nullptr));
-}
-
-BackendTexture::BackendTexture(SkISize dimensions,
-                               const DawnTextureInfo& info,
-                               WGPUTextureView textureView)
-        : fDimensions(dimensions), fInfo(strip_copy_usage(info)) {
-    fTextureData.emplace<DawnBackendTextureData>(DawnBackendTextureData(nullptr, textureView));
-}
-#endif
 
 }  // namespace skgpu::graphite

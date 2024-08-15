@@ -20,27 +20,9 @@ namespace skgpu::graphite {
 
 class TextureInfoData;
 
-#if defined(SK_VULKAN) && !defined(SK_DISABLE_LEGACY_VK_TEXTURE_INFO_FUNCS)
-struct VulkanTextureInfo;
-#endif
-
-#if defined(SK_DAWN) && !defined(SK_DISABLE_LEGACY_DAWN_TEXTURE_INFO_FUNCS)
-struct DawnTextureInfo;
-#endif
-
 class SK_API TextureInfo {
 public:
     TextureInfo();
-#if defined(SK_DAWN) && !defined(SK_DISABLE_LEGACY_DAWN_TEXTURE_INFO_FUNCS)
-    TextureInfo(const DawnTextureInfo& dawnInfo);
-
-    bool getDawnTextureInfo(DawnTextureInfo* info) const;
-#endif
-
-#if defined(SK_VULKAN) && !defined(SK_DISABLE_LEGACY_VK_TEXTURE_INFO_FUNCS)
-    TextureInfo(const VulkanTextureInfo& vkInfo);
-#endif
-
     ~TextureInfo();
     TextureInfo(const TextureInfo&);
     TextureInfo& operator=(const TextureInfo&);
@@ -55,6 +37,7 @@ public:
     Mipmapped mipmapped() const { return fMipmapped; }
     Protected isProtected() const { return fProtected; }
     SkTextureCompressionType compressionType() const;
+    bool isMemoryless() const;
 
     bool isCompatible(const TextureInfo& that) const;
     // Return a string containing the full description of this TextureInfo.
