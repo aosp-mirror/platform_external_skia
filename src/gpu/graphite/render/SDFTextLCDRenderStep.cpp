@@ -42,7 +42,7 @@ SDFTextLCDRenderStep::SDFTextLCDRenderStep()
                                    {"deviceToLocal", SkSLType::kFloat4x4},
                                    {"atlasSizeInv", SkSLType::kFloat2},
                                    {"pixelGeometryDelta", SkSLType::kHalf2},
-                                   {"distAdjust", SkSLType::kHalf3}},
+                                   {"gammaParams", SkSLType::kHalf4}},
                      PrimitiveType::kTriangleStrip,
                      kDirectDepthGEqualPass,
                      /*vertexAttrs=*/ {},
@@ -103,7 +103,7 @@ const char* SDFTextLCDRenderStep::fragmentCoverageSkSL() const {
     static_assert(kNumSDFAtlasTextures == 4);
     return "outputCoverage = sdf_text_lcd_coverage_fn(textureCoords, "
                                                      "pixelGeometryDelta, "
-                                                     "distAdjust, "
+                                                     "gammaParams, "
                                                      "unormTexCoords, "
                                                      "texIndex, "
                                                      "sdf_atlas_0, "
@@ -164,18 +164,19 @@ void SDFTextLCDRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                                          subRunData.useGammaCorrectDistanceTable());
     float blueCorrection = dfAdjustTable->getAdjustment(SkColorGetB(subRunData.luminanceColor()),
                                                         subRunData.useGammaCorrectDistanceTable());
-    SkPoint3 gammaAdjustment = {redCorrection, greenCorrection, blueCorrection};
-    gatherer->writeHalf(gammaAdjustment);
+    SkV4 gammaParams = {redCorrection, greenCorrection, blueCorrection,
+                        subRunData.useGammaCorrectDistanceTable() ? 1.f : 0.f};
+    gatherer->writeHalf(gammaParams);
 
     // write textures and samplers
     const SkSamplingOptions kSamplingOptions(SkFilterMode::kLinear);
     constexpr SkTileMode kTileModes[2] = { SkTileMode::kClamp, SkTileMode::kClamp };
     for (unsigned int i = 0; i < numProxies; ++i) {
-        gatherer->add(kSamplingOptions, kTileModes, proxies[i]);
+        gatherer->add(proxies[i], {kSamplingOptions, kTileModes});
     }
     // If the atlas has less than 4 active proxies we still need to set up samplers for the shader.
     for (unsigned int i = numProxies; i < kNumSDFAtlasTextures; ++i) {
-        gatherer->add(kSamplingOptions, kTileModes, proxies[0]);
+        gatherer->add(proxies[0], {kSamplingOptions, kTileModes});
     }
 }
 

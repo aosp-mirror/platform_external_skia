@@ -16,6 +16,7 @@
 #include "include/gpu/ShaderErrorHandler.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 
+#include <optional>
 #include <vector>
 
 class SkExecutor;
@@ -246,6 +247,17 @@ struct SK_API GrContextOptions {
     int fMaxCachedVulkanSecondaryCommandBuffers = -1;
 
     /**
+     * If Skia is creating a default VMA allocator for the Vulkan backend this value will be used
+     * for the preferredLargeHeapBlockSize. If the value is not set, then Skia will use an
+     * inernally defined default size.
+     *
+     * However, it is highly discouraged to have Skia make a default allocator (and support for
+     * doing so will be removed soon,  b/321962001). Instead clients should create their own
+     * allocator to pass into Skia where they can fine tune this value themeselves.
+     */
+    std::optional<uint64_t> fVulkanVMALargeHeapBlockSize;
+
+    /**
      * If true, the caps will never support mipmaps.
      */
     bool fSuppressMipmapSupport = false;
@@ -297,7 +309,7 @@ struct SK_API GrContextOptions {
     GrDirectContextDestroyedContext fContextDeleteContext = nullptr;
     GrDirectContextDestroyedProc fContextDeleteProc = nullptr;
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     /**
      * Private options that are only meant for testing within Skia's tools.
      */

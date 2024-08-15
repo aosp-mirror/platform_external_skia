@@ -202,7 +202,7 @@ bool SkJpegMetadataDecoderImpl::findGainmapImage(SkJpegSourceMgr* sourceMgr,
     // First, search through the Multi-Picture images.
     if (mpParams) {
         for (size_t mpImageIndex = 1; mpImageIndex < mpParams->images.size(); ++mpImageIndex) {
-            size_t mpImageOffset = SkJpegMultiPictureParameters::GetAbsoluteOffset(
+            size_t mpImageOffset = SkJpegMultiPictureParameters::GetImageAbsoluteOffset(
                     mpParams->images[mpImageIndex].dataOffset, mpParamsSegment.offset);
             size_t mpImageSize = mpParams->images[mpImageIndex].size;
 
@@ -488,4 +488,8 @@ bool SkJpegMetadataDecoderImpl::findGainmapImage(sk_sp<SkData> baseImageData,
 
 std::unique_ptr<SkJpegMetadataDecoder> SkJpegMetadataDecoder::Make(std::vector<Segment> segments) {
     return std::make_unique<SkJpegMetadataDecoderImpl>(std::move(segments));
+}
+
+std::unique_ptr<SkJpegMetadataDecoder> SkJpegMetadataDecoder::Make(sk_sp<SkData> data) {
+    return std::make_unique<SkJpegMetadataDecoderImpl>(std::move(data));
 }

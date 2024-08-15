@@ -111,6 +111,10 @@ static bool can_embed(const SkAdvancedTypefaceMetrics& metrics) {
     return !SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kNotEmbeddable_FontFlag);
 }
 
+static bool can_subset(const SkAdvancedTypefaceMetrics& metrics) {
+    return !SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kNotSubsettable_FontFlag);
+}
+
 const SkAdvancedTypefaceMetrics* SkPDFFont::GetMetrics(const SkTypeface* typeface,
                                                        SkPDFDocument* canon) {
     SkASSERT(typeface);
@@ -289,10 +293,11 @@ void SkPDFFont::PopulateCommonFontDescriptor(SkPDFDict* descriptor,
 ///////////////////////////////////////////////////////////////////////////////
 
 static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
-    const SkAdvancedTypefaceMetrics* metricsPtr =
-        SkPDFFont::GetMetrics(font.typeface(), doc);
+    const SkAdvancedTypefaceMetrics* metricsPtr = SkPDFFont::GetMetrics(font.typeface(), doc);
     SkASSERT(metricsPtr);
-    if (!metricsPtr) { return; }
+    if (!metricsPtr) {
+        return;
+    }
     const SkAdvancedTypefaceMetrics& metrics = *metricsPtr;
     SkASSERT(can_embed(metrics));
     SkAdvancedTypefaceMetrics::FontType type = font.getType();
@@ -310,44 +315,54 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
         SkDebugf("Error: (SkTypeface)(%p)::openStream() returned "
                  "empty stream (%p) when identified as kType1CID_Font "
                  "or kTrueType_Font.\n", face, fontAsset.get());
-    } else {
-        switch (type) {
-            case SkAdvancedTypefaceMetrics::kTrueType_Font:
-            case SkAdvancedTypefaceMetrics::kCFF_Font: {
-                if (!SkToBool(metrics.fFlags &
-                              SkAdvancedTypefaceMetrics::kNotSubsettable_FontFlag)) {
-                    SkASSERT(font.firstGlyphID() == 1);
-                    sk_sp<SkData> subsetFontData = SkPDFSubsetFont(*face, font.glyphUsage());
-                    if (subsetFontData) {
-                        std::unique_ptr<SkPDFDict> tmp = SkPDFMakeDict();
-                        tmp->insertInt("Length1", SkToInt(subsetFontData->size()));
-                        descriptor->insertRef(
-                                "FontFile2",
-                                SkPDFStreamOut(std::move(tmp),
-                                               SkMemoryStream::Make(std::move(subsetFontData)),
-                                               doc, SkPDFSteamCompressionEnabled::Yes));
-                        break;
-                    }
-                    // If subsetting fails, fall back to original font data.
-                }
-                std::unique_ptr<SkPDFDict> tmp = SkPDFMakeDict();
-                tmp->insertInt("Length1", fontSize);
-                descriptor->insertRef("FontFile2",
-                                      SkPDFStreamOut(std::move(tmp), std::move(fontAsset),
-                                                     doc, SkPDFSteamCompressionEnabled::Yes));
-                break;
-            }
-            case SkAdvancedTypefaceMetrics::kType1CID_Font: {
-                std::unique_ptr<SkPDFDict> tmp = SkPDFMakeDict();
-                tmp->insertName("Subtype", "CIDFontType0C");
-                descriptor->insertRef("FontFile3",
-                                      SkPDFStreamOut(std::move(tmp), std::move(fontAsset),
-                                                     doc, SkPDFSteamCompressionEnabled::Yes));
-                break;
-            }
-            default:
-                SkASSERT(false);
+    } else if (type == SkAdvancedTypefaceMetrics::kTrueType_Font ||
+               type == SkAdvancedTypefaceMetrics::kCFF_Font)
+    {
+        // Avoid use of FontFile3 OpenType (OpenType with CFF) which is PDF 1.6 (2004).
+        // Instead use FontFile3 CIDFontType0C (bare CFF) which is PDF 1.3 (2000).
+        // See b/352098914
+        sk_sp<SkData> subsetFontData;
+        if (can_subset(metrics)) {
+            SkASSERT(font.firstGlyphID() == 1);
+            // If the face has CFF the subsetter will always return just the CFF.
+            subsetFontData = SkPDFSubsetFont(*face, font.glyphUsage());
         }
+        if (!subsetFontData) {
+            // If the data cannot be subset, still ensure bare CFF.
+            constexpr SkFontTableTag CFFTag = SkSetFourByteTag('C', 'F', 'F', ' ');
+            size_t cffTableSize = face->getTableSize(CFFTag);
+            if (cffTableSize) {
+                subsetFontData = SkData::MakeUninitialized(cffTableSize);
+                face->getTableData(CFFTag, 0, cffTableSize, subsetFontData->writable_data());
+            }
+        }
+        std::unique_ptr<SkStreamAsset> subsetFontAsset;
+        if (subsetFontData) {
+            subsetFontAsset = SkMemoryStream::Make(std::move(subsetFontData));
+        } else {
+            // If subsetting fails, fall back to original font data.
+            subsetFontAsset = std::move(fontAsset);
+        }
+        std::unique_ptr<SkPDFDict> streamDict = SkPDFMakeDict();
+        streamDict->insertInt("Length1", subsetFontAsset->getLength());
+        const char* fontFileKey;
+        if (type == SkAdvancedTypefaceMetrics::kTrueType_Font) {
+            fontFileKey = "FontFile2";
+        } else {
+            streamDict->insertName("Subtype", "CIDFontType0C");
+            fontFileKey = "FontFile3";
+        }
+        descriptor->insertRef(fontFileKey,
+                              SkPDFStreamOut(std::move(streamDict), std::move(subsetFontAsset),
+                                             doc, SkPDFSteamCompressionEnabled::Yes));
+    } else if (type == SkAdvancedTypefaceMetrics::kType1CID_Font) {
+        std::unique_ptr<SkPDFDict> streamDict = SkPDFMakeDict();
+        streamDict->insertName("Subtype", "CIDFontType0C");
+        descriptor->insertRef("FontFile3",
+                              SkPDFStreamOut(std::move(streamDict), std::move(fontAsset),
+                                             doc, SkPDFSteamCompressionEnabled::Yes));
+    } else {
+        SkASSERT(false);
     }
 
     auto newCIDFont = SkPDFMakeDict("Font");
@@ -358,8 +373,11 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
         case SkAdvancedTypefaceMetrics::kType1CID_Font:
             newCIDFont->insertName("Subtype", "CIDFontType0");
             break;
-        case SkAdvancedTypefaceMetrics::kTrueType_Font:
         case SkAdvancedTypefaceMetrics::kCFF_Font:
+            newCIDFont->insertName("Subtype", "CIDFontType0");
+            newCIDFont->insertName("CIDToGIDMap", "Identity");
+            break;
+        case SkAdvancedTypefaceMetrics::kTrueType_Font:
             newCIDFont->insertName("Subtype", "CIDFontType2");
             newCIDFont->insertName("CIDToGIDMap", "Identity");
             break;
