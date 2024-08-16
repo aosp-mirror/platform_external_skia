@@ -29,7 +29,7 @@
 
 namespace {
 
-skgpu::UniqueKey::Domain get_domain() {
+skgpu::UniqueKey::Domain get_pipeline_domain() {
     static const skgpu::UniqueKey::Domain kDawnGraphicsPipelineDomain =
             skgpu::UniqueKey::GenerateDomain();
 
@@ -945,7 +945,7 @@ UniqueKey DawnCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeline
     UniqueKey pipelineKey;
     {
         // 4 uint32_t's (render step id, paint id, uint32 RenderPassDesc, uint16 write swizzle key)
-        UniqueKey::Builder builder(&pipelineKey, get_domain(),
+        UniqueKey::Builder builder(&pipelineKey, get_pipeline_domain(),
                                    kDawnGraphicsPipelineKeyData32Count, "DawnGraphicsPipeline");
         // Add GraphicsPipelineDesc key.
         builder[0] = pipelineDesc.renderStepID();
@@ -966,7 +966,7 @@ bool DawnCaps::extractGraphicsDescs(const UniqueKey& key,
                                     GraphicsPipelineDesc* pipelineDesc,
                                     RenderPassDesc* renderPassDesc,
                                     const RendererProvider* rendererProvider) const {
-    SkASSERT(key.domain() == get_domain());
+    SkASSERT(key.domain() == get_pipeline_domain());
     SkASSERT(key.dataSize() == 4 * kDawnGraphicsPipelineKeyData32Count);
 
     const uint32_t* rawKeyData = key.data();
