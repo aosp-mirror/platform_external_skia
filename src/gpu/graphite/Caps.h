@@ -20,9 +20,9 @@
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/ResourceTypes.h"
 #include "src/gpu/graphite/TextureProxy.h"
-#include "src/text/gpu/SDFTControl.h"
+#include "src/text/gpu/SubRunControl.h"
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
 #include "src/gpu/graphite/ContextOptionsPriv.h"
 #endif
 
@@ -81,7 +81,7 @@ public:
 
     sk_sp<SkCapabilities> capabilities() const;
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     std::string_view deviceName() const { return fDeviceName; }
 
     PathRendererStrategy requestedPathRendererStrategy() const {
@@ -243,13 +243,15 @@ public:
     // the storage buffer memory layout is std430 or in metal, which is also the only supported
     // way the data is packed.
     bool gradientBufferSupport() const {
-        return fGradientBufferSupport;
+        return fStorageBufferSupport &&
+               (fResourceBindingReqs.fStorageBufferLayout == Layout::kStd430 ||
+                fResourceBindingReqs.fStorageBufferLayout == Layout::kMetal);
     }
 
     // Returns whether a draw buffer can be mapped.
     bool drawBufferCanBeMapped() const { return fDrawBufferCanBeMapped; }
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     bool drawBufferCanBeMappedForReadback() const { return fDrawBufferCanBeMappedForReadback; }
 #endif
 
@@ -300,7 +302,7 @@ public:
         return fFullCompressedUploadSizeMustAlignToBlockDims;
     }
 
-    sktext::gpu::SDFTControl getSDFTControl(bool useSDFTForSmallText) const;
+    sktext::gpu::SubRunControl getSubRunControl(bool useSDFTForSmallText) const;
 
     bool setBackendLabels() const { return fSetBackendLabels; }
 
@@ -311,7 +313,7 @@ protected:
     // the caps.
     void finishInitialization(const ContextOptions&);
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     void setDeviceName(const char* n) {
         fDeviceName = n;
     }
@@ -375,7 +377,6 @@ protected:
     bool fSemaphoreSupport = false;
     bool fAllowCpuSync = true;
     bool fStorageBufferSupport = false;
-    bool fGradientBufferSupport = false;
     bool fDrawBufferCanBeMapped = true;
     bool fBufferMapsAreAsync = false;
     bool fMSAARenderToSingleSampledSupport = false;
@@ -384,7 +385,7 @@ protected:
     bool fSupportsAHardwareBufferImages = false;
     bool fFullCompressedUploadSizeMustAlignToBlockDims = false;
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     bool fDrawBufferCanBeMappedForReadback = true;
 #endif
 
@@ -399,7 +400,7 @@ protected:
      */
     ShaderErrorHandler* fShaderErrorHandler = nullptr;
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     std::string fDeviceName;
     int fMaxTextureAtlasSize = 2048;
     PathRendererStrategy fRequestedPathRendererStrategy;

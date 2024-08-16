@@ -351,18 +351,19 @@ static int write_color_and_offset_bufdata(int numStops,
     auto [dstData, bufferOffset] = gatherer->allocateGradientData(numStops, shader);
     if (dstData) {
         // Data doesn't already exist so we need to write it.
-        for (int i = 0; i < numStops; i++) {
+        // Writes all offset data, then color data. This way when binary searching through the
+        // offsets, there is better cache locality.
+        for (int i = 0, colorIdx = numStops; i < numStops; i++, colorIdx+=4) {
             SkColor4f unpremulColor = colors[i].unpremul();
 
             float offset = offsets ? offsets[i] : SkIntToFloat(i) / (numStops - 1);
             SkASSERT(offset >= 0.0f && offset <= 1.0f);
 
-            int dataIndex = i * 5;
-            dstData[dataIndex] = offset;
-            dstData[dataIndex + 1] = unpremulColor.fR;
-            dstData[dataIndex + 2] = unpremulColor.fG;
-            dstData[dataIndex + 3] = unpremulColor.fB;
-            dstData[dataIndex + 4] = unpremulColor.fA;
+            dstData[i] = offset;
+            dstData[colorIdx + 0] = unpremulColor.fR;
+            dstData[colorIdx + 1] = unpremulColor.fG;
+            dstData[colorIdx + 2] = unpremulColor.fB;
+            dstData[colorIdx + 3] = unpremulColor.fA;
         }
     }
 
@@ -517,13 +518,7 @@ void add_localmatrixshader_uniform_data(const ShaderCodeDictionary* dict,
                                         PipelineDataGatherer* gatherer) {
     BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kLocalMatrixShader)
 
-    SkM44 lmInverse;
-    bool wasInverted = localMatrix.invert(&lmInverse);  // TODO: handle failure up stack
-    if (!wasInverted) {
-        lmInverse.setIdentity();
-    }
-
-    gatherer->write(lmInverse);
+    gatherer->write(localMatrix);
 }
 
 } // anonymous namespace
@@ -1046,6 +1041,7 @@ void add_matrix_colorfilter_uniform_data(const ShaderCodeDictionary* dict,
     gatherer->write(data.fMatrix);
     gatherer->write(data.fTranslate);
     gatherer->write(static_cast<int>(data.fInHSLA));
+    gatherer->write(static_cast<int>(data.fClamp));
 }
 
 } // anonymous namespace
@@ -1111,6 +1107,29 @@ void ColorSpaceTransformBlock::AddBlock(const KeyContext& keyContext,
                                         const ColorSpaceTransformData& data) {
     add_color_space_xform_uniform_data(keyContext.dict(), data, gatherer);
     builder->addBlock(BuiltInCodeSnippetID::kColorSpaceXformColorFilter);
+}
+
+//--------------------------------------------------------------------------------------------------
+namespace {
+
+void add_circular_rrect_clip_data(
+        const ShaderCodeDictionary* dict,
+        const CircularRRectClipBlock::CircularRRectClipData& data,
+        PipelineDataGatherer* gatherer) {
+    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kCircularRRectClip)
+    gatherer->write(data.fRect);
+    gatherer->write(data.fRadiusPlusHalf);
+    gatherer->writeHalf(data.fEdgeSelect);
+}
+
+}  // anonymous namespace
+
+void CircularRRectClipBlock::AddBlock(const KeyContext& keyContext,
+                                      PaintParamsKeyBuilder* builder,
+                                      PipelineDataGatherer* gatherer,
+                                      const CircularRRectClipData& data) {
+    add_circular_rrect_clip_data(keyContext.dict(), data, gatherer);
+    builder->addBlock(BuiltInCodeSnippetID::kCircularRRectClip);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1205,27 +1224,6 @@ static void gather_runtime_effect_uniforms(const KeyContext& keyContext,
             gatherer->write(uniform, uniformPtr);
         }
     }
-
-    if (SkRuntimeEffectPriv::UsesColorTransform(effect)) {
-        SkColorSpace* dstCS = keyContext.dstColorInfo().colorSpace();
-        if (!dstCS) {
-            dstCS = sk_srgb_linear_singleton(); // turn colorspace conversion into a noop
-        }
-
-        // TODO(b/332565302): If the runtime shader only uses one of these
-        // transforms, we could upload only one set of uniforms.
-        ColorSpaceTransformBlock::ColorSpaceTransformData dstToLinear(dstCS,
-                                                                      kUnpremul_SkAlphaType,
-                                                                      sk_srgb_linear_singleton(),
-                                                                      kUnpremul_SkAlphaType);
-        ColorSpaceTransformBlock::ColorSpaceTransformData linearToDst(sk_srgb_linear_singleton(),
-                                                                      kUnpremul_SkAlphaType,
-                                                                      dstCS,
-                                                                      kUnpremul_SkAlphaType);
-
-        add_color_space_uniforms(dstToLinear.fSteps, ReadSwizzle::kRGBA, gatherer);
-        add_color_space_uniforms(linearToDst.fSteps, ReadSwizzle::kRGBA, gatherer);
-    }
 }
 
 void RuntimeEffectBlock::BeginBlock(const KeyContext& keyContext,
@@ -1264,18 +1262,18 @@ void add_to_key(const KeyContext& keyContext,
     AddModeBlend(keyContext, builder, gatherer, blender->mode());
 }
 
-// Be sure to keep this function in sync w/ its correlate in FactoryFunctions.cpp
+// Be sure to keep this function in sync w/ the code in PrecompileRTEffect::addToKey
 void add_children_to_key(const KeyContext& keyContext,
                          PaintParamsKeyBuilder* builder,
                          PipelineDataGatherer* gatherer,
                          SkSpan<const SkRuntimeEffect::ChildPtr> children,
-                         SkSpan<const SkRuntimeEffect::Child> childInfo) {
+                         const SkRuntimeEffect* effect) {
+    SkSpan<const SkRuntimeEffect::Child> childInfo = effect->children();
     SkASSERT(children.size() == childInfo.size());
 
     using ChildType = SkRuntimeEffect::ChildType;
 
     KeyContextWithScope childContext(keyContext, KeyContext::Scope::kRuntimeEffect);
-
     for (size_t index = 0; index < children.size(); ++index) {
         const SkRuntimeEffect::ChildPtr& child = children[index];
         std::optional<ChildType> type = child.type();
@@ -1306,6 +1304,34 @@ void add_children_to_key(const KeyContext& keyContext,
             }
         }
     }
+
+    // Runtime effects that reference color transform intrinsics have two extra children that
+    // are bound to the colorspace xform snippet with values to go to and from the linear srgb
+    // to the current working/dst color space.
+    if (SkRuntimeEffectPriv::UsesColorTransform(effect)) {
+        SkColorSpace* dstCS = keyContext.dstColorInfo().colorSpace();
+        if (!dstCS) {
+            dstCS = sk_srgb_linear_singleton(); // turn colorspace conversion into a noop
+        }
+
+        // TODO(b/332565302): If the runtime shader only uses one of these transforms, we could
+        // upload only one set of uniforms.
+
+        // NOTE: This must be kept in sync with the logic used to generate the toLinearSrgb() and
+        // fromLinearSrgb() expressions for each runtime effect. toLinearSrgb() is assumed to be
+        // the second to last child, and fromLinearSrgb() is assumed to be the last.
+        ColorSpaceTransformBlock::ColorSpaceTransformData dstToLinear(dstCS,
+                                                                      kUnpremul_SkAlphaType,
+                                                                      sk_srgb_linear_singleton(),
+                                                                      kUnpremul_SkAlphaType);
+        ColorSpaceTransformBlock::ColorSpaceTransformData linearToDst(sk_srgb_linear_singleton(),
+                                                                      kUnpremul_SkAlphaType,
+                                                                      dstCS,
+                                                                      kUnpremul_SkAlphaType);
+
+        ColorSpaceTransformBlock::AddBlock(childContext, builder, gatherer, dstToLinear);
+        ColorSpaceTransformBlock::AddBlock(childContext, builder, gatherer, linearToDst);
+    }
 }
 
 void add_to_key(const KeyContext& keyContext,
@@ -1325,7 +1351,7 @@ void add_to_key(const KeyContext& keyContext,
                                    { effect, std::move(uniforms) });
 
     add_children_to_key(keyContext, builder, gatherer,
-                        blender->children(), effect->children());
+                        blender->children(), effect.get());
 
     builder->endBlock();
 }
@@ -1443,7 +1469,8 @@ static void add_to_key(const KeyContext& keyContext,
     SkASSERT(filter);
 
     bool inHSLA = filter->domain() == SkMatrixColorFilter::Domain::kHSLA;
-    MatrixColorFilterBlock::MatrixColorFilterData matrixCFData(filter->matrix(), inHSLA);
+    bool clamp = filter->clamp() == SkMatrixColorFilter::Clamp::kYes;
+    MatrixColorFilterBlock::MatrixColorFilterData matrixCFData(filter->matrix(), inHSLA, clamp);
 
     MatrixColorFilterBlock::AddBlock(keyContext, builder, gatherer, matrixCFData);
 }
@@ -1462,7 +1489,7 @@ static void add_to_key(const KeyContext& keyContext,
     RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer, {effect, std::move(uniforms)});
 
     add_children_to_key(keyContext, builder, gatherer,
-                        filter->children(), effect->children());
+                        filter->children(), effect.get());
 
     builder->endBlock();
 }
@@ -1605,19 +1632,30 @@ static void notify_in_use(Recorder* recorder,
     NotifyImagesInUse(recorder, drawContext, shader->dst().get());
 }
 
+static SkMatrix matrix_invert_or_identity(const SkMatrix& matrix) {
+    SkMatrix inverseMatrix;
+    if (!matrix.invert(&inverseMatrix)) {
+        inverseMatrix.setIdentity();
+    }
+
+    return inverseMatrix;
+}
+
 static void add_to_key(const KeyContext& keyContext,
                        PaintParamsKeyBuilder* builder,
                        PipelineDataGatherer* gatherer,
                        const SkCTMShader* shader) {
     // CTM shaders are always given device coordinates, so we don't have to modify the CTM itself
     // with keyContext's local transform.
-    LocalMatrixShaderBlock::LMShaderData lmShaderData(shader->ctm());
+
+    SkMatrix lmInverse = matrix_invert_or_identity(shader->ctm());
+    LocalMatrixShaderBlock::LMShaderData lmShaderData(lmInverse);
 
     KeyContextWithLocalMatrix newContext(keyContext, shader->ctm());
 
     LocalMatrixShaderBlock::BeginBlock(newContext, builder, gatherer, lmShaderData);
 
-        AddToKey(newContext, builder, gatherer, shader->proxyShader().get());
+    AddToKey(newContext, builder, gatherer, shader->proxyShader().get());
 
     builder->endBlock();
 }
@@ -2016,8 +2054,9 @@ static void add_to_key(const KeyContext& keyContext,
     auto wrappedShader = shader->wrappedShader().get();
 
     // Fold the texture's origin flip into the local matrix so that the image shader doesn't need
-    // additional state
+    // additional state.
     SkMatrix matrix;
+
     SkShaderBase* wrappedShaderBase = as_SB(wrappedShader);
     if (wrappedShaderBase->type() == SkShaderBase::ShaderType::kImage) {
         auto imgShader = static_cast<const SkImageShader*>(wrappedShader);
@@ -2031,7 +2070,7 @@ static void add_to_key(const KeyContext& keyContext,
             if (imgBase->isYUVA()) {
                 auto imgYUVA = static_cast<const Image_YUVA*>(imgBase);
                 SkASSERT(imgYUVA);
-                matrix = imgYUVA->yuvaInfo().originMatrix();
+                matrix = matrix_invert_or_identity(imgYUVA->yuvaInfo().originMatrix());
             } else {
                 auto imgGraphite = static_cast<Image*>(imgBase);
                 SkASSERT(imgGraphite);
@@ -2041,11 +2080,11 @@ static void add_to_key(const KeyContext& keyContext,
                     matrix.setTranslateY(view.height());
                 }
             }
-        }
 
+        }
     } else if (wrappedShaderBase->type() == SkShaderBase::ShaderType::kGradientBase) {
         auto gradShader = static_cast<const SkGradientBaseShader*>(wrappedShader);
-        auto gradMatrix = gradShader->getGradientMatrix();
+        matrix = gradShader->getGradientMatrix();
 
         // Override the conical gradient matrix since graphite uses a different algorithm
         // than the ganesh and raster backends.
@@ -2064,19 +2103,16 @@ static void add_to_key(const KeyContext& keyContext,
                                                              conicalShader->getEndCenter(),
                                                              &conicalMatrix));
             }
-            gradMatrix = conicalMatrix;
+            matrix = conicalMatrix;
         }
-
-        SkMatrix invGradMatrix;
-        SkAssertResult(gradMatrix.invert(&invGradMatrix));
-
-        matrix.postConcat(invGradMatrix);
     }
 
-    matrix.postConcat(shader->localMatrix());
-    LocalMatrixShaderBlock::LMShaderData lmShaderData(matrix);
+    SkMatrix lmInverse = matrix_invert_or_identity(shader->localMatrix());
+    lmInverse.postConcat(matrix);
 
-    KeyContextWithLocalMatrix newContext(keyContext, matrix);
+    LocalMatrixShaderBlock::LMShaderData lmShaderData(lmInverse);
+
+    KeyContextWithLocalMatrix newContext(keyContext, shader->localMatrix());
 
     LocalMatrixShaderBlock::BeginBlock(newContext, builder, gatherer, lmShaderData);
 
@@ -2232,7 +2268,7 @@ static void add_to_key(const KeyContext& keyContext,
                                    {effect, std::move(uniforms)});
 
     add_children_to_key(keyContext, builder, gatherer,
-                        shader->children(), effect->children());
+                        shader->children(), effect.get());
 
     builder->endBlock();
 }

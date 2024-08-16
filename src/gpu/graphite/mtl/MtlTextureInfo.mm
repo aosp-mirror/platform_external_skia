@@ -30,11 +30,18 @@ private:
     MtlTextureSpec fMtlSpec;
 
     size_t bytesPerPixel() const override {
-        return MtlFormatBytesPerBlock(static_cast<MTLPixelFormat>(fMtlSpec.fFormat));
+        return MtlFormatBytesPerBlock(fMtlSpec.fFormat);
     }
 
     SkTextureCompressionType compressionType() const override {
-        return MtlFormatToCompressionType(static_cast<MTLPixelFormat>(fMtlSpec.fFormat));
+        return MtlFormatToCompressionType(fMtlSpec.fFormat);
+    }
+
+    bool isMemoryless() const override {
+        if (@available(macOS 11.0, iOS 10.0, tvOS 10.0, *)) {
+            return fMtlSpec.fStorageMode == MTLStorageModeMemoryless;
+        }
+        return false;
     }
 
     SkString toString() const override {
@@ -130,16 +137,5 @@ bool GetMtlFramebufferOnly(const TextureInfo& info) {
 }
 
 }  // namespace TextureInfos
-
-#if defined(SK_METAL) && !defined(SK_DISABLE_LEGACY_TEXTURE_INFO_FUNCS)
-TextureInfo::TextureInfo(const MtlTextureInfo& mtlInfo)
-        : fBackend(BackendApi::kMetal)
-        , fValid(true)
-        , fSampleCount(mtlInfo.fSampleCount)
-        , fMipmapped(mtlInfo.fMipmapped)
-        , fProtected(Protected::kNo) {
-    fTextureInfoData.emplace<MtlTextureInfoData>(MtlTextureInfoData(mtlInfo));
-}
-#endif
 
 }  // namespace skgpu::graphite

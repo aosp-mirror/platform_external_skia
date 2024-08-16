@@ -96,7 +96,8 @@ SKSL_SRCS = [
     "SkSLMangler.h",
     "SkSLMemoryLayout.h",
     "SkSLMemoryPool.h",
-    "SkSLModuleData.h",
+    "SkSLModule.cpp",
+    "SkSLModule.h",
     "SkSLModuleLoader.cpp",
     "SkSLModuleLoader.h",
     "SkSLOperator.cpp",
@@ -191,6 +192,7 @@ skia_cc_deps(
 skia_filegroup(
     name = "core_srcs",
     srcs = [
+        ":sksl_graphite_modules_hdrs",
         ":sksl_srcs",
         "//src/sksl/analysis:srcs",
         "//src/sksl/ir:srcs",
@@ -216,4 +218,20 @@ skia_cc_library(
     name = "generated_sksl",
     textual_hdrs = [":txts"],
     visibility = ["//src/core:__pkg__"],
+)
+
+skia_filegroup(
+    name = "sksl_graphite_modules_hdrs",
+    srcs = [
+        "SkSLGraphiteModules.h",
+    ],
+    visibility = ["//src/gpu/graphite:__pkg__"],
+)
+
+skia_filegroup(
+    name = "sksl_graphite_modules_srcs",
+    srcs = [
+        "SkSLGraphiteModules.cpp",
+    ],
+    visibility = ["//src/gpu/graphite:__pkg__"],
 )
