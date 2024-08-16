@@ -9,8 +9,14 @@
  * be overwritten.
  */
 
+#include "include/core/SkRefCnt.h"
 #include "include/gpu/gl/GrGLAssembleHelpers.h"
 #include "include/gpu/gl/GrGLAssembleInterface.h"
+#include "include/gpu/gl/GrGLExtensions.h"
+#include "include/gpu/gl/GrGLFunctions.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "include/gpu/gl/GrGLTypes.h"
+#include "src/gpu/ganesh/gl/GrGLDefines.h"
 #include "src/gpu/ganesh/gl/GrGLUtil.h"
 
 #define GET_PROC(F) functions->f##F = (GrGL##F##Fn*)get(ctx, "gl" #F)
@@ -438,7 +444,7 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLInterface(void *ctx, GrGLGetProc g
 
     GET_PROC(GetQueryObjectiv);
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     GET_PROC(BeginQuery);
     GET_PROC(DeleteQueries);
     GET_PROC(EndQuery);

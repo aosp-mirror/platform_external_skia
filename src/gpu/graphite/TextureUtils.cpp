@@ -108,6 +108,8 @@ bool valid_client_provided_image(const SkImage* clientProvided,
     return true;
 }
 
+#if defined(SK_USE_LEGACY_BLUR_GRAPHITE)
+
 sk_sp<SkSpecialImage> eval_blur(Recorder* recorder,
                                 sk_sp<SkShader> blurEffect,
                                 const SkIRect& dstRect,
@@ -315,6 +317,8 @@ sk_sp<SkSpecialImage> blur_impl(Recorder* recorder,
     }
 }
 
+#endif // SK_USE_LEGACY_BLUR_GRAPHITE
+
 // This class is the lazy instantiation callback for promise images. It manages calling the
 // client's Fulfill, ImageRelease, and TextureRelease procs.
 class PromiseLazyInstantiateCallback {
@@ -463,15 +467,16 @@ std::tuple<TextureProxyView, SkColorType> MakeBitmapProxyView(Recorder* recorder
 
     // Src and dst colorInfo are the same
     const SkColorInfo& colorInfo = bmpToUpload.info().colorInfo();
-    // Add UploadTask to Recorder
-    UploadInstance upload = UploadInstance::Make(
+    // Add upload to the root upload list. These bitmaps are uploaded to unique textures so there is
+    // no need to coordinate resource sharing. It is better to then group them into a single task
+    // at the start of the Recording.
+    if (!recorder->priv().rootUploadList()->recordUpload(
             recorder, proxy, colorInfo, colorInfo, texels,
-            SkIRect::MakeSize(bmpToUpload.dimensions()), std::make_unique<ImageUploadContext>());
-    if (!upload.isValid()) {
+            SkIRect::MakeSize(bmpToUpload.dimensions()),
+            std::make_unique<ImageUploadContext>())) {
         SKGPU_LOG_E("MakeBitmapProxyView: Could not create UploadInstance");
         return {};
     }
-    recorder->priv().add(UploadTask::Make(std::move(upload)));
 
     Swizzle swizzle = caps->getReadSwizzle(ct, textureInfo);
     // If the color type is alpha-only, propagate the alpha value to the other channels.
@@ -528,8 +533,10 @@ sk_sp<SkImage> MakeFromBitmap(Recorder* recorder,
     return sk_make_sp<skgpu::graphite::Image>(std::move(view), colorInfo.makeColorType(ct));
 }
 
-size_t ComputeSize(SkISize dimensions,
-                   const TextureInfo& info) {
+size_t ComputeSize(SkISize dimensions, const TextureInfo& info) {
+    if (info.isMemoryless()) {
+        return 0;
+    }
 
     SkTextureCompressionType compression = info.compressionType();
 
@@ -867,7 +874,14 @@ namespace {
 // TODO(michaelludwig): The skgpu::BlurUtils effects will be migrated to src/core to implement a
 // shader BlurEngine that can be shared by rastr, Ganesh, and Graphite. This is blocked by having
 // skif::FilterResult handle the resizing to the max supported sigma.
-class GraphiteBackend : public Backend, private SkBlurEngine, private SkBlurEngine::Algorithm {
+class GraphiteBackend :
+        public Backend,
+#if defined(SK_USE_LEGACY_BLUR_GRAPHITE)
+        private SkBlurEngine::Algorithm,
+#else
+        private SkShaderBlurAlgorithm,
+#endif
+        private SkBlurEngine {
 public:
 
     GraphiteBackend(skgpu::graphite::Recorder* recorder,
@@ -923,10 +937,9 @@ public:
         return this;
     }
 
+#if defined(SK_USE_LEGACY_BLUR_GRAPHITE)
     // SkBlurEngine::Algorithm
     float maxSigma() const override {
-        // TODO: When FilterResult handles rescaling externally, change this to
-        // skgpu::kMaxLinearBlurSigma.
         return SK_ScalarInfinity;
     }
 
@@ -944,6 +957,22 @@ public:
         return skgpu::graphite::blur_impl(fRecorder, sigma, std::move(src), srcRect, tileMode,
                                           dstRect, sk_ref_sp(cs), this->surfaceProps());
     }
+#else
+    bool useLegacyFilterResultBlur() const override { return false; }
+
+    // SkShaderBlurAlgorithm
+    sk_sp<SkDevice> makeDevice(const SkImageInfo& imageInfo) const override {
+        return skgpu::graphite::Device::Make(fRecorder,
+                                             imageInfo,
+                                             skgpu::Budgeted::kYes,
+                                             skgpu::Mipmapped::kNo,
+                                             SkBackingFit::kApprox,
+                                             this->surfaceProps(),
+                                             skgpu::graphite::LoadOp::kDiscard,
+                                             "EvalBlurTexture");
+    }
+
+#endif
 
 private:
     skgpu::graphite::Recorder* fRecorder;
