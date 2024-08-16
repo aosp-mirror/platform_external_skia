@@ -23,6 +23,7 @@
 #include "src/gpu/Blend.h"
 #include "src/gpu/graphite/BuiltInCodeSnippetID.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
+#include "src/gpu/graphite/ResourceTypes.h"
 #include "src/gpu/graphite/Uniform.h"
 #include "src/gpu/graphite/UniquePaintParamsID.h"
 
@@ -58,12 +59,15 @@ private:
 
 enum class SnippetRequirementFlags : uint32_t {
     kNone             = 0x0,
+    // Signature of the ShaderNode
     kLocalCoords      = 0x1,
     kPriorStageOutput = 0x2,  // AKA the "input" color, or the "src" argument for a blender
     kBlenderDstColor  = 0x4,  // The "dst" argument for a blender
+    // Special values and/or behaviors required for the snippet
     kSurfaceColor     = 0x8,
-    kGradientBuffer   = 0x10,
-    kStoresData       = 0x20, // Indicates that the node stores numerical data
+    kPrimitiveColor   = 0x10,
+    kGradientBuffer   = 0x20,
+    kStoresData       = 0x40, // Indicates that the node stores numerical data
 };
 SK_MAKE_BITMASK_OPS(SnippetRequirementFlags)
 
@@ -81,9 +85,6 @@ struct ShaderSnippet {
         std::string fBlenderDstColor;
         std::string fFragCoord;
     };
-    using GenerateExpressionForSnippetFn = std::string (*)(const ShaderInfo& shaderInfo,
-                                                           const ShaderNode*,
-                                                           const Args& args);
 
     ShaderSnippet() = default;
 
@@ -92,7 +93,6 @@ struct ShaderSnippet {
                   SkEnumBitMask<SnippetRequirementFlags> snippetRequirementFlags,
                   SkSpan<const Uniform> uniforms,
                   SkSpan<const TextureAndSampler> textures = {},
-                  GenerateExpressionForSnippetFn expressionGenerator = nullptr,
                   GeneratePreambleForSnippetFn preambleGenerator = nullptr,
                   int numChildren = 0)
             : fName(name)
@@ -101,12 +101,11 @@ struct ShaderSnippet {
             , fUniforms(uniforms)
             , fTexturesAndSamplers(textures)
             , fNumChildren(numChildren)
-            , fExpressionGenerator(expressionGenerator)
             , fPreambleGenerator(preambleGenerator) {
         // Must always provide a name; static function is not optional if using the default (null)
         // generation logic.
         SkASSERT(name);
-        SkASSERT(staticFn || expressionGenerator || preambleGenerator);
+        SkASSERT(staticFn || preambleGenerator);
     }
 
     bool needsLocalCoords() const {
@@ -128,11 +127,18 @@ struct ShaderSnippet {
     // The features and args that this shader snippet requires in order to be invoked
     SkEnumBitMask<SnippetRequirementFlags> fSnippetRequirementFlags{SnippetRequirementFlags::kNone};
 
+    // If not null, the list of uniforms in `fUniforms` describes an existing struct type declared
+    // in the Graphite modules with the given name. Instead of inlining the each uniform in the
+    // top-level interface block or aggregate struct, there will be a single member of this struct's
+    // type.
+    const char* fUniformStructName = nullptr;
+    // If the uniforms are being embedded as a sub-struct, this is the required starting alignment.
+    int fRequiredAlignment = -1;
+
     skia_private::TArray<Uniform> fUniforms;
     skia_private::TArray<TextureAndSampler> fTexturesAndSamplers;
 
     int fNumChildren = 0;
-    GenerateExpressionForSnippetFn fExpressionGenerator = nullptr;
     GeneratePreambleForSnippetFn fPreambleGenerator = nullptr;
 };
 
@@ -229,9 +235,7 @@ public:
                        const RenderStep* step,
                        bool useStorageBuffers,
                        int* numTexturesAndSamplersUsed,
-                       int* numPaintUniforms,
-                       int* renderStepUniformTotalBytes,
-                       int* paintUniformsTotalBytes,
+                       bool* hasPaintUniforms,
                        bool* hasGradientBuffer,
                        Swizzle writeSwizzle);
 
@@ -266,7 +270,7 @@ private:
 // SkRuntimeEffect, including de-duplicating equivalent SkRuntimeEffect objects.
 class ShaderCodeDictionary {
 public:
-    ShaderCodeDictionary();
+    ShaderCodeDictionary(Layout layout);
 
     UniquePaintParamsID findOrCreate(PaintParamsKeyBuilder*) SK_EXCLUDES(fSpinLock);
 
@@ -274,12 +278,6 @@ public:
 
     SkString idToString(UniquePaintParamsID id) const {
         return this->lookup(id).toString(this, /*includeData=*/false);
-    }
-
-    SkSpan<const Uniform> getUniforms(BuiltInCodeSnippetID) const;
-    SkEnumBitMask<SnippetRequirementFlags> getSnippetRequirementFlags(
-            BuiltInCodeSnippetID id) const {
-        return fBuiltInCodeSnippets[(int) id].fSnippetRequirementFlags;
     }
 
 #if defined(SK_DEBUG)
@@ -290,8 +288,9 @@ public:
 
     // This method can return nullptr
     const ShaderSnippet* getEntry(int codeSnippetID) const SK_EXCLUDES(fSpinLock);
-    const ShaderSnippet* getEntry(BuiltInCodeSnippetID codeSnippetID) const SK_EXCLUDES(fSpinLock) {
-        return this->getEntry(SkTo<int>(codeSnippetID));
+    const ShaderSnippet* getEntry(BuiltInCodeSnippetID codeSnippetID) const {
+        // Built-in code snippets are initialized once so there is no need to take a lock
+        return &fBuiltInCodeSnippets[SkTo<int>(codeSnippetID)];
     }
 
     int findOrCreateRuntimeEffectSnippet(const SkRuntimeEffect* effect);
@@ -301,6 +300,8 @@ private:
 
     SkSpan<const Uniform> convertUniforms(const SkRuntimeEffect* effect);
     ShaderSnippet convertRuntimeEffect(const SkRuntimeEffect* effect, const char* name);
+
+    const Layout fLayout;
 
     std::array<ShaderSnippet, kBuiltInCodeSnippetIDCount> fBuiltInCodeSnippets;
 

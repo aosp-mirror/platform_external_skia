@@ -43,6 +43,7 @@ enum class BuiltInCodeSnippetID : int32_t {
     kConicalGradientShaderBuffer,
 
     kLocalMatrixShader,
+    kLocalMatrixShaderPersp,
     kImageShader,
     kCubicImageShader,
     kHWImageShader,
@@ -53,13 +54,13 @@ enum class BuiltInCodeSnippetID : int32_t {
     kCoordClampShader,
     kDitherShader,
     kPerlinNoiseShader,
-    kRuntimeShader,
 
     // SkColorFilter code snippets
     kMatrixColorFilter,
     kTableColorFilter,
     kGaussianColorFilter,
     kColorSpaceXformColorFilter,
+    kPremulAlphaColorFilter,
 
     // SkBlender code snippets
     kBlendShader,
@@ -76,6 +77,9 @@ enum class BuiltInCodeSnippetID : int32_t {
     // Clip shader snippet
     // TODO(b/238763003): Avoid incorporating clip shaders into the actual shader code.
     kClipShader,
+
+    // Analytic clip for circular roundrect and AA rect shapes
+    kCircularRRectClip,
 
     kCompose,
 

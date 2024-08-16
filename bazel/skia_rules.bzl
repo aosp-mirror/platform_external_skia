@@ -132,8 +132,9 @@ def skia_cc_test(name, copts = DEFAULT_COPTS, linkopts = DEFAULT_LINKOPTS, **kwa
 def skia_cc_library(name, copts = DEFAULT_COPTS, local_defines = [], **kwargs):
     """A wrapper around cc_library for Skia C++ libraries.
 
-    This lets us provide compiler flags (copts) consistently to the Skia build (e.g. //:skia_public)
-    and builds which depend on those targets (e.g. things in //tools or //modules).
+    This lets us provide compiler flags (copts) consistently to the Skia build. By default,
+    copts do not flow up the dependency stack. Additionally, in G3, this allows us to set
+    some options universally.
 
     It also lets us easily tweak these settings when being built in G3.
 
@@ -199,7 +200,7 @@ def skia_objc_library(
         **kwargs):
     """A wrapper around objc_library for Skia Objective C libraries.
 
-    This lets us provide compiler flags (copts) consistently to the Skia build (e.g. //:skia_public)
+    This lets us provide compiler flags (copts) consistently to the Skia build (e.g. //:core)
     and builds which depend on those targets (e.g. things in //tools or //modules).
 
     It also lets us easily tweak these settings when being built in G3.
@@ -228,18 +229,6 @@ def skia_objc_library(
         sdk_frameworks = sdk_frameworks,
         **kwargs
     )
-
-# buildifier: disable=unnamed-macro
-def exports_files_legacy(label_list = None, visibility = None):
-    """A self-annotating macro to export all files in this package for legacy G3 rules.
-
-    Args:
-        label_list: If provided, this will act like a normal exports_files rule. If not
-           provided, nothing happens.
-        visibility: Should be provided if label_list is set
-    """
-    if label_list:
-        native.exports_files(label_list, visibility = visibility)
 
 def split_srcs_and_hdrs(name, files):
     """Take a list of files and creates filegroups for C++ sources and headers.

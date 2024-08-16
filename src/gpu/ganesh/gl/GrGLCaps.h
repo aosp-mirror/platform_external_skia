@@ -525,7 +525,7 @@ public:
                            const GrProgramInfo&,
                            ProgramDescOverrideFlags) const override;
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     GrGLStandard standard() const { return fStandard; }
 
     std::vector<GrTest::TestFormatColorTypeCombination> getTestingCombinations() const override;
@@ -802,12 +802,10 @@ private:
 
         bool fHaveQueriedImplementationReadSupport = false;
 
-        enum {
-            // This indicates that a stencil format has not yet been determined for the config.
-            kUnknown_StencilIndex = -1,
-            // This indicates that there is no supported stencil format for the config.
-            kUnsupported_StencilFormatIndex = -2
-        };
+        // This indicates that a stencil format has not yet been determined for the config.
+        static constexpr int kUnknown_StencilIndex = -1;
+        // This indicates that there is no supported stencil format for the config.
+        static constexpr int kUnsupported_StencilFormatIndex = -2;
 
         // Index fStencilFormats.
         int fStencilFormatIndex = kUnknown_StencilIndex;

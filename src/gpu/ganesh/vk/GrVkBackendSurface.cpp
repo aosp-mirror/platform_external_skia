@@ -16,7 +16,7 @@
 #include "include/gpu/vk/VulkanMutableTextureState.h"
 #include "include/gpu/vk/VulkanTypes.h"
 #include "include/private/base/SkAssert.h"
-#include "include/private/base/SkTo.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrBackendSurfacePriv.h"
 #include "src/gpu/ganesh/vk/GrVkTypesPriv.h"
@@ -28,6 +28,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 class GrVkBackendFormatData final : public GrBackendFormatData {
 public:
@@ -79,7 +80,7 @@ private:
     }
 
     std::string toString() const override {
-#if defined(SK_DEBUG) || GR_TEST_UTILS
+#if defined(SK_DEBUG) || defined(GPU_TEST_UTILS)
         return skgpu::VkFormatToStr(fFormat);
 #else
         return "";

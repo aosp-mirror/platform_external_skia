@@ -99,11 +99,8 @@ config("skia_private") {
   if (is_skia_dev_build && !is_wasm) {
     defines += [
       "SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1",
-      "GR_TEST_UTILS=1",
+      "GPU_TEST_UTILS=1",
     ]
-    if (skia_enable_graphite) {
-      defines += [ "GRAPHITE_TEST_UTILS=1" ]
-    }
   }
   libs = []
   lib_dirs = []
@@ -167,6 +164,7 @@ template("opts") {
 }
 
 is_x86 = current_cpu == "x64" || current_cpu == "x86"
+is_loong64 = current_cpu == "loong64"
 
 opts("hsw") {
   enabled = is_x86
@@ -186,6 +184,12 @@ opts("skx") {
   } else {
     cflags = [ "-march=skylake-avx512" ]
   }
+}
+
+opts("lasx") {
+  enabled = is_loong64
+  sources = skia_opts.lasx_sources
+  cflags = [ "-mlasx" ]
 }
 
 # Any feature of Skia that requires third-party code should be optional and use this template.
@@ -836,6 +840,18 @@ if (skia_compile_sksl_tests) {
   }
 }
 
+group("compile_all_sksl_tests") {
+  deps = [
+    ":compile_sksl_glsl_nosettings_tests",
+    ":compile_sksl_glsl_tests",
+    ":compile_sksl_hlsl_tests",
+    ":compile_sksl_metal_tests",
+    ":compile_sksl_skrp_tests",
+    ":compile_sksl_spirv_tests",
+    ":compile_sksl_wgsl_tests",
+  ]
+}
+
 optional("gpu_shared") {
   enabled = skia_enable_ganesh || skia_enable_graphite
 
@@ -907,11 +923,6 @@ optional("gpu_shared") {
 optional("gpu") {
   enabled = skia_enable_ganesh
   deps = [
-    ":compile_sksl_glsl_nosettings_tests",
-    ":compile_sksl_glsl_tests",
-    ":compile_sksl_metal_tests",
-    ":compile_sksl_skrp_tests",
-    ":compile_sksl_spirv_tests",
     ":gpu_shared",
     ":minify_sksl",
     ":run_sksllex",
@@ -961,7 +972,6 @@ optional("gpu") {
           "src/gpu/ganesh/gl/egl/GrGLMakeNativeInterface_egl.cpp",
         ]
         libs += [ "EGL" ]
-        public_defines += [ "SK_EGL" ]
       }
     } else if (skia_use_webgl) {
       sources += [ "src/gpu/ganesh/gl/webgl/GrGLMakeNativeInterface_webgl.cpp" ]
@@ -971,7 +981,6 @@ optional("gpu") {
         "src/gpu/ganesh/gl/glx/GrGLMakeNativeInterface_glx.cpp",
       ]
       libs += [ "GL" ]
-      public_defines += [ "SK_GLX" ]
     } else if (is_mac) {
       sources += [ "src/gpu/ganesh/gl/mac/GrGLMakeNativeInterface_mac.cpp" ]
     } else if (is_ios) {
@@ -1146,6 +1155,7 @@ optional("graphite") {
   ]
   public = skia_graphite_public
   sources = skia_graphite_sources
+  sources += skia_sksl_graphite_modules_sources
 
   if (is_android) {
     sources += skia_graphite_android_private
@@ -1441,6 +1451,7 @@ skia_component("skia") {
     ":hsw",
     ":jpeg_decode",
     ":jpegxl_decode",
+    ":lasx",
     ":minify_sksl",
     ":ndk_images",
     ":png_decode",
@@ -1471,7 +1482,7 @@ skia_component("skia") {
   sources += skia_codec_decode_bmp
   sources += skia_encode_srcs
   sources += skia_sksl_core_sources
-  sources += skia_sksl_default_module_sources
+  sources += skia_sksl_core_module_sources
   sources += skia_sksl_tracing_sources
   sources += skia_ports_sources
   sources += [
@@ -1509,7 +1520,6 @@ skia_component("skia") {
     sources += skia_ports_windows_sources + [
                  "src/ports/SkDebug_win.cpp",
                  "src/ports/SkImageGeneratorWIC.cpp",
-                 "src/ports/SkOSLibrary_win.cpp",
                ]
     libs += [
       "Ole32.lib",
@@ -1524,10 +1534,10 @@ skia_component("skia") {
       ]
     }
   } else {
-    sources += [
-      "src/ports/SkOSFile_posix.cpp",
-      "src/ports/SkOSLibrary_posix.cpp",
-    ]
+    sources += [ "src/ports/SkOSFile_posix.cpp" ]
+    if (is_ios) {
+      sources += [ "src/ports/SkOSFile_ios.h" ]
+    }
     libs += [ "dl" ]
   }
 
@@ -1896,6 +1906,17 @@ if (skia_enable_tools) {
     }
   }
 
+  test_lib("load_dynamic_library") {
+    configs = [ ":skia_private" ]
+    deps = [ ":skia" ]
+    sources = [ "tools/library/LoadDynamicLibrary.h" ]
+    if (is_win) {
+      sources += [ "tools/library/LoadDynamicLibrary_win.cpp" ]
+    } else {
+      sources += [ "tools/library/LoadDynamicLibrary_posix.cpp" ]
+    }
+  }
+
   test_lib("gpu_tool_utils") {
     public_defines = []
 
@@ -1908,7 +1929,7 @@ if (skia_enable_tools) {
       defines += [ "SK_ENABLE_DISCRETE_GPU" ]
     }
 
-    deps = []
+    deps = [ ":load_dynamic_library" ]
     public_deps = []
     sources = [
       "tools/gpu/BackendSurfaceFactory.cpp",
@@ -2064,7 +2085,7 @@ if (skia_enable_tools) {
     public_deps = [ ":gpu_tool_utils" ]
   }
   test_lib("common_flags_gpu") {
-    sources = [ "tools/flags/CommonFlagsGpu.cpp" ]
+    sources = [ "tools/flags/CommonFlagsGanesh.cpp" ]
     deps = [ ":flags" ]
     public_deps = [ ":gpu_tool_utils" ]
   }
@@ -2385,6 +2406,7 @@ if (skia_enable_tools) {
         ":common_flags_config",
         ":common_flags_gpu",
         ":common_flags_images",
+        ":compile_all_sksl_tests",
         ":flags",
         ":gm",
         ":gpu_tool_utils",
@@ -3000,7 +3022,10 @@ if (skia_enable_tools) {
       sources += [ "tools/gpu/vk/VkTestMemoryAllocator.cpp" ]
       sources += [ "tools/gpu/vk/VkTestUtils.h" ]
       sources += [ "tools/gpu/vk/VkTestUtils.cpp" ]
-      deps = [ ":skia" ]
+      deps = [
+        ":load_dynamic_library",
+        ":skia",
+      ]
     }
   }
 

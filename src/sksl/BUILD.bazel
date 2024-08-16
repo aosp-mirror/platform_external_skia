@@ -1,13 +1,11 @@
 load("//bazel:flags.bzl", "bool_flag", "selects")
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_deps", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "skia_cc_deps", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
 
 package(
     default_applicable_licenses = ["//:license"],
 )
 
 licenses(["notice"])
-
-exports_files_legacy()
 
 skia_filegroup(
     name = "txts",
@@ -98,7 +96,8 @@ SKSL_SRCS = [
     "SkSLMangler.h",
     "SkSLMemoryLayout.h",
     "SkSLMemoryPool.h",
-    "SkSLModuleData.h",
+    "SkSLModule.cpp",
+    "SkSLModule.h",
     "SkSLModuleLoader.cpp",
     "SkSLModuleLoader.h",
     "SkSLOperator.cpp",
@@ -193,6 +192,7 @@ skia_cc_deps(
 skia_filegroup(
     name = "core_srcs",
     srcs = [
+        ":sksl_graphite_modules_hdrs",
         ":sksl_srcs",
         "//src/sksl/analysis:srcs",
         "//src/sksl/ir:srcs",
@@ -218,4 +218,20 @@ skia_cc_library(
     name = "generated_sksl",
     textual_hdrs = [":txts"],
     visibility = ["//src/core:__pkg__"],
+)
+
+skia_filegroup(
+    name = "sksl_graphite_modules_hdrs",
+    srcs = [
+        "SkSLGraphiteModules.h",
+    ],
+    visibility = ["//src/gpu/graphite:__pkg__"],
+)
+
+skia_filegroup(
+    name = "sksl_graphite_modules_srcs",
+    srcs = [
+        "SkSLGraphiteModules.cpp",
+    ],
+    visibility = ["//src/gpu/graphite:__pkg__"],
 )

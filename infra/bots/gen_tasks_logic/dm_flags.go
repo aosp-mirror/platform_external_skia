@@ -283,6 +283,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "EGLImageTest")
 			skip(ALL, "test", ALL, "ES2BlendWithNoTexture")
 			skip(ALL, "test", ALL, "ExtendedSkColorTypeTests_gpu")
+			skip(ALL, "test", ALL, "F16DrawTest")
 			skip(ALL, "test", ALL, "FilterResult_ganesh") // knocks out a bunch
 			skip(ALL, "test", ALL, "FullScreenClearWithLayers")
 			skip(ALL, "test", ALL, "GLBackendAllocationTest")
@@ -402,6 +403,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.extraConfig("Graphite") {
 			args = append(args, "--nogpu") // disable non-Graphite tests
 
+			// This gm is just meant for local debugging
+			skip(ALL, "test", ALL, "PaintParamsKeyTestReduced")
+
 			if b.extraConfig("Dawn") {
 				if b.extraConfig("D3D11") {
 					configs = []string{"grdawn_d3d11"}
@@ -437,6 +441,63 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					// The Dawn Pixel5 device job fails one compute test (b/318725123)
 					skip(ALL, "test", ALL, "Compute_AtomicOperationsOverArrayAndStructTest")
 				}
+
+				if b.extraConfig("GL") || b.extraConfig("GLES") {
+					// These GMs currently have rendering issues in Dawn compat.
+					skip(ALL, "gm", ALL, "aaclip")
+					skip(ALL, "gm", ALL, "backdrop_imagefilter_croprect_persp")
+					skip(ALL, "gm", ALL, "bigblurs")
+					skip(ALL, "gm", ALL, "blur2rectsnonninepatch")
+					skip(ALL, "gm", ALL, "blurredclippedcircle")
+					skip(ALL, "gm", ALL, "bug9331")
+					skip(ALL, "gm", ALL, "circular-clips")
+					skip(ALL, "gm", ALL, "clip_shader_persp")
+					skip(ALL, "gm", ALL, "clipcubic")
+					skip(ALL, "gm", ALL, "clippedcubic")
+					skip(ALL, "gm", ALL, "clippedcubic2")
+					skip(ALL, "gm", ALL, "complexclip_aa")
+					skip(ALL, "gm", ALL, "complexclip_aa_invert")
+					skip(ALL, "gm", ALL, "complexclip_aa_layer")
+					skip(ALL, "gm", ALL, "complexclip_aa_layer_invert")
+					skip(ALL, "gm", ALL, "complexclip_blur_tiled")
+					skip(ALL, "gm", ALL, "complexclip_bw")
+					skip(ALL, "gm", ALL, "complexclip_bw_invert")
+					skip(ALL, "gm", ALL, "complexclip_bw_layer")
+					skip(ALL, "gm", ALL, "complexclip_bw_layer_invert")
+					skip(ALL, "gm", ALL, "complexclip2")
+					skip(ALL, "gm", ALL, "complexclip2_path_aa")
+					skip(ALL, "gm", ALL, "complexclip2_path_bw")
+					skip(ALL, "gm", ALL, "complexclip2_rect_aa")
+					skip(ALL, "gm", ALL, "complexclip2_rrect_aa")
+					skip(ALL, "gm", ALL, "complexclip2_rrect_bw")
+					skip(ALL, "gm", ALL, "complexclip3_complex")
+					skip(ALL, "gm", ALL, "complexclip3_simple")
+					skip(ALL, "gm", ALL, "complexclip4_aa")
+					skip(ALL, "gm", ALL, "complexclip4_bw")
+					skip(ALL, "gm", ALL, "croppedrects")
+					skip(ALL, "gm", ALL, "filltypes")
+					skip(ALL, "gm", ALL, "filltypespersp")
+					skip(ALL, "gm", ALL, "glyph_pos_n_s")
+					skip(ALL, "gm", ALL, "mixedtextblobs")
+					skip(ALL, "gm", ALL, "parsedpaths")
+					skip(ALL, "gm", ALL, "pathinvfill")
+					skip(ALL, "gm", ALL, "persptext")
+					skip(ALL, "gm", ALL, "persptext_minimal")
+					skip(ALL, "gm", ALL, "pictureshader_persp")
+					skip(ALL, "gm", ALL, "rrect_clip_aa")
+					skip(ALL, "gm", ALL, "rrect_clip_bw")
+					skip(ALL, "gm", ALL, "simpleaaclip_path")
+					skip(ALL, "gm", ALL, "simpleaaclip_rect")
+					skip(ALL, "gm", ALL, "skbug_9319")
+					skip(ALL, "gm", ALL, "strokes_poly")
+					skip(ALL, "gm", ALL, "tall_stretched_bitmaps")
+					skip(ALL, "gm", ALL, "wacky_yuv_formats_frompixmaps")
+					skip(ALL, "gm", ALL, "windowrectangles")
+
+					// This GM is larger than Dawn compat's max texture size.
+					skip(ALL, "gm", ALL, "wacky_yuv_formats_domain")
+				}
+
 			} else if b.extraConfig("Native") {
 				if b.extraConfig("Metal") {
 					configs = []string{"grmtl"}

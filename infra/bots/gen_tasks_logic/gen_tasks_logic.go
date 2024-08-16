@@ -64,7 +64,7 @@ const (
 	OLD_OS_LINUX_GCE               = "Debian-9.8"
 	COMPILE_TASK_NAME_OS_LINUX     = "Debian10"
 	COMPILE_TASK_NAME_OS_LINUX_OLD = "Debian9"
-	DEFAULT_OS_MAC                 = "Mac-10.15.7"
+	DEFAULT_OS_MAC                 = "Mac-14.5"
 	DEFAULT_OS_WIN                 = "Windows-Server-17763"
 
 	// Small is a 2-core machine.
@@ -194,7 +194,7 @@ var (
 			Path: "mac_toolchain",
 			// When this is updated, also update
 			// https://skia.googlesource.com/skcms.git/+/f1e2b45d18facbae2dece3aca673fe1603077846/infra/bots/gen_tasks.go#56
-			Version: "git_revision:796d2b92cff93fc2059623ce0a66284373ceea0a",
+			Version: "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9",
 		},
 	}
 
@@ -429,7 +429,6 @@ func GenTasks(cfg *Config) {
 		Paths: []string{
 			// Source code.
 			"skia/example",
-			"skia/experimental/bazel_test",
 			"skia/include",
 			"skia/modules",
 			"skia/src",
@@ -745,7 +744,11 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 			task_os = COMPILE_TASK_NAME_OS_LINUX
 		} else if b.os("iOS") {
 			ec = append([]string{task_os}, ec...)
-			task_os = "Mac"
+			if b.parts["compiler"] == "Xcode11.4.1" {
+				task_os = "Mac10.15.7"
+			} else {
+				task_os = "Mac"
+			}
 		} else if b.matchOs("Win") {
 			task_os = "Win"
 		} else if b.compiler("GCC") {
@@ -852,7 +855,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Debian11":   DEBIAN_11_OS,
 			"Mac":        DEFAULT_OS_MAC,
 			"Mac10.15.1": "Mac-10.15.1",
-			"Mac10.15.7": "Mac-10.15.7", // Same as 'Mac', but explicit.
+			"Mac10.15.7": "Mac-10.15.7",
 			"Mac11":      "Mac-11.4",
 			"Mac12":      "Mac-12",
 			"Mac13":      "Mac-13",
@@ -1093,7 +1096,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			d["cpu"] = "x86-64-Haswell_GCE"
 			// Use many-core machines for Build tasks.
 			d["machine_type"] = MACHINE_TYPE_LARGE
-		} else if d["os"] == DEFAULT_OS_MAC {
+		} else if d["os"] == DEFAULT_OS_MAC || d["os"] == "Mac-10.15.7" {
 			// Mac CPU bots are no longer VMs.
 			d["cpu"] = "x86-64"
 			d["cores"] = "12"
@@ -2176,19 +2179,21 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"modules_canvaskit":          {"//modules/canvaskit:canvaskit", ""},
 	"modules_canvaskit_js_tests": {"//modules/canvaskit:canvaskit_js_tests", ""},
 	"skottie_tool_gpu":           {"//modules/skottie:skottie_tool_gpu", ""},
+	"viewer":                     {"//tools/viewer:viewer", ""},
 
 	// Note: these paths are relative to the WORKSPACE in //example/external_client
-	"decode_everything":  {"//:decode_everything", ""},
-	"path_combiner":      {"//:path_combiner", ""},
-	"png_decoder":        {"//:png_decoder", ""},
-	"shape_text":         {"//:shape_text", ""},
-	"svg_with_harfbuzz":  {"//:svg_with_harfbuzz", ""},
-	"svg_with_primitive": {"//:svg_with_primitive", ""},
-	"use_ganesh_gl":      {"//:use_ganesh_gl", ""},
-	"use_ganesh_vulkan":  {"//:use_ganesh_vulkan", ""},
-	"use_skresources":    {"//:use_skresources", ""},
-	"write_text_to_png":  {"//:write_text_to_png", ""},
-	"write_to_pdf":       {"//:write_to_pdf", ""},
+	"decode_everything":          {"//:decode_everything", ""},
+	"path_combiner":              {"//:path_combiner", ""},
+	"png_decoder":                {"//:png_decoder", ""},
+	"shape_text":                 {"//:shape_text", ""},
+	"svg_with_harfbuzz":          {"//:svg_with_harfbuzz", ""},
+	"svg_with_primitive":         {"//:svg_with_primitive", ""},
+	"use_ganesh_gl":              {"//:use_ganesh_gl", ""},
+	"use_ganesh_vulkan":          {"//:use_ganesh_vulkan", ""},
+	"use_graphite_native_vulkan": {"//:use_graphite_native_vulkan", ""},
+	"use_skresources":            {"//:use_skresources", ""},
+	"write_text_to_png":          {"//:write_text_to_png", ""},
+	"write_to_pdf":               {"//:write_to_pdf", ""},
 
 	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
 	// under a test_suite.

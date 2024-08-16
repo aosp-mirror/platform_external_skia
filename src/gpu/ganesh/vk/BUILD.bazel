@@ -1,13 +1,11 @@
 load("//bazel:flags.bzl", "bool_flag")
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
 
 package(
     default_applicable_licenses = ["//:license"],
 )
 
 licenses(["notice"])
-
-exports_files_legacy()
 
 VK_FILES = [
     "GrVkBackendSemaphore.cpp",
@@ -169,7 +167,7 @@ skia_cc_library(
     ],
     features = ["layering_check"],
     local_defines = [
-        "GR_TEST_UTILS",
+        "GPU_TEST_UTILS",
         "SK_USE_EXTERNAL_VULKAN_HEADERS",
     ],
     visibility = ["//tools:__subpackages__"],

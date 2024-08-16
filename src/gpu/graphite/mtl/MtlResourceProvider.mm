@@ -13,7 +13,7 @@
 
 #include "src/core/SkSLTypeShared.h"
 #include "src/gpu/Blend.h"
-#include "src/gpu/PipelineUtils.h"
+#include "src/gpu/SkSLToBackend.h"
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/ComputePipelineDesc.h"
 #include "src/gpu/graphite/ContextUtils.h"
@@ -115,8 +115,9 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
         const RenderPassDesc& renderPassDesc) {
     std::string vsMSL, fsMSL;
     SkSL::Program::Interface vsInterface, fsInterface;
-    SkSL::ProgramSettings settings;
 
+    SkSL::ProgramSettings settings;
+    settings.fSharpenTextures = true;
     settings.fForceNoRTFlip = true;
 
     SkSL::Compiler skslCompiler;
@@ -170,7 +171,7 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
     sk_cfp<id<MTLDepthStencilState>> dss =
             this->findOrCreateCompatibleDepthStencilState(step->depthStencilSettings());
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     GraphicsPipeline::PipelineInfo pipelineInfo = {pipelineDesc.renderStepID(),
                                                    pipelineDesc.paintParamsID(),
                                                    std::move(vsSkSL),
@@ -246,7 +247,7 @@ sk_sp<Texture> MtlResourceProvider::createTexture(SkISize dimensions,
 }
 
 sk_sp<Texture> MtlResourceProvider::onCreateWrappedTexture(const BackendTexture& texture) {
-    CFTypeRef mtlHandleTexture = texture.getMtlTexture();
+    CFTypeRef mtlHandleTexture = BackendTextures::GetMtlTexture(texture);
     if (!mtlHandleTexture) {
         return nullptr;
     }
@@ -356,12 +357,12 @@ BackendTexture MtlResourceProvider::onCreateBackendTexture(SkISize dimensions,
     if (!texture) {
         return {};
     }
-    return BackendTexture(dimensions, (CFTypeRef)texture.release());
+    return BackendTextures::MakeMetal(dimensions, (CFTypeRef)texture.release());
 }
 
 void MtlResourceProvider::onDeleteBackendTexture(const BackendTexture& texture) {
     SkASSERT(texture.backend() == BackendApi::kMetal);
-    CFTypeRef texHandle = texture.getMtlTexture();
+    CFTypeRef texHandle = BackendTextures::GetMtlTexture(texture);
     SkCFSafeRelease(texHandle);
 }
 

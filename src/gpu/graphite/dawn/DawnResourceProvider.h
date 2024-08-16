@@ -60,8 +60,6 @@ public:
     const wgpu::BindGroup& findOrCreateSingleTextureSamplerBindGroup(const DawnSampler* sampler,
                                                                      const DawnTexture* texture);
 
-    const sk_sp<DawnBuffer>& getOrCreateIntrinsicConstantBuffer();
-
 private:
     sk_sp<GraphicsPipeline> createGraphicsPipeline(const RuntimeEffectDictionary*,
                                                    const GraphicsPipelineDesc&,
@@ -82,14 +80,12 @@ private:
 
     DawnSharedContext* dawnSharedContext() const;
 
-    skia_private::THashMap<uint64_t, wgpu::RenderPipeline> fBlitWithDrawPipelines;
+    skia_private::THashMap<uint32_t, wgpu::RenderPipeline> fBlitWithDrawPipelines;
 
     wgpu::BindGroupLayout fUniformBuffersBindGroupLayout;
     wgpu::BindGroupLayout fSingleTextureSamplerBindGroupLayout;
 
     wgpu::Buffer fNullBuffer;
-
-    sk_sp<DawnBuffer> fIntrinsicConstantBuffer;
 
     template <size_t NumEntries>
     using BindGroupCache = SkLRUCache<BindGroupKey<NumEntries>,

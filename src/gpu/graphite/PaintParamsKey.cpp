@@ -223,7 +223,8 @@ static int dump_node(const ShaderCodeDictionary* dict,
         return currentIndex;
     }
 
-    SkDebugf("[%d] %s\n", id, entry->fStaticFunctionName);
+    SkDebugf("[%d] %s\n", id, entry->fStaticFunctionName ? entry->fStaticFunctionName
+                                                         : entry->fName);
     for (int i = 0; i < entry->fNumChildren; ++i) {
         currentIndex = dump_node(dict, keyData, currentIndex, indent + 1);
     }
@@ -239,7 +240,7 @@ static int dump_node(const ShaderCodeDictionary* dict,
             SkDebugf("0 (no data)\n");
         } else {
             for (int i = currentIndex; i < dataLength; i++) {
-                SkDebugf( "%d ", keyData[currentIndex + i]);
+                SkDebugf("%u ", keyData[currentIndex + i]);
             }
             SkDebugf("\n");
             currentIndex += dataLength;
