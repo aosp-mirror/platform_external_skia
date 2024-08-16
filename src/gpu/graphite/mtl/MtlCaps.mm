@@ -743,14 +743,6 @@ TextureInfo MtlCaps::getTextureInfoForSampledCopy(const TextureInfo& textureInfo
 }
 
 namespace {
-
-skgpu::UniqueKey::Domain get_domain() {
-    static const skgpu::UniqueKey::Domain kMtlGraphicsPipelineDomain =
-            skgpu::UniqueKey::GenerateDomain();
-
-    return kMtlGraphicsPipelineDomain;
-}
-
 MTLPixelFormat format_from_compression(SkTextureCompressionType compression) {
     switch (compression) {
         case SkTextureCompressionType::kETC2_RGB8_UNORM:
@@ -899,15 +891,16 @@ const Caps::ColorTypeInfo* MtlCaps::getColorTypeInfo(
     return nullptr;
 }
 
-static const int kMtlGraphicsPipelineKeyData32Count = 5;
+static const skgpu::UniqueKey::Domain kGraphicsPipelineDomain = UniqueKey::GenerateDomain();
+static const int kGraphicsPipelineKeyData32Count = 5;
 
 UniqueKey MtlCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipelineDesc,
                                            const RenderPassDesc& renderPassDesc) const {
     UniqueKey pipelineKey;
     {
         // 5 uint32_t's (render step id, paint id, uint64 renderpass desc, uint16 write swizzle key)
-        UniqueKey::Builder builder(&pipelineKey, get_domain(),
-                                   kMtlGraphicsPipelineKeyData32Count, "MtlGraphicsPipeline");
+        UniqueKey::Builder builder(&pipelineKey, kGraphicsPipelineDomain,
+                                   kGraphicsPipelineKeyData32Count, "GraphicsPipeline");
         // add GraphicsPipelineDesc key
         builder[0] = pipelineDesc.renderStepID();
         builder[1] = pipelineDesc.paintParamsID().asUInt();
@@ -943,8 +936,8 @@ bool MtlCaps::extractGraphicsDescs(const UniqueKey& key,
         Swizzle fWriteSwizzle;
     } keyData;
 
-    SkASSERT(key.domain() == get_domain());
-    SkASSERT(key.dataSize() == 4 * kMtlGraphicsPipelineKeyData32Count);
+    SkASSERT(key.domain() == kGraphicsPipelineDomain);
+    SkASSERT(key.dataSize() == 4 * kGraphicsPipelineKeyData32Count);
 
     const uint32_t* rawKeyData = key.data();
 
