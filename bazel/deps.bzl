@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "c10e91977ac3fc7a289242635577a87a39dc5179",
+        commit = "69433722b83b5294b3e339150d07aaf4296dab91",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -179,13 +179,13 @@ def c_plus_plus_deps(ws = "@skia"):
 
     git_repository(
         name = "spirv_headers",
-        commit = "db5a00f8cebe81146cafabf89019674a3c4bf03d",
+        commit = "1b75a4ae0b4289014b4c369301dc925c366f78a6",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git",
     )
 
     git_repository(
         name = "spirv_tools",
-        commit = "e7216170d02921ce8acd49aebed0098adc050d23",
+        commit = "87fcbaf1bc8346469e178711eff27cfd20aa1960",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
@@ -199,21 +199,21 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "vulkan_headers",
         build_file = ws + "//bazel/external/vulkan_headers:BUILD.bazel",
-        commit = "fabe9e2672334fdb9a622d42a2e8f94578952082",
+        commit = "595c8d4794410a4e64b98dc58d27c0310d7ea2fd",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers",
     )
 
     new_git_repository(
         name = "vulkan_tools",
         build_file = ws + "//bazel/external/vulkan_tools:BUILD.bazel",
-        commit = "46df205dcad665b652f57ee580d78051925b296a",
+        commit = "32379b03f828619cb54eed874a11ab7e5ceafb3a",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
     )
 
     new_git_repository(
         name = "vulkan_utility_libraries",
         build_file = ws + "//bazel/external/vulkan_utility_libraries:BUILD.bazel",
-        commit = "67522b34edde86dbb97e164280291f387ade55fc",
+        commit = "45b881573538f8e481cb6e1d811a9076be6920c1",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries",
     )
 

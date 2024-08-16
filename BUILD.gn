@@ -99,11 +99,8 @@ config("skia_private") {
   if (is_skia_dev_build && !is_wasm) {
     defines += [
       "SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1",
-      "GR_TEST_UTILS=1",
+      "GPU_TEST_UTILS=1",
     ]
-    if (skia_enable_graphite) {
-      defines += [ "GRAPHITE_TEST_UTILS=1" ]
-    }
   }
   libs = []
   lib_dirs = []
@@ -975,7 +972,6 @@ optional("gpu") {
           "src/gpu/ganesh/gl/egl/GrGLMakeNativeInterface_egl.cpp",
         ]
         libs += [ "EGL" ]
-        public_defines += [ "SK_EGL" ]
       }
     } else if (skia_use_webgl) {
       sources += [ "src/gpu/ganesh/gl/webgl/GrGLMakeNativeInterface_webgl.cpp" ]
@@ -985,7 +981,6 @@ optional("gpu") {
         "src/gpu/ganesh/gl/glx/GrGLMakeNativeInterface_glx.cpp",
       ]
       libs += [ "GL" ]
-      public_defines += [ "SK_GLX" ]
     } else if (is_mac) {
       sources += [ "src/gpu/ganesh/gl/mac/GrGLMakeNativeInterface_mac.cpp" ]
     } else if (is_ios) {
@@ -1160,6 +1155,7 @@ optional("graphite") {
   ]
   public = skia_graphite_public
   sources = skia_graphite_sources
+  sources += skia_sksl_graphite_modules_sources
 
   if (is_android) {
     sources += skia_graphite_android_private
@@ -1230,10 +1226,7 @@ optional("png_decode") {
   ]
 
   deps = [ "//third_party/libpng" ]
-  sources = [
-    "src/codec/SkIcoCodec.cpp",
-    "src/codec/SkPngCodec.cpp",
-  ]
+  sources = [ "src/codec/SkIcoCodec.cpp" ] + skia_codec_png
 }
 
 optional("png_encode") {
@@ -1482,11 +1475,11 @@ skia_component("skia") {
   sources += skia_effects_sources
   sources += skia_colorfilters_sources
   sources += skia_effects_imagefilter_sources
-  sources += skia_codec_core
+  sources += skia_codec_shared
   sources += skia_codec_decode_bmp
   sources += skia_encode_srcs
   sources += skia_sksl_core_sources
-  sources += skia_sksl_default_module_sources
+  sources += skia_sksl_core_module_sources
   sources += skia_sksl_tracing_sources
   sources += skia_ports_sources
   sources += [
@@ -1494,8 +1487,6 @@ skia_component("skia") {
     "src/android/SkAnimatedImage.cpp",
     "src/codec/SkAndroidCodec.cpp",
     "src/codec/SkAndroidCodecAdapter.cpp",
-    "src/codec/SkEncodedInfo.cpp",
-    "src/codec/SkParseEncodedOrigin.cpp",
     "src/codec/SkSampledCodec.cpp",
     "src/ports/SkDiscardableMemory_none.cpp",
     "src/ports/SkMemory_malloc.cpp",
@@ -1524,7 +1515,6 @@ skia_component("skia") {
     sources += skia_ports_windows_sources + [
                  "src/ports/SkDebug_win.cpp",
                  "src/ports/SkImageGeneratorWIC.cpp",
-                 "src/ports/SkOSLibrary_win.cpp",
                ]
     libs += [
       "Ole32.lib",
@@ -1539,10 +1529,7 @@ skia_component("skia") {
       ]
     }
   } else {
-    sources += [
-      "src/ports/SkOSFile_posix.cpp",
-      "src/ports/SkOSLibrary_posix.cpp",
-    ]
+    sources += [ "src/ports/SkOSFile_posix.cpp" ]
     if (is_ios) {
       sources += [ "src/ports/SkOSFile_ios.h" ]
     }
@@ -1914,6 +1901,17 @@ if (skia_enable_tools) {
     }
   }
 
+  test_lib("load_dynamic_library") {
+    configs = [ ":skia_private" ]
+    deps = [ ":skia" ]
+    sources = [ "tools/library/LoadDynamicLibrary.h" ]
+    if (is_win) {
+      sources += [ "tools/library/LoadDynamicLibrary_win.cpp" ]
+    } else {
+      sources += [ "tools/library/LoadDynamicLibrary_posix.cpp" ]
+    }
+  }
+
   test_lib("gpu_tool_utils") {
     public_defines = []
 
@@ -1926,7 +1924,7 @@ if (skia_enable_tools) {
       defines += [ "SK_ENABLE_DISCRETE_GPU" ]
     }
 
-    deps = []
+    deps = [ ":load_dynamic_library" ]
     public_deps = []
     sources = [
       "tools/gpu/BackendSurfaceFactory.cpp",
@@ -2082,7 +2080,7 @@ if (skia_enable_tools) {
     public_deps = [ ":gpu_tool_utils" ]
   }
   test_lib("common_flags_gpu") {
-    sources = [ "tools/flags/CommonFlagsGpu.cpp" ]
+    sources = [ "tools/flags/CommonFlagsGanesh.cpp" ]
     deps = [ ":flags" ]
     public_deps = [ ":gpu_tool_utils" ]
   }
@@ -3019,7 +3017,10 @@ if (skia_enable_tools) {
       sources += [ "tools/gpu/vk/VkTestMemoryAllocator.cpp" ]
       sources += [ "tools/gpu/vk/VkTestUtils.h" ]
       sources += [ "tools/gpu/vk/VkTestUtils.cpp" ]
-      deps = [ ":skia" ]
+      deps = [
+        ":load_dynamic_library",
+        ":skia",
+      ]
     }
   }
 
