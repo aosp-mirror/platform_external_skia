@@ -1077,7 +1077,7 @@ sktext::gpu::AtlasDrawDelegate Device::atlasDelegate() {
                const SkPaint& paint,
                sk_sp<SkRefCnt> subRunStorage,
                sktext::gpu::RendererData rendererData) {
-        this->drawAtlasSubRun(subRun, drawOrigin, paint, subRunStorage, rendererData);
+        this->drawAtlasSubRun(subRun, drawOrigin, paint, std::move(subRunStorage), rendererData);
     };
 }
 
@@ -1761,7 +1761,7 @@ void Device::internalFlush() {
     fCurrentDepth = DrawOrder::kClearDepth;
 
      // Any cleanup in the AtlasProvider
-    fRecorder->priv().atlasProvider()->compact();
+    fRecorder->priv().atlasProvider()->compact(/*forceCompact=*/false);
 }
 
 bool Device::needsFlushBeforeDraw(int numNewRenderSteps, DstReadRequirement dstReadReq) const {
