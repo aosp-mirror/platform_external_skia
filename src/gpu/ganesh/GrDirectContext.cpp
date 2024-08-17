@@ -261,7 +261,7 @@ bool GrDirectContext::init() {
                                                        this->contextID());
     fResourceCache->setProxyProvider(this->proxyProvider());
     fResourceCache->setThreadSafeCache(this->threadSafeCache());
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     if (this->options().fResourceCacheLimitOverride != -1) {
         this->setResourceCacheLimit(this->options().fResourceCacheLimitOverride);
     }
@@ -1127,9 +1127,11 @@ bool GrDirectContext::precompileShader(const SkData& key, const SkData& data) {
     return fGpu->precompileShader(key, data);
 }
 
-#ifdef SK_ENABLE_DUMP_GPU
+#if defined(SK_ENABLE_DUMP_GPU)
 #include "include/core/SkString.h"
+#include "src/gpu/ganesh/GrUtil.h"
 #include "src/utils/SkJSONWriter.h"
+
 SkString GrDirectContext::dump() const {
     SkDynamicMemoryWStream stream;
     SkJSONWriter writer(&stream, SkJSONWriter::Mode::kPretty);
