@@ -1252,13 +1252,10 @@ protected:
 
                     SkBitmap readBack;
                     readBack.allocPixels(yuv->imageInfo());
-#if defined(GRAPHITE_TEST_UTILS)
                     if (recorder) {
                         SkAssertResult(
                                 as_IB(yuv)->readPixelsGraphite(recorder, readBack.pixmap(), 0, 0));
-                    } else
-#endif
-                    {
+                    } else {
                         SkAssertResult(yuv->readPixels(dContext, readBack.pixmap(), 0, 0));
                     }
                     canvas->drawImage(readBack.asImage(), x, y);
