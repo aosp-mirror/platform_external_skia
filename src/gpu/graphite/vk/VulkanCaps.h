@@ -49,7 +49,7 @@ public:
 
     TextureInfo getDefaultStorageTextureInfo(SkColorType) const override;
 
-    ImmutableSamplerInfo getImmutableSamplerInfo(sk_sp<TextureProxy> proxy) const override;
+    ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy* proxy) const override;
 
     UniqueKey makeGraphicsPipelineKey(const GraphicsPipelineDesc&,
                                       const RenderPassDesc&) const override;
@@ -59,7 +59,10 @@ public:
 
     uint32_t channelMask(const TextureInfo&) const override;
 
+    bool isTexturable(const VulkanTextureInfo&) const;
+
     bool isRenderable(const TextureInfo&) const override;
+    bool isRenderable(const VulkanTextureInfo&) const;
     bool isStorage(const TextureInfo&) const override;
 
     void buildKeyForTexture(SkISize dimensions,
@@ -93,6 +96,8 @@ public:
         return fMaxVertexAttributes;
     }
     uint64_t maxUniformBufferRange() const { return fMaxUniformBufferRange; }
+
+    uint64_t maxStorageBufferRange() const { return fMaxStorageBufferRange; }
 
     const VkPhysicalDeviceMemoryProperties2& physicalDeviceMemoryProperties2() const {
         return fPhysicalDeviceMemoryProperties2;
@@ -228,6 +233,7 @@ private:
 
     uint32_t fMaxVertexAttributes;
     uint64_t fMaxUniformBufferRange;
+    uint64_t fMaxStorageBufferRange;
     VkPhysicalDeviceMemoryProperties2 fPhysicalDeviceMemoryProperties2;
 
     // ColorTypeInfo struct for use w/ external formats.

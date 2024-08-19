@@ -14,6 +14,7 @@
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/vk/VulkanQueueManager.h"
+#include "src/gpu/graphite/vk/VulkanSampler.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/sksl/SkSLProgramSettings.h"
 
@@ -82,9 +83,10 @@ void DescriptorDataToVkDescSetLayout(const VulkanSharedContext* ctxt,
             layoutBinding.descriptorCount = currDescriptor.fCount;
             layoutBinding.stageFlags =
                     PipelineStageFlagsToVkShaderStageFlags(currDescriptor.fPipelineStageFlags);
-            // TODO(b/302126498): Set pImmutableSampler to currDescriptor.fImmutableSampler once
-            // immutable samplers are created and used within graphite.
-            layoutBinding.pImmutableSamplers = nullptr;
+            layoutBinding.pImmutableSamplers = currDescriptor.fImmutableSampler
+                    ? (static_cast<const VulkanSampler*>(
+                            currDescriptor.fImmutableSampler))->constVkSamplerPtr()
+                    : nullptr;
         }
     }
 
@@ -118,7 +120,7 @@ VkDescriptorType DsTypeEnumToVkDs(DescriptorType type) {
         case DescriptorType::kCombinedTextureSampler:
             return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         case DescriptorType::kStorageBuffer:
-            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
         case DescriptorType::kInputAttachment:
             return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
     }

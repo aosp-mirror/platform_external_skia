@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "5ddf4e5b6d971a43655bf01705f853b1a1839485",
+        commit = "db1fa936ad0a58846f179c81cdf60f55267099b9",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -57,7 +57,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "freetype",
         build_file = ws + "//bazel/external/freetype:BUILD.bazel",
-        commit = "a46424228f0998a72c715f32e18dca8a7a764c1f",
+        commit = "73720c7c9958e87b3d134a7574d1720ad2d24442",
         remote = "https://chromium.googlesource.com/chromium/src/third_party/freetype2.git",
     )
 
@@ -179,41 +179,41 @@ def c_plus_plus_deps(ws = "@skia"):
 
     git_repository(
         name = "spirv_headers",
-        commit = "eb49bb7b1136298b77945c52b4bbbc433f7885de",
+        commit = "1b75a4ae0b4289014b4c369301dc925c366f78a6",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git",
     )
 
     git_repository(
         name = "spirv_tools",
-        commit = "c3178da8eac9bc7d1788e95f8d555918ba483c23",
+        commit = "87fcbaf1bc8346469e178711eff27cfd20aa1960",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
     new_git_repository(
         name = "vello",
         build_file = ws + "//bazel/external/vello:BUILD.bazel",
-        commit = "6938a2893d6a2ba658709d1d04720f6c6033700f",
+        commit = "3ee3bea02164c5a816fe6c16ef4e3a810edb7620",
         remote = "https://skia.googlesource.com/external/github.com/linebender/vello.git",
     )
 
     new_git_repository(
         name = "vulkan_headers",
         build_file = ws + "//bazel/external/vulkan_headers:BUILD.bazel",
-        commit = "d192041a2fc9c9fd8ae67d8ae3f32c5511541f04",
+        commit = "d205aff40b4e15d4c568523ee6a26f85138126d9",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers",
     )
 
     new_git_repository(
         name = "vulkan_tools",
         build_file = ws + "//bazel/external/vulkan_tools:BUILD.bazel",
-        commit = "a9a1bcd709e185700847268eb4310f6484b027bc",
+        commit = "494d32f2da0bd8a782d88fdaa98b9e1967148d1b",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
     )
 
     new_git_repository(
         name = "vulkan_utility_libraries",
         build_file = ws + "//bazel/external/vulkan_utility_libraries:BUILD.bazel",
-        commit = "07759f04791dc3fbb390174f0d24d4a792e0d357",
+        commit = "9b6e18888be3ac761a3f71594c3949f8dc862ccc",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries",
     )
 
@@ -254,44 +254,45 @@ def bazel_deps():
     )
 
 def header_based_configs():
+    skia_revision = "9f271dd94582411feddce92dbea3bce25d0e06f5"
     maybe(
         download_config_files,
         name = "expat_config",
-        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        skia_revision = skia_revision,
         files = {
-            "BUILD.bazel": "bazel/external/expat/config/BUILD.bazel",
-            "expat_config.h": "third_party/expat/include/expat_config/expat_config.h",
+            "BUILD.bazel": "third_party/expat/include/BUILD.bazel",
+            "expat_config/expat_config.h": "third_party/expat/include/expat_config/expat_config.h",
         },
     )
     maybe(
         download_config_files,
         name = "freetype_config",
-        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        skia_revision = skia_revision,
         files = {
-            "BUILD.bazel": "bazel/external/freetype/config/BUILD.bazel",
-            "android/freetype/config/ftmodule.h": "third_party/freetype2/include/freetype-android/freetype/config/ftmodule.h",
-            "android/freetype/config/ftoption.h": "third_party/freetype2/include/freetype-android/freetype/config/ftoption.h",
-            "no-type1/freetype/config/ftmodule.h": "third_party/freetype2/include/freetype-no-type1/freetype/config/ftmodule.h",
-            "no-type1/freetype/config/ftoption.h": "third_party/freetype2/include/freetype-no-type1/freetype/config/ftoption.h",
+            "BUILD.bazel": "third_party/freetype2/include/BUILD.bazel",
+            "freetype-android/freetype/config/ftmodule.h": "third_party/freetype2/include/freetype-android/freetype/config/ftmodule.h",
+            "freetype-android/freetype/config/ftoption.h": "third_party/freetype2/include/freetype-android/freetype/config/ftoption.h",
+            "freetype-no-type1/freetype/config/ftmodule.h": "third_party/freetype2/include/freetype-no-type1/freetype/config/ftmodule.h",
+            "freetype-no-type1/freetype/config/ftoption.h": "third_party/freetype2/include/freetype-no-type1/freetype/config/ftoption.h",
         },
     )
     maybe(
         download_config_files,
         name = "harfbuzz_config",
-        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        skia_revision = skia_revision,
         files = {
-            "BUILD.bazel": "bazel/external/harfbuzz/config/BUILD.bazel",
+            "BUILD.bazel": "third_party/harfbuzz/BUILD.bazel",
             "config-override.h": "third_party/harfbuzz/config-override.h",
         },
     )
     maybe(
         download_config_files,
         name = "icu_utils",
-        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        skia_revision = skia_revision,
         files = {
-            "BUILD.bazel": "bazel/external/icu/utils/BUILD.bazel",
-            "icu/SkLoadICU.cpp": "third_party/icu/SkLoadICU.cpp",
-            "icu/SkLoadICU.h": "third_party/icu/SkLoadICU.h",
-            "icu/make_data_cpp.py": "third_party/icu/make_data_cpp.py",
+            "BUILD.bazel": "third_party/icu/BUILD.bazel",
+            "SkLoadICU.cpp": "third_party/icu/SkLoadICU.cpp",
+            "SkLoadICU.h": "third_party/icu/SkLoadICU.h",
+            "make_data_cpp.py": "third_party/icu/make_data_cpp.py",
         },
     )

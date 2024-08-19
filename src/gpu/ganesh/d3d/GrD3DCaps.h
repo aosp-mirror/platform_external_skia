@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2020 Google LLC
  *
@@ -108,7 +107,7 @@ public:
     bool resolveSubresourceRegionSupport() const { return fResolveSubresourceRegionSupport; }
     bool standardSwizzleLayoutSupport() const { return fStandardSwizzleLayoutSupport; }
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     std::vector<GrTest::TestFormatColorTypeCombination> getTestingCombinations() const override;
 #endif
 
@@ -197,7 +196,7 @@ private:
         std::unique_ptr<ColorTypeInfo[]> fColorTypeInfos;
         int fColorTypeInfoCount = 0;
     };
-    static const size_t kNumDxgiFormats = 15;
+    static constexpr size_t kNumDxgiFormats = 15;
     FormatInfo fFormatTable[kNumDxgiFormats];
 
     FormatInfo& getFormatInfo(DXGI_FORMAT);
