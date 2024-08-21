@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "db1fa936ad0a58846f179c81cdf60f55267099b9",
+        commit = "40d470c7339335d4bea4cbfcc8a7edf920ba5c06",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -57,7 +57,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "freetype",
         build_file = ws + "//bazel/external/freetype:BUILD.bazel",
-        commit = "73720c7c9958e87b3d134a7574d1720ad2d24442",
+        commit = "f92c96550ad763639158587974cf11067ace743d",
         remote = "https://chromium.googlesource.com/chromium/src/third_party/freetype2.git",
     )
 
