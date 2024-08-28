@@ -192,21 +192,6 @@ private:
     SkStream* fStream = nullptr;  // Non-owning pointer.
 };
 
-// The current implementation does *not* call into
-// `SkCodec::applyColorXform` and therefore it doesn't really matter what we
-// pass to the constructor of `SkCodec` as `XformFormat srcFormat`.  Passing
-// `kInvalidSkcmsFormat` will ensure that `skcms_Transform` will return
-// false if (unexpectedly) called.
-//
-// Note that `skcms_PixelFormat` doesn't currently cover all the possible
-// output formats from the PNG decoder - e.g. it has no support for handling
-// G16 or GA16.
-//
-// TODO(https://crbug.com/356879515): Remove this constant and start using
-// valid pixel format constants before depending on `skcms_Transform`.
-#pragma clang diagnostic ignored "-Wenum-constexpr-conversion"
-constexpr skcms_PixelFormat kInvalidSkcmsPixelFormat = static_cast<skcms_PixelFormat>(-1);
-
 }  // namespace
 
 // static
@@ -231,14 +216,13 @@ std::unique_ptr<SkPngRustCodec> SkPngRustCodec::MakeFromStream(std::unique_ptr<S
 SkPngRustCodec::SkPngRustCodec(SkEncodedInfo&& encodedInfo,
                                std::unique_ptr<SkStream> stream,
                                rust::Box<rust_png::Reader> reader)
-        : SkPngCodecBase(std::move(encodedInfo), kInvalidSkcmsPixelFormat, std::move(stream))
-        , fReader(std::move(reader)) {}
+        : SkPngCodecBase(std::move(encodedInfo), std::move(stream)), fReader(std::move(reader)) {}
 
 SkPngRustCodec::~SkPngRustCodec() = default;
 
 SkCodec::Result SkPngRustCodec::onGetPixels(const SkImageInfo& dstInfo,
-                                            void* dst,
-                                            size_t rowBytes,
+                                            void* dstPtr,
+                                            size_t dstRowSize,
                                             const Options& options,
                                             int* rowsDecoded) {
     // TODO(https://crbug.com/356922876): Expose `png` crate's ability to decode
@@ -257,8 +241,9 @@ SkCodec::Result SkPngRustCodec::onGetPixels(const SkImageInfo& dstInfo,
     // `SkCodec::getPixels` checks `dimensionsSupported` before proceeding).
     int width = dstInfo.width();
     int height = dstInfo.height();
-    SkASSERT(width == getEncodedInfo().width());
-    SkASSERT(height == getEncodedInfo().height());
+    const SkEncodedInfo& encodedInfo = this->getEncodedInfo();
+    SkASSERT(width == encodedInfo.width());
+    SkASSERT(height == encodedInfo.height());
 
     // Palette expansion currently takes place within the `png` crate, via
     // `png::Transformations::EXPAND`.
@@ -268,13 +253,13 @@ SkCodec::Result SkPngRustCodec::onGetPixels(const SkImageInfo& dstInfo,
     SkPMColor* kColorTable = nullptr;
 
     std::unique_ptr<SkSwizzler> swizzler =
-            SkSwizzler::Make(this->getEncodedInfo(), kColorTable, dstInfo, options);
+            SkSwizzler::Make(encodedInfo, kColorTable, dstInfo, options);
 
     // The assertion below is based on `png::Transformations::EXPAND`.  The
     // assertion helps to ensure that dividing by 8 in `srcRowSize` calculations
     // is okay.
-    SkASSERT(getEncodedInfo().bitsPerComponent() % 8 == 0);
-    size_t srcRowSize = static_cast<size_t>(getEncodedInfo().bitsPerPixel()) / 8 * width;
+    SkASSERT(encodedInfo.bitsPerComponent() % 8 == 0);
+    size_t srcRowSize = static_cast<size_t>(encodedInfo.bitsPerPixel()) / 8 * width;
 
     // Decode the whole PNG image into an intermediate buffer.
     //
@@ -298,10 +283,10 @@ SkCodec::Result SkPngRustCodec::onGetPixels(const SkImageInfo& dstInfo,
 
     // Convert the `decodedPixels` into the `dstInfo` format.
     SkSpan<const uint8_t> src = decodedPixels;
-    void* dstRow = dst;
+    SkSpan<uint8_t> dst(static_cast<uint8_t*>(dstPtr), dstRowSize * height);
     for (int y = 0; y < height; ++y) {
-        swizzler->swizzle(dstRow, src.data());
-        dstRow = SkTAddOffset<void>(dstRow, rowBytes);
+        swizzler->swizzle(dst.data(), src.data());
+        dst = dst.subspan(dstRowSize);
         src = src.subspan(srcRowSize);
     }
     *rowsDecoded = height;
