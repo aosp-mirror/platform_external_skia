@@ -14,9 +14,9 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/private/base/SkAlign.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrCaps.h"
@@ -519,6 +519,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TransferPixelsToTextureTest,
                      GrColorType::kAlpha_F16,
                      GrColorType::kRGBA_F16,
                      GrColorType::kRGBA_F16_Clamped,
+                     GrColorType::kRGB_F16F16F16x,
                      GrColorType::kRGBA_F32,
                      GrColorType::kAlpha_16,
                      GrColorType::kRG_1616,
@@ -557,6 +558,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TransferPixelsFromTextureTest,
                      GrColorType::kAlpha_F16,
                      GrColorType::kRGBA_F16,
                      GrColorType::kRGBA_F16_Clamped,
+                     GrColorType::kRGB_F16F16F16x,
                      GrColorType::kRGBA_F32,
                      GrColorType::kRG_1616,
                      GrColorType::kRGBA_16161616,

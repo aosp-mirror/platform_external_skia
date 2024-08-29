@@ -14,7 +14,6 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkPathTypes.h"
 #include "include/core/SkRefCnt.h"
-#include "include/gpu/GrTypes.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkMacros.h"
@@ -254,7 +253,7 @@ enum class GrQuadAAFlags {
     kAll  = 0b1111,
 };
 
-GR_MAKE_BITFIELD_CLASS_OPS(GrQuadAAFlags)
+SK_MAKE_BITFIELD_CLASS_OPS(GrQuadAAFlags)
 
 static inline GrQuadAAFlags SkToGrQuadAAFlags(unsigned flags) {
     return static_cast<GrQuadAAFlags>(flags);
@@ -462,9 +461,9 @@ enum class GrInternalSurfaceFlags {
     kVkRTSupportsInputAttachment    = 1 << 4,
 };
 
-GR_MAKE_BITFIELD_CLASS_OPS(GrInternalSurfaceFlags)
+SK_MAKE_BITFIELD_CLASS_OPS(GrInternalSurfaceFlags)
 
-// 'GR_MAKE_BITFIELD_CLASS_OPS' defines the & operator on GrInternalSurfaceFlags to return bool.
+// 'SK_MAKE_BITFIELD_CLASS_OPS' defines the & operator on GrInternalSurfaceFlags to return bool.
 // We want to find the bitwise & with these masks, so we declare them as ints.
 constexpr static int kGrInternalTextureFlagsMask = static_cast<int>(
         GrInternalSurfaceFlags::kReadOnly);
@@ -526,7 +525,7 @@ enum class GrMipmapStatus {
     kValid,        // All levels fully allocated and have valid data in them
 };
 
-GR_MAKE_BITFIELD_CLASS_OPS(GpuPathRenderers)
+SK_MAKE_BITFIELD_CLASS_OPS(GpuPathRenderers)
 
 /**
  * Like SkColorType this describes a layout of pixel data in CPU memory. It specifies the channels,
@@ -555,6 +554,7 @@ enum class GrColorType {
     kGrayAlpha_88,
     kAlpha_F16,
     kRGBA_F16,
+    kRGB_F16F16F16x,
     kRGBA_F16_Clamped,
     kRGBA_F32,
 
@@ -606,6 +606,7 @@ static constexpr SkColorType GrColorTypeToSkColorType(GrColorType ct) {
         case GrColorType::kAlpha_F16:        return kA16_float_SkColorType;
         case GrColorType::kRGBA_F16:         return kRGBA_F16_SkColorType;
         case GrColorType::kRGBA_F16_Clamped: return kRGBA_F16Norm_SkColorType;
+        case GrColorType::kRGB_F16F16F16x:   return kRGB_F16F16F16x_SkColorType;
         case GrColorType::kRGBA_F32:         return kRGBA_F32_SkColorType;
         case GrColorType::kAlpha_8xxx:       return kUnknown_SkColorType;
         case GrColorType::kAlpha_F32xxx:     return kUnknown_SkColorType;
@@ -639,7 +640,7 @@ static constexpr GrColorType SkColorTypeToGrColorType(SkColorType ct) {
         case kGray_8_SkColorType:             return GrColorType::kGray_8;
         case kRGBA_F16Norm_SkColorType:       return GrColorType::kRGBA_F16_Clamped;
         case kRGBA_F16_SkColorType:           return GrColorType::kRGBA_F16;
-        case kRGB_F16F16F16x_SkColorType:     return GrColorType::kUnknown;
+        case kRGB_F16F16F16x_SkColorType:     return GrColorType::kRGB_F16F16F16x;
         case kRGBA_1010102_SkColorType:       return GrColorType::kRGBA_1010102;
         case kRGB_101010x_SkColorType:        return GrColorType::kUnknown;
         case kBGRA_1010102_SkColorType:       return GrColorType::kBGRA_1010102;
@@ -679,6 +680,7 @@ static constexpr uint32_t GrColorTypeChannelFlags(GrColorType ct) {
         case GrColorType::kAlpha_F16:        return kAlpha_SkColorChannelFlag;
         case GrColorType::kRGBA_F16:         return kRGBA_SkColorChannelFlags;
         case GrColorType::kRGBA_F16_Clamped: return kRGBA_SkColorChannelFlags;
+        case GrColorType::kRGB_F16F16F16x:   return kRGB_SkColorChannelFlags;
         case GrColorType::kRGBA_F32:         return kRGBA_SkColorChannelFlags;
         case GrColorType::kAlpha_8xxx:       return kAlpha_SkColorChannelFlag;
         case GrColorType::kAlpha_F32xxx:     return kAlpha_SkColorChannelFlag;
@@ -828,6 +830,8 @@ static constexpr GrColorFormatDesc GrGetColorTypeDesc(GrColorType ct) {
             return GrColorFormatDesc::MakeAlpha(16, GrColorTypeEncoding::kFloat);
         case GrColorType::kRGBA_F16:
             return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
+        case GrColorType::kRGB_F16F16F16x:
+            return GrColorFormatDesc::MakeRGB(16, GrColorTypeEncoding::kFloat);
         case GrColorType::kRGBA_F16_Clamped:
             return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
         case GrColorType::kRGBA_F32:
@@ -914,6 +918,7 @@ static constexpr size_t GrColorTypeBytesPerPixel(GrColorType ct) {
         case GrColorType::kAlpha_F16:        return 2;
         case GrColorType::kRGBA_F16:         return 8;
         case GrColorType::kRGBA_F16_Clamped: return 8;
+        case GrColorType::kRGB_F16F16F16x:   return 8;
         case GrColorType::kRGBA_F32:         return 16;
         case GrColorType::kAlpha_8xxx:       return 4;
         case GrColorType::kAlpha_F32xxx:     return 16;
@@ -939,7 +944,7 @@ enum class GrDstSampleFlags {
     kRequiresTextureBarrier =   1 << 0,
     kAsInputAttachment = 1 << 1,
 };
-GR_MAKE_BITFIELD_CLASS_OPS(GrDstSampleFlags)
+SK_MAKE_BITFIELD_CLASS_OPS(GrDstSampleFlags)
 
 using GrVisitProxyFunc = std::function<void(GrSurfaceProxy*, skgpu::Mipmapped)>;
 

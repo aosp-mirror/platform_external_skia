@@ -645,7 +645,7 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
     {
         info = &fFormatTable[GetFormatIndex(wgpu::TextureFormat::RGBA16Float)];
         info->fFlags = FormatInfo::kAllFlags;
-        info->fColorTypeInfoCount = 1;
+        info->fColorTypeInfoCount = 2;
         info->fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info->fColorTypeInfoCount);
         int ctIdx = 0;
         // Format: RGBA16Float, Surface: RGBA_F16
@@ -653,6 +653,13 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
             auto& ctInfo = info->fColorTypeInfos[ctIdx++];
             ctInfo.fColorType = kRGBA_F16_SkColorType;
             ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
+        }
+        // Format: RGBA16Float, Surface: RGB_F16F16F16x
+        {
+            auto& ctInfo = info->fColorTypeInfos[ctIdx++];
+            ctInfo.fColorType = kRGBA_F16_SkColorType;
+            ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
+            ctInfo.fReadSwizzle = skgpu::Swizzle::RGB1();
         }
     }
 
@@ -837,6 +844,7 @@ void DawnCaps::initFormatTable(const wgpu::Device& device) {
     this->setColorType(kGray_8_SkColorType,           { wgpu::TextureFormat::R8Unorm });
     this->setColorType(kR8_unorm_SkColorType,         { wgpu::TextureFormat::R8Unorm });
     this->setColorType(kRGBA_F16_SkColorType,         { wgpu::TextureFormat::RGBA16Float });
+    this->setColorType(kRGB_F16F16F16x_SkColorType,   { wgpu::TextureFormat::RGBA16Float });
     this->setColorType(kA16_float_SkColorType,        { wgpu::TextureFormat::R16Float });
     this->setColorType(kR8G8_unorm_SkColorType,       { wgpu::TextureFormat::RG8Unorm });
     this->setColorType(kRGBA_1010102_SkColorType,     { wgpu::TextureFormat::RGB10A2Unorm });
@@ -981,9 +989,12 @@ bool DawnCaps::extractGraphicsDescs(const UniqueKey& key,
 
     DawnTextureInfo dawnInfo;
     dawnInfo.fFormat = dawnInfo.fViewFormat = kFormats[colorFormatIndex];
-    dawnInfo.fSampleCount  = (renderpassDescBits >> kColorNumSamplesOffset) & kNumSamplesMask;
+    dawnInfo.fSampleCount  = 1;
     dawnInfo.fMipmapped = skgpu::Mipmapped::kNo;
     dawnInfo.fUsage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment;
+
+    uint32_t colorSampleCount = (renderpassDescBits >> kColorNumSamplesOffset) & kNumSamplesMask;
+    bool requiresMSAA = colorSampleCount > 1;
 
     SkEnumBitMask<DepthStencilFlags> dsFlags = DepthStencilFlags::kNone;
 
@@ -1001,7 +1012,7 @@ bool DawnCaps::extractGraphicsDescs(const UniqueKey& key,
     }
     SkDEBUGCODE(uint32_t dsSampleCount =
                     (renderpassDescBits >> kDepthStencilNumSamplesOffset) & kNumSamplesMask;)
-    SkASSERT(dawnInfo.fSampleCount == dsSampleCount);
+    SkASSERT(colorSampleCount == dsSampleCount);
 
     LoadOp loadOp = LoadOp::kClear;
     if (renderpassDescBits & kResolveMask) {
@@ -1018,7 +1029,7 @@ bool DawnCaps::extractGraphicsDescs(const UniqueKey& key,
                                            StoreOp::kStore,
                                            dsFlags,
                                            /* clearColor= */ { .0f, .0f, .0f, .0f },
-                                           /* requiresMSAA= */ dawnInfo.fSampleCount > 1,
+                                           requiresMSAA,
                                            writeSwizzle);
 
     return true;
