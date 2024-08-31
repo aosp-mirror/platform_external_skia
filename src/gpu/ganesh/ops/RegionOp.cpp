@@ -11,7 +11,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRegion.h"
 #include "include/core/SkString.h"
-#include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
 #include "include/private/SkColorData.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTArray.h"
@@ -152,12 +152,8 @@ private:
         for (int i = 0; i < numRegions; i++) {
             numRects = safeMath.addInt(numRects, fRegions[i].fRegion.computeRegionComplexity());
         }
-        if (!safeMath) {
-            // This is a nonsensical draw, so we can just drop it.
-            return;
-        }
 
-        if (!numRects) {
+        if (!numRects || !safeMath) {
             return;
         }
 
