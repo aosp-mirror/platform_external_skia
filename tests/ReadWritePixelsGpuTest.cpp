@@ -28,10 +28,10 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/SkImageGanesh.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTArray.h"
@@ -340,7 +340,7 @@ static void gpu_read_pixels_test_driver(skiatest::Reporter* reporter,
         } else if (!rules.fUncontainedRectSucceeds && !surfBounds.contains(rect)) {
             REPORTER_ASSERT(reporter, result != Result::kSuccess);
         } else if (result == Result::kFail) {
-            // TODO: Support RGB/BGR 101010x, BGRA 1010102, RGB F16F16F16x on the GPU.
+            // TODO: Support BGR 101010x, BGRA 1010102, on the GPU.
             if (SkColorTypeToGrColorType(readCT) != GrColorType::kUnknown) {
                 ERRORF(reporter,
                        "Read failed. %sSrc CT: %s, Src AT: %s Read CT: %s, Read AT: %s, "
@@ -1010,7 +1010,7 @@ static void gpu_write_pixels_test_driver(skiatest::Reporter* reporter,
         } else if (result == Result::kExcusedFailure) {
             return result;
         } else if (result == Result::kFail) {
-            // TODO: Support RGB/BGR 101010x, BGRA 1010102, RGB F16F16F16x on the GPU.
+            // TODO: Support BGR 101010x, BGRA 1010102 on the GPU.
             if (SkColorTypeToGrColorType(writeCT) != GrColorType::kUnknown) {
                 ERRORF(reporter,
                        "Write failed. Write CT: %s, Write AT: %s Dst CT: %s, Dst AT: %s, "
