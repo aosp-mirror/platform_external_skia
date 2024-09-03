@@ -398,7 +398,7 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
                         availablePlots.pop_back();
                         --usedPlots;
                     }
-                    if (!usedPlots || !availablePlots.size()) {
+                    if (usedPlots == 0 || !availablePlots.size()) {
                         break;
                     }
                 }
@@ -407,7 +407,7 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
         }
 
         // If none of the plots in the last page have been used recently, delete it.
-        if (!usedPlots) {
+        if (usedPlots == 0) {
             if constexpr (kDumpAtlasData) {
                 SkDebugf("delete %u\n", fNumActivePages-1);
             }
@@ -417,6 +417,41 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
         }
     }
 
+    fPrevFlushToken = startTokenForNextFlush;
+}
+
+void DrawAtlas::purge(AtlasToken startTokenForNextFlush) {
+    // Go through each page from last to first. We evict any plots that are not in
+    // use this flush. If a page has no plots used this flush, we can deactivate it and
+    // remove its texture. However, once we hit a page that is in use, we can't deactivate
+    // any further due to the first-to-last nature of the DrawAtlas page management.
+    PlotList::Iter plotIter;
+    bool atlasUsedThisFlush = false;
+    for (int pageIndex = (int)(fNumActivePages)-1; pageIndex >= 0; --pageIndex) {
+        plotIter.init(fPages[pageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
+        while (Plot* plot = plotIter.get()) {
+            if (plot->lastUseToken().inInterval(fPrevFlushToken, startTokenForNextFlush)) {
+                plot->resetFlushesSinceLastUsed();
+                atlasUsedThisFlush = true;
+            } else {
+                this->processEvictionAndResetRects(plot);
+                // clear out unneeded memory for Plot
+                plot->purge();
+                // TODO (jvanverth): should resetRects() call resetFlushesSinceLastUsed()?
+            }
+            plotIter.next();
+        }
+        // Can only remove Pages in last-to-first order at the moment
+        if (!atlasUsedThisFlush) {
+            this->deactivateLastPage();
+        }
+    }
+
+    // Set the params used by compact()
+    // We can set flushesSinceLastUse to 0 whether the atlas has been used or not.
+    // If it has been used, we set to 0 as normal. If it hasn't been used, we've
+    // deactivated all the Pages so we might as well set it to 0.
+    fFlushesSinceLastUse = 0;
     fPrevFlushToken = startTokenForNextFlush;
 }
 

@@ -312,6 +312,8 @@ void SkTypeface_Fontations::getGlyphToUnicodeMap(SkUnichar* codepointForGlyphMap
 }
 
 void SkTypeface_Fontations::onFilterRec(SkScalerContextRec* rec) const {
+    rec->useStrokeForFakeBold();
+
     // Opportunistic hinting downgrades copied from SkFontHost_FreeType.cpp
     SkFontHinting h = rec->getHinting();
     if (SkFontHinting::kFull == h && !isLCD(*rec)) {
@@ -561,7 +563,10 @@ protected:
                     fontations_ffi::bitmap_glyph(fBridgeFontRef, glyph.getGlyphID(), scale.fY);
             rust::cxxbridge1::Slice<const uint8_t> png_data =
                     fontations_ffi::png_data(*bitmap_glyph);
-            SkASSERT(png_data.size());
+
+            if (png_data.empty()) {
+                return mx;
+            }
 
             const fontations_ffi::BitmapMetrics bitmapMetrics =
                     fontations_ffi::bitmap_metrics(*bitmap_glyph);

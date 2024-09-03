@@ -351,18 +351,19 @@ static int write_color_and_offset_bufdata(int numStops,
     auto [dstData, bufferOffset] = gatherer->allocateGradientData(numStops, shader);
     if (dstData) {
         // Data doesn't already exist so we need to write it.
-        for (int i = 0; i < numStops; i++) {
+        // Writes all offset data, then color data. This way when binary searching through the
+        // offsets, there is better cache locality.
+        for (int i = 0, colorIdx = numStops; i < numStops; i++, colorIdx+=4) {
             SkColor4f unpremulColor = colors[i].unpremul();
 
             float offset = offsets ? offsets[i] : SkIntToFloat(i) / (numStops - 1);
             SkASSERT(offset >= 0.0f && offset <= 1.0f);
 
-            int dataIndex = i * 5;
-            dstData[dataIndex] = offset;
-            dstData[dataIndex + 1] = unpremulColor.fR;
-            dstData[dataIndex + 2] = unpremulColor.fG;
-            dstData[dataIndex + 3] = unpremulColor.fB;
-            dstData[dataIndex + 4] = unpremulColor.fA;
+            dstData[i] = offset;
+            dstData[colorIdx + 0] = unpremulColor.fR;
+            dstData[colorIdx + 1] = unpremulColor.fG;
+            dstData[colorIdx + 2] = unpremulColor.fB;
+            dstData[colorIdx + 3] = unpremulColor.fA;
         }
     }
 
@@ -978,37 +979,38 @@ void PerlinNoiseShaderBlock::AddBlock(const KeyContext& keyContext,
 
 //--------------------------------------------------------------------------------------------------
 
-void BlendShaderBlock::BeginBlock(const KeyContext& keyContext,
+void BlendComposeBlock::BeginBlock(const KeyContext& keyContext,
                                   PaintParamsKeyBuilder* builder,
                                   PipelineDataGatherer* gatherer) {
-    BEGIN_WRITE_UNIFORMS(gatherer, keyContext.dict(), BuiltInCodeSnippetID::kBlendShader)
+    BEGIN_WRITE_UNIFORMS(gatherer, keyContext.dict(), BuiltInCodeSnippetID::kBlendCompose)
 
-    builder->beginBlock(BuiltInCodeSnippetID::kBlendShader);
+    builder->beginBlock(BuiltInCodeSnippetID::kBlendCompose);
 }
 
 //--------------------------------------------------------------------------------------------------
 
-void BlendModeBlenderBlock::AddBlock(const KeyContext& keyContext,
-                                     PaintParamsKeyBuilder* builder,
-                                     PipelineDataGatherer* gatherer,
-                                     SkBlendMode blendMode) {
-    BEGIN_WRITE_UNIFORMS(gatherer, keyContext.dict(), BuiltInCodeSnippetID::kBlendModeBlender)
-    gatherer->write(SkTo<int>(blendMode));
-
-    builder->addBlock(BuiltInCodeSnippetID::kBlendModeBlender);
-}
-
-//--------------------------------------------------------------------------------------------------
-
-void CoeffBlenderBlock::AddBlock(const KeyContext& keyContext,
-                                 PaintParamsKeyBuilder* builder,
-                                 PipelineDataGatherer* gatherer,
-                                 SkSpan<const float> coeffs) {
-    BEGIN_WRITE_UNIFORMS(gatherer, keyContext.dict(), BuiltInCodeSnippetID::kCoeffBlender)
+void PorterDuffBlenderBlock::AddBlock(const KeyContext& keyContext,
+                                      PaintParamsKeyBuilder* builder,
+                                      PipelineDataGatherer* gatherer,
+                                      SkSpan<const float> coeffs) {
+    BEGIN_WRITE_UNIFORMS(gatherer, keyContext.dict(), BuiltInCodeSnippetID::kPorterDuffBlender)
     SkASSERT(coeffs.size() == 4);
     gatherer->writeHalf(SkV4{coeffs[0], coeffs[1], coeffs[2], coeffs[3]});
 
-    builder->addBlock(BuiltInCodeSnippetID::kCoeffBlender);
+    builder->addBlock(BuiltInCodeSnippetID::kPorterDuffBlender);
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void HSLCBlenderBlock::AddBlock(const KeyContext& keyContext,
+                                 PaintParamsKeyBuilder* builder,
+                                 PipelineDataGatherer* gatherer,
+                                 SkSpan<const float> coeffs) {
+    BEGIN_WRITE_UNIFORMS(gatherer, keyContext.dict(), BuiltInCodeSnippetID::kHSLCBlender)
+    SkASSERT(coeffs.size() == 2);
+    gatherer->writeHalf(SkV2{coeffs[0], coeffs[1]});
+
+    builder->addBlock(BuiltInCodeSnippetID::kHSLCBlender);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1040,6 +1042,7 @@ void add_matrix_colorfilter_uniform_data(const ShaderCodeDictionary* dict,
     gatherer->write(data.fMatrix);
     gatherer->write(data.fTranslate);
     gatherer->write(static_cast<int>(data.fInHSLA));
+    gatherer->write(static_cast<int>(data.fClamp));
 }
 
 } // anonymous namespace
@@ -1110,6 +1113,29 @@ void ColorSpaceTransformBlock::AddBlock(const KeyContext& keyContext,
 //--------------------------------------------------------------------------------------------------
 namespace {
 
+void add_circular_rrect_clip_data(
+        const ShaderCodeDictionary* dict,
+        const CircularRRectClipBlock::CircularRRectClipData& data,
+        PipelineDataGatherer* gatherer) {
+    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kCircularRRectClip)
+    gatherer->write(data.fRect);
+    gatherer->write(data.fRadiusPlusHalf);
+    gatherer->writeHalf(data.fEdgeSelect);
+}
+
+}  // anonymous namespace
+
+void CircularRRectClipBlock::AddBlock(const KeyContext& keyContext,
+                                      PaintParamsKeyBuilder* builder,
+                                      PipelineDataGatherer* gatherer,
+                                      const CircularRRectClipData& data) {
+    add_circular_rrect_clip_data(keyContext.dict(), data, gatherer);
+    builder->addBlock(BuiltInCodeSnippetID::kCircularRRectClip);
+}
+
+//--------------------------------------------------------------------------------------------------
+namespace {
+
 void add_primitive_color_uniform_data(
         const ShaderCodeDictionary* dict,
         const SkColorSpaceXformSteps& steps,
@@ -1142,12 +1168,7 @@ void AddBlendModeColorFilter(const KeyContext& keyContext,
                              const SkPMColor4f& srcColor) {
     Blend(keyContext, builder, gatherer,
           /* addBlendToKey= */ [&] () -> void {
-              // Note, we're playing a bit of a game here. By explicitly adding a
-              // BlendModeBlenderBlock we're always forcing the SkSL to call 'sk_blend'
-              // rather than allowing it to sometimes call 'blend_porter_duff'. This reduces
-              // the number of shader combinations and allows the pre-compilation system to more
-              // easily match the rendering path.
-              BlendModeBlenderBlock::AddBlock(keyContext, builder, gatherer, bm);
+            AddBlendMode(keyContext, builder, gatherer, bm);
           },
           /* addSrcToKey= */ [&]() -> void {
               SolidColorShaderBlock::AddBlock(keyContext, builder, gatherer, srcColor);
@@ -1234,7 +1255,7 @@ void add_to_key(const KeyContext& keyContext,
                 const SkBlendModeBlender* blender) {
     SkASSERT(blender);
 
-    AddModeBlend(keyContext, builder, gatherer, blender->mode());
+    AddBlendMode(keyContext, builder, gatherer, blender->mode());
 }
 
 // Be sure to keep this function in sync w/ the code in PrecompileRTEffect::addToKey
@@ -1274,7 +1295,7 @@ void add_children_to_key(const KeyContext& keyContext,
 
                 case ChildType::kBlender:
                     // A "passthrough" blender performs `blend_src_over(src, dest)`.
-                    AddKnownModeBlend(childContext, builder, gatherer, SkBlendMode::kSrcOver);
+                    AddFixedBlendMode(childContext, builder, gatherer, SkBlendMode::kSrcOver);
                     break;
             }
         }
@@ -1444,7 +1465,8 @@ static void add_to_key(const KeyContext& keyContext,
     SkASSERT(filter);
 
     bool inHSLA = filter->domain() == SkMatrixColorFilter::Domain::kHSLA;
-    MatrixColorFilterBlock::MatrixColorFilterData matrixCFData(filter->matrix(), inHSLA);
+    bool clamp = filter->clamp() == SkMatrixColorFilter::Clamp::kYes;
+    MatrixColorFilterBlock::MatrixColorFilterData matrixCFData(filter->matrix(), inHSLA, clamp);
 
     MatrixColorFilterBlock::AddBlock(keyContext, builder, gatherer, matrixCFData);
 }
@@ -1589,7 +1611,7 @@ static void add_to_key(const KeyContext& keyContext,
 
     Blend(keyContext, builder, gatherer,
             /* addBlendToKey= */ [&] () -> void {
-                AddModeBlend(keyContext, builder, gatherer, shader->mode());
+                AddBlendMode(keyContext, builder, gatherer, shader->mode());
             },
             /* addSrcToKey= */ [&]() -> void {
                 AddToKey(keyContext, builder, gatherer, shader->src().get());
@@ -1980,7 +2002,7 @@ static void add_to_key(const KeyContext& keyContext,
         if (imageToDraw->isAlphaOnly() && keyContext.scope() != KeyContext::Scope::kRuntimeEffect) {
             Blend(keyContext, builder, gatherer,
                   /* addBlendToKey= */ [&] () -> void {
-                      AddKnownModeBlend(keyContext, builder, gatherer, SkBlendMode::kDstIn);
+                      AddFixedBlendMode(keyContext, builder, gatherer, SkBlendMode::kDstIn);
                   },
                   /* addSrcToKey= */ [&] () -> void {
                       Compose(keyContext, builder, gatherer,

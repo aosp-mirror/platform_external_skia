@@ -1655,9 +1655,7 @@ void WGSLCodeGenerator::writeUserDefinedIODecl(const Layout& layout,
         // avoid any expensive shader or data rewriting to ensure 'first'. Skia has a long-standing
         // policy to only use flat shading when it's constant for a primitive so the vertex doesn't
         // matter. See https://www.w3.org/TR/WGSL/#interpolation-sampling-either
-        // TODO (b/340278447): Dawn doesn't yet support the new `either` option yet, but then this
-        // should be @interpolate(flat,either)
-        this->write("@interpolate(flat) ");
+        this->write("@interpolate(flat, either) ");
     } else if (flags & ModifierFlag::kNoPerspective) {
         this->write("@interpolate(linear) ");
     }
@@ -3304,16 +3302,6 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
 
         case k_unpackUnorm4x8_IntrinsicKind:
             return this->assembleSimpleIntrinsic("unpack4x8unorm", call);
-
-        case k_loadFloatBuffer_IntrinsicKind: {
-            auto indexExpression = IRHelpers::LoadFloatBuffer(
-                                        fContext,
-                                        fCaps,
-                                        call.position(),
-                                        call.arguments()[0]->clone());
-
-            return this->assembleExpression(*indexExpression, Precedence::kExpression);
-        }
 
         case k_clamp_IntrinsicKind:
         case k_max_IntrinsicKind:

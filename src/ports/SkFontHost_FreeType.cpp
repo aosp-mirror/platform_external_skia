@@ -785,6 +785,9 @@ std::unique_ptr<SkFontData> SkTypeface_FreeType::cloneFontData(const SkFontArgum
 }
 
 void SkTypeface_FreeType::onFilterRec(SkScalerContextRec* rec) const {
+#if !defined(SK_USE_FREETYPE_EMBOLDEN)
+    rec->useStrokeForFakeBold();
+#endif
     //BOGUS: http://code.google.com/p/chromium/issues/detail?id=121119
     //Cap the requested size as larger sizes give bogus values.
     //Remove when http://code.google.com/p/skia/issues/detail?id=554 is fixed.
@@ -1680,22 +1683,16 @@ void SkScalerContext_FreeType::emboldenIfNeeded(FT_Face face, FT_GlyphSlot glyph
         return;
     }
 
-    switch (glyph->format) {
-        case FT_GLYPH_FORMAT_OUTLINE:
-            FT_Pos strength;
-            strength = FT_MulFix(face->units_per_EM, face->size->metrics.y_scale)
-                       / SK_OUTLINE_EMBOLDEN_DIVISOR;
-            FT_Outline_Embolden(&glyph->outline, strength);
-            break;
-        case FT_GLYPH_FORMAT_BITMAP:
-            if (!fFace->glyph->bitmap.buffer) {
-                FT_Load_Glyph(fFace, gid, fLoadGlyphFlags);
-            }
-            FT_GlyphSlot_Own_Bitmap(glyph);
-            FT_Bitmap_Embolden(glyph->library, &glyph->bitmap, kBitmapEmboldenStrength, 0);
-            break;
-        default:
-            SkDEBUGFAIL("unknown glyph format");
+    if (glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
+        const FT_Pos strength = FT_MulFix(face->units_per_EM, face->size->metrics.y_scale)
+                                / SK_OUTLINE_EMBOLDEN_DIVISOR;
+        FT_Outline_Embolden(&glyph->outline, strength);
+    } else if (glyph->format == FT_GLYPH_FORMAT_BITMAP) {
+        if (!fFace->glyph->bitmap.buffer) {
+            FT_Load_Glyph(fFace, gid, fLoadGlyphFlags);
+        }
+        FT_GlyphSlot_Own_Bitmap(glyph);
+        FT_Bitmap_Embolden(glyph->library, &glyph->bitmap, kBitmapEmboldenStrength, 0);
     }
 }
 

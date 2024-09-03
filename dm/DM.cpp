@@ -40,6 +40,7 @@
 #include "tools/ToolUtils.h"
 #include "tools/flags/CommonFlags.h"
 #include "tools/flags/CommonFlagsConfig.h"
+#include "tools/flags/CommonFlagsGanesh.h"
 #include "tools/fonts/FontToolUtils.h"
 #include "tools/ios_utils.h"
 #include "tools/trace/ChromeTracingTracer.h"
@@ -168,21 +169,6 @@ static DEFINE_string(properties, "",
                      "Space-separated key/value pairs to add to JSON identifying this run.");
 
 static DEFINE_bool(rasterize_pdf, false, "Rasterize PDFs when possible.");
-
-#if defined(__MSVC_RUNTIME_CHECKS)
-#include <rtcapi.h>
-int RuntimeCheckErrorFunc(int errorType, const char* filename, int linenumber,
-                          const char* moduleName, const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
-
-    SkDebugf("Line #%d\nFile: %s\nModule: %s\n",
-             linenumber, filename ? filename : "Unknown", moduleName ? moduleName : "Unknwon");
-    return 1;
-}
-#endif
 
 using namespace DM;
 using sk_gpu_test::GrContextFactory;
@@ -369,8 +355,7 @@ static void find_culprit() {
     #include <signal.h>
     #if !defined(SK_BUILD_FOR_ANDROID)
         #include <execinfo.h>
-
-#endif
+    #endif
 
     static constexpr int max_of() { return 0; }
     template <typename... Rest>
@@ -1037,6 +1022,7 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
         SINK("bgr101010x",  RasterSink, kBGR_101010x_SkColorType);
         SINK("f16",         RasterSink, kRGBA_F16_SkColorType);
         SINK("f16norm",     RasterSink, kRGBA_F16Norm_SkColorType);
+        SINK("f16f16f16x",  RasterSink, kRGB_F16F16F16x_SkColorType);
         SINK("f32",         RasterSink, kRGBA_F32_SkColorType);
         SINK("srgba",       RasterSink, kSRGBA_8888_SkColorType);
 
@@ -1551,9 +1537,6 @@ TestHarness CurrentTestHarness() {
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 int main(int argc, char** argv) {
-#if defined(__MSVC_RUNTIME_CHECKS)
-    _RTC_SetErrorFunc(RuntimeCheckErrorFunc);
-#endif
 #if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) && defined(SK_HAS_HEIF_LIBRARY)
     android::ProcessState::self()->startThreadPool();
 #endif

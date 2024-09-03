@@ -7,7 +7,7 @@
 #include "include/private/gpu/ganesh/GrImageContext.h"
 
 #include "include/core/SkRefCnt.h"
-#include "include/gpu/GrContextThreadSafeProxy.h"
+#include "include/gpu/ganesh/GrContextThreadSafeProxy.h"
 #include "src/gpu/ganesh/GrContextThreadSafeProxyPriv.h"
 
 #include <utility>
@@ -23,7 +23,7 @@ void GrImageContext::abandonContext() {
 }
 
 bool GrImageContext::abandoned() {
-    return !fThreadSafeProxy || fThreadSafeProxy->priv().abandoned();
+    return fThreadSafeProxy->priv().abandoned();
 }
 
 sk_sp<GrImageContext> GrImageContext::MakeForPromiseImage(sk_sp<GrContextThreadSafeProxy> tsp) {

@@ -9,6 +9,7 @@
 
 #include "include/gpu/MutableTextureState.h"
 #include "include/gpu/graphite/BackendSemaphore.h"
+#include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
 #include "include/gpu/vk/VulkanMutableTextureState.h"
 #include "include/private/base/SkTArray.h"
 #include "src/gpu/DataUtils.h"
@@ -174,7 +175,7 @@ void VulkanCommandBuffer::addWaitSemaphores(size_t numWaitSemaphores,
     for (size_t i = 0; i < numWaitSemaphores; ++i) {
         auto& semaphore = waitSemaphores[i];
         if (semaphore.isValid() && semaphore.backend() == BackendApi::kVulkan) {
-            fWaitSemaphores.push_back(semaphore.getVkSemaphore());
+            fWaitSemaphores.push_back(BackendSemaphores::GetVkSemaphore(semaphore));
         }
     }
 }
@@ -189,7 +190,7 @@ void VulkanCommandBuffer::addSignalSemaphores(size_t numSignalSemaphores,
     for (size_t i = 0; i < numSignalSemaphores; ++i) {
         auto& semaphore = signalSemaphores[i];
         if (semaphore.isValid() && semaphore.backend() == BackendApi::kVulkan) {
-            fSignalSemaphores.push_back(semaphore.getVkSemaphore());
+            fSignalSemaphores.push_back(BackendSemaphores::GetVkSemaphore(semaphore));
         }
     }
 }
@@ -370,8 +371,10 @@ void VulkanCommandBuffer::updateRtAdjustUniform(const SkRect& viewport) {
     SkASSERT(intrinsicVulkanBuffer);
 
     fUniformBuffersToBind[VulkanGraphicsPipeline::kIntrinsicUniformBufferIndex] = {
-            {intrinsicUniformBuffer.get(), /*offset=*/0},
-            VulkanResourceProvider::kIntrinsicConstantSize};
+            intrinsicUniformBuffer.get(),
+            /*offset=*/0,
+            VulkanResourceProvider::kIntrinsicConstantSize
+        };
 
     this->updateBuffer(intrinsicVulkanBuffer,
                        &rtAdjust,
@@ -384,6 +387,7 @@ void VulkanCommandBuffer::updateRtAdjustUniform(const SkRect& viewport) {
 }
 
 bool VulkanCommandBuffer::onAddRenderPass(const RenderPassDesc& renderPassDesc,
+                                          SkIRect renderPassBounds,
                                           const Texture* colorTexture,
                                           const Texture* resolveTexture,
                                           const Texture* depthStencilTexture,
@@ -411,7 +415,11 @@ bool VulkanCommandBuffer::onAddRenderPass(const RenderPassDesc& renderPassDesc,
     this->updateRtAdjustUniform(viewport);
     this->setViewport(viewport);
 
-    if (!this->beginRenderPass(renderPassDesc, colorTexture, resolveTexture, depthStencilTexture)) {
+    if (!this->beginRenderPass(renderPassDesc,
+                               renderPassBounds,
+                               colorTexture,
+                               resolveTexture,
+                               depthStencilTexture)) {
         return false;
     }
 
@@ -657,9 +665,61 @@ void gather_clear_values(
     }
 }
 
+// The RenderArea bounds we pass into BeginRenderPass must have a start x value that is a multiple
+// of the granularity. The width must also be a multiple of the granularity or equal to the width
+// of the entire attachment. Similar requirements apply to the y and height components.
+VkRect2D get_render_area(const SkIRect& srcBounds,
+                         const VkExtent2D& granularity,
+                         int maxWidth,
+                         int maxHeight) {
+    SkIRect dstBounds;
+    // Adjust Width
+    if (granularity.width == 0 || granularity.width == 1) {
+        dstBounds.fLeft = srcBounds.fLeft;
+        dstBounds.fRight = srcBounds.fRight;
+    } else {
+        // Start with the right side of rect so we know if we end up going past the maxWidth.
+        int rightAdj = srcBounds.fRight % granularity.width;
+        if (rightAdj != 0) {
+            rightAdj = granularity.width - rightAdj;
+        }
+        dstBounds.fRight = srcBounds.fRight + rightAdj;
+        if (dstBounds.fRight > maxWidth) {
+            dstBounds.fRight = maxWidth;
+            dstBounds.fLeft = 0;
+        } else {
+            dstBounds.fLeft = srcBounds.fLeft - srcBounds.fLeft % granularity.width;
+        }
+    }
+
+    if (granularity.height == 0 || granularity.height == 1) {
+        dstBounds.fTop = srcBounds.fTop;
+        dstBounds.fBottom = srcBounds.fBottom;
+    } else {
+        // Start with the bottom side of rect so we know if we end up going past the maxHeight.
+        int bottomAdj = srcBounds.fBottom % granularity.height;
+        if (bottomAdj != 0) {
+            bottomAdj = granularity.height - bottomAdj;
+        }
+        dstBounds.fBottom = srcBounds.fBottom + bottomAdj;
+        if (dstBounds.fBottom > maxHeight) {
+            dstBounds.fBottom = maxHeight;
+            dstBounds.fTop = 0;
+        } else {
+            dstBounds.fTop = srcBounds.fTop - srcBounds.fTop % granularity.height;
+        }
+    }
+
+    VkRect2D renderArea;
+    renderArea.offset = { dstBounds.fLeft , dstBounds.fTop };
+    renderArea.extent = { (uint32_t)dstBounds.width(), (uint32_t)dstBounds.height() };
+    return renderArea;
+}
+
 } // anonymous namespace
 
 bool VulkanCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
+                                          SkIRect renderPassBounds,
                                           const Texture* colorTexture,
                                           const Texture* resolveTexture,
                                           const Texture* depthStencilTexture) {
@@ -723,8 +783,6 @@ bool VulkanCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
 
     int frameBufferWidth = 0;
     int frameBufferHeight = 0;
-    // TODO: Get frame buffer render area from RenderPassDesc. Account for granularity if it wasn't
-    // already. For now, simply set the render area to be the entire frame buffer.
     if (colorTexture) {
         frameBufferWidth = colorTexture->dimensions().width();
         frameBufferHeight = colorTexture->dimensions().height();
@@ -742,14 +800,24 @@ bool VulkanCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
         return false;
     }
 
+    VkExtent2D granularity;
+    // Get granularity for this render pass
+    VULKAN_CALL(fSharedContext->interface(),
+                GetRenderAreaGranularity(fSharedContext->device(),
+                                         vulkanRenderPass->renderPass(),
+                                         &granularity));
+    VkRect2D renderArea = get_render_area(renderPassBounds,
+                                          granularity,
+                                          frameBufferWidth,
+                                          frameBufferHeight);
+
     VkRenderPassBeginInfo beginInfo;
     memset(&beginInfo, 0, sizeof(VkRenderPassBeginInfo));
     beginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     beginInfo.pNext = nullptr;
     beginInfo.renderPass = vulkanRenderPass->renderPass();
     beginInfo.framebuffer = framebuffer->framebuffer();
-    beginInfo.renderArea = {{ 0, 0 },
-                            { (unsigned int) frameBufferWidth, (unsigned int) frameBufferHeight }};
+    beginInfo.renderArea = renderArea;
     beginInfo.clearValueCount = clearValues.size();
     beginInfo.pClearValues = clearValues.begin();
 
@@ -899,8 +967,7 @@ void VulkanCommandBuffer::setBlendConstants(float* blendConstants) {
     }
 }
 
-void VulkanCommandBuffer::recordBufferBindingInfo(const BindUniformBufferInfo& info,
-                                                  UniformSlot slot) {
+void VulkanCommandBuffer::recordBufferBindingInfo(const BindBufferInfo& info, UniformSlot slot) {
     unsigned int bufferIndex = 0;
     switch (slot) {
         case UniformSlot::kRenderStep:
@@ -1321,7 +1388,7 @@ bool VulkanCommandBuffer::onCopyTextureToBuffer(const Texture* texture,
 
     // Obtain the VkFormat of the source texture so we can determine bytes per block.
     VulkanTextureInfo srcTextureInfo;
-    texture->textureInfo().getVulkanTextureInfo(&srcTextureInfo);
+    SkAssertResult(TextureInfos::GetVulkanTextureInfo(texture->textureInfo(), &srcTextureInfo));
     size_t bytesPerBlock = VkFormatBytesPerBlock(srcTextureInfo.fFormat);
 
     // Set up copy region
@@ -1368,7 +1435,7 @@ bool VulkanCommandBuffer::onCopyBufferToTexture(const Buffer* buffer,
 
     // Obtain the VkFormat of the destination texture so we can determine bytes per block.
     VulkanTextureInfo dstTextureInfo;
-    dstTexture->textureInfo().getVulkanTextureInfo(&dstTextureInfo);
+    SkAssertResult(TextureInfos::GetVulkanTextureInfo(dstTexture->textureInfo(), &dstTextureInfo));
     size_t bytesPerBlock = VkFormatBytesPerBlock(dstTextureInfo.fFormat);
     SkISize oneBlockDims = CompressedDimensions(dstTexture->textureInfo().compressionType(),
                                                 {1, 1});
@@ -1585,7 +1652,7 @@ void VulkanCommandBuffer::submitPipelineBarriers(bool forSelfDependency) {
     // TODO: Do we need to handle SecondaryCommandBuffers as well?
 
     // Currently we never submit a pipeline barrier without at least one buffer or image barrier.
-    if (fBufferBarriers.size() || fImageBarriers.size()) {
+    if (!fBufferBarriers.empty() || !fImageBarriers.empty()) {
         // For images we can have barriers inside of render passes but they require us to add more
         // support in subpasses which need self dependencies to have barriers inside them. Also, we
         // can never have buffer barriers inside of a render pass. For now we will just assert that
@@ -1608,8 +1675,8 @@ void VulkanCommandBuffer::submitPipelineBarriers(bool forSelfDependency) {
         fSrcStageMask = 0;
         fDstStageMask = 0;
     }
-    SkASSERT(!fBufferBarriers.size());
-    SkASSERT(!fImageBarriers.size());
+    SkASSERT(fBufferBarriers.empty());
+    SkASSERT(fImageBarriers.empty());
     SkASSERT(!fBarriersByRegion);
     SkASSERT(!fSrcStageMask);
     SkASSERT(!fDstStageMask);

@@ -23,6 +23,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkSerialProcs.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
@@ -200,6 +201,7 @@ sk_sp<SkTypeface> SkCustomTypefaceBuilder::detach() {
 /////////////
 
 void SkUserTypeface::onFilterRec(SkScalerContextRec* rec) const {
+    rec->useStrokeForFakeBold();
     rec->setHinting(SkFontHinting::kNone);
 }
 
@@ -482,7 +484,9 @@ sk_sp<SkTypeface> SkCustomTypefaceBuilder::Deserialize(SkStream* stream) {
 
         switch (gtype) {
         case GlyphType::kDrawable: {
-            auto drawable = SkDrawable::Deserialize(data->data(), data->size());
+            SkDeserialProcs procs;
+            procs.fAllowSkSL = false;
+            auto drawable = SkDrawable::Deserialize(data->data(), data->size(), &procs);
             if (!drawable) {
                 return nullptr;
             }

@@ -286,18 +286,18 @@ struct PerlinNoiseShaderBlock {
                          const PerlinNoiseData&);
 };
 
-struct BlendShaderBlock {
+struct BlendComposeBlock {
     static void BeginBlock(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*);
 };
 
-struct BlendModeBlenderBlock {
+struct PorterDuffBlenderBlock {
     static void AddBlock(const KeyContext&,
                          PaintParamsKeyBuilder*,
                          PipelineDataGatherer*,
-                         SkBlendMode);
+                         SkSpan<const float> coeffs);
 };
 
-struct CoeffBlenderBlock {
+struct HSLCBlenderBlock {
     static void AddBlock(const KeyContext&,
                          PaintParamsKeyBuilder*,
                          PipelineDataGatherer*,
@@ -318,19 +318,20 @@ struct ComposeBlock {
 
 struct MatrixColorFilterBlock {
     struct MatrixColorFilterData {
-        MatrixColorFilterData(const float matrix[20],
-                              bool inHSLA)
+        MatrixColorFilterData(const float matrix[20], bool inHSLA, bool clamp)
                 : fMatrix(matrix[ 0], matrix[ 1], matrix[ 2], matrix[ 3],
                           matrix[ 5], matrix[ 6], matrix[ 7], matrix[ 8],
                           matrix[10], matrix[11], matrix[12], matrix[13],
                           matrix[15], matrix[16], matrix[17], matrix[18])
                 , fTranslate{matrix[4], matrix[9], matrix[14], matrix[19]}
-                , fInHSLA(inHSLA) {
+                , fInHSLA(inHSLA)
+                , fClamp(clamp) {
         }
 
         SkM44 fMatrix;
         SkV4  fTranslate;
         bool  fInHSLA;
+        bool  fClamp;
     };
 
     // The gatherer and matrixCFData should be null or non-null together
@@ -371,6 +372,26 @@ struct ColorSpaceTransformBlock {
                          PaintParamsKeyBuilder*,
                          PipelineDataGatherer*,
                          const ColorSpaceTransformData&);
+};
+
+struct CircularRRectClipBlock {
+    struct CircularRRectClipData {
+        CircularRRectClipData(SkRect rect,
+                              SkPoint radiusPlusHalf,
+                              SkRect edgeSelect) :
+            fRect(rect),
+            fRadiusPlusHalf(radiusPlusHalf),
+            fEdgeSelect(edgeSelect) {}
+        SkRect  fRect;            // bounds, outset by 0.5
+        SkPoint fRadiusPlusHalf;  // abs() of .x is radius+0.5, if < 0 indicates inverse fill
+                                  // .y is 1/(radius+0.5)
+        SkRect  fEdgeSelect;      // 1 indicates a rounded corner on that side (LTRB), 0 otherwise
+    };
+
+    static void AddBlock(const KeyContext&,
+                         PaintParamsKeyBuilder*,
+                         PipelineDataGatherer*,
+                         const CircularRRectClipData&);
 };
 
 struct PrimitiveColorBlock {
