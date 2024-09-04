@@ -12,6 +12,7 @@
 #include "include/gpu/graphite/dawn/DawnTypes.h"
 #include "src/core/SkMipmap.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/TextureUtils.h"
 #include "src/gpu/graphite/dawn/DawnCaps.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteTypesPriv.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
@@ -108,6 +109,14 @@ std::pair<wgpu::TextureView, wgpu::TextureView> DawnTexture::CreateTextureViews(
         viewDesc.dimension = wgpu::TextureViewDimension::e2D;
         viewDesc.baseArrayLayer = dawnSpec.fSlice;
         viewDesc.arrayLayerCount = 1;
+#if !defined(__EMSCRIPTEN__)
+        // Ensure that the TextureView is configured to use YCbCr sampling if the Texture is
+        // doing so.
+        const wgpu::YCbCrVkDescriptor& ycbcrDesc = dawnSpec.fYcbcrVkDescriptor;
+        if (ycbcrUtils::DawnDescriptorIsValid(ycbcrDesc)) {
+            viewDesc.nextInChain = &ycbcrDesc;
+        }
+#endif
         wgpu::TextureView sampleTextureView = texture.CreateView(&viewDesc);
         wgpu::TextureView renderTextureView;
         if (info.mipmapped() == Mipmapped::kYes) {

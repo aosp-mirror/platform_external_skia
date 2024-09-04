@@ -35,6 +35,14 @@ private:
         return DawnFormatToCompressionType(fDawnSpec.getViewFormat());
     }
 
+    bool isMemoryless() const override {
+#if !defined(__EMSCRIPTEN__)
+        return fDawnSpec.fUsage & wgpu::TextureUsage::TransientAttachment;
+#else
+        return false;
+#endif
+    }
+
     SkString toString() const override {
         return SkStringPrintf("Dawn(%s,", fDawnSpec.toString().c_str());
     }
@@ -117,20 +125,5 @@ wgpu::TextureAspect GetDawnAspect(const TextureInfo& info) {
 }
 
 }  // namespace TextureInfos
-
-#if !defined(SK_DISABLE_LEGACY_DAWN_TEXTURE_INFO_FUNCS)
-TextureInfo::TextureInfo(const DawnTextureInfo& dawnInfo)
-        : fBackend(BackendApi::kDawn)
-        , fValid(true)
-        , fSampleCount(dawnInfo.fSampleCount)
-        , fMipmapped(dawnInfo.fMipmapped)
-        , fProtected(Protected::kNo) {
-    fTextureInfoData.emplace<DawnTextureInfoData>(DawnTextureInfoData(dawnInfo));
-}
-
-bool TextureInfo::getDawnTextureInfo(DawnTextureInfo* info) const {
-    return TextureInfos::GetDawnTextureInfo(*this, info);
-}
-#endif
 
 }  // namespace skgpu::graphite

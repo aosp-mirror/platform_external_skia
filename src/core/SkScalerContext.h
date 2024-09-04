@@ -29,7 +29,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <utility>
 
 class SkArenaAlloc;
 class SkAutoDescriptor;
@@ -135,6 +134,9 @@ public:
         ignoreGamma();
         setContrast(0);
     }
+
+    /** If the kEmbolden_Flag is set, drop it and use stroking instead. */
+    void useStrokeForFakeBold();
 
     SkMask::Format fMaskFormat;
 
@@ -425,7 +427,7 @@ protected:
      *  Does not apply subpixel positioning to the path.
      *  @return false if this glyph does not have any path.
      */
-    [[nodiscard]] virtual bool generatePath(const SkGlyph&, SkPath*) = 0;
+    [[nodiscard]] virtual bool generatePath(const SkGlyph&, SkPath*, bool* modified) = 0;
 
     /** Returns the drawable for the glyph (if any).
      *
