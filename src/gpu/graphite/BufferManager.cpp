@@ -8,7 +8,6 @@
 #include "src/gpu/graphite/BufferManager.h"
 
 #include "include/gpu/graphite/Recording.h"
-#include "include/private/base/SkTFitsIn.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/Log.h"
@@ -19,6 +18,9 @@
 #include "src/gpu/graphite/UploadBufferManager.h"
 #include "src/gpu/graphite/task/ClearBuffersTask.h"
 #include "src/gpu/graphite/task/CopyTask.h"
+#include "src/gpu/graphite/task/TaskList.h"
+
+#include <limits>
 
 namespace skgpu::graphite {
 
@@ -38,13 +40,25 @@ static constexpr uint32_t kStorageBufferSize = 2 << 10; //  2 KB
 // are addressed, we can tighten this and decide on the transfer buffer sizing as well.
 [[maybe_unused]] static constexpr uint32_t kMaxStaticDataSize = 6 << 10;
 
-uint32_t validate_size(size_t requiredBytes) {
-    if (!SkTFitsIn<uint32_t>(requiredBytes)) {
-        // Return 0 to skip attempting to allocate an buffer that's larger than we support.
+uint32_t validate_count_and_stride(size_t count, size_t stride) {
+    // size_t may just be uint32_t, so this ensures we have enough bits to do
+    // compute the required byte product.
+    uint64_t count64 = SkTo<uint64_t>(count);
+    uint64_t stride64 = SkTo<uint64_t>(stride);
+    uint64_t bytes64 = count64*stride64;
+    if (count64 > std::numeric_limits<uint32_t>::max() ||
+        stride64 > std::numeric_limits<uint32_t>::max() ||
+        bytes64 > std::numeric_limits<uint32_t>::max()) {
+        // Return 0 to skip further allocation attempts.
         return 0;
-    } else {
-        return SkTo<uint32_t>(requiredBytes);
     }
+    // Since count64 and stride64 fit into 32-bits, their product did not overflow, and the product
+    // fits into 32-bits so this cast is safe.
+    return SkTo<uint32_t>(bytes64);
+}
+
+uint32_t validate_size(size_t requiredBytes) {
+    return validate_count_and_stride(1, requiredBytes);
 }
 
 uint32_t sufficient_block_size(uint32_t requiredBytes, uint32_t blockSize) {
@@ -150,15 +164,16 @@ DrawBufferManager::BufferInfo::BufferInfo(BufferType type, uint32_t blockSize, c
         , fStartAlignment(starting_alignment(type, !caps->drawBufferCanBeMapped(), caps))
         , fBlockSize(SkAlignTo(blockSize, fStartAlignment)) {}
 
-std::pair<VertexWriter, BindBufferInfo> DrawBufferManager::getVertexWriter(size_t requiredBytes) {
-    uint32_t requiredBytes32 = validate_size(requiredBytes);
-    if (!requiredBytes32) {
+std::pair<VertexWriter, BindBufferInfo> DrawBufferManager::getVertexWriter(size_t count,
+                                                                           size_t stride) {
+    uint32_t requiredBytes = validate_count_and_stride(count, stride);
+    if (!requiredBytes) {
         return {};
     }
 
     auto& info = fCurrentBuffers[kVertexBufferIndex];
-    auto [ptr, bindInfo] = this->prepareMappedBindBuffer(&info, requiredBytes32, "VertexBuffer");
-    return {VertexWriter(ptr, requiredBytes32), bindInfo};
+    auto [ptr, bindInfo] = this->prepareMappedBindBuffer(&info, requiredBytes, "VertexBuffer");
+    return {VertexWriter(ptr, requiredBytes), bindInfo};
 }
 
 void DrawBufferManager::returnVertexBytes(size_t unusedBytes) {
@@ -171,37 +186,40 @@ void DrawBufferManager::returnVertexBytes(size_t unusedBytes) {
     fCurrentBuffers[kVertexBufferIndex].fOffset -= unusedBytes;
 }
 
-std::pair<IndexWriter, BindBufferInfo> DrawBufferManager::getIndexWriter(size_t requiredBytes) {
-    uint32_t requiredBytes32 = validate_size(requiredBytes);
-    if (!requiredBytes32) {
+std::pair<IndexWriter, BindBufferInfo> DrawBufferManager::getIndexWriter(size_t count,
+                                                                         size_t stride) {
+    uint32_t requiredBytes = validate_count_and_stride(count, stride);
+    if (!requiredBytes) {
         return {};
     }
 
     auto& info = fCurrentBuffers[kIndexBufferIndex];
-    auto [ptr, bindInfo] = this->prepareMappedBindBuffer(&info, requiredBytes32, "IndexBuffer");
-    return {IndexWriter(ptr, requiredBytes32), bindInfo};
+    auto [ptr, bindInfo] = this->prepareMappedBindBuffer(&info, requiredBytes, "IndexBuffer");
+    return {IndexWriter(ptr, requiredBytes), bindInfo};
 }
 
-std::pair<UniformWriter, BindBufferInfo> DrawBufferManager::getUniformWriter(size_t requiredBytes) {
-    uint32_t requiredBytes32 = validate_size(requiredBytes);
-    if (!requiredBytes32) {
+std::pair<UniformWriter, BindBufferInfo> DrawBufferManager::getUniformWriter(size_t count,
+                                                                             size_t stride) {
+    uint32_t requiredBytes = validate_count_and_stride(count, stride);
+    if (!requiredBytes) {
         return {};
     }
 
     auto& info = fCurrentBuffers[kUniformBufferIndex];
-    auto [ptr, bindInfo] = this->prepareMappedBindBuffer(&info, requiredBytes32, "UniformBuffer");
-    return {UniformWriter(ptr, requiredBytes32), bindInfo};
+    auto [ptr, bindInfo] = this->prepareMappedBindBuffer(&info, requiredBytes, "UniformBuffer");
+    return {UniformWriter(ptr, requiredBytes), bindInfo};
 }
 
-std::pair<UniformWriter, BindBufferInfo> DrawBufferManager::getSsboWriter(size_t requiredBytes) {
-    uint32_t requiredBytes32 = validate_size(requiredBytes);
-    if (!requiredBytes32) {
+std::pair<UniformWriter, BindBufferInfo> DrawBufferManager::getSsboWriter(size_t count,
+                                                                          size_t stride) {
+    uint32_t requiredBytes = validate_count_and_stride(count, stride);
+    if (!requiredBytes) {
         return {};
     }
 
     auto& info = fCurrentBuffers[kStorageBufferIndex];
-    auto [ptr, bindInfo] = this->prepareMappedBindBuffer(&info, requiredBytes32, "StorageBuffer");
-    return {UniformWriter(ptr, requiredBytes32), bindInfo};
+    auto [ptr, bindInfo] = this->prepareMappedBindBuffer(&info, requiredBytes, "StorageBuffer");
+    return {UniformWriter(ptr, requiredBytes), bindInfo};
 }
 
 std::pair<void* /*mappedPtr*/, BindBufferInfo> DrawBufferManager::getUniformPointer(
@@ -300,6 +318,7 @@ void DrawBufferManager::onFailedBuffer() {
     fMappingFailed = true;
 
     // Clean up and unmap everything now
+    fClearList.clear();
     fReusableScratchStorageBuffers.clear();
 
     for (auto& [buffer, _] : fUsedBuffers) {
@@ -319,14 +338,18 @@ void DrawBufferManager::onFailedBuffer() {
     }
 }
 
-void DrawBufferManager::transferToRecording(Recording* recording) {
-    // We could allow this to be called when the mapping has failed, since the transfer will be a no
-    // op, but in practice, the caller will want to check the error state as soon as possible to
-    // limit any unnecessary resource preparation from other tasks.
-    SkASSERT(!fMappingFailed);
+bool DrawBufferManager::transferToRecording(Recording* recording) {
+    if (fMappingFailed) {
+        // All state should have been reset by onFailedBuffer() except for this error flag.
+        SkASSERT(fUsedBuffers.empty() &&
+                 fClearList.empty() &&
+                 fReusableScratchStorageBuffers.empty());
+        fMappingFailed = false;
+        return false;
+    }
 
     if (!fClearList.empty()) {
-        recording->priv().addTask(ClearBuffersTask::Make(std::move(fClearList)));
+        recording->priv().taskList()->add(ClearBuffersTask::Make(std::move(fClearList)));
     }
 
     // Transfer the buffers in the reuse pool to the recording.
@@ -343,7 +366,7 @@ void DrawBufferManager::transferToRecording(Recording* recording) {
             // Since the transfer buffer is managed by the UploadManager, we don't manually unmap
             // it here or need to pass a ref into CopyBufferToBufferTask.
             size_t copySize = buffer->size();
-            recording->priv().addTask(
+            recording->priv().taskList()->add(
                     CopyBufferToBufferTask::Make(transferBuffer.fBuffer,
                                                  transferBuffer.fOffset,
                                                  std::move(buffer),
@@ -370,7 +393,7 @@ void DrawBufferManager::transferToRecording(Recording* recording) {
             SkASSERT(!fCaps->drawBufferCanBeMapped());
             // Since the transfer buffer is managed by the UploadManager, we don't manually unmap
             // it here or need to pass a ref into CopyBufferToBufferTask.
-            recording->priv().addTask(
+            recording->priv().taskList()->add(
                     CopyBufferToBufferTask::Make(info.fTransferBuffer.fBuffer,
                                                  info.fTransferBuffer.fOffset,
                                                  info.fBuffer,
@@ -385,6 +408,8 @@ void DrawBufferManager::transferToRecording(Recording* recording) {
         info.fTransferBuffer = {};
         info.fOffset = 0;
     }
+
+    return true;
 }
 
 std::pair<void*, BindBufferInfo> DrawBufferManager::prepareMappedBindBuffer(

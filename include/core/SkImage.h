@@ -548,13 +548,6 @@ public:
                     int srcY,
                     CachingHint cachingHint = kAllow_CachingHint) const;
 
-#if defined(GRAPHITE_TEST_UTILS)
-    bool readPixelsGraphite(skgpu::graphite::Recorder*,
-                            const SkPixmap& dst,
-                            int srcX,
-                            int srcY) const;
-#endif
-
 #ifndef SK_IMAGE_READ_PIXELS_DISABLE_LEGACY_API
     /** Deprecated. Use the variants that accept a GrDirectContext. */
     bool readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
@@ -572,8 +565,17 @@ public:
         AsyncReadResult& operator=(AsyncReadResult&&) = delete;
 
         virtual ~AsyncReadResult() = default;
+        /** Returns how many planes of data are in the result. e.g. 3 for YUV data. */
         virtual int count() const = 0;
+        /** Returns the raw pixel data for a given plane.
+         *
+         * It will be organized as per the dst SkImageInfo passed in to the async read call.
+         *
+         * Clients may wish to create an SkPixmap with this data using the dst SkImageInfo
+         * and rowBytes(i).
+         */
         virtual const void* data(int i) const = 0;
+        /** Returns how many bytes correspond to a single row of image data */
         virtual size_t rowBytes(int i) const = 0;
 
     protected:

@@ -447,7 +447,7 @@ static void setup_shader_stage_info(VkShaderStageFlagBits stage,
 
 static VkDescriptorSetLayout descriptor_data_to_layout(const VulkanSharedContext* sharedContext,
         const SkSpan<DescriptorData>& descriptorData) {
-    if (descriptorData.size() == 0) { return VK_NULL_HANDLE; }
+    if (descriptorData.empty()) { return VK_NULL_HANDLE; }
 
     VkDescriptorSetLayout setLayout;
     DescriptorDataToVkDescSetLayout(sharedContext, descriptorData, &setLayout);
@@ -630,7 +630,9 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
         const RenderPassDesc& renderPassDesc) {
     SkASSERT(rsrcProvider);
     SkSL::Program::Interface vsInterface, fsInterface;
+
     SkSL::ProgramSettings settings;
+    settings.fSharpenTextures = true;
     settings.fForceNoRTFlip = true; // TODO: Confirm
 
     const VulkanSharedContext* sharedContext = rsrcProvider->vulkanSharedContext();
@@ -851,7 +853,7 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     // After creating the pipeline object, we can clean up the VkShaderModule(s).
     destroy_shader_modules(sharedContext, vsModule, fsModule);
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     GraphicsPipeline::PipelineInfo pipelineInfo = {pipelineDesc.renderStepID(),
                                                    pipelineDesc.paintParamsID(),
                                                    std::move(vsSkSL),
