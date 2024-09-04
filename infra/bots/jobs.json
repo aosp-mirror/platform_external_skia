@@ -12,6 +12,7 @@
     "cq_config": {}
   },
   {"name": "BazelBuild-core-release-linux_x64"},
+  {"name": "BazelBuild-full_library-for_windows_x64_release-windows_x64"},
   {"name": "BazelBuild-ganesh_gl-release-linux_x64"},
   {"name": "BazelBuild-all_tests-debug-linux_x64"},
   {"name": "BazelBuild-all_tests-release-linux_x64",
@@ -20,6 +21,10 @@
   {"name": "BazelBuild-cpu_8888_benchmark_android_test-for_android_arm64_release-linux_x64"},
   {"name": "BazelBuild-hello_bazel_world_android_test-for_android_arm64_release-linux_x64"},
   {"name": "BazelBuild-android_math_test-for_android_arm64_release-linux_x64"},
+  {"name": "BazelBuild-viewer-debug-linux_x64",
+    "cq_config": {}
+  },
+  {"name": "BazelBuild-viewer-release-linux_x64"},
   {"name": "BazelTest-canvaskit_gold-modules_canvaskit_js_tests-ck_full_cpu_release_chrome-linux_x64",
     "cq_config": {"location_regexes": ["modules/canvaskit/.*"]}
   },
@@ -41,6 +46,9 @@
   {"name": "BazelTest-external_client-svg_with_primitive-default-linux_x64"},
   {"name": "BazelTest-external_client-use_ganesh_gl-default-linux_x64"},
   {"name": "BazelTest-external_client-use_ganesh_vulkan-default-linux_x64"},
+  {"name": "BazelTest-external_client-use_graphite_native_vulkan-default-linux_x64",
+    "cq_config": {}
+  },
   {"name": "BazelTest-external_client-use_skresources-default-linux_x64"},
   {"name": "BazelTest-external_client-write_text_to_png-default-linux_x64"},
   {"name": "BazelTest-external_client-write_to_pdf-default-linux_x64"},
@@ -83,6 +91,7 @@
    },
   {"name": "Build-Debian10-Clang-arm64-Debug-Android_API30"},
   {"name": "Build-Debian10-Clang-arm64-Debug-Android_FrameworkWorkarounds"},
+  {"name": "Build-Debian10-Clang-arm64-Debug-Android_Graphite_Dawn_GLES"},
   {"name": "Build-Debian10-Clang-arm64-Debug-Android_Graphite_Dawn_Vulkan",
    "cq_config": {"location_regexes": ["(tests|src/gpu)/graphite/.*", "src/sksl/generated/.*",
      "bazel/external/dawn/*", "DEPS"]}
@@ -94,6 +103,7 @@
   {"name": "Build-Debian10-Clang-arm64-Debug-Android_Vulkan"},
   {"name": "Build-Debian10-Clang-arm64-Release-Android"},
   {"name": "Build-Debian10-Clang-arm64-Release-Android_API30"},
+  {"name": "Build-Debian10-Clang-arm64-Release-Android_Graphite_Dawn_GLES"},
   {"name": "Build-Debian10-Clang-arm64-Release-Android_Graphite_Dawn_Vulkan"},
   {"name": "Build-Debian10-Clang-arm64-Release-Android_Graphite_Native_Vulkan",
   "cq_config": {}
@@ -104,6 +114,7 @@
   {"name": "Build-Debian10-Clang-x64-Release-Android"},
   {"name": "Build-Debian10-Clang-x86-Debug"},
   {"name": "Build-Debian10-Clang-x86-Debug-Android"},
+  {"name": "Build-Debian10-Clang-x86-Debug-Android_Graphite_Dawn_GLES"},
   {"name": "Build-Debian10-Clang-x86-Debug-Android_Graphite_Dawn_Vulkan"},
   {"name": "Build-Debian10-Clang-x86-Debug-Android_Graphite_Native_Vulkan",
   "cq_config": {}
@@ -421,6 +432,7 @@
   {"name": "Perf-Android12-Clang-Pixel5-GPU-Adreno620-arm64-Release-All-Android"},
   {"name": "Perf-Android12-Clang-Pixel5-GPU-Adreno620-arm64-Release-All-Android_Vulkan"},
   {"name": "Perf-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Vulkan"},
+  {"name": "Perf-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Dawn_GLES"},
   {"name": "Perf-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Dawn_Vulkan"},
   {"name": "Perf-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Native_Vulkan"},
   {"name": "Perf-Android-Clang-Wembley-GPU-PowerVRGE8320-arm-Release-All-Android"},
@@ -577,6 +589,7 @@
   {"name": "Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android"},
   {"name": "Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Debug-All-Android"},
   {"name": "Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Vulkan"},
+  {"name": "Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Dawn_GLES"},
   {"name": "Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Dawn_Vulkan"},
   {"name": "Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Native_Vulkan"},
   {"name": "Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Debug-All-Android_Graphite_Native_Vulkan_Protected"},
