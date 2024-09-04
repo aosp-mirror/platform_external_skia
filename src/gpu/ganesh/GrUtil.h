@@ -9,7 +9,7 @@
 
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkSLTypeShared.h"
 
@@ -89,12 +89,14 @@ static constexpr const char* GrColorTypeToStr(GrColorType ct) {
         case GrColorType::kBGRA_8888:        return "kBGRA_8888";
         case GrColorType::kRGBA_1010102:     return "kRGBA_1010102";
         case GrColorType::kBGRA_1010102:     return "kBGRA_1010102";
+        case GrColorType::kRGB_101010x:      return "kRGB_101010x";
         case GrColorType::kRGBA_10x6:        return "kBGRA_10x6";
         case GrColorType::kGray_8:           return "kGray_8";
         case GrColorType::kGrayAlpha_88:     return "kGrayAlpha_88";
         case GrColorType::kAlpha_F16:        return "kAlpha_F16";
         case GrColorType::kRGBA_F16:         return "kRGBA_F16";
         case GrColorType::kRGBA_F16_Clamped: return "kRGBA_F16_Clamped";
+        case GrColorType::kRGB_F16F16F16x:   return "kRGB_F16F16F16x";
         case GrColorType::kRGBA_F32:         return "kRGBA_F32";
         case GrColorType::kAlpha_8xxx:       return "kAlpha_8xxx";
         case GrColorType::kAlpha_F32xxx:     return "kAlpha_F32xxx";
