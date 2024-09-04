@@ -9,14 +9,17 @@
 
 #if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
 
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
+#include "include/gpu/ganesh/vk/GrVkTypes.h"
 #include "include/gpu/vk/VulkanTypes.h"
 #include "include/private/gpu/vk/SkiaVulkan.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/vk/GrVkCaps.h"
 #include "src/gpu/ganesh/vk/GrVkGpu.h"
+#include "src/gpu/vk/VulkanInterface.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
 
 #include <android/hardware_buffer.h>
