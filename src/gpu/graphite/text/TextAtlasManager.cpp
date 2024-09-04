@@ -312,6 +312,15 @@ void TextAtlasManager::compact() {
     }
 }
 
+void TextAtlasManager::purge() {
+    auto tokenTracker = fRecorder->priv().tokenTracker();
+    for (int i = 0; i < kMaskFormatCount; ++i) {
+        if (fAtlases[i]) {
+            fAtlases[i]->purge(tokenTracker->nextFlushToken());
+        }
+    }
+}
+
 }  // namespace skgpu::graphite
 
 ////////////////////////////////////////////////////////////////////////////////////////////////

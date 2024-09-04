@@ -30,7 +30,7 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/SkColorData.h"
 #include "include/private/SkSLSampleUsage.h"
@@ -729,7 +729,7 @@ DEF_TEST(SkRuntimeEffectSimple, r) {
 
 #if defined(SK_GRAPHITE)
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SkRuntimeEffectSimple_Graphite, r, context,
-                                         CtsEnforcement::kNextRelease) {
+                                         CtsEnforcement::kApiLevel_V) {
     std::unique_ptr<skgpu::graphite::Recorder> recorder = context->makeRecorder();
     GraphiteInfo graphite = {context, recorder.get()};
     test_RuntimeEffect_Shaders(r, /*grContext=*/nullptr, &graphite);

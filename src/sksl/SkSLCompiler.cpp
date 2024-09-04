@@ -181,7 +181,6 @@ std::unique_ptr<Module> Compiler::compileModule(ProgramKind kind,
                                                 const Module* parentModule,
                                                 bool shouldInline) {
     SkASSERT(parentModule);
-    SkASSERT(!moduleSource.empty());
     SkASSERT(this->errorCount() == 0);
 
     // Wrap the program source in a pointer so it is guaranteed to be stable across moves.
@@ -425,8 +424,7 @@ bool Compiler::finalize(Program& program) {
         }
     }
     if (this->errorCount() == 0) {
-        bool enforceSizeLimit = ProgramConfig::IsRuntimeEffect(program.fConfig->fKind);
-        Analysis::CheckProgramStructure(program, enforceSizeLimit);
+        Analysis::CheckProgramStructure(program);
 
         // Make sure that variables are declared in the symbol tables that immediately enclose them.
         SkDEBUGCODE(Analysis::CheckSymbolTableCorrectness(program));
