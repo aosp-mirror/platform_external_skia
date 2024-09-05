@@ -5220,6 +5220,7 @@ cc_library_shared {
         "tests/graphite/CacheKeyTest.cpp",
         "tests/graphite/ComputeTest.cpp",
         "tests/graphite/DeviceTest.cpp",
+        "tests/graphite/DrawAtlasTest.cpp",
         "tests/graphite/DrawPassTest.cpp",
         "tests/graphite/GraphitePromiseImageTest.cpp",
         "tests/graphite/GraphiteResourceCacheTest.cpp",
