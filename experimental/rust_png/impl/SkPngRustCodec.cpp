@@ -15,14 +15,19 @@
 #include "include/private/SkEncodedInfo.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkTemplates.h"
-#include "modules/skcms/src/skcms_public.h"
+#include "modules/skcms/skcms.h"
 #include "src/base/SkAutoMalloc.h"
+#include "src/codec/SkFrameHolder.h"
 #include "src/codec/SkSwizzler.h"
 #include "third_party/rust/cxx/v1/cxx.h"
 
 namespace {
 
 SkEncodedInfo::Color ToColor(rust_png::ColorType colorType) {
+    // TODO(https://crbug.com/359279096): Take `sBIT` chunk into account to
+    // sometimes return `kXAlpha_Color` or `k565_Color`.  This may require
+    // a small PR to expose `sBIT` chunk from the `png` crate.
+
     switch (colorType) {
         case rust_png::ColorType::Grayscale:
             return SkEncodedInfo::kGray_Color;
@@ -54,13 +59,88 @@ SkEncodedInfo::Alpha ToAlpha(rust_png::ColorType colorType) {
     SK_ABORT("Unexpected `rust_png::ColorType`: %d", static_cast<int>(colorType));
 }
 
+std::unique_ptr<SkEncodedInfo::ICCProfile> CreateColorProfile(const rust_png::Reader& reader) {
+    // NOTE: This method is based on `read_color_profile` in
+    // `src/codec/SkPngCodec.cpp` but has been refactored to use Rust inputs
+    // instead of `libpng`.
+
+    rust::Slice<const uint8_t> iccp;
+    if (reader.try_get_iccp(iccp)) {
+        skcms_ICCProfile profile;
+        skcms_Init(&profile);
+        if (skcms_Parse(iccp.data(), iccp.size(), &profile)) {
+            return SkEncodedInfo::ICCProfile::Make(profile);
+        }
+    }
+
+    if (reader.is_srgb()) {
+        // TODO(https://crbug.com/362304558): Consider the intent field from the
+        // `sRGB` chunk.
+        return nullptr;
+    }
+
+    // Default to SRGB gamut.
+    skcms_Matrix3x3 toXYZD50 = skcms_sRGB_profile()->toXYZD50;
+
+    // Next, check for chromaticities.
+    float rx = 0.0;
+    float ry = 0.0;
+    float gx = 0.0;
+    float gy = 0.0;
+    float bx = 0.0;
+    float by = 0.0;
+    float wx = 0.0;
+    float wy = 0.0;
+    if (reader.try_get_chrm(wx, wy, rx, ry, gx, gy, bx, by)) {
+        skcms_Matrix3x3 tmp;
+        if (skcms_PrimariesToXYZD50(rx, ry, gx, gy, bx, by, wx, wy, &tmp)) {
+            toXYZD50 = tmp;
+        } else {
+            // Note that Blink simply returns nullptr in this case. We'll fall
+            // back to srgb.
+            //
+            // TODO(https://crbug.com/362306048): If this implementation ends up
+            // replacing the one from Blink, then we should 1) double-check that
+            // we are comfortable with the difference and 2) remove this comment
+            // (since the Blink code that it refers to will get removed).
+        }
+    }
+
+    skcms_TransferFunction fn;
+    float gamma;
+    if (reader.try_get_gama(gamma)) {
+        fn.a = 1.0f;
+        fn.b = fn.c = fn.d = fn.e = fn.f = 0.0f;
+        fn.g = 1.0f / gamma;
+    } else {
+        // Default to sRGB gamma if the image has color space information,
+        // but does not specify gamma.
+        // Note that Blink would again return nullptr in this case.
+        fn = *skcms_sRGB_TransferFunction();
+    }
+
+    skcms_ICCProfile profile;
+    skcms_Init(&profile);
+    skcms_SetTransferFunction(&profile, &fn);
+    skcms_SetXYZD50(&profile, &toXYZD50);
+    return SkEncodedInfo::ICCProfile::Make(profile);
+}
+
 SkEncodedInfo CreateEncodedInfo(const rust_png::Reader& reader) {
-    rust_png::ColorType color = reader.output_color_type();
+    rust_png::ColorType rust_color = reader.output_color_type();
+    SkEncodedInfo::Color sk_color = ToColor(rust_color);
+
+    std::unique_ptr<SkEncodedInfo::ICCProfile> profile = CreateColorProfile(reader);
+    if (!SkPngCodecBase::isCompatibleColorProfileAndType(profile.get(), sk_color)) {
+        profile = nullptr;
+    }
+
     return SkEncodedInfo::Make(reader.width(),
                                reader.height(),
-                               ToColor(color),
-                               ToAlpha(color),
-                               reader.output_bits_per_component());
+                               sk_color,
+                               ToAlpha(rust_color),
+                               reader.output_bits_per_component(),
+                               std::move(profile));
 }
 
 SkCodec::Result ToSkCodecResult(rust_png::DecodingResult rustResult) {
@@ -113,22 +193,17 @@ private:
     SkStream* fStream = nullptr;  // Non-owning pointer.
 };
 
-// The current implementation does *not* call into
-// `SkCodec::applyColorXform` and therefore it doesn't really matter what we
-// pass to the constructor of `SkCodec` as `XformFormat srcFormat`.  Passing
-// `kInvalidSkcmsFormat` will ensure that `skcms_Transform` will return
-// false if (unexpectedly) called.
-//
-// Note that `skcms_PixelFormat` doesn't currently cover all the possible
-// output formats from the PNG decoder - e.g. it has no support for handling
-// G16 or GA16.
-//
-// TODO(https://crbug.com/356879515): Remove this constant and start using
-// valid pixel format constants before depending on `skcms_Transform`.
-#pragma clang diagnostic ignored "-Wenum-constexpr-conversion"
-constexpr skcms_PixelFormat kInvalidSkcmsPixelFormat = static_cast<skcms_PixelFormat>(-1);
-
 }  // namespace
+
+class SkPngRustCodec::PngFrame final : public SkFrame {
+public:
+    PngFrame(int id, SkEncodedInfo::Alpha alpha) : SkFrame(id), fReportedAlpha(alpha) {}
+
+private:
+    SkEncodedInfo::Alpha onReportedAlpha() const override { return fReportedAlpha; };
+
+    const SkEncodedInfo::Alpha fReportedAlpha;
+};
 
 // static
 std::unique_ptr<SkPngRustCodec> SkPngRustCodec::MakeFromStream(std::unique_ptr<SkStream> stream,
@@ -152,66 +227,95 @@ std::unique_ptr<SkPngRustCodec> SkPngRustCodec::MakeFromStream(std::unique_ptr<S
 SkPngRustCodec::SkPngRustCodec(SkEncodedInfo&& encodedInfo,
                                std::unique_ptr<SkStream> stream,
                                rust::Box<rust_png::Reader> reader)
-        : SkCodec(std::move(encodedInfo), kInvalidSkcmsPixelFormat, std::move(stream))
-        , fReader(std::move(reader)) {}
+        : SkPngCodecBase(std::move(encodedInfo), std::move(stream)), fReader(std::move(reader)) {
+    // Initialize propoerties of the first (maybe the only) animation frame.
+    constexpr int kIdOfFirstFrame = 0;
+    fFrames.push_back(PngFrame(kIdOfFirstFrame, this->getEncodedInfo().alpha()));
+    SkFrame& first_frame = fFrames.back();
+    first_frame.setXYWH(0, 0, this->getEncodedInfo().width(), this->getEncodedInfo().height());
+    first_frame.setHasAlpha(this->getEncodedInfo().alpha() == SkEncodedInfo::kUnpremul_Alpha);
+    first_frame.setRequiredFrame(kNoFrame);
+    // No need to call `setDuration` or `setBlend` - the default values are ok.
+    //
+    // TODO(https://crbug.com/356922876): Call setDisposalMethod`, based on
+    // `png::FrameControl`.
+}
 
 SkPngRustCodec::~SkPngRustCodec() = default;
 
-SkEncodedImageFormat SkPngRustCodec::onGetEncodedFormat() const {
-    return SkEncodedImageFormat::kPNG;
-}
+SkCodec::Result SkPngRustCodec::startDecoding(const SkImageInfo& dstInfo,
+                                              void* pixels,
+                                              size_t rowBytes,
+                                              const Options& options,
+                                              DecodingState* decodingState) {
+    decodingState->dst = SkSpan(static_cast<uint8_t*>(pixels), rowBytes * dstInfo.height());
+    decodingState->dstRowSize = rowBytes;
 
-SkCodec::Result SkPngRustCodec::onGetPixels(const SkImageInfo& dstInfo,
-                                            void* dst,
-                                            size_t rowBytes,
-                                            const Options& options,
-                                            int* rowsDecoded) {
     // TODO(https://crbug.com/356922876): Expose `png` crate's ability to decode
     // multiple frames.
     if (options.fFrameIndex != 0) {
         return kUnimplemented;
     }
 
+    // TODO(https://crbug.com/362830091): Consider handling `fSubset` (if not
+    // for `onGetPixels` then at least for `onStartIncrementalDecode`).
     if (options.fSubset) {
         return kUnimplemented;
     }
 
-    // We can assume that the source and destination have the same dimensions,
-    // because `SkPngRustCodec` inherits the default implementation of
-    // `SkCodec::onDimensionsSupported` which returns false (and
-    // `SkCodec::getPixels` checks `dimensionsSupported` before proceeding).
-    int width = dstInfo.width();
-    int height = dstInfo.height();
-    SkASSERT(width == getEncodedInfo().width());
-    SkASSERT(height == getEncodedInfo().height());
+    return this->initializeXforms(dstInfo, options);
+}
 
-    // Palette expansion currently takes place within the `png` crate, via
-    // `png::Transformations::EXPAND`.
-    //
-    // TODO(https://crbug.com/356882657): Measure if populating `SkPMColor`
-    // table may have some runtime performance benefits.
-    SkPMColor* kColorTable = nullptr;
+SkCodec::Result SkPngRustCodec::incrementalDecode(DecodingState& decodingState,
+                                                  int* rowsDecodedPtr) {
+    if (fReader->interlaced()) {
+        // TODO(https://crbug.com/356923435): Support incremental decoding of
+        // interlaced images.
+        return kUnimplemented;
+    }
+    this->initializeXformParams();
 
-    std::unique_ptr<SkSwizzler> swizzler =
-            SkSwizzler::Make(this->getEncodedInfo(), kColorTable, dstInfo, options);
+    int rowsDecoded = 0;
+    while (true) {
+        // TODO(https://crbug.com/357876243): Avoid an unconditional buffer hop
+        // through buffer owned by `fReader` (e.g. when we can decode directly
+        // into `dst`, because the pixel format received from `fReader` is
+        // similar enough to `dstInfo`).
+        rust::Slice<const uint8_t> decodedRow;
 
-    // The assertion below is based on `png::Transformations::EXPAND`.  The
-    // assertion helps to ensure that dividing by 8 in `srcRowSize` calculations
-    // is okay.
-    SkASSERT(getEncodedInfo().bitsPerComponent() % 8 == 0);
-    size_t srcRowSize = static_cast<size_t>(getEncodedInfo().bitsPerPixel()) / 8 * width;
+        Result result = ToSkCodecResult(fReader->next_row(decodedRow));
+        if (result != kSuccess) {
+            if (result == kIncompleteInput && rowsDecodedPtr) {
+                // TODO(https://crbug.com/356923435): Handle `kIncompleteInput` (right
+                // now the FFI layer will never return `kIncompleteInput` but we will
+                // need to handle it for incremental, row-by-row decoding).
+                SkUNREACHABLE;
 
+                *rowsDecodedPtr = rowsDecoded;
+            }
+            return result;
+        }
+
+        if (decodedRow.empty()) {  // This is how FFI layer says "no more rows".
+            fIncrementalDecodingState.reset();
+            fNumOfFullyReceivedFrames++;
+            return kSuccess;
+        }
+
+        this->applyXformRow(decodingState.dst, decodedRow);
+        decodingState.dst = decodingState.dst.subspan(decodingState.dstRowSize);
+        rowsDecoded++;
+    }
+}
+
+SkCodec::Result SkPngRustCodec::decodeInterlacedImage(DecodingState& decodingState) {
     // Decode the whole PNG image into an intermediate buffer.
     //
-    // TODO(https://crbug.com/357876243): Avoid an extra buffer when possible
-    // (e.g. when we can decode directly into `dst`, because the pixel format
-    // received from `fReader` is similar enough to `dstInfo`).
-    //
-    // TODO(https://github.com/dtolnay/cxx/pull/1367): Consider using a new
-    // constructor when available: `rust::Slice(decodedPixels)`.
+    // TODO(https://crbug.com/356923435): Handle interlaced images in
+    // `incrementalDecode` and stop using (and remove) `next_frame` below.
     std::vector<uint8_t> decodedPixels(fReader->output_buffer_size(), 0x00);
-    Result result = ToSkCodecResult(
-            fReader->next_frame(rust::Slice(decodedPixels.data(), decodedPixels.size())));
+    Result result = ToSkCodecResult(fReader->next_frame(rust::Slice<uint8_t>(decodedPixels)));
+
     if (result != kSuccess) {
         // TODO(https://crbug.com/356923435): Handle `kIncompleteInput` (right
         // now the FFI layer will never return `kIncompleteInput` but we will
@@ -223,13 +327,91 @@ SkCodec::Result SkPngRustCodec::onGetPixels(const SkImageInfo& dstInfo,
 
     // Convert the `decodedPixels` into the `dstInfo` format.
     SkSpan<const uint8_t> src = decodedPixels;
-    void* dstRow = dst;
+    size_t srcRowSize = this->getEncodedInfoRowSize();
+    int height = this->getEncodedInfo().height();
     for (int y = 0; y < height; ++y) {
-        swizzler->swizzle(dstRow, src.data());
-        dstRow = SkTAddOffset<void>(dstRow, rowBytes);
+        this->applyXformRow(decodingState.dst, src);
+        decodingState.dst = decodingState.dst.subspan(decodingState.dstRowSize);
         src = src.subspan(srcRowSize);
     }
-    *rowsDecoded = height;
 
     return kSuccess;
+}
+
+SkCodec::Result SkPngRustCodec::onGetPixels(const SkImageInfo& dstInfo,
+                                            void* pixels,
+                                            size_t rowBytes,
+                                            const Options& options,
+                                            int* rowsDecoded) {
+    DecodingState decodingState;
+    Result result = this->startDecoding(dstInfo, pixels, rowBytes, options, &decodingState);
+    if (result != kSuccess) {
+        return result;
+    }
+
+    // TODO(https://crbug.com/356923435): Handle interlaced images in
+    // `incrementalDecode` and then: remove the `if` statement below
+    // (and remove `SkPngRustCodec::decodeInterlacedImage` as well as
+    // `ffi::Reader::next_frame`).
+    if (fReader->interlaced()) {
+        return this->decodeInterlacedImage(decodingState);
+    }
+    return this->incrementalDecode(decodingState, rowsDecoded);
+}
+
+SkCodec::Result SkPngRustCodec::onStartIncrementalDecode(const SkImageInfo& dstInfo,
+                                                         void* pixels,
+                                                         size_t rowBytes,
+                                                         const Options& options) {
+    DecodingState decodingState;
+    Result result = this->startDecoding(dstInfo, pixels, rowBytes, options, &decodingState);
+    if (result != kSuccess) {
+        return result;
+    }
+
+    SkASSERT(!fIncrementalDecodingState.has_value());
+    fIncrementalDecodingState = decodingState;
+    return kSuccess;
+}
+
+SkCodec::Result SkPngRustCodec::onIncrementalDecode(int* rowsDecoded) {
+    SkASSERT(fIncrementalDecodingState.has_value());
+    return this->incrementalDecode(*fIncrementalDecodingState, rowsDecoded);
+}
+
+bool SkPngRustCodec::onGetFrameInfo(int index, FrameInfo* info) const {
+    if ((0 <= index) && (index < fFrames.size())) {
+        if (info) {
+            fFrames[index].fillIn(info, fNumOfFullyReceivedFrames > index);
+        }
+        return true;
+    }
+
+    return false;
+}
+
+std::optional<SkSpan<const SkPngCodecBase::PaletteColorEntry>> SkPngRustCodec::onTryGetPlteChunk() {
+    if (fReader->output_color_type() != rust_png::ColorType::Indexed) {
+        return std::nullopt;
+    }
+
+    // We shouldn't get here because we always use
+    // `png::Transformations::EXPAND`.
+    //
+    // TODO(https://crbug.com/356882657): Handle pLTE and tRNS inside
+    // `SkPngRustCodec` rather than via `png::Transformations::EXPAND`.
+    SkUNREACHABLE;
+}
+
+std::optional<SkSpan<const uint8_t>> SkPngRustCodec::onTryGetTrnsChunk() {
+    if (fReader->output_color_type() != rust_png::ColorType::Indexed) {
+        return std::nullopt;
+    }
+
+    // We shouldn't get here because we always use
+    // `png::Transformations::EXPAND`.
+    //
+    // TODO(https://crbug.com/356882657): Handle pLTE and tRNS inside
+    // `SkPngRustCodec` rather than via `png::Transformations::EXPAND`.
+    SkUNREACHABLE;
 }

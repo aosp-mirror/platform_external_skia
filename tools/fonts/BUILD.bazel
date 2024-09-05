@@ -79,10 +79,10 @@ skia_cc_library(
         "//src/core:core_priv",
         "//tools:resources",
         "//tools:tool_utils",
-    ] + select(
-        {
-            "//bazel/common_config_settings:use_fontations_true": ["//src/ports:fontmgr_fontations_empty"],
-            "//conditions:default": [],
-        },
-    ),
+    ] + select({
+        "@platforms//os:android": ["@skia//:fontmgr_android_freetype"],
+        "@platforms//os:linux": ["@skia//:fontmgr_fontconfig_freetype"],
+        "@platforms//os:macos": ["@skia//:fontmgr_coretext"],
+        "//conditions:default": ["//src/ports:fontmgr_fontations_empty"],
+    }),
 )

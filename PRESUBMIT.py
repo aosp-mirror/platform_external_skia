@@ -124,7 +124,8 @@ def _CopyrightChecks(input_api, output_api, source_file_filter=None):
         'tests/sksl/' in affected_file.LocalPath() or
         'bazel/rbe/' in affected_file.LocalPath() or
         'bazel/external/' in affected_file.LocalPath() or
-        'bazel/exporter/interfaces/mocks/' in affected_file.LocalPath()):
+        'bazel/exporter/interfaces/mocks/' in affected_file.LocalPath() or
+        affected_file.LocalPath().endswith('gen.go')):
       continue
     contents = input_api.ReadFile(affected_file, 'rb')
     if not re.search(copyright_pattern, contents):
@@ -462,15 +463,11 @@ def _CheckBuildifier(input_api, output_api):
       'You can download it from https://github.com/bazelbuild/buildtools/releases')]
 
   return _RunCommandAndCheckDiff(
-    # One can change --lint=warn to --lint=fix to have things automatically fixed where possible.
-    # However, --lint=fix will not cause a presubmit error if there are things that require
-    # manual intervention, so we leave --lint=warn on by default.
-    #
     # Please keep the below arguments in sync with those in the //:buildifier rule definition.
     output_api, [
       'buildifier',
       '--mode=fix',
-      '--lint=warn',
+      '--lint=fix',
       '--warnings',
       ','.join([
         '-native-android',

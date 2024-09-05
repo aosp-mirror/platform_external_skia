@@ -33,7 +33,6 @@
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/PathAtlas.h"
 #include "src/gpu/graphite/PipelineData.h"
-#include "src/gpu/graphite/PipelineDataCache.h"
 #include "src/gpu/graphite/ProxyCache.h"
 #include "src/gpu/graphite/RasterPathAtlas.h"
 #include "src/gpu/graphite/RecorderPriv.h"
@@ -318,8 +317,12 @@ BackendTexture Recorder::createBackendTexture(AHardwareBuffer* hardwareBuffer,
 
 bool Recorder::updateBackendTexture(const BackendTexture& backendTex,
                                     const SkPixmap srcData[],
-                                    int numLevels) {
+                                    int numLevels,
+                                    GpuFinishedProc finishedProc,
+                                    GpuFinishedContext finishedContext) {
     ASSERT_SINGLE_OWNER
+
+    auto releaseHelper = skgpu::RefCntedCallback::Make(finishedProc, finishedContext);
 
     if (!backendTex.isValid() || backendTex.backend() != this->backend()) {
         return false;
@@ -349,6 +352,7 @@ bool Recorder::updateBackendTexture(const BackendTexture& backendTex,
     if (!texture) {
         return false;
     }
+    texture->setReleaseCallback(std::move(releaseHelper));
 
     sk_sp<TextureProxy> proxy = TextureProxy::Wrap(std::move(texture));
 
@@ -388,8 +392,12 @@ bool Recorder::updateBackendTexture(const BackendTexture& backendTex,
 
 bool Recorder::updateCompressedBackendTexture(const BackendTexture& backendTex,
                                               const void* data,
-                                              size_t dataSize) {
+                                              size_t dataSize,
+                                              GpuFinishedProc finishedProc,
+                                              GpuFinishedContext finishedContext) {
     ASSERT_SINGLE_OWNER
+
+    auto releaseHelper = skgpu::RefCntedCallback::Make(finishedProc, finishedContext);
 
     if (!backendTex.isValid() || backendTex.backend() != this->backend()) {
         return false;
@@ -403,6 +411,7 @@ bool Recorder::updateCompressedBackendTexture(const BackendTexture& backendTex,
     if (!texture) {
         return false;
     }
+    texture->setReleaseCallback(std::move(releaseHelper));
 
     sk_sp<TextureProxy> proxy = TextureProxy::Wrap(std::move(texture));
 
@@ -586,6 +595,11 @@ bool RecorderPriv::deviceIsRegistered(Device* device) const {
 void RecorderPriv::setContext(Context* context) {
     fRecorder->fContext = context;
 }
+
+void RecorderPriv::issueFlushToken() {
+    fRecorder->fTokenTracker->issueFlushToken();
+}
+
 #endif
 
 

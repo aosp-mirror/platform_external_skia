@@ -213,7 +213,7 @@ py_binary(
     srcs = [":generate_workarounds.py"],
     args = [
         "--output-file",
-        "include/gpu/GrDriverBugWorkaroundsAutogen.h",
+        "include/gpu/ganesh/GrDriverBugWorkaroundsAutogen.h",
         "src/gpu/gpu_workaround_list.txt",
     ],
     data = [
@@ -274,6 +274,7 @@ skia_cc_library(
         "//include/private/chromium:headers_to_compile",
         "//include/private/gpu/ganesh:headers_to_compile",
         "//include/private:headers_to_compile",
+        "//modules/svg/src:headers_to_compile",
         "//src/base:headers_to_compile",
         "//src/codec:headers_to_compile",
         "//src/core:headers_to_compile",
@@ -282,6 +283,7 @@ skia_cc_library(
         "//src/gpu/ganesh/geometry:headers_to_compile",
         "//src/gpu/ganesh/gl:headers_to_compile",
         "//src/gpu/ganesh/mock:headers_to_compile",
+        "//src/gpu/ganesh/ops:headers_to_compile",
         "//src/gpu/ganesh/tessellate:headers_to_compile",
         "//src/gpu/ganesh:headers_to_compile",
         "//src/gpu/graphite/geom:headers_to_compile",
@@ -298,7 +300,13 @@ skia_cc_library(
         "-Wno-unused-function",
         "-Wno-unused-template",
         "-Wno-unused-const-variable",
-    ],
+        "-Wno-invalid-constexpr",
+    ] + select({
+        "@platforms//os:windows": [
+            "-D_CRT_USE_BUILTIN_OFFSETOF",
+        ],
+        "//conditions:default": [],
+    }),
     # This is not intended to be used for tests or anything, just for IWYU
     visibility = ["//visibility:private"],
     deps = [
