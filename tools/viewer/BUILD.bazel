@@ -99,6 +99,9 @@ skia_cc_binary(
         "//tools/fonts:test_font_manager_srcs",
         "//tools/trace",
     ],
+    data = [
+        "//resources",
+    ],
     deps = [
         "//:core",
         "//:fontmgr_directory_freetype",
@@ -118,7 +121,9 @@ skia_cc_binary(
         "//tools:runtime_blend_utils",
         "//tools/flags:common_flags",
         "//tools/flags:ganesh_flags",
+        "//tools/flags:graphite_flags",
         "//tools/gpu:ganesh_gl_utils",
+        "//tools/graphite:graphite_utils",
         "//tools/sk_app",
         "//tools/skui",
         "//tools/timer",

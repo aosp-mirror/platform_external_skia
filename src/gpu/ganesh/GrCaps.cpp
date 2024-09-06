@@ -12,8 +12,8 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContextOptions.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrContextOptions.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkCompressedDataUtils.h"
@@ -490,6 +490,8 @@ static inline GrColorType color_type_fallback(GrColorType ct) {
         case GrColorType::kAlpha_F16:
             return GrColorType::kRGBA_F16;
         case GrColorType::kGray_8:
+        case GrColorType::kRGB_F16F16F16x:
+        case GrColorType::kRGB_101010x:
             return GrColorType::kRGB_888x;
         default:
             return GrColorType::kUnknown;

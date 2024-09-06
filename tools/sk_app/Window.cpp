@@ -9,8 +9,8 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
 #include "tools/window/WindowContext.h"
 
 namespace sk_app {
@@ -181,13 +181,13 @@ skgpu::graphite::Recorder* Window::graphiteRecorder() const {
 #endif
 }
 
-#if defined(SK_GRAPHITE)
 void Window::snapRecordingAndSubmit() {
+#if defined(SK_GRAPHITE)
     if (fWindowContext) {
         fWindowContext->snapRecordingAndSubmit();
     }
-}
 #endif
+}
 
 void Window::inval() {
     if (!fWindowContext) {

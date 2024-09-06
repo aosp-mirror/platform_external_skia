@@ -10,7 +10,7 @@
 
 #include "src/gpu/Blend.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
-#include "src/gpu/graphite/PipelineDataCache.h"
+#include "src/gpu/graphite/PipelineData.h"
 
 #include <optional>
 #include <tuple>
@@ -58,10 +58,13 @@ struct FragSkSLInfo {
     int  fNumTexturesAndSamplers = 0;
     bool fHasPaintUniforms = false;
     bool fHasGradientBuffer = false;
+    // Note that fData is currently only used to store SamplerDesc information for shaders that have
+    // the option of using immutable samplers. However, other snippets could leverage this field to
+    // convey other information once data can be tied to snippetIDs (b/347072931).
     skia_private::TArray<uint32_t> fData = {};
 };
 
-std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*> ExtractPaintData(
+std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaintData(
         Recorder*,
         PipelineDataGatherer* gatherer,
         PaintParamsKeyBuilder* builder,
@@ -73,7 +76,7 @@ std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*
         SkIPoint dstOffset,
         const SkColorInfo& targetColorInfo);
 
-std::tuple<const UniformDataBlock*, const TextureDataBlock*> ExtractRenderStepData(
+std::tuple<UniformDataBlock, TextureDataBlock> ExtractRenderStepData(
         UniformDataCache* uniformDataCache,
         TextureDataCache* textureDataCache,
         PipelineDataGatherer* gatherer,
