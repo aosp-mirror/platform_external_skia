@@ -85,7 +85,7 @@ private:
                                 const DrawPassCommands::BindTexturesAndSamplers& command);
 
     void setScissor(unsigned int left, unsigned int top, unsigned int width, unsigned int height);
-    void preprocessViewport(const SkRect& viewport);
+    bool preprocessViewport(const SkRect& viewport);
     void setViewport(const SkRect& viewport);
 
     void draw(PrimitiveType type, unsigned int baseVertex, unsigned int vertexCount);
@@ -143,9 +143,10 @@ private:
 
     bool fBoundUniformBuffersDirty = false;
 
-    std::array<const DawnBuffer*, DawnGraphicsPipeline::kNumUniformBuffers> fBoundUniformBuffers;
-    std::array<uint32_t, DawnGraphicsPipeline::kNumUniformBuffers> fBoundUniformBufferOffsets;
-    std::array<uint32_t, DawnGraphicsPipeline::kNumUniformBuffers> fBoundUniformBufferSizes;
+    std::array<BindBufferInfo, DawnGraphicsPipeline::kNumUniformBuffers> fBoundUniforms;
+
+    class IntrinsicConstantsManager;
+    std::unique_ptr<IntrinsicConstantsManager> fIntrinsicConstants;
 
     wgpu::CommandEncoder fCommandEncoder;
     wgpu::RenderPassEncoder fActiveRenderPassEncoder;
@@ -153,18 +154,6 @@ private:
 
     wgpu::Buffer fCurrentIndirectBuffer;
     size_t fCurrentIndirectBufferOffset = 0;
-
-    using IntrinsicConstant = std::array<float, 4>;
-
-    static constexpr int kBufferBindingOffsetAlignment = 256;
-    static constexpr int kIntrinsicConstantAlignedSize =
-            SkAlignTo(sizeof(IntrinsicConstant), kBufferBindingOffsetAlignment);
-    static constexpr int kNumSlotsForIntrinsicConstantBuffer = 8;
-
-    std::optional<IntrinsicConstant> fCurrentRTAdjust;
-
-    sk_sp<DawnBuffer> fIntrinsicConstantBuffer;
-    int fIntrinsicConstantBufferSlotsUsed = 0;
 
     const DawnGraphicsPipeline* fActiveGraphicsPipeline = nullptr;
     const DawnComputePipeline* fActiveComputePipeline = nullptr;
