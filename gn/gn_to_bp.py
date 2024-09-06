@@ -81,10 +81,6 @@ cc_defaults {
     arch: {
         arm: {
             srcs: [],
-
-            neon: {
-                srcs: [],
-            },
         },
 
         arm64: {
@@ -266,12 +262,15 @@ cc_defaults {
         "libpiex",
         "libexpat",
         "libft2",
+        "libharfbuzz_subset",
     ],
     static_libs: [
         "libwebp-decode",
         "libwebp-encode",
-        "libsfntly",
         "libwuffs_mirror_release_c",
+    ],
+    cflags: [
+        "-DSK_PDF_USE_HARFBUZZ_SUBSET",
     ],
     target: {
       android: {
@@ -450,17 +449,16 @@ def generate_args(target_os, enable_gpu, renderengine = False):
     'skia_use_fonthost_mac':                'false',
 
     'skia_use_system_harfbuzz':             'false',
+    'skia_pdf_subset_harfbuzz':             'true',
 
     # enable features used in skia_nanobench
     'skia_tools_require_resources':         'true',
 
     'skia_use_fontconfig':                  'false',
-    'skia_include_multiframe_procs':        'false',
+    'skia_include_multiframe_procs':        'true',
 
     # Tracing-related flags:
     'skia_disable_tracing':                 'false',
-    # Required for some SKSL tests
-    'skia_enable_sksl_tracing':             'true',
     # The two Perfetto integrations are currently mutually exclusive due to
     # complexity.
     'skia_use_perfetto':                    'false',
@@ -468,7 +466,6 @@ def generate_args(target_os, enable_gpu, renderengine = False):
   d['target_os'] = target_os
   if target_os == '"android"':
     d['skia_enable_tools'] = 'true'
-    d['skia_include_multiframe_procs'] = 'true'
     # Only enable for actual Android framework builds targeting Android devices.
     # (E.g. disabled for host builds and SkQP)
     d['skia_android_framework_use_perfetto'] = 'true'
@@ -476,9 +473,12 @@ def generate_args(target_os, enable_gpu, renderengine = False):
   if enable_gpu:
     d['skia_use_vulkan']    = 'true'
     d['skia_enable_ganesh'] = 'true'
+    if renderengine:
+      d['skia_enable_graphite'] = 'true'
   else:
-    d['skia_use_vulkan']    = 'false'
-    d['skia_enable_ganesh'] = 'false'
+    d['skia_use_vulkan']      = 'false'
+    d['skia_enable_ganesh']   = 'false'
+    d['skia_enable_graphite'] = 'false'
 
   if target_os == '"win"':
     # The Android Windows build system does not provide FontSub.h

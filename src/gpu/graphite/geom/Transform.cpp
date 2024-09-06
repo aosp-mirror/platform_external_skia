@@ -231,7 +231,7 @@ float Transform::localAARadius(const Rect& bounds) const {
     // transformation moves between [1,max/min] so using 1/min as the local AA radius ensures that
     // the post-transformed point is at least 1px away from the original.
     float aaRadius = sk_ieee_float_divide(1.f, min);
-    if (sk_float_isfinite(aaRadius)) {
+    if (SkIsFinite(aaRadius)) {
         return aaRadius;
     } else {
         return SK_FloatInfinity;
@@ -240,10 +240,16 @@ float Transform::localAARadius(const Rect& bounds) const {
 
 Rect Transform::mapRect(const Rect& rect) const {
     SkASSERT(this->valid());
+    if (fType == Type::kIdentity) {
+        return rect;
+    }
     return map_rect(fM, rect);
 }
 Rect Transform::inverseMapRect(const Rect& rect) const {
     SkASSERT(this->valid());
+    if (fType == Type::kIdentity) {
+        return rect;
+    }
     return map_rect(fInvM, rect);
 }
 

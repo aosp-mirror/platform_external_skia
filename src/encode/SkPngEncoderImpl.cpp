@@ -202,6 +202,15 @@ bool SkPngEncoderMgr::setHeader(const SkImageInfo& srcInfo, const SkPngEncoder::
             pngColorType = PNG_COLOR_TYPE_RGB;
             fPngBytesPerPixel = 6;
             break;
+        case kBGRA_10101010_XR_SkColorType:
+            bitDepth = 16;
+            sigBit.red = 10;
+            sigBit.green = 10;
+            sigBit.blue = 10;
+            sigBit.alpha = 10;
+            pngColorType = srcInfo.isOpaque() ? PNG_COLOR_TYPE_RGB : PNG_COLOR_TYPE_RGB_ALPHA;
+            fPngBytesPerPixel = 8;
+            break;
         default:
             return false;
     }
@@ -364,6 +373,8 @@ static transform_scanline_proc choose_proc(const SkImageInfo& info) {
                     SkDEBUGFAIL("unsupported color type");
                     return nullptr;
             }
+        case kBGRA_10101010_XR_SkColorType:
+            return transform_scanline_bgra_10101010_xr;
         case kAlpha_8_SkColorType:
             return transform_scanline_A8_to_GrayAlpha;
         case kR8G8_unorm_SkColorType:

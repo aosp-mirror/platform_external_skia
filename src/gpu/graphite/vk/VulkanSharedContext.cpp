@@ -15,9 +15,12 @@
 #include "src/gpu/graphite/vk/VulkanBuffer.h"
 #include "src/gpu/graphite/vk/VulkanCaps.h"
 #include "src/gpu/graphite/vk/VulkanResourceProvider.h"
-#include "src/gpu/vk/VulkanAMDMemoryAllocator.h"
 #include "src/gpu/vk/VulkanInterface.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
+
+#if defined(SK_USE_VMA)
+#include "src/gpu/vk/VulkanAMDMemoryAllocator.h"
+#endif
 
 namespace skgpu::graphite {
 
@@ -104,9 +107,12 @@ sk_sp<SharedContext> VulkanSharedContext::Make(const VulkanBackendContext& conte
                                                           context.fProtectedContext));
 
     sk_sp<skgpu::VulkanMemoryAllocator> memoryAllocator = context.fMemoryAllocator;
+#if defined(SK_USE_VMA)
     if (!memoryAllocator) {
         // We were not given a memory allocator at creation
-        bool threadSafe = !options.fClientWillExternallySynchronizeAllThreads;
+        skgpu::ThreadSafe threadSafe = options.fClientWillExternallySynchronizeAllThreads
+                                               ? skgpu::ThreadSafe::kNo
+                                               : skgpu::ThreadSafe::kYes;
         memoryAllocator = skgpu::VulkanAMDMemoryAllocator::Make(context.fInstance,
                                                                 context.fPhysicalDevice,
                                                                 context.fDevice,
@@ -115,6 +121,7 @@ sk_sp<SharedContext> VulkanSharedContext::Make(const VulkanBackendContext& conte
                                                                 interface.get(),
                                                                 threadSafe);
     }
+#endif
     if (!memoryAllocator) {
         SKGPU_LOG_E("No supplied vulkan memory allocator and unable to create one internally.");
         return nullptr;
@@ -151,16 +158,15 @@ std::unique_ptr<ResourceProvider> VulkanSharedContext::makeResourceProvider(
     size_t alignedIntrinsicConstantSize =
             std::max(VulkanResourceProvider::kIntrinsicConstantSize,
                      this->vulkanCaps().requiredUniformBufferAlignment());
-    sk_sp<Buffer> intrinsicConstantBuffer = VulkanBuffer::Make(this,
-                                                               alignedIntrinsicConstantSize,
-                                                               BufferType::kUniform,
-                                                               AccessPattern::kGpuOnly);
+    sk_sp<Buffer> intrinsicConstantBuffer = VulkanBuffer::Make(
+            this, alignedIntrinsicConstantSize, BufferType::kUniform, AccessPattern::kGpuOnly);
     if (!intrinsicConstantBuffer) {
         SKGPU_LOG_E("Failed to create intrinsic constant uniform buffer");
         return nullptr;
     }
     SkASSERT(static_cast<VulkanBuffer*>(intrinsicConstantBuffer.get())->bufferUsageFlags()
              & VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    intrinsicConstantBuffer->setLabel("IntrinsicConstantBuffer");
 
     // Establish a vertex buffer that can be updated across multiple render passes and cmd buffers
     // for loading MSAA from resolve
@@ -175,6 +181,7 @@ std::unique_ptr<ResourceProvider> VulkanSharedContext::makeResourceProvider(
     }
     SkASSERT(static_cast<VulkanBuffer*>(loadMSAAVertexBuffer.get())->bufferUsageFlags()
              & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    loadMSAAVertexBuffer->setLabel("LoadMSAAVertexBuffer");
 
     return std::unique_ptr<ResourceProvider>(
             new VulkanResourceProvider(this,

@@ -6,7 +6,7 @@
 from . import util
 
 
-def compile_swiftshader(api, extra_tokens, swiftshader_root, cc, cxx, out):
+def compile_swiftshader(api, extra_tokens, swiftshader_root, ninja_root, cc, cxx, out):
   """Build SwiftShader with CMake.
 
   Building SwiftShader works differently from any other Skia third_party lib.
@@ -14,6 +14,7 @@ def compile_swiftshader(api, extra_tokens, swiftshader_root, cc, cxx, out):
 
   Args:
     swiftshader_root: root of the SwiftShader checkout.
+    ninja_root: A folder containing a ninja binary
     cc, cxx: compiler binaries to use
     out: target directory for libvk_swiftshader.so
   """
@@ -26,7 +27,7 @@ def compile_swiftshader(api, extra_tokens, swiftshader_root, cc, cxx, out):
   env = {
       'CC': cc,
       'CXX': cxx,
-      'PATH': '%%(PATH)s:%s' % cmake_bin,
+      'PATH': '%s:%%(PATH)s:%s' % (ninja_root, cmake_bin),
       # We arrange our MSAN/TSAN prebuilts a little differently than
       # SwiftShader's CMakeLists.txt expects, so we'll just keep our custom
       # setup (everything mentioning libcxx below) and point SwiftShader's
@@ -83,8 +84,17 @@ def compile_fn(api, checkout_root, out_dir):
   cc, cxx, ccache = None, None, None
   extra_cflags = []
   extra_ldflags = []
-  args = {'werror': 'true'}
+  args = {'werror': 'true', 'link_pool_depth':'2'}
   env = {}
+
+  with api.context(cwd=skia_dir):
+    api.run(api.step, 'fetch-gn',
+            cmd=['python3', skia_dir.join('bin', 'fetch-gn')],
+            infra_step=True)
+
+    api.run(api.step, 'fetch-ninja',
+            cmd=['python3', skia_dir.join('bin', 'fetch-ninja')],
+            infra_step=True)
 
   if os == 'Mac':
     # XCode build is listed in parentheses after the version at
@@ -103,7 +113,7 @@ def compile_fn(api, checkout_root, out_dir):
     # Copied from
     # https://chromium.googlesource.com/chromium/tools/build/+/e19b7d9390e2bb438b566515b141ed2b9ed2c7c2/scripts/slave/recipe_modules/ios/api.py#322
     with api.step.nest('ensure xcode') as step_result:
-      step_result.presentation.step_text = (
+      step_result.step_summary_text = (
           'Ensuring Xcode version %s in %s' % (
               XCODE_BUILD_VERSION, xcode_app_path))
       install_xcode_cmd = [
@@ -118,12 +128,18 @@ def compile_fn(api, checkout_root, out_dir):
       api.step('select xcode', [
           'sudo', 'xcode-select', '-switch', xcode_app_path])
       if 'iOS' in extra_tokens:
-        # Our current min-spec for Skia is iOS 11
-        env['IPHONEOS_DEPLOYMENT_TARGET'] = '11.0'
-        args['ios_min_target'] = '"11.0"'
+        if compiler == 'Xcode11.4.1':
+          # Ganesh has a lower minimum iOS version than Graphite but there are dedicated jobs that
+          # test with the lower SDK.
+          env['IPHONEOS_DEPLOYMENT_TARGET'] = '11.0'
+          args['ios_min_target'] = '"11.0"'
+        else:
+          env['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+          args['ios_min_target'] = '"13.0"'
+
       else:
-        # We have some bots on 10.13.
-        env['MACOSX_DEPLOYMENT_TARGET'] = '10.13'
+        # We have some machines on 10.15.
+        env['MACOSX_DEPLOYMENT_TARGET'] = '10.15'
 
   # ccache + clang-tidy.sh chokes on the argument list.
   if (api.vars.is_linux or os == 'Mac' or os == 'Mac10.15.5' or os == 'Mac10.15.7') and 'Tidy' not in extra_tokens:
@@ -223,8 +239,10 @@ def compile_fn(api, checkout_root, out_dir):
     args['skia_use_angle'] = 'true'
   if 'SwiftShader' in extra_tokens:
     swiftshader_root = skia_dir.join('third_party', 'externals', 'swiftshader')
+    # Swiftshader will need to make ninja be on the path
+    ninja_root = skia_dir.join('third_party', 'ninja')
     swiftshader_out = out_dir.join('swiftshader_out')
-    compile_swiftshader(api, extra_tokens, swiftshader_root, cc, cxx, swiftshader_out)
+    compile_swiftshader(api, extra_tokens, swiftshader_root, ninja_root, cc, cxx, swiftshader_out)
     args['skia_use_vulkan'] = 'true'
     extra_cflags.extend(['-DSK_GPU_TOOLS_VK_LIBRARY_NAME=%s' %
         api.vars.swarming_out_dir.join('swiftshader_out', 'libvk_swiftshader.so'),
@@ -242,6 +260,9 @@ def compile_fn(api, checkout_root, out_dir):
   if 'Fontations' in extra_tokens:
     args['skia_use_fontations'] = 'true'
     args['skia_use_freetype'] = 'true' # we compare with freetype in tests
+    args['skia_use_system_freetype2'] = 'false'
+  if 'FreeType' in extra_tokens:
+    args['skia_use_freetype'] = 'true'
     args['skia_use_system_freetype2'] = 'false'
 
   if 'NoGpu' in extra_tokens:
@@ -341,12 +362,9 @@ def compile_fn(api, checkout_root, out_dir):
 
   gn_args = ' '.join('%s=%s' % (k,v) for (k,v) in sorted(args.items()))
   gn = skia_dir.join('bin', 'gn')
+  ninja = skia_dir.join('third_party', 'ninja', 'ninja')
 
   with api.context(cwd=skia_dir):
-    api.run(api.step, 'fetch-gn',
-            cmd=['python3', skia_dir.join('bin', 'fetch-gn')],
-            infra_step=True)
-
     with api.env(env):
       if ccache:
         api.run(api.step, 'ccache stats-start', cmd=[ccache, '-s'])
@@ -355,7 +373,7 @@ def compile_fn(api, checkout_root, out_dir):
       if 'Fontations' in extra_tokens:
         api.run(api.step, 'gn clean',
               cmd=[gn, 'clean', out_dir])
-      api.run(api.step, 'ninja', cmd=['ninja', '-C', out_dir])
+      api.run(api.step, 'ninja', cmd=[ninja, '-C', out_dir])
       if ccache:
         api.run(api.step, 'ccache stats-end', cmd=[ccache, '-s'])
 

@@ -46,7 +46,7 @@ protected:
     SkTypeface_FreeType(const SkFontStyle& style, bool isFixedPitch);
     ~SkTypeface_FreeType() override;
 
-    std::unique_ptr<SkFontData> cloneFontData(const SkFontArguments&) const;
+    std::unique_ptr<SkFontData> cloneFontData(const SkFontArguments&, SkFontStyle* style) const;
     std::unique_ptr<SkScalerContext> onCreateScalerContext(const SkScalerContextEffects&,
                                                            const SkDescriptor*) const override;
     void onFilterRec(SkScalerContextRec*) const override;
@@ -112,18 +112,21 @@ public:
     SkFontScanner_FreeType();
     ~SkFontScanner_FreeType() override;
 
-    bool recognizedFont(SkStreamAsset* stream, int* numFaces) const override;
-    bool scanFont(SkStreamAsset* stream,
-                  int ttcIndex,
-                  SkString* name,
-                  SkFontStyle* style,
-                  bool* isFixedPitch,
-                  SkFontScanner::AxisDefinitions* axes) const override;
+    bool scanFile(SkStreamAsset* stream, int* numFaces) const override;
+    bool scanFace(SkStreamAsset* stream, int faceIndex, int* numInstances) const override;
+    bool scanInstance(SkStreamAsset* stream,
+                      int faceIndex,
+                      int instanceIndex,
+                      SkString* name,
+                      SkFontStyle* style,
+                      bool* isFixedPitch,
+                      AxisDefinitions* axes) const override;
     static void computeAxisValues(
             AxisDefinitions axisDefinitions,
             const SkFontArguments::VariationPosition position,
             SkFixed* axisValues,
             const SkString& name,
+            SkFontStyle* style,
             const SkFontArguments::VariationPosition::Coordinate* currentPosition = nullptr);
     static bool GetAxes(FT_Face face, AxisDefinitions* axes);
 private:

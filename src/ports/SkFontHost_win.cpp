@@ -975,7 +975,7 @@ void SkScalerContext_GDI::generateFontMetrics(SkFontMetrics* metrics) {
 static void build_power_table(uint8_t table[], float ee) {
     for (int i = 0; i < 256; i++) {
         float x = i / 255.f;
-        x = sk_float_pow(x, ee);
+        x = std::pow(x, ee);
         int xx = SkScalarRoundToInt(x * 255);
         table[i] = SkToU8(xx);
     }
@@ -1654,7 +1654,6 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> LogFontTypeface::onGetAdvancedMetrics
     glyphCount = calculateGlyphCount(hdc, fLogFont);
 
     info.reset(new SkAdvancedTypefaceMetrics);
-    tchar_to_skstring(lf.lfFaceName, &info->fFontName);
 
     SkOTTableOS2_V4::Type fsType;
     if (sizeof(fsType) == this->getTableData(SkTEndian_SwapBE32(SkOTTableOS2::TAG),
