@@ -103,3 +103,25 @@ skia_cc_library(
         "//src/gpu/ganesh:ganesh_TEST_UTIL",
     ],
 )
+
+skia_cc_library(
+    name = "graphite_flags",
+    testonly = True,
+    srcs = [
+        "CommonFlagsGraphite.cpp",
+    ],
+    hdrs = [
+        "CommonFlagsGraphite.h",
+    ],
+    visibility = [
+        "//bench:__pkg__",
+        "//dm:__pkg__",
+        "//tools/viewer:__pkg__",
+    ],
+    deps = [
+        ":cmd_flags",
+        "//:core",
+        "//src/gpu/graphite:graphite_TEST_UTIL",
+        "//tools/graphite:graphite_utils",
+    ],
+)
