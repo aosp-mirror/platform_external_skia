@@ -10,9 +10,9 @@
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTextureCompressionType.h"
-#include "include/gpu/GrBackendSemaphore.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrBackendSemaphore.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkMathPriv.h"
 #include "src/core/SkCompressedDataUtils.h"
@@ -434,6 +434,7 @@ bool GrGpu::readPixels(GrSurface* surface,
     SkASSERT(!surface->framebufferOnly());
     SkASSERT(this->caps()->areColorTypeAndFormatCompatible(surfaceColorType,
                                                            surface->backendFormat()));
+    SkASSERT(dstColorType != GrColorType::kUnknown);
 
     if (!SkIRect::MakeSize(surface->dimensions()).contains(rect)) {
         return false;

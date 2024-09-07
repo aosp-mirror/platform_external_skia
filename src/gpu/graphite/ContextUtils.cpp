@@ -29,7 +29,7 @@
 
 namespace skgpu::graphite {
 
-std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*> ExtractPaintData(
+std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaintData(
         Recorder* recorder,
         PipelineDataGatherer* gatherer,
         PaintParamsKeyBuilder* builder,
@@ -56,8 +56,8 @@ std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*
     p.toKey(keyContext, builder, gatherer);
 
     UniquePaintParamsID paintID = recorder->priv().shaderCodeDictionary()->findOrCreate(builder);
-    const UniformDataBlock* uniforms = nullptr;
-    const TextureDataBlock* textures = nullptr;
+    UniformDataBlock uniforms;
+    TextureDataBlock textures;
     if (paintID.isValid()) {
         if (gatherer->hasUniforms()) {
             UniformDataCache* uniformDataCache = recorder->priv().uniformDataCache();
@@ -72,7 +72,7 @@ std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*
     return { paintID, uniforms, textures };
 }
 
-std::tuple<const UniformDataBlock*, const TextureDataBlock*> ExtractRenderStepData(
+std::tuple<UniformDataBlock, TextureDataBlock> ExtractRenderStepData(
         UniformDataCache* uniformDataCache,
         TextureDataCache* textureDataCache,
         PipelineDataGatherer* gatherer,
@@ -82,12 +82,12 @@ std::tuple<const UniformDataBlock*, const TextureDataBlock*> ExtractRenderStepDa
     gatherer->resetWithNewLayout(layout);
     step->writeUniformsAndTextures(params, gatherer);
 
-    const UniformDataBlock* uniforms =
+    UniformDataBlock uniforms =
             gatherer->hasUniforms() ? uniformDataCache->insert(gatherer->finishUniformDataBlock())
-                                    : nullptr;
-    const TextureDataBlock* textures =
+                                    : UniformDataBlock();
+    TextureDataBlock textures =
             gatherer->hasTextures() ? textureDataCache->insert(gatherer->textureDataBlock())
-                                    : nullptr;
+                                    : TextureDataBlock();
 
     return { uniforms, textures };
 }
@@ -277,7 +277,55 @@ std::string get_node_texture_samplers(const ResourceBindingRequirements& binding
     return result;
 }
 
+static constexpr Uniform kIntrinsicUniforms[] = { {"rtAdjust",          SkSLType::kFloat4},
+                                                  {"replayTranslation", SkSLType::kFloat2},
+                                                  {"dstCopyOffset",     SkSLType::kFloat2} };
+
+std::string emit_intrinsic_uniforms(int bufferID, Layout layout) {
+    auto offsetter = UniformOffsetCalculator::ForTopLevel(layout);
+
+    std::string result = get_uniform_header(bufferID, "Intrinsic");
+    result += get_uniforms(&offsetter, kIntrinsicUniforms, -1, /* wrotePaintColor= */ nullptr);
+    result.append("};\n\n");
+
+    SkASSERTF(result.find('[') == std::string::npos,
+              "Arrays are not supported in intrinsic uniforms");
+
+    return result;
+}
+
 }  // anonymous namespace
+
+void CollectIntrinsicUniforms(const Caps* caps,
+                              SkIRect viewport,
+                              SkIPoint replayTranslation,
+                              UniformManager* uniforms) {
+    SkDEBUGCODE(uniforms->setExpectedUniforms(kIntrinsicUniforms, /*isSubstruct=*/false);)
+
+    // rtAdjust
+    {
+        // The rtAdjust defines the linear transform from logical pixel space (before any replay
+        // translation) to the NDC space. So we have to subtract off the replay offset.
+        const float x = viewport.left() - replayTranslation.x();
+        const float y = viewport.top()  - replayTranslation.y();
+        const float invTwoW = 2.f / viewport.width();
+        const float invTwoH = 2.f / viewport.height();
+        // Depending on how the backend defines its NDC space, we may have to flip the Y axis
+        // even though all logical rendering and actual pixel storage is assumed to be top-left.
+        const float yFlip = caps->ndcYAxisPointsDown() ? 1.f : -1.f;
+        SkV4 rtAdjust = {invTwoW, yFlip*invTwoH, -1.f - x*invTwoW, yFlip*(-1.f - y*invTwoH)};
+        uniforms->write(rtAdjust);
+    }
+
+    // replayTranslation
+    uniforms->write(SkV2{(float) replayTranslation.fX, (float) replayTranslation.fY});
+
+    // dstCopyOffset
+    // TODO(b/280802448): Plumb dstCopyOffset value into this function from CommandBuffer
+    uniforms->write(SkV2{0, 0});
+
+    SkDEBUGCODE(uniforms->doneWithExpectedUniforms());
+}
 
 std::string EmitPaintParamsUniforms(int bufferID,
                                     const Layout layout,
@@ -490,22 +538,9 @@ VertSkSLInfo BuildVertexSkSL(const ResourceBindingRequirements& bindingReqs,
     const bool useStepStorageBuffer = useStorageBuffers && hasStepUniforms;
     const bool useShadingStorageBuffer = useStorageBuffers && step->performsShading();
 
-    // TODO: To more completely support end-to-end rendering, this will need to be updated so that
-    // the RenderStep shader snippet can produce a device coord, a local coord, and depth.
-    // If the paint combination doesn't need the local coord it can be ignored, otherwise we need
-    // a varying for it. The fragment function's output will need to be updated to have a color and
-    // the depth, or when there's no combination, just the depth. Lastly, we also should add the
-    // static/intrinsic uniform binding point so that we can handle normalizing the device position
-    // produced by the RenderStep automatically.
-
-    // Fixed program header
-    std::string sksl =
-        SkSL::String::printf("layout (binding=%d) uniform intrinsicUniforms {\n"
-                             "    layout(offset=0) float4 rtAdjust;\n"
-                             "};\n"
-                             "\n", bindingReqs.fIntrinsicBufferBinding);
-    SkASSERTF(sksl.find('[') == std::string::npos,
-              "Arrays are not supported in intrinsic uniforms");
+    // Fixed program header (intrinsics are always declared as an uniform interface block)
+    std::string sksl = emit_intrinsic_uniforms(bindingReqs.fIntrinsicBufferBinding,
+                                               bindingReqs.fUniformBufferLayout);
 
     if (step->numVertexAttributes() > 0 || step->numInstanceAttributes() > 0) {
         sksl += emit_attributes(step->vertexAttributes(), step->instanceAttributes());

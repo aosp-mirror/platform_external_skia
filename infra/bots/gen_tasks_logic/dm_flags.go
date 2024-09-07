@@ -174,9 +174,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	sampleCount := 0
 	glPrefix := ""
-	if b.extraConfig("FakeWGPU") {
-		configs = append(configs, "grdawn_fakeWGPU")
-	} else if b.extraConfig("SwiftShader") {
+	if b.extraConfig("SwiftShader") {
 		configs = append(configs, "vk", "vkdmsaa")
 		// skbug.com/12826
 		skip(ALL, "test", ALL, "GrThreadSafeCache16Verts")
@@ -407,24 +405,32 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "PaintParamsKeyTestReduced")
 
 			if b.extraConfig("Dawn") {
+				baseConfig := ""
 				if b.extraConfig("D3D11") {
-					configs = []string{"grdawn_d3d11"}
+					baseConfig = "grdawn_d3d11"
+				} else if b.extraConfig("D3D12") {
+					baseConfig = "grdawn_d3d12"
+				} else if b.extraConfig("Metal") {
+					baseConfig = "grdawn_mtl"
+				} else if b.extraConfig("Vulkan") {
+					baseConfig = "grdawn_vk"
+				} else if b.extraConfig("GL") {
+					baseConfig = "grdawn_gl"
+				} else if b.extraConfig("GLES") {
+					baseConfig = "grdawn_gles"
 				}
-				if b.extraConfig("D3D12") {
-					configs = []string{"grdawn_d3d12"}
+
+				configs = []string{baseConfig}
+
+				if b.extraConfig("FakeWGPU") {
+					args = append(args, "--neverYieldToWebGPU")
+					args = append(args, "--useWGPUTextureView")
 				}
-				if b.extraConfig("Metal") {
-					configs = []string{"grdawn_mtl"}
+
+				if b.extraConfig("TintIR") {
+					args = append(args, "--useTintIR")
 				}
-				if b.extraConfig("Vulkan") {
-					configs = []string{"grdawn_vk"}
-				}
-				if b.extraConfig("GL") {
-					configs = []string{"grdawn_gl"}
-				}
-				if b.extraConfig("GLES") {
-					configs = []string{"grdawn_gles"}
-				}
+
 				// Shader doesn't compile
 				// https://skbug.com/14105
 				skip(ALL, "gm", ALL, "runtime_intrinsics_matrix")

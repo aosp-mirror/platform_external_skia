@@ -986,7 +986,10 @@ optional("gpu") {
     } else if (is_ios) {
       sources += [ "src/gpu/ganesh/gl/iOS/GrGLMakeNativeInterface_iOS.cpp" ]
     } else if (is_win && !skia_enable_winuwp) {
-      sources += [ "src/gpu/ganesh/gl/win/GrGLMakeNativeInterface_win.cpp" ]
+      sources += [
+        "src/gpu/ganesh/gl/win/GrGLMakeNativeInterface_win.cpp",
+        "src/gpu/ganesh/gl/win/GrGLMakeWinInterface.cpp",
+      ]
       if (target_cpu != "arm64") {
         libs += [ "OpenGL32.lib" ]
       }
@@ -1400,7 +1403,8 @@ if (skia_enable_ganesh && skia_generate_workarounds) {
     # GN insists its outputs should go somewhere underneath root_out_dir, so we trick it with a
     # path that starts with root_out_dir and then uses ".." to back up into the src dir.
     output_file =
-        rebase_path("include/gpu/GrDriverBugWorkaroundsAutogen.h", root_out_dir)
+        rebase_path("include/gpu/ganesh/GrDriverBugWorkaroundsAutogen.h",
+                    root_out_dir)
 
     outputs = [ "$root_out_dir/$output_file" ]
     args = [
@@ -2085,6 +2089,11 @@ if (skia_enable_tools) {
     deps = [ ":flags" ]
     public_deps = [ ":gpu_tool_utils" ]
   }
+  test_lib("common_flags_graphite") {
+    sources = [ "tools/flags/CommonFlagsGraphite.cpp" ]
+    deps = [ ":flags" ]
+    public_deps = [ ":gpu_tool_utils" ]
+  }
   test_lib("common_flags_images") {
     sources = [ "tools/flags/CommonFlagsImages.cpp" ]
     deps = [ ":flags" ]
@@ -2401,6 +2410,7 @@ if (skia_enable_tools) {
       deps = [
         ":common_flags_config",
         ":common_flags_gpu",
+        ":common_flags_graphite",
         ":common_flags_images",
         ":compile_all_sksl_tests",
         ":flags",
@@ -2459,6 +2469,7 @@ if (skia_enable_tools) {
       ":bench",
       ":common_flags_config",
       ":common_flags_gpu",
+      ":common_flags_graphite",
       ":common_flags_images",
       ":flags",
       ":gm",
@@ -2774,6 +2785,12 @@ if (skia_enable_tools) {
     }
   }
 
+  if (is_ios && skia_enable_skottie) {
+    group("skottie_ios") {
+      deps = [ "tools/skottie_ios_app" ]
+    }
+  }
+
   test_lib("sk_app") {
     public_deps = [
       ":gpu_tool_utils",
@@ -2974,7 +2991,9 @@ if (skia_enable_tools) {
       libs = []
 
       deps = [
+        ":common_flags_config",
         ":common_flags_gpu",
+        ":common_flags_graphite",
         ":flags",
         ":gm",
         ":gpu_tool_utils",
@@ -3022,6 +3041,12 @@ if (skia_enable_tools) {
         ":load_dynamic_library",
         ":skia",
       ]
+    }
+  }
+
+  if (is_ios && skia_use_metal && skia_enable_ganesh) {
+    group("minimal_ios_mtl_skia_app") {
+      deps = [ "experimental/minimal_ios_mtl_skia_app" ]
     }
   }
 
@@ -3396,18 +3421,6 @@ if (skia_enable_tools) {
       sources = [ "fuzz/oss_fuzz/FuzzParsePath.cpp" ]
       deps = []
     }
-  }
-}
-
-if (is_ios && skia_use_metal && skia_enable_ganesh) {
-  group("minimal_ios_mtl_skia_app") {
-    deps = [ "experimental/minimal_ios_mtl_skia_app" ]
-  }
-}
-
-if (is_ios && skia_enable_skottie) {
-  group("skottie_ios") {
-    deps = [ "tools/skottie_ios_app" ]
   }
 }
 
