@@ -43,6 +43,11 @@ mod ffi {
         fn read(self: Pin<&mut ReadTrait>, buffer: &mut [u8]) -> usize;
     }
 
+    // Rust functions, types, and methods that are exposed through FFI.
+    //
+    // To avoid duplication, there are no doc comments inside the `extern "Rust"`
+    // section. The doc comments of these items can instead be found in the
+    // actual Rust code, outside of the `#[cxx::bridge]` manifest.
     extern "Rust" {
         fn new_reader(input: UniquePtr<ReadTrait>) -> Box<ResultOfReader>;
 
@@ -53,10 +58,29 @@ mod ffi {
         type Reader;
         fn height(self: &Reader) -> u32;
         fn width(self: &Reader) -> u32;
+        fn interlaced(self: &Reader) -> bool;
+        fn is_srgb(self: &Reader) -> bool;
+        fn try_get_chrm(
+            self: &Reader,
+            wx: &mut f32,
+            wy: &mut f32,
+            rx: &mut f32,
+            ry: &mut f32,
+            gx: &mut f32,
+            gy: &mut f32,
+            bx: &mut f32,
+            by: &mut f32,
+        ) -> bool;
+        fn try_get_gama(self: &Reader, gamma: &mut f32) -> bool;
+        unsafe fn try_get_iccp<'a>(self: &'a Reader, iccp: &mut &'a [u8]) -> bool;
+        fn has_actl_chunk(self: &Reader) -> bool;
+        fn get_actl_num_frames(self: &Reader) -> u32;
+        fn get_actl_num_plays(self: &Reader) -> u32;
         fn output_buffer_size(self: &Reader) -> usize;
         fn output_color_type(self: &Reader) -> ColorType;
         fn output_bits_per_component(self: &Reader) -> u8;
         fn next_frame(self: &mut Reader, output: &mut [u8]) -> DecodingResult;
+        unsafe fn next_row<'a>(self: &'a mut Reader, row: &mut &'a [u8]) -> DecodingResult;
     }
 }
 
@@ -131,10 +155,25 @@ impl Reader {
         //
         // TODO(https://crbug.com/356882657): Consider handling palette expansion
         // via `SkSwizzler` instead of relying on `EXPAND` for this use case.
-        decoder.set_transformations(png::Transformations::EXPAND);
+        let mut transformations = png::Transformations::EXPAND;
 
-        let reader = decoder.read_info()?;
-        Ok(Self(reader))
+        // TODO(https://crbug.com/359245096): Avoid stripping least signinficant 8 bits in G16 and
+        // GA16 images.
+        let info = decoder.read_header_info()?;
+        if info.bit_depth == png::BitDepth::Sixteen {
+            match info.color_type {
+                png::ColorType::Grayscale | png::ColorType::GrayscaleAlpha => {
+                    transformations = transformations | png::Transformations::STRIP_16;
+                }
+                png::ColorType::Rgb | png::ColorType::Rgba => (),
+                // PNG says that the only allowed bit depths for color type 3 (indexed)
+                // are 1,2,4,8.
+                png::ColorType::Indexed => unreachable!(),
+            }
+        }
+
+        decoder.set_transformations(transformations);
+        Ok(Self(decoder.read_info()?))
     }
 
     fn height(&self) -> u32 {
@@ -143,6 +182,109 @@ impl Reader {
 
     fn width(&self) -> u32 {
         self.0.info().width
+    }
+
+    /// Returns whether the PNG image is interlaced.
+    fn interlaced(&self) -> bool {
+        self.0.info().interlaced
+    }
+
+    /// Returns whether the decoded PNG image contained a `sRGB` chunk.
+    fn is_srgb(&self) -> bool {
+        self.0.info().srgb.is_some()
+    }
+
+    /// If the decoded PNG image contained a `cHRM` chunk then `try_get_chrm`
+    /// returns `true` and populates the out parameters (`wx`, `wy`, `rx`,
+    /// etc.).  Otherwise, returns `false`.
+    ///
+    /// C++/FFI safety: The caller has to guarantee that all the outputs /
+    /// `&mut` values have been initialized (unlike in C++, where such
+    /// guarantees are typically not needed for output parameters).
+    fn try_get_chrm(
+        &self,
+        wx: &mut f32,
+        wy: &mut f32,
+        rx: &mut f32,
+        ry: &mut f32,
+        gx: &mut f32,
+        gy: &mut f32,
+        bx: &mut f32,
+        by: &mut f32,
+    ) -> bool {
+        fn copy_channel(channel: &(png::ScaledFloat, png::ScaledFloat), x: &mut f32, y: &mut f32) {
+            *x = channel.0.into_value();
+            *y = channel.1.into_value();
+        }
+
+        match self.0.info().chrm_chunk.as_ref() {
+            None => false,
+            Some(chrm) => {
+                copy_channel(&chrm.white, wx, wy);
+                copy_channel(&chrm.red, rx, ry);
+                copy_channel(&chrm.green, gx, gy);
+                copy_channel(&chrm.blue, bx, by);
+                true
+            }
+        }
+    }
+
+    /// If the decoded PNG image contained a `gAMA` chunk then `try_get_gama`
+    /// returns `true` and populates the `gamma` out parameter.  Otherwise,
+    /// returns `false`.
+    ///
+    /// C++/FFI safety: The caller has to guarantee that all the outputs /
+    /// `&mut` values have been initialized (unlike in C++, where such
+    /// guarantees are typically not needed for output parameters).
+    fn try_get_gama(&self, gamma: &mut f32) -> bool {
+        match self.0.info().gama_chunk.as_ref() {
+            None => false,
+            Some(scaled_float) => {
+                *gamma = scaled_float.into_value();
+                true
+            }
+        }
+    }
+
+    /// If the decoded PNG image contained an `iCCP` chunk then `try_get_iccp`
+    /// returns `true` and sets `iccp` to the `rust::Slice`.  Otherwise,
+    /// returns `false`.
+    fn try_get_iccp<'a>(&'a self, iccp: &mut &'a [u8]) -> bool {
+        match self.0.info().icc_profile.as_ref().map(|cow| cow.as_ref()) {
+            None => false,
+            Some(value) => {
+                *iccp = value;
+                true
+            }
+        }
+    }
+
+    /// Returns whether the `aCTL` chunk exists.
+    fn has_actl_chunk(&self) -> bool {
+        self.0.info().animation_control.is_some()
+    }
+
+    /// Returns `num_frames` from the `aCTL` chunk.  Panics if there is no
+    /// `aCTL` chunk.
+    ///
+    /// The returned value is equal the number of `fcTL` chunks.  (Note that it
+    /// doesn't count `IDAT` nor `fDAT` chunks.  In particular, if an `fCTL`
+    /// chunk doesn't appear before an `IDAT` chunk then `IDAT` is not part
+    /// of the animation.)
+    ///
+    /// See also
+    /// <https://wiki.mozilla.org/APNG_Specification#.60acTL.60:_The_Animation_Control_Chunk>.
+    fn get_actl_num_frames(&self) -> u32 {
+        self.0.info().animation_control.as_ref().unwrap().num_frames
+    }
+
+    /// Returns `num_plays` from the `aCTL` chunk.  Panics if there is no `aCTL`
+    /// chunk.
+    ///
+    /// `0` indicates that the animation should play indefinitely. See
+    /// <https://wiki.mozilla.org/APNG_Specification#.60acTL.60:_The_Animation_Control_Chunk>.
+    fn get_actl_num_plays(&self) -> u32 {
+        self.0.info().animation_control.as_ref().unwrap().num_plays
     }
 
     fn output_buffer_size(&self) -> usize {
@@ -165,6 +307,19 @@ impl Reader {
     /// where a write-only access may not need such guarantees).
     fn next_frame(&mut self, output: &mut [u8]) -> ffi::DecodingResult {
         self.0.next_frame(output).as_ref().err().into()
+    }
+
+    /// Decodes the next row - see
+    /// https://docs.rs/png/latest/png/struct.Reader.html#method.next_row
+    ///
+    /// TODO(https://crbug.com/357876243): Consider using `read_row` to avoid an extra copy.
+    /// See also https://github.com/image-rs/image-png/pull/493
+    fn next_row<'a>(&'a mut self, row: &mut &'a [u8]) -> ffi::DecodingResult {
+        let result = self.0.next_row();
+        if let Ok(maybe_row) = result.as_ref() {
+            *row = maybe_row.map(|r| r.data()).unwrap_or(&[]);
+        }
+        result.as_ref().err().into()
     }
 }
 
