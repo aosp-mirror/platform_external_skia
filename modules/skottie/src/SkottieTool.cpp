@@ -32,6 +32,7 @@
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/utils/SkottieUtils.h"
 #include "modules/skresources/include/SkResources.h"
+#include "modules/skshaper/utils/FactoryHelpers.h"
 #include "src/core/SkOSFile.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/utils/SkOSPath.h"
@@ -64,6 +65,7 @@
 #include <vector>
 
 #if defined(HAVE_VIDEO_ENCODER)
+    #include <future>
     #include "experimental/ffmpeg/SkVideoEncoder.h"
     const char* formats_help = "Output format (png, skp, mp4, or null)";
 #else
@@ -536,6 +538,7 @@ int main(int argc, char** argv) {
             .setFontManager(fontMgr)
             .setLogger(logger)
             .setResourceProvider(rp)
+            .setTextShapingFactory(SkShapers::BestAvailable())
             .make(static_cast<const char*>(data->data()), data->size());
     if (!anim) {
         SkDebugf("Could not parse animation: '%s'.\n", FLAGS_input[0]);

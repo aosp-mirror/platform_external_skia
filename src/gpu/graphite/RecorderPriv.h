@@ -30,7 +30,7 @@ public:
 
     const Caps* caps() const { return fRecorder->fSharedContext->caps(); }
 
-    ResourceProvider* resourceProvider() { return fRecorder->fResourceProvider.get(); }
+    ResourceProvider* resourceProvider() { return fRecorder->fResourceProvider; }
 
     const RuntimeEffectDictionary* runtimeEffectDictionary() const {
         return fRecorder->fRuntimeEffectDict.get();
@@ -66,17 +66,25 @@ public:
     }
     ProxyCache* proxyCache() { return this->resourceProvider()->proxyCache(); }
 
+    // NOTE: Temporary access for DrawTask to manipulate pending read counts.
+    void addPendingRead(const TextureProxy*);
+
     static sk_sp<TextureProxy> CreateCachedProxy(Recorder*,
                                                  const SkBitmap&,
-                                                 Mipmapped = skgpu::Mipmapped::kNo);
+                                                 std::string_view label);
 
     uint32_t uniqueID() const { return fRecorder->fUniqueID; }
+
+#if defined(SK_DEBUG)
+    uint32_t nextRecordingID() const { return fRecorder->fNextRecordingID; }
+#endif
 
     size_t getResourceCacheLimit() const;
 
 #if defined(GRAPHITE_TEST_UTILS)
-    bool deviceIsRegistered(Device*);
+    bool deviceIsRegistered(Device*) const;
     ResourceCache* resourceCache() { return fRecorder->fResourceProvider->resourceCache(); }
+    SharedContext* sharedContext() { return fRecorder->fSharedContext.get(); }
     // used by the Context that created this Recorder to set a back pointer
     void setContext(Context*);
     Context* context() { return fRecorder->fContext; }

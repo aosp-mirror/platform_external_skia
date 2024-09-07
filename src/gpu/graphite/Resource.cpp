@@ -27,7 +27,6 @@ Resource::Resource(const SharedContext* sharedContext,
                    Ownership ownership,
                    skgpu::Budgeted budgeted,
                    size_t gpuMemorySize,
-                   std::string_view label,
                    bool commandBufferRefsAsUsageRefs)
         : fSharedContext(sharedContext)
         , fUsageRefCnt(1)
@@ -41,8 +40,6 @@ Resource::Resource(const SharedContext* sharedContext,
     // If we don't own the resource that must mean its wrapped in a client object. Thus we should
     // not be budgeted
     SkASSERT(fOwnership == Ownership::kOwned || fBudgeted == skgpu::Budgeted::kNo);
-
-    this->setLabel(label);
 }
 
 Resource::~Resource() {
@@ -131,6 +128,8 @@ void Resource::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
         traceMemoryDump->dumpBudgetedState(resourceName.c_str(),
                                            this->budgeted() == skgpu::Budgeted::kYes);
     }
+
+    this->onDumpMemoryStatistics(traceMemoryDump, resourceName.c_str());
 
     // TODO: implement this to report real gpu id backing the resource. Will be virtual implemented
     // by backend specific resource subclasses.

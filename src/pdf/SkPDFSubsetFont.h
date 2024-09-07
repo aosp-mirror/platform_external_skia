@@ -3,14 +3,12 @@
 #ifndef SkPDFSubsetFont_DEFINED
 #define SkPDFSubsetFont_DEFINED
 
-#include "include/core/SkData.h"
-#include "include/docs/SkPDFDocument.h"
-#include "src/pdf/SkPDFGlyphUse.h"
+#include "include/core/SkRefCnt.h"
 
-sk_sp<SkData> SkPDFSubsetFont(sk_sp<SkData> fontData,
-                              const SkPDFGlyphUse& glyphUsage,
-                              SkPDF::Metadata::Subsetter subsetter,
-                              const char* fontName,
-                              int ttcIndex);
+class SkData;
+class SkPDFGlyphUse;
+class SkTypeface;
+
+sk_sp<SkData> SkPDFSubsetFont(const SkTypeface& typeface, const SkPDFGlyphUse& glyphUsage);
 
 #endif  // SkPDFSubsetFont_DEFINED

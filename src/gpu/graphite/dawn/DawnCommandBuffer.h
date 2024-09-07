@@ -48,7 +48,7 @@ private:
                          const Texture* depthStencilTexture,
                          SkRect viewport,
                          const DrawPassList&) override;
-    bool onAddComputePass(const DispatchGroupList&) override;
+    bool onAddComputePass(DispatchGroupSpan) override;
 
     // Methods for populating a Dawn RenderPassEncoder:
     bool beginRenderPass(const RenderPassDesc&,
@@ -66,9 +66,9 @@ private:
                         int height);
     void endRenderPass();
 
-    void addDrawPass(const DrawPass*);
+    bool addDrawPass(const DrawPass*);
 
-    void bindGraphicsPipeline(const GraphicsPipeline*);
+    bool bindGraphicsPipeline(const GraphicsPipeline*);
     void setBlendConstants(float* blendConstants);
 
     void bindUniformBuffer(const BindUniformBufferInfo& info, UniformSlot);

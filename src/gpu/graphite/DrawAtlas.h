@@ -17,6 +17,8 @@
 #include "src/core/SkTHash.h"
 #include "src/gpu/AtlasTypes.h"
 
+class SkAutoPixmapStorage;
+
 namespace skgpu::graphite {
 
 class DrawContext;
@@ -53,6 +55,9 @@ public:
     /** Is the atlas allowed to use more than one texture? */
     enum class AllowMultitexturing : bool { kNo, kYes };
 
+    /** Should the atlas use storage textures? */
+    enum class UseStorageTextures : bool { kNo, kYes };
+
     /**
      * Returns a DrawAtlas.
      *  @param ct                  The colorType which this atlas will store.
@@ -63,7 +68,9 @@ public:
      *  @param plotWidth           The height of each plot. height/plotHeight should be an integer.
      *  @param atlasGeneration     A pointer to the context's generation counter.
      *  @param allowMultitexturing Can the atlas use more than one texture.
+     *  @param useStorageTextures  Should the atlas use storage textures.
      *  @param evictor             A pointer to an eviction callback class.
+     *  @param label               Label for texture resources.
      *
      *  @return                    An initialized DrawAtlas, or nullptr if creation fails.
      */
@@ -72,6 +79,7 @@ public:
                                            int plotWidth, int plotHeight,
                                            AtlasGenerationCounter* generationCounter,
                                            AllowMultitexturing allowMultitexturing,
+                                           UseStorageTextures useStorageTextures,
                                            PlotEvictionCallback* evictor,
                                            std::string_view label);
 
@@ -104,6 +112,9 @@ public:
 
     ErrorCode addToAtlas(Recorder*, int width, int height, const void* image, AtlasLocator*);
     ErrorCode addRect(Recorder*, int width, int height, AtlasLocator*);
+    // Reset Pixmap to point to backing data for the AtlasLocator's Plot.
+    // Return relative location within the Plot, as indicated by the AtlasLocator.
+    SkIPoint prepForRender(const AtlasLocator&, SkAutoPixmapStorage*);
     bool recordUploads(DrawContext*, Recorder*);
 
     const sk_sp<TextureProxy>* getProxies() const { return fProxies; }
@@ -112,6 +123,7 @@ public:
     uint64_t atlasGeneration() const { return fAtlasGeneration; }
     uint32_t numActivePages() const { return fNumActivePages; }
     unsigned int numPlots() const { return fNumPlots; }
+    SkISize plotSize() const { return {fPlotWidth, fPlotHeight}; }
 
     bool hasID(const PlotLocator& plotLocator) {
         if (!plotLocator.isValid()) {
@@ -147,6 +159,10 @@ public:
 
     void compact(AtlasToken startTokenForNextFlush);
 
+    // Mark all plots with any content as full. Used only with Vello because it can't do
+    // new renders to a texture without a clear.
+    void markUsedPlotsAsFull();
+
     void evictAllPlots();
 
     uint32_t maxPages() const {
@@ -157,13 +173,16 @@ public:
     void setMaxPages_TestingOnly(uint32_t maxPages);
 
 private:
-    DrawAtlas(SkColorType, size_t bpp, int width, int height, int plotWidth, int plotHeight,
+    DrawAtlas(SkColorType, size_t bpp,
+              int width, int height, int plotWidth, int plotHeight,
               AtlasGenerationCounter* generationCounter,
-              AllowMultitexturing allowMultitexturing, std::string_view label);
+              AllowMultitexturing allowMultitexturing,
+              UseStorageTextures useStorageTextures,
+              std::string_view label);
 
     bool addRectToPage(unsigned int pageIdx, int width, int height, AtlasLocator*);
 
-    bool updatePlot(Plot* plot, AtlasLocator*);
+    void updatePlot(Plot* plot, AtlasLocator*);
 
     inline void makeMRU(Plot* plot, int pageIdx) {
         if (fPages[pageIdx].fPlotList.head() == plot) {
@@ -206,6 +225,7 @@ private:
     int                   fPlotWidth;
     int                   fPlotHeight;
     unsigned int          fNumPlots;
+    UseStorageTextures    fUseStorageTextures;
     const std::string     fLabel;
     uint32_t              fAtlasID;   // unique identifier for this atlas
 

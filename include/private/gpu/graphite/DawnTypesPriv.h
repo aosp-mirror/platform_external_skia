@@ -14,40 +14,78 @@
 namespace skgpu::graphite {
 
 struct DawnTextureSpec {
-    DawnTextureSpec()
-            : fFormat(wgpu::TextureFormat::Undefined)
-            , fUsage(wgpu::TextureUsage::None)
-            , fAspect(wgpu::TextureAspect::All) {}
+    DawnTextureSpec() = default;
     DawnTextureSpec(const DawnTextureInfo& info)
-            : fFormat(info.fFormat), fUsage(info.fUsage), fAspect(info.fAspect) {}
+            : fFormat(info.fFormat)
+            , fViewFormat(info.fViewFormat)
+            , fUsage(info.fUsage)
+            , fAspect(info.fAspect)
+#if !defined(__EMSCRIPTEN__)
+            , fYcbcrVkDescriptor(info.fYcbcrVkDescriptor)
+#endif
+            , fSlice(info.fSlice) {
+    }
 
     bool operator==(const DawnTextureSpec& that) const {
-        return fUsage == that.fUsage && fFormat == that.fFormat && fAspect == that.fAspect;
+        return fUsage == that.fUsage && fFormat == that.fFormat &&
+               fViewFormat == that.fViewFormat && fAspect == that.fAspect &&
+#if !defined(__EMSCRIPTEN__)
+               IsEqualToYCbCrVkDescriptorField(that.fYcbcrVkDescriptor) &&
+#endif
+               fSlice == that.fSlice;
     }
 
     bool isCompatible(const DawnTextureSpec& that) const {
         // The usages may match or the usage passed in may be a superset of the usage stored within.
+        // The YCbCrInfo must be equal.
         // The aspect should either match the plane aspect or should be All.
-        return fFormat == that.fFormat && (fUsage & that.fUsage) == fUsage &&
+        return getViewFormat() == that.getViewFormat() && (fUsage & that.fUsage) == fUsage &&
+#if !defined(__EMSCRIPTEN__)
+               IsEqualToYCbCrVkDescriptorField(that.fYcbcrVkDescriptor) &&
+#endif
                (fAspect == that.fAspect || fAspect == wgpu::TextureAspect::All);
     }
 
-    SkString toString() const {
-        return SkStringPrintf("format=0x%08X,usage=0x%08X,aspect=0x%08X",
-                              static_cast<unsigned int>(fFormat),
-                              static_cast<unsigned int>(fUsage),
-                              static_cast<unsigned int>(fAspect));
+    wgpu::TextureFormat getViewFormat() const {
+        return fViewFormat != wgpu::TextureFormat::Undefined ? fViewFormat : fFormat;
     }
 
-    // `fFormat` is always single plane format or plane view format for a multiplanar wgpu::Texture.
-    wgpu::TextureFormat fFormat;
-    wgpu::TextureUsage fUsage;
-    wgpu::TextureAspect fAspect;
+    SkString toString() const;
+
+    wgpu::TextureFormat fFormat = wgpu::TextureFormat::Undefined;
+    // `fViewFormat` is always single plane format or plane view format for a multiplanar
+    // wgpu::Texture.
+    wgpu::TextureFormat fViewFormat = wgpu::TextureFormat::Undefined;
+    wgpu::TextureUsage fUsage = wgpu::TextureUsage::None;
+    wgpu::TextureAspect fAspect = wgpu::TextureAspect::All;
+#if !defined(__EMSCRIPTEN__)
+    wgpu::YCbCrVkDescriptor fYcbcrVkDescriptor = {};
+#endif
+    uint32_t fSlice = 0;
+
+private:
+#if !defined(__EMSCRIPTEN__)
+    bool IsEqualToYCbCrVkDescriptorField(wgpu::YCbCrVkDescriptor that) const {
+        return fYcbcrVkDescriptor.vkFormat == that.vkFormat &&
+               fYcbcrVkDescriptor.vkYCbCrRange == that.vkYCbCrRange &&
+               fYcbcrVkDescriptor.vkComponentSwizzleRed == that.vkComponentSwizzleRed &&
+               fYcbcrVkDescriptor.vkComponentSwizzleGreen == that.vkComponentSwizzleGreen &&
+               fYcbcrVkDescriptor.vkComponentSwizzleBlue == that.vkComponentSwizzleBlue &&
+               fYcbcrVkDescriptor.vkComponentSwizzleAlpha == that.vkComponentSwizzleAlpha &&
+               fYcbcrVkDescriptor.vkXChromaOffset == that.vkXChromaOffset &&
+               fYcbcrVkDescriptor.vkYChromaOffset == that.vkYChromaOffset &&
+               fYcbcrVkDescriptor.vkChromaFilter == that.vkChromaFilter &&
+               fYcbcrVkDescriptor.forceExplicitReconstruction == that.forceExplicitReconstruction &&
+               fYcbcrVkDescriptor.externalFormat == that.externalFormat;
+    }
+#endif
 };
 
 DawnTextureInfo DawnTextureSpecToTextureInfo(const DawnTextureSpec& dawnSpec,
                                              uint32_t sampleCount,
                                              Mipmapped mipmapped);
+
+DawnTextureInfo DawnTextureInfoFromWGPUTexture(WGPUTexture texture);
 
 } // namespace skgpu::graphite
 
