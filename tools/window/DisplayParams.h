@@ -15,31 +15,30 @@
 #if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/ContextOptions.h"
 #include "src/gpu/graphite/ContextOptionsPriv.h"
-#include "tools/graphite/TestOptions.h"
 #endif
 
 namespace skwindow {
 
 #if defined(SK_GRAPHITE)
-struct GraphiteTestOptions {
-    GraphiteTestOptions() {
-        fTestOptions.fContextOptions.fOptionsPriv = &fPriv;
+struct GraphiteContextOptions {
+    GraphiteContextOptions() {
+        fOptions.fOptionsPriv = &fPriv;
     }
 
-    GraphiteTestOptions(const GraphiteTestOptions& other)
-            : fTestOptions(other.fTestOptions)
-            , fPriv(other.fPriv) {
-        fTestOptions.fContextOptions.fOptionsPriv = &fPriv;
+    GraphiteContextOptions(const GraphiteContextOptions& other)
+        : fOptions(other.fOptions)
+        , fPriv(other.fPriv) {
+        fOptions.fOptionsPriv = &fPriv;
     }
 
-    GraphiteTestOptions& operator=(const GraphiteTestOptions& other) {
-        fTestOptions = other.fTestOptions;
+    GraphiteContextOptions& operator=(const GraphiteContextOptions& other) {
+        fOptions = other.fOptions;
         fPriv = other.fPriv;
-        fTestOptions.fContextOptions.fOptionsPriv = &fPriv;
+        fOptions.fOptionsPriv = &fPriv;
         return *this;
     }
 
-    skiatest::graphite::TestOptions     fTestOptions;
+    skgpu::graphite::ContextOptions     fOptions;
     skgpu::graphite::ContextOptionsPriv fPriv;
 };
 
@@ -61,9 +60,9 @@ struct DisplayParams {
     int                    fMSAASampleCount;
     GrContextOptions       fGrContextOptions;
 #if defined(SK_GRAPHITE)
-    GraphiteTestOptions    fGraphiteTestOptions;
+    GraphiteContextOptions fGraphiteContextOptions;
 #if defined(SK_DAWN)
-    bool                   fDisableTintSymbolRenaming = false;
+    bool fDisableTintSymbolRenaming = false;
 #endif
 #endif
     SkSurfaceProps         fSurfaceProps;

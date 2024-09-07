@@ -10,7 +10,7 @@
 
 #include "src/gpu/Blend.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
-#include "src/gpu/graphite/PipelineData.h"
+#include "src/gpu/graphite/PipelineDataCache.h"
 
 #include <optional>
 #include <tuple>
@@ -64,7 +64,7 @@ struct FragSkSLInfo {
     skia_private::TArray<uint32_t> fData = {};
 };
 
-std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaintData(
+std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*> ExtractPaintData(
         Recorder*,
         PipelineDataGatherer* gatherer,
         PaintParamsKeyBuilder* builder,
@@ -76,7 +76,7 @@ std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaint
         SkIPoint dstOffset,
         const SkColorInfo& targetColorInfo);
 
-std::tuple<UniformDataBlock, TextureDataBlock> ExtractRenderStepData(
+std::tuple<const UniformDataBlock*, const TextureDataBlock*> ExtractRenderStepData(
         UniformDataCache* uniformDataCache,
         TextureDataCache* textureDataCache,
         PipelineDataGatherer* gatherer,

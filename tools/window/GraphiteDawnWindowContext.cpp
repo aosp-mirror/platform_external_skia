@@ -42,7 +42,7 @@ void GraphiteDawnWindowContext::initializeContext(int width, int height) {
     fWidth = width;
     fHeight = height;
 
-    if (!this->onInitializeContext())
+    if (!onInitializeContext())
         return;
 
     SkASSERT(fDevice);
@@ -53,9 +53,9 @@ void GraphiteDawnWindowContext::initializeContext(int width, int height) {
     backendContext.fDevice = fDevice;
     backendContext.fQueue = fDevice.GetQueue();
     // Needed to make synchronous readPixels work:
-    fDisplayParams.fGraphiteTestOptions.fPriv.fStoreContextRefInRecorder = true;
+    fDisplayParams.fGraphiteContextOptions.fPriv.fStoreContextRefInRecorder = true;
     fGraphiteContext = skgpu::graphite::ContextFactory::MakeDawn(
-            backendContext, fDisplayParams.fGraphiteTestOptions.fTestOptions.fContextOptions);
+            backendContext, fDisplayParams.fGraphiteContextOptions.fOptions);
     if (!fGraphiteContext) {
         SkASSERT(false);
         return;
@@ -120,15 +120,9 @@ wgpu::Device GraphiteDawnWindowContext::createDevice(wgpu::BackendType type) {
     static constexpr const char* kToggles[] = {
         "allow_unsafe_apis",  // Needed for dual-source blending, BufferMapExtendedUsages.
         "use_user_defined_labels_in_backend",
-        // Robustness impacts performance and is always disabled when running Graphite in Chrome,
-        // so this keeps Skia's tests operating closer to real-use behavior.
-        "disable_robustness",
-        // Must be last to correctly respond to `fUseTintIR` option.
-        "use_tint_ir",
     };
     wgpu::DawnTogglesDescriptor togglesDesc;
-    togglesDesc.enabledToggleCount  = std::size(kToggles) -
-        (fDisplayParams.fGraphiteTestOptions.fTestOptions.fUseTintIR ? 0 : 1);
+    togglesDesc.enabledToggleCount  = std::size(kToggles);
     togglesDesc.enabledToggles      = kToggles;
 
     wgpu::RequestAdapterOptions adapterOptions;

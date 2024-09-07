@@ -438,7 +438,6 @@ func GenTasks(cfg *Config) {
 		Paths: []string{
 			// Source code.
 			"skia/example",
-			"skia/experimental/rust_png",
 			"skia/include",
 			"skia/modules",
 			"skia/src",
@@ -732,7 +731,7 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 				"DDLRecord", "BonusConfigs", "ColorSpaces", "GL",
 				"SkottieTracing", "SkottieWASM", "GpuTess", "DMSAAStats", "Docker", "PDF",
 				"Puppeteer", "SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile",
-				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "TintIR", "Protected"}
+				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "Protected"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -2140,7 +2139,6 @@ type labelAndSavedOutputDir struct {
 // Maps a shorthand version of a label (which can be an arbitrary string) to an absolute Bazel
 // label or "target pattern" https://bazel.build/docs/build#specifying-build-targets
 // The reason we need this mapping is because Buildbucket build names cannot have / or : in them.
-// TODO(borenet/kjlubick): Is there a way to generate a mapping using `bazel query`?
 var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"all_tests":                  {"//tests:linux_rbe_tests", ""},
 	"core":                       {"//:core", ""},
@@ -2153,18 +2151,20 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"modules_canvaskit_js_tests": {"//modules/canvaskit:canvaskit_js_tests", ""},
 	"skottie_tool_gpu":           {"//modules/skottie:skottie_tool_gpu", ""},
 	"viewer":                     {"//tools/viewer:viewer", ""},
-	"decode_everything":          {"//example/external_client:decode_everything", ""},
-	"path_combiner":              {"//example/external_client:path_combiner", ""},
-	"png_decoder":                {"//example/external_client:png_decoder", ""},
-	"shape_text":                 {"//example/external_client:shape_text", ""},
-	"svg_with_harfbuzz":          {"//example/external_client:svg_with_harfbuzz", ""},
-	"svg_with_primitive":         {"//example/external_client:svg_with_primitive", ""},
-	"use_ganesh_gl":              {"//example/external_client:use_ganesh_gl", ""},
-	"use_ganesh_vulkan":          {"//example/external_client:use_ganesh_vulkan", ""},
-	"use_graphite_native_vulkan": {"//example/external_client:use_graphite_native_vulkan", ""},
-	"use_skresources":            {"//example/external_client:use_skresources", ""},
-	"write_text_to_png":          {"//example/external_client:write_text_to_png", ""},
-	"write_to_pdf":               {"//example/external_client:write_to_pdf", ""},
+
+	// Note: these paths are relative to the WORKSPACE in //example/external_client
+	"decode_everything":          {"//:decode_everything", ""},
+	"path_combiner":              {"//:path_combiner", ""},
+	"png_decoder":                {"//:png_decoder", ""},
+	"shape_text":                 {"//:shape_text", ""},
+	"svg_with_harfbuzz":          {"//:svg_with_harfbuzz", ""},
+	"svg_with_primitive":         {"//:svg_with_primitive", ""},
+	"use_ganesh_gl":              {"//:use_ganesh_gl", ""},
+	"use_ganesh_vulkan":          {"//:use_ganesh_vulkan", ""},
+	"use_graphite_native_vulkan": {"//:use_graphite_native_vulkan", ""},
+	"use_skresources":            {"//:use_skresources", ""},
+	"write_text_to_png":          {"//:write_text_to_png", ""},
+	"write_to_pdf":               {"//:write_to_pdf", ""},
 
 	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
 	// under a test_suite.
@@ -2442,14 +2442,9 @@ func (b *jobBuilder) bazelTest() {
 				"--patchset_order="+specs.PLACEHOLDER_PATCHSET)
 
 		case "external_client":
-			// For external_client, we want to test how an external user would
-			// build using Skia. Therefore, we change to the workspace in that
-			// directory and use labels relative to it.
-			pathInSkia := "example/external_client"
-			label := strings.Replace(labelAndSavedOutputDir.label, pathInSkia, "", -1)
 			cmd = append(cmd,
-				"--bazel_label="+label,
-				"--path_in_skia="+pathInSkia,
+				"--bazel_label="+labelAndSavedOutputDir.label,
+				"--path_in_skia=example/external_client",
 				"--bazel_cache_dir="+bazelCacheDir)
 			b.usesDocker()
 

@@ -139,9 +139,8 @@ tree green and then open; if a simple revert can fix the problem, the gardener
 
 - [The Chromium main console](https://ci.chromium.org/p/chromium/g/main/console).
 - [The Flutter engine console](https://ci.chromium.org/p/flutter/g/engine/console).
-- [Skia client search](http://go/skia-client-search),
-  a tool for searching the codebases of all skia clients at once. See //tools/skia-client-search.html
-  for the public version.
+- [Skia client search](https://brianosman.users.x20web.corp.google.com/www/skia-client-search.html),
+  a tool for searching the codebases of all skia clients at once.
 
 <a name="chat_rooms"></a>
 
@@ -158,7 +157,7 @@ tree green and then open; if a simple revert can fix the problem, the gardener
 ---
 
 The list of Skia Gardeners is specified
-[here](http://go/skia-gardener-rotation). The
+[here](https://rotations.corp.google.com/rotation/4699606003744768). The
 gardeners widget on the [status page](https://status.skia.org) also displays the
 current gardeners.
 
@@ -171,7 +170,7 @@ current gardeners.
 If you need to swap shifts with someone (because you are out sick or on
 vacation), please get approval from the person you want to swap with and
 directly make the swap via the
-[rotations page](http://go/skia-gardener-rotation).
+[rotations page](https://rotations.corp.google.com/rotation/4699606003744768).
 
 <a name="tips"></a>
 

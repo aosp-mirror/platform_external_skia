@@ -37,9 +37,4 @@
   // TODO (b/239048372): Remove this flag when we can safely migrate apps to the
   // new behavior.
   #define SK_SUPPORT_LEGACY_ALPHA_BITMAP_AS_COVERAGE
-
-#if defined(__APPLE__) && !defined(SK_R32_SHIFT)
-  // Set macOS to use BGRA format to match Linux and Windows
-  #define SK_R32_SHIFT 16
-#endif
 #endif // SkUserConfigManual_DEFINED

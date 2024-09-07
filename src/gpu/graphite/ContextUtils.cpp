@@ -29,7 +29,7 @@
 
 namespace skgpu::graphite {
 
-std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaintData(
+std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*> ExtractPaintData(
         Recorder* recorder,
         PipelineDataGatherer* gatherer,
         PaintParamsKeyBuilder* builder,
@@ -56,8 +56,8 @@ std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaint
     p.toKey(keyContext, builder, gatherer);
 
     UniquePaintParamsID paintID = recorder->priv().shaderCodeDictionary()->findOrCreate(builder);
-    UniformDataBlock uniforms;
-    TextureDataBlock textures;
+    const UniformDataBlock* uniforms = nullptr;
+    const TextureDataBlock* textures = nullptr;
     if (paintID.isValid()) {
         if (gatherer->hasUniforms()) {
             UniformDataCache* uniformDataCache = recorder->priv().uniformDataCache();
@@ -72,7 +72,7 @@ std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaint
     return { paintID, uniforms, textures };
 }
 
-std::tuple<UniformDataBlock, TextureDataBlock> ExtractRenderStepData(
+std::tuple<const UniformDataBlock*, const TextureDataBlock*> ExtractRenderStepData(
         UniformDataCache* uniformDataCache,
         TextureDataCache* textureDataCache,
         PipelineDataGatherer* gatherer,
@@ -82,12 +82,12 @@ std::tuple<UniformDataBlock, TextureDataBlock> ExtractRenderStepData(
     gatherer->resetWithNewLayout(layout);
     step->writeUniformsAndTextures(params, gatherer);
 
-    UniformDataBlock uniforms =
+    const UniformDataBlock* uniforms =
             gatherer->hasUniforms() ? uniformDataCache->insert(gatherer->finishUniformDataBlock())
-                                    : UniformDataBlock();
-    TextureDataBlock textures =
+                                    : nullptr;
+    const TextureDataBlock* textures =
             gatherer->hasTextures() ? textureDataCache->insert(gatherer->textureDataBlock())
-                                    : TextureDataBlock();
+                                    : nullptr;
 
     return { uniforms, textures };
 }
