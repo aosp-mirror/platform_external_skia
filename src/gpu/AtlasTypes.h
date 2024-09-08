@@ -487,12 +487,9 @@ public:
     bool needsUpload() { return !fDirtyRect.isEmpty(); }
     std::pair<const void*, SkIRect> prepareForUpload();
     void resetRects();
-    void purge() {
-        delete fData;
-        fData = nullptr;
-    }
 
     void markFullIfUsed() { fIsFull = !fDirtyRect.isEmpty(); }
+    bool isEmpty() const { return fRectanizer.percentFull() == 0; }
 
     /**
      * Create a clone of this plot. The cloned plot will take the place of the current plot in
