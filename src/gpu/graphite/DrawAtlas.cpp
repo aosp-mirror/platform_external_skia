@@ -384,7 +384,7 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
         // to evict them if there's available space in lower index pages. Since we prioritize
         // uploading to the first pages, this will eventually clear out usage of this page unless
         // we have a large need.
-        if (availablePlots.size() && usedPlots && usedPlots <= fNumPlots / 4) {
+        if (!availablePlots.empty() && usedPlots && usedPlots <= fNumPlots / 4) {
             plotIter.init(fPages[lastPageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
             while (Plot* plot = plotIter.get()) {
                 // If this plot was used recently
@@ -392,13 +392,13 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
                     // See if there's room in an lower index page and if so evict.
                     // We need to be somewhat harsh here so that a handful of plots that are
                     // consistently in use don't end up locking the page in memory.
-                    if (availablePlots.size() > 0) {
+                    if (!availablePlots.empty()) {
                         this->processEvictionAndResetRects(plot);
                         this->processEvictionAndResetRects(availablePlots.back());
                         availablePlots.pop_back();
                         --usedPlots;
                     }
-                    if (usedPlots == 0 || !availablePlots.size()) {
+                    if (usedPlots == 0 || availablePlots.empty()) {
                         break;
                     }
                 }
@@ -430,14 +430,13 @@ void DrawAtlas::purge(AtlasToken startTokenForNextFlush) {
     for (int pageIndex = (int)(fNumActivePages)-1; pageIndex >= 0; --pageIndex) {
         plotIter.init(fPages[pageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
         while (Plot* plot = plotIter.get()) {
-            if (plot->lastUseToken().inInterval(fPrevFlushToken, startTokenForNextFlush)) {
-                plot->resetFlushesSinceLastUsed();
-                atlasUsedThisFlush = true;
-            } else {
-                this->processEvictionAndResetRects(plot);
-                // clear out unneeded memory for Plot
-                plot->purge();
-                // TODO (jvanverth): should resetRects() call resetFlushesSinceLastUsed()?
+            if (!plot->isEmpty()) {
+                if (plot->lastUseToken() < startTokenForNextFlush) {
+                    // Not in use, we can evict this plot
+                    this->processEvictionAndResetRects(plot);
+                } else {
+                    atlasUsedThisFlush = true;
+                }
             }
             plotIter.next();
         }
@@ -446,13 +445,6 @@ void DrawAtlas::purge(AtlasToken startTokenForNextFlush) {
             this->deactivateLastPage();
         }
     }
-
-    // Set the params used by compact()
-    // We can set flushesSinceLastUse to 0 whether the atlas has been used or not.
-    // If it has been used, we set to 0 as normal. If it hasn't been used, we've
-    // deactivated all the Pages so we might as well set it to 0.
-    fFlushesSinceLastUse = 0;
-    fPrevFlushToken = startTokenForNextFlush;
 }
 
 bool DrawAtlas::createPages(AtlasGenerationCounter* generationCounter) {
