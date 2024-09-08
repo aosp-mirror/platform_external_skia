@@ -8,12 +8,14 @@
 #define SkPngRustCodec_DEFINED
 
 #include <memory>
+#include <vector>
 
 #include "experimental/rust_png/ffi/FFI.rs.h"
 #include "src/codec/SkPngCodecBase.h"
 #include "third_party/rust/cxx/v1/cxx.h"
 
 struct SkEncodedInfo;
+class SkFrame;
 class SkStream;
 template <typename T> class SkSpan;
 
@@ -22,7 +24,7 @@ template <typename T> class SkSpan;
 //   Rust)
 // * Skia's `SkSwizzler` and `skcms_Transform` (pixel format and color space
 //   transformations implemented in C++).
-class SkPngRustCodec : public SkPngCodecBase {
+class SkPngRustCodec final : public SkPngCodecBase {
 public:
     static std::unique_ptr<SkPngRustCodec> MakeFromStream(std::unique_ptr<SkStream>, Result*);
 
@@ -68,6 +70,8 @@ private:
                                     size_t rowBytes,
                                     const Options&) override;
     Result onIncrementalDecode(int* rowsDecoded) override;
+    bool onGetFrameInfo(int, FrameInfo*) const override;
+    int onGetRepetitionCount() override;
 
     // SkPngCodecBase overrides:
     std::optional<SkSpan<const PaletteColorEntry>> onTryGetPlteChunk() override;
@@ -76,6 +80,11 @@ private:
     rust::Box<rust_png::Reader> fReader;
 
     std::optional<DecodingState> fIncrementalDecodingState;
+
+    class PngFrame;
+    std::vector<PngFrame> fFrames;
+
+    size_t fNumOfFullyReceivedFrames = 0;
 };
 
 #endif  // SkPngRustCodec_DEFINED
