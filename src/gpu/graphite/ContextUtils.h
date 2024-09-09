@@ -10,7 +10,7 @@
 
 #include "src/gpu/Blend.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
-#include "src/gpu/graphite/PipelineDataCache.h"
+#include "src/gpu/graphite/PipelineData.h"
 
 #include <optional>
 #include <tuple>
@@ -38,6 +38,7 @@ struct RenderPassDesc;
 class RenderStep;
 class RuntimeEffectDictionary;
 class ShaderNode;
+class UniformManager;
 class UniquePaintParamsID;
 
 struct ResourceBindingRequirements;
@@ -64,7 +65,7 @@ struct FragSkSLInfo {
     skia_private::TArray<uint32_t> fData = {};
 };
 
-std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*> ExtractPaintData(
+std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaintData(
         Recorder*,
         PipelineDataGatherer* gatherer,
         PaintParamsKeyBuilder* builder,
@@ -76,13 +77,22 @@ std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*
         SkIPoint dstOffset,
         const SkColorInfo& targetColorInfo);
 
-std::tuple<const UniformDataBlock*, const TextureDataBlock*> ExtractRenderStepData(
+std::tuple<UniformDataBlock, TextureDataBlock> ExtractRenderStepData(
         UniformDataCache* uniformDataCache,
         TextureDataCache* textureDataCache,
         PipelineDataGatherer* gatherer,
         const Layout layout,
         const RenderStep* step,
         const DrawParams& params);
+
+// `viewport` should hold the actual viewport set as backend state (defining the NDC -> pixel
+// transform).
+// `replayTranslation` should hold the replay translation provided on insertRecording().
+void CollectIntrinsicUniforms(
+        const Caps* caps,
+        SkIRect viewport,
+        SkIPoint replayTranslation,
+        UniformManager*);
 
 DstReadRequirement GetDstReadRequirement(const Caps*, std::optional<SkBlendMode>, Coverage);
 
