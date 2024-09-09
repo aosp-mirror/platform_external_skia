@@ -33,7 +33,6 @@
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/PathAtlas.h"
 #include "src/gpu/graphite/PipelineData.h"
-#include "src/gpu/graphite/PipelineDataCache.h"
 #include "src/gpu/graphite/ProxyCache.h"
 #include "src/gpu/graphite/RasterPathAtlas.h"
 #include "src/gpu/graphite/RecorderPriv.h"
@@ -173,9 +172,9 @@ std::unique_ptr<Recording> Recorder::snap() {
     // data cache so that they can be instantiated easily when the Recording is inserted.
     std::unordered_set<sk_sp<TextureProxy>, Recording::ProxyHash> nonVolatileLazyProxies;
     std::unordered_set<sk_sp<TextureProxy>, Recording::ProxyHash> volatileLazyProxies;
-    fTextureDataCache->foreach([&](const TextureDataBlock* block) {
-        for (int j = 0; j < block->numTextures(); ++j) {
-            const TextureDataBlock::SampledTexture& tex = block->texture(j);
+    fTextureDataCache->foreach([&](TextureDataBlock block) {
+        for (int j = 0; j < block.numTextures(); ++j) {
+            const TextureDataBlock::SampledTexture& tex = block.texture(j);
 
             if (tex.first->isLazy()) {
                 if (tex.first->isVolatile()) {
@@ -596,6 +595,11 @@ bool RecorderPriv::deviceIsRegistered(Device* device) const {
 void RecorderPriv::setContext(Context* context) {
     fRecorder->fContext = context;
 }
+
+void RecorderPriv::issueFlushToken() {
+    fRecorder->fTokenTracker->issueFlushToken();
+}
+
 #endif
 
 
