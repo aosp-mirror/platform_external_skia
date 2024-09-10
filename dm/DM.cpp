@@ -40,6 +40,8 @@
 #include "tools/ToolUtils.h"
 #include "tools/flags/CommonFlags.h"
 #include "tools/flags/CommonFlagsConfig.h"
+#include "tools/flags/CommonFlagsGanesh.h"
+#include "tools/flags/CommonFlagsGraphite.h"
 #include "tools/fonts/FontToolUtils.h"
 #include "tools/ios_utils.h"
 #include "tools/trace/ChromeTracingTracer.h"
@@ -128,7 +130,6 @@ static DEFINE_bool2(veryVerbose, V, false, "tell individual tests to be verbose.
 static DEFINE_bool(cpu, true, "Run CPU-bound work?");
 static DEFINE_bool(gpu, true, "Run GPU-bound work?");
 static DEFINE_bool(graphite, true, "Run Graphite work?");
-static DEFINE_bool(neverYieldToWebGPU, false, "Run Graphite with never-yield context option.");
 
 static DEFINE_bool(dryRun, false,
                    "just print the tests that would be run, without actually running them.");
@@ -168,21 +169,6 @@ static DEFINE_string(properties, "",
                      "Space-separated key/value pairs to add to JSON identifying this run.");
 
 static DEFINE_bool(rasterize_pdf, false, "Rasterize PDFs when possible.");
-
-#if defined(__MSVC_RUNTIME_CHECKS)
-#include <rtcapi.h>
-int RuntimeCheckErrorFunc(int errorType, const char* filename, int linenumber,
-                          const char* moduleName, const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
-
-    SkDebugf("Line #%d\nFile: %s\nModule: %s\n",
-             linenumber, filename ? filename : "Unknown", moduleName ? moduleName : "Unknwon");
-    return 1;
-}
-#endif
 
 using namespace DM;
 using sk_gpu_test::GrContextFactory;
@@ -369,8 +355,7 @@ static void find_culprit() {
     #include <signal.h>
     #if !defined(SK_BUILD_FOR_ANDROID)
         #include <execinfo.h>
-
-#endif
+    #endif
 
     static constexpr int max_of() { return 0; }
     template <typename... Rest>
@@ -976,7 +961,11 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
     ts.tag = config.getTag();
 }
 
-static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLineConfig* config) {
+static Sink* create_sink(const GrContextOptions& grCtxOptions,
+#if defined(SK_GRAPHITE)
+                         const skiatest::graphite::TestOptions& graphiteOptions,
+#endif
+                         const SkCommandLineConfig* config) {
     if (FLAGS_gpu) {
         if (const SkCommandLineConfigGpu* gpuConfig = config->asConfigGpu()) {
             GrContextFactory testFactory(grCtxOptions);
@@ -1007,11 +996,11 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
         if (const SkCommandLineConfigGraphite *graphiteConfig = config->asConfigGraphite()) {
 #if defined(SK_ENABLE_PRECOMPILE)
             if (graphiteConfig->getTestPrecompile()) {
-                return new GraphitePrecompileTestingSink(graphiteConfig);
+                return new GraphitePrecompileTestingSink(graphiteConfig, graphiteOptions);
             } else
 #endif // SK_ENABLE_PRECOMPILE
             {
-                return new GraphiteSink(graphiteConfig);
+                return new GraphiteSink(graphiteConfig, graphiteOptions);
             }
         }
     }
@@ -1037,6 +1026,7 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
         SINK("bgr101010x",  RasterSink, kBGR_101010x_SkColorType);
         SINK("f16",         RasterSink, kRGBA_F16_SkColorType);
         SINK("f16norm",     RasterSink, kRGBA_F16Norm_SkColorType);
+        SINK("f16f16f16x",  RasterSink, kRGB_F16F16F16x_SkColorType);
         SINK("f32",         RasterSink, kRGBA_F32_SkColorType);
         SINK("srgba",       RasterSink, kSRGBA_8888_SkColorType);
 
@@ -1078,7 +1068,11 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
     return nullptr;
 }
 
-static bool gather_sinks(const GrContextOptions& grCtxOptions, bool defaultConfigs) {
+static bool gather_sinks(const GrContextOptions& grCtxOptions,
+#if defined(SK_GRAPHITE)
+                         const skiatest::graphite::TestOptions& graphiteOptions,
+#endif
+                         bool defaultConfigs) {
     if (FLAGS_src.size() == 1 && FLAGS_src.contains("tests")) {
         // If we're just running tests skip trying to accumulate sinks. The 'justOneRect' test
         // can fail for protected contexts.
@@ -1090,7 +1084,11 @@ static bool gather_sinks(const GrContextOptions& grCtxOptions, bool defaultConfi
     AutoreleasePool pool;
     for (int i = 0; i < configs.size(); i++) {
         const SkCommandLineConfig& config = *configs[i];
-        Sink* sink = create_sink(grCtxOptions, &config);
+        Sink* sink = create_sink(grCtxOptions,
+#if defined(SK_GRAPHITE)
+                                 graphiteOptions,
+#endif
+                                 &config);
         if (sink == nullptr) {
             info("Skipping config %s: Don't understand '%s'.\n", config.getTag().c_str(),
                  config.getTag().c_str());
@@ -1485,8 +1483,10 @@ static void gather_tests() {
         }
         if (test.fTestType == TestType::kGanesh && FLAGS_gpu) {
             gGaneshTests->push_back(test);
+#if defined(SK_GRAPHITE)
         } else if (test.fTestType == TestType::kGraphite && FLAGS_graphite) {
             gGraphiteTests->push_back(test);
+#endif
         } else if (test.fTestType == TestType::kCPU && FLAGS_cpu) {
             gCPUTests->push_back(test);
         } else if (test.fTestType == TestType::kCPUSerial && FLAGS_cpu) {
@@ -1529,10 +1529,13 @@ static void run_ganesh_test(skiatest::Test test, const GrContextOptions& grCtxOp
     done("unit", "test", "", test.fName);
 }
 
-static void run_graphite_test(skiatest::Test test, skiatest::graphite::TestOptions& options) {
+#if defined(SK_GRAPHITE)
+static void run_graphite_test(skiatest::Test test,
+                              const skiatest::graphite::TestOptions& optionsIn) {
     DMReporter reporter;
     if (!FLAGS_dryRun && !should_skip("_", "tests", "_", test.fName)) {
         AutoreleasePool pool;
+        skiatest::graphite::TestOptions options = optionsIn;
         test.modifyGraphiteContextOptions(&options.fContextOptions);
 
         skiatest::ReporterContext ctx(&reporter, SkString(test.fName));
@@ -1541,6 +1544,7 @@ static void run_graphite_test(skiatest::Test test, skiatest::graphite::TestOptio
     }
     done("unit", "test", "", test.fName);
 }
+#endif
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -1551,9 +1555,6 @@ TestHarness CurrentTestHarness() {
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 int main(int argc, char** argv) {
-#if defined(__MSVC_RUNTIME_CHECKS)
-    _RTC_SetErrorFunc(RuntimeCheckErrorFunc);
-#endif
 #if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) && defined(SK_HAS_HEIF_LIBRARY)
     android::ProcessState::self()->startThreadPool();
 #endif
@@ -1582,10 +1583,10 @@ int main(int argc, char** argv) {
         gVLog = stderr;
     }
 
+#if defined(SK_GRAPHITE)
     skiatest::graphite::TestOptions graphiteOptions;
-    if (FLAGS_neverYieldToWebGPU) {
-        graphiteOptions.fNeverYieldToWebGPU = true;
-    }
+    CommonFlags::SetTestOptions(&graphiteOptions);
+#endif
 
     GrContextOptions grCtxOptions;
     CommonFlags::SetCtxOptions(&grCtxOptions);
@@ -1615,7 +1616,11 @@ int main(int argc, char** argv) {
             break;
         }
     }
-    if (!gather_sinks(grCtxOptions, defaultConfigs)) {
+    if (!gather_sinks(grCtxOptions,
+#if defined(SK_GRAPHITE)
+                      graphiteOptions,
+#endif
+                      defaultConfigs)) {
         return 1;
     }
     gather_tests();
@@ -1660,7 +1665,9 @@ int main(int argc, char** argv) {
     // With the parallel work running, run serial tasks and tests here on main thread.
     for (Task& task : serial) { Task::Run(task); }
     for (skiatest::Test& test : *gGaneshTests) { run_ganesh_test(test, grCtxOptions); }
+#if defined(SK_GRAPHITE)
     for (skiatest::Test& test : *gGraphiteTests) { run_graphite_test(test, graphiteOptions); }
+#endif
 
     // Wait for any remaining parallel work to complete (including any spun off of serial tasks).
     parallel.wait();

@@ -154,19 +154,12 @@
 #endif
 
 #if !defined(GR_GPU_STATS)
-  #if defined(SK_DEBUG) || defined(SK_DUMP_STATS) || defined(GR_TEST_UTILS)
+  #if defined(SK_DEBUG) || defined(SK_DUMP_STATS) || defined(GPU_TEST_UTILS)
       #define GR_GPU_STATS    1
   #else
       #define GR_GPU_STATS    0
   #endif
 #endif
-
-////////////////////////////////////////////////////////////////////////////////
-
-typedef uint32_t SkFourByteTag;
-static inline constexpr SkFourByteTag SkSetFourByteTag(char a, char b, char c, char d) {
-    return (((uint32_t)a << 24) | ((uint32_t)b << 16) | ((uint32_t)c << 8) | (uint32_t)d);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

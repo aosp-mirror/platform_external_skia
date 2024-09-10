@@ -31,16 +31,6 @@ namespace skgpu::graphite {
 
 PrecompileShader::~PrecompileShader() = default;
 
-sk_sp<PrecompileShader> PrecompileShader::makeWithLocalMatrix() const {
-    if (this->priv().isALocalMatrixShader()) {
-        // SkShader::makeWithLocalMatrix collapses chains of localMatrix shaders so we need to
-        // follow suit here
-        return sk_ref_sp(this);
-    }
-
-    return PrecompileShaders::LocalMatrix({ sk_ref_sp(this) });
-}
-
 sk_sp<PrecompileShader> PrecompileShader::makeWithColorFilter(
         sk_sp<PrecompileColorFilter> cf) const {
     if (!cf) {
@@ -109,28 +99,12 @@ sk_sp<PrecompileShader> PrecompileShaders::Color(sk_sp<SkColorSpace>) {
 //--------------------------------------------------------------------------------------------------
 class PrecompileBlendShader final : public PrecompileShader {
 public:
-    PrecompileBlendShader(SkSpan<const sk_sp<PrecompileBlender>> runtimeBlendEffects,
+    PrecompileBlendShader(PrecompileBlenderList&& blenders,
                           SkSpan<const sk_sp<PrecompileShader>> dsts,
-                          SkSpan<const sk_sp<PrecompileShader>> srcs,
-                          bool needsPorterDuffBased,
-                          bool needsSeparableMode)
-            : fRuntimeBlendEffects(runtimeBlendEffects.begin(), runtimeBlendEffects.end())
+                          SkSpan<const sk_sp<PrecompileShader>> srcs)
+            : fBlenderOptions(std::move(blenders))
             , fDstOptions(dsts.begin(), dsts.end())
             , fSrcOptions(srcs.begin(), srcs.end()) {
-
-        fNumBlenderCombos = 0;
-        for (const auto& rt : fRuntimeBlendEffects) {
-            fNumBlenderCombos += rt->priv().numCombinations();
-        }
-        if (needsPorterDuffBased) {
-            ++fNumBlenderCombos;
-        }
-        if (needsSeparableMode) {
-            ++fNumBlenderCombos;
-        }
-
-        SkASSERT(fNumBlenderCombos >= 1);
-
         fNumDstCombos = 0;
         for (const auto& d : fDstOptions) {
             fNumDstCombos += d->priv().numCombinations();
@@ -140,31 +114,11 @@ public:
         for (const auto& s : fSrcOptions) {
             fNumSrcCombos += s->priv().numCombinations();
         }
-
-        if (needsPorterDuffBased) {
-            fPorterDuffIndex = 0;
-            if (needsSeparableMode) {
-                fSeparableModeIndex = 1;
-                if (!fRuntimeBlendEffects.empty()) {
-                    fBlenderIndex = 2;
-                }
-            } else if (!fRuntimeBlendEffects.empty()) {
-                fBlenderIndex = 1;
-            }
-        } else if (needsSeparableMode) {
-            fSeparableModeIndex = 0;
-            if (!fRuntimeBlendEffects.empty()) {
-                fBlenderIndex = 1;
-            }
-        } else {
-            SkASSERT(!fRuntimeBlendEffects.empty());
-            fBlenderIndex = 0;
-        }
     }
 
 private:
     int numChildCombinations() const override {
-        return fNumBlenderCombos * fNumDstCombos * fNumSrcCombos;
+        return fBlenderOptions.numCombinations() * fNumDstCombos * fNumSrcCombos;
     }
 
     void addToKey(const KeyContext& keyContext,
@@ -180,20 +134,21 @@ private:
         remainingCombinations /= fNumSrcCombos;
 
         int desiredBlendCombination = remainingCombinations;
-        SkASSERT(desiredBlendCombination < fNumBlenderCombos);
+        SkASSERT(desiredBlendCombination < fBlenderOptions.numCombinations());
 
-        if (desiredBlendCombination == fPorterDuffIndex ||
-            desiredBlendCombination == fSeparableModeIndex) {
-            BlendShaderBlock::BeginBlock(keyContext, builder, gatherer);
-
+        auto [blender, blenderCombination] = fBlenderOptions.selectOption(desiredBlendCombination);
+        if (blender->priv().asBlendMode()) {
+            // Coefficient and HSLC blends, and other fixed SkBlendMode blenders use the
+            // BlendCompose block to organize the children.
+            BlendComposeBlock::BeginBlock(keyContext, builder, gatherer);
         } else {
+            // Runtime blenders are wrapped in the kBlend runtime shader, although functionally
+            // it is identical to the BlendCompose snippet.
             const SkRuntimeEffect* blendEffect =
                     GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kBlend);
 
             RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer,
                                            { sk_ref_sp(blendEffect) });
-            SkASSERT(desiredBlendCombination >= fBlenderIndex);
-            desiredBlendCombination -= fBlenderIndex;
         }
 
         AddToKey<PrecompileShader>(keyContext, builder, gatherer, fSrcOptions,
@@ -201,93 +156,36 @@ private:
         AddToKey<PrecompileShader>(keyContext, builder, gatherer, fDstOptions,
                                    desiredDstCombination);
 
-        if (desiredBlendCombination == fPorterDuffIndex) {
-            CoeffBlenderBlock::AddBlock(keyContext, builder, gatherer,
-                                        { 0.0f, 0.0f, 0.0f, 0.0f }); // coeffs aren't used
-        } else if (desiredBlendCombination == fSeparableModeIndex) {
-            BlendModeBlenderBlock::AddBlock(keyContext, builder, gatherer,
-                                            SkBlendMode::kOverlay); // the blendmode is unused
+        if (blender->priv().asBlendMode()) {
+            SkASSERT(blenderCombination == 0);
+            AddBlendMode(keyContext, builder, gatherer, *blender->priv().asBlendMode());
         } else {
-            AddToKey<PrecompileBlender>(keyContext, builder, gatherer, fRuntimeBlendEffects,
-                                        desiredBlendCombination);
+            blender->priv().addToKey(keyContext, builder, gatherer, blenderCombination);
         }
 
-        builder->endBlock();  // BlendShaderBlock or RuntimeEffectBlock
+        builder->endBlock();  // BlendComposeBlock or RuntimeEffectBlock
     }
 
-    std::vector<sk_sp<PrecompileBlender>> fRuntimeBlendEffects;
+    PrecompileBlenderList fBlenderOptions;
     std::vector<sk_sp<PrecompileShader>> fDstOptions;
     std::vector<sk_sp<PrecompileShader>> fSrcOptions;
 
-    int fNumBlenderCombos;
     int fNumDstCombos;
     int fNumSrcCombos;
-
-    int fPorterDuffIndex = -1;
-    int fSeparableModeIndex = -1;
-    int fBlenderIndex = -1;
 };
 
 sk_sp<PrecompileShader> PrecompileShaders::Blend(
         SkSpan<const sk_sp<PrecompileBlender>> blenders,
         SkSpan<const sk_sp<PrecompileShader>> dsts,
         SkSpan<const sk_sp<PrecompileShader>> srcs) {
-    std::vector<sk_sp<PrecompileBlender>> tmp;
-    tmp.reserve(blenders.size());
-
-    bool needsPorterDuffBased = false;
-    bool needsBlendModeBased = false;
-
-    for (const auto& b : blenders) {
-        if (!b) {
-            needsPorterDuffBased = true; // fall back to kSrcOver
-        } else if (b->priv().asBlendMode().has_value()) {
-            SkBlendMode bm = b->priv().asBlendMode().value();
-
-            SkSpan<const float> coeffs = skgpu::GetPorterDuffBlendConstants(bm);
-            if (!coeffs.empty()) {
-                needsPorterDuffBased = true;
-            } else {
-                needsBlendModeBased = true;
-            }
-        } else {
-            tmp.push_back(b);
-        }
-    }
-
-    if (!needsPorterDuffBased && !needsBlendModeBased && tmp.empty()) {
-        needsPorterDuffBased = true; // fallback to kSrcOver
-    }
-
-    return sk_make_sp<PrecompileBlendShader>(SkSpan<const sk_sp<PrecompileBlender>>(tmp),
-                                             dsts, srcs,
-                                             needsPorterDuffBased, needsBlendModeBased);
+    return sk_make_sp<PrecompileBlendShader>(PrecompileBlenderList(blenders), dsts, srcs);
 }
 
 sk_sp<PrecompileShader> PrecompileShaders::Blend(
         SkSpan<const SkBlendMode> blendModes,
         SkSpan<const sk_sp<PrecompileShader>> dsts,
         SkSpan<const sk_sp<PrecompileShader>> srcs) {
-
-    bool needsPorterDuffBased = false;
-    bool needsBlendModeBased = false;
-
-    for (SkBlendMode bm : blendModes) {
-        SkSpan<const float> porterDuffConstants = skgpu::GetPorterDuffBlendConstants(bm);
-        if (!porterDuffConstants.empty()) {
-            needsPorterDuffBased = true;
-        } else {
-            needsBlendModeBased = true;
-        }
-    }
-
-    if (!needsPorterDuffBased && !needsBlendModeBased) {
-        needsPorterDuffBased = true; // fallback to kSrcOver
-    }
-
-    return sk_make_sp<PrecompileBlendShader>(SkSpan<const sk_sp<PrecompileBlender>>(),
-                                             dsts, srcs,
-                                             needsPorterDuffBased, needsBlendModeBased);
+    return sk_make_sp<PrecompileBlendShader>(PrecompileBlenderList(blendModes), dsts, srcs);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -331,7 +229,6 @@ sk_sp<PrecompileShader> PrecompileShaders::CoordClamp(SkSpan<const sk_sp<Precomp
 }
 
 //--------------------------------------------------------------------------------------------------
-// TODO: Investigate the YUV-image use case
 class PrecompileImageShader final : public PrecompileShader {
 public:
     PrecompileImageShader(SkEnumBitMask<PrecompileImageShaderFlags> flags) : fFlags(flags) {}
@@ -395,23 +292,40 @@ private:
                                                             : kDefaultSampling,
                 SkTileMode::kClamp, SkTileMode::kClamp,
                 desiredSamplingTilingCombo == kHWTiled ? kHWTileableSize : kShaderTileableSize,
-                kSubset, kIgnoredSwizzle);
+                kSubset);
+        ColorSpaceTransformBlock::ColorSpaceTransformData colorXformData(kIgnoredSwizzle);
 
         if (desiredAlphaCombo == kAlphaOnly) {
             SkASSERT(!(fFlags & PrecompileImageShaderFlags::kExcludeAlpha));
 
             Blend(keyContext, builder, gatherer,
                   /* addBlendToKey= */ [&] () -> void {
-                      AddKnownModeBlend(keyContext, builder, gatherer, SkBlendMode::kDstIn);
+
+                      AddFixedBlendMode(keyContext, builder, gatherer, SkBlendMode::kDstIn);
                   },
                   /* addSrcToKey= */ [&] () -> void {
-                      ImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                      Compose(keyContext, builder, gatherer,
+                              /* addInnerToKey= */ [&]() -> void {
+                                  ImageShaderBlock::AddBlock(keyContext, builder, gatherer,
+                                                             imgData);
+                              },
+                              /* addOuterToKey= */ [&]() -> void {
+                                  ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer,
+                                                                     colorXformData);
+                              });
                   },
                   /* addDstToKey= */ [&]() -> void {
                       RGBPaintColorBlock::AddBlock(keyContext, builder, gatherer);
                   });
         } else {
-            ImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+            Compose(keyContext, builder, gatherer,
+                    /* addInnerToKey= */ [&]() -> void {
+                        ImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                    },
+                    /* addOuterToKey= */ [&]() -> void {
+                        ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer,
+                                                           colorXformData);
+                    });
         }
     }
 
@@ -440,6 +354,100 @@ sk_sp<PrecompileShader> PrecompileShadersPriv::RawImage(
     return PrecompileShaders::LocalMatrix(
             { sk_make_sp<PrecompileImageShader>(flags |
                                                 PrecompileImageShaderFlags::kExcludeAlpha) });
+}
+
+//--------------------------------------------------------------------------------------------------
+class PrecompileYUVImageShader : public PrecompileShader {
+public:
+    PrecompileYUVImageShader() {}
+
+private:
+    // There are 8 intrinsic YUV shaders:
+    //  4 tiling modes
+    //    HW tiling w/o swizzle
+    //    HW tiling w/ swizzle
+    //    cubic shader tiling
+    //    non-cubic shader tiling
+    //  crossed with two postambles:
+    //    just premul
+    //    full-blown colorSpace transform
+    inline static constexpr int kNumTilingModes     = 4;
+    inline static constexpr int kHWTiledNoSwizzle   = 3;
+    inline static constexpr int kHWTiledWithSwizzle = 2;
+    inline static constexpr int kCubicShaderTiled   = 1;
+    inline static constexpr int kShaderTiled        = 0;
+
+    inline static constexpr int kNumPostambles       = 2;
+    inline static constexpr int kWithColorSpaceXform = 1;
+    inline static constexpr int kJustPremul          = 0;
+
+    inline static constexpr int kNumIntrinsicCombinations = kNumTilingModes * kNumPostambles;
+
+    int numIntrinsicCombinations() const override { return kNumIntrinsicCombinations; }
+
+    void addToKey(const KeyContext& keyContext,
+                  PaintParamsKeyBuilder* builder,
+                  PipelineDataGatherer* gatherer,
+                  int desiredCombination) const override {
+        SkASSERT(desiredCombination < kNumIntrinsicCombinations);
+
+        int desiredPostamble = desiredCombination % kNumPostambles;
+        int desiredTiling = desiredCombination / kNumPostambles;
+        SkASSERT(desiredTiling < kNumTilingModes);
+
+        static constexpr SkSamplingOptions kDefaultCubicSampling(SkCubicResampler::Mitchell());
+        static constexpr SkSamplingOptions kDefaultSampling;
+
+        YUVImageShaderBlock::ImageData imgData(desiredTiling == kCubicShaderTiled
+                                                                       ? kDefaultCubicSampling
+                                                                       : kDefaultSampling,
+                                               SkTileMode::kClamp, SkTileMode::kClamp,
+                                               /* imgSize= */ { 1, 1 },
+                                               /* subset= */ desiredTiling == kShaderTiled
+                                                                     ? SkRect::MakeEmpty()
+                                                                     : SkRect::MakeWH(1, 1));
+
+        static constexpr SkV4 kRedChannel{ 1.f, 0.f, 0.f, 0.f };
+        imgData.fChannelSelect[0] = kRedChannel;
+        imgData.fChannelSelect[1] = kRedChannel;
+        if (desiredTiling == kHWTiledNoSwizzle) {
+            imgData.fChannelSelect[2] = kRedChannel;
+        } else {
+            // Having a non-red channel selector forces a swizzle
+            imgData.fChannelSelect[2] = { 0.f, 1.f, 0.f, 0.f};
+        }
+        imgData.fChannelSelect[3] = kRedChannel;
+
+        imgData.fYUVtoRGBMatrix.setAll(1, 0, 0, 0, 1, 0, 0, 0, 0);
+        imgData.fYUVtoRGBTranslate = { 0, 0, 0 };
+
+        ColorSpaceTransformBlock::ColorSpaceTransformData colorXformData(
+                                      skgpu::graphite::ReadSwizzle::kRGBA);
+
+        if (desiredPostamble == kJustPremul) {
+            Compose(keyContext, builder, gatherer,
+                    /* addInnerToKey= */ [&]() -> void {
+                        YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                    },
+                    /* addOuterToKey= */ [&]() -> void {
+                        builder->addBlock(BuiltInCodeSnippetID::kPremulAlphaColorFilter);
+                    });
+        } else {
+            Compose(keyContext, builder, gatherer,
+                    /* addInnerToKey= */ [&]() -> void {
+                        YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+                    },
+                    /* addOuterToKey= */ [&]() -> void {
+                        ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer,
+                                                           colorXformData);
+                    });
+        }
+
+    }
+};
+
+sk_sp<PrecompileShader> PrecompileShaders::YUVImage() {
+    return PrecompileShaders::LocalMatrix({ sk_make_sp<PrecompileYUVImageShader>() });
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -570,12 +578,13 @@ sk_sp<PrecompileShader> PrecompileShadersPriv::Picture(bool withLM) {
 class PrecompileLocalMatrixShader final : public PrecompileShader {
 public:
     enum class Flags {
-        kNone,
-        kIncludeWithOutVariant,
+        kNone                  = 0b00,
+        kIsPerspective         = 0b01,
+        kIncludeWithOutVariant = 0b10,
     };
 
     PrecompileLocalMatrixShader(SkSpan<const sk_sp<PrecompileShader>> wrapped,
-                                Flags flags = Flags::kNone)
+                                SkEnumBitMask<Flags> flags = Flags::kNone)
             : fWrapped(wrapped.begin(), wrapped.end())
             , fFlags(flags) {
         fNumWrappedCombos = 0;
@@ -603,8 +612,16 @@ public:
         return false;
     }
 
+    SkSpan<const sk_sp<PrecompileShader>> getWrapped() const {
+        return fWrapped;
+    }
+
+    SkEnumBitMask<Flags> getFlags() const { return fFlags; }
+
 private:
     // The LocalMatrixShader has two potential variants: with and without the LocalMatrixShader
+    // In the "with" variant, the kIsPerspective flag will determine if the shader performs
+    // the perspective division or not.
     inline static constexpr int kNumIntrinsicCombinations = 2;
     inline static constexpr int kWithLocalMatrix    = 1;
     inline static constexpr int kWithoutLocalMatrix = 0;
@@ -612,7 +629,7 @@ private:
     bool isALocalMatrixShader() const override { return true; }
 
     int numIntrinsicCombinations() const override {
-        if (fFlags != Flags::kIncludeWithOutVariant) {
+        if (!(fFlags & Flags::kIncludeWithOutVariant)) {
             return 1;   // just kWithLocalMatrix
         }
         return kNumIntrinsicCombinations;
@@ -628,7 +645,7 @@ private:
 
         int desiredLMCombination, desiredWrappedCombination;
 
-        if (fFlags != Flags::kIncludeWithOutVariant) {
+        if (!(fFlags & Flags::kIncludeWithOutVariant)) {
             desiredLMCombination = kWithLocalMatrix;
             desiredWrappedCombination = desiredCombination;
         } else {
@@ -638,13 +655,17 @@ private:
         SkASSERT(desiredWrappedCombination < fNumWrappedCombos);
 
         if (desiredLMCombination == kWithLocalMatrix) {
-            LocalMatrixShaderBlock::LMShaderData kIgnoredLMShaderData(SkMatrix::I());
+            SkMatrix matrix = SkMatrix::I();
+            if (fFlags & Flags::kIsPerspective) {
+                matrix.setPerspX(0.1f);
+            }
+            LocalMatrixShaderBlock::LMShaderData lmShaderData(matrix);
 
-            LocalMatrixShaderBlock::BeginBlock(keyContext, builder, gatherer, kIgnoredLMShaderData);
+            LocalMatrixShaderBlock::BeginBlock(keyContext, builder, gatherer, matrix);
         }
 
-            AddToKey<PrecompileShader>(keyContext, builder, gatherer, fWrapped,
-                                       desiredWrappedCombination);
+        AddToKey<PrecompileShader>(keyContext, builder, gatherer, fWrapped,
+                                   desiredWrappedCombination);
 
         if (desiredLMCombination == kWithLocalMatrix) {
             builder->endBlock();
@@ -653,12 +674,16 @@ private:
 
     std::vector<sk_sp<PrecompileShader>> fWrapped;
     int fNumWrappedCombos;
-    Flags fFlags;
+    SkEnumBitMask<Flags> fFlags;
 };
 
 sk_sp<PrecompileShader> PrecompileShaders::LocalMatrix(
-        SkSpan<const sk_sp<PrecompileShader>> wrapped) {
-    return sk_make_sp<PrecompileLocalMatrixShader>(std::move(wrapped));
+        SkSpan<const sk_sp<PrecompileShader>> wrapped,
+        bool isPerspective) {
+    return sk_make_sp<PrecompileLocalMatrixShader>(
+            std::move(wrapped),
+            isPerspective ? PrecompileLocalMatrixShader::Flags::kIsPerspective
+                          : PrecompileLocalMatrixShader::Flags::kNone);
 }
 
 sk_sp<PrecompileShader> PrecompileShadersPriv::LocalMatrixBothVariants(
@@ -666,6 +691,24 @@ sk_sp<PrecompileShader> PrecompileShadersPriv::LocalMatrixBothVariants(
     return sk_make_sp<PrecompileLocalMatrixShader>(
             std::move(wrapped),
             PrecompileLocalMatrixShader::Flags::kIncludeWithOutVariant);
+}
+
+sk_sp<PrecompileShader> PrecompileShader::makeWithLocalMatrix(bool isPerspective) const {
+    if (this->priv().isALocalMatrixShader()) {
+        // SkShader::makeWithLocalMatrix collapses chains of localMatrix shaders so we need to
+        // follow suit here, folding in any new perspective flag if needed.
+        auto thisAsLMShader = static_cast<const PrecompileLocalMatrixShader*>(this);
+        if (isPerspective && !(thisAsLMShader->getFlags() &
+                PrecompileLocalMatrixShader::Flags::kIsPerspective)) {
+            return sk_make_sp<PrecompileLocalMatrixShader>(
+                thisAsLMShader->getWrapped(),
+                thisAsLMShader->getFlags() | PrecompileLocalMatrixShader::Flags::kIsPerspective);
+        }
+
+        return sk_ref_sp(this);
+    }
+
+    return PrecompileShaders::LocalMatrix({ sk_ref_sp(this) }, isPerspective);
 }
 
 //--------------------------------------------------------------------------------------------------

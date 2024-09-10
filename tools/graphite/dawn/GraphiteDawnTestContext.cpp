@@ -12,7 +12,7 @@
 #include "include/gpu/graphite/dawn/DawnTypes.h"
 #include "include/gpu/graphite/dawn/DawnUtils.h"
 #include "include/private/base/SkOnce.h"
-#include "include/private/gpu/graphite/ContextOptionsPriv.h"
+#include "src/gpu/graphite/ContextOptionsPriv.h"
 #include "tools/gpu/ContextType.h"
 #include "tools/graphite/TestOptions.h"
 
@@ -30,16 +30,22 @@ DawnTestContext::~DawnTestContext() {
     tick();
 }
 
-std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType backend) {
+std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType backend,
+                                                           bool useTintIR) {
     static std::unique_ptr<dawn::native::Instance> sInstance;
     static SkOnce sOnce;
 
     static constexpr const char* kToggles[] = {
         "allow_unsafe_apis",  // Needed for dual-source blending.
         "use_user_defined_labels_in_backend",
+        // Robustness impacts performance and is always disabled when running Graphite in Chrome,
+        // so this keeps Skia's tests operating closer to real-use behavior.
+        "disable_robustness",
+        // Must be last to correctly respond to `useTintIR` parameter.
+        "use_tint_ir",
     };
     wgpu::DawnTogglesDescriptor togglesDesc;
-    togglesDesc.enabledToggleCount  = std::size(kToggles);
+    togglesDesc.enabledToggleCount  = std::size(kToggles) - (useTintIR ? 0 : 1);
     togglesDesc.enabledToggles      = kToggles;
 
     // Creation of Instance is cheap but calling EnumerateAdapters can be expensive the first time,
@@ -125,26 +131,27 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType bac
     if (adapter.HasFeature(wgpu::FeatureName::DawnLoadResolveTexture)) {
         features.push_back(wgpu::FeatureName::DawnLoadResolveTexture);
     }
+    if (adapter.HasFeature(wgpu::FeatureName::DawnPartialLoadResolveTexture)) {
+        features.push_back(wgpu::FeatureName::DawnPartialLoadResolveTexture);
+    }
 
     wgpu::DeviceDescriptor desc;
     desc.requiredFeatureCount  = features.size();
     desc.requiredFeatures      = features.data();
     desc.nextInChain           = &togglesDesc;
-    desc.deviceLostCallbackInfo.mode = wgpu::CallbackMode::AllowSpontaneous;
-    desc.deviceLostCallbackInfo.callback =
-        [](WGPUDeviceImpl *const *, WGPUDeviceLostReason reason, const char* message, void*) {
-            if (reason != WGPUDeviceLostReason_Destroyed) {
-                SK_ABORT("Device lost: %s\n", message);
-            }
-        };
+    desc.SetDeviceLostCallback(
+            wgpu::CallbackMode::AllowSpontaneous,
+            [](const wgpu::Device&, wgpu::DeviceLostReason reason, const char* message) {
+                if (reason != wgpu::DeviceLostReason::Destroyed) {
+                    SK_ABORT("Device lost: %s\n", message);
+                }
+            });
+    desc.SetUncapturedErrorCallback([](const wgpu::Device&, wgpu::ErrorType, const char* message) {
+        SkDebugf("Device error: %s\n", message);
+    });
 
     wgpu::Device device = wgpu::Device::Acquire(matchedAdaptor.CreateDevice(&desc));
     SkASSERT(device);
-    device.SetUncapturedErrorCallback(
-            [](WGPUErrorType type, const char* message, void*) {
-                SkDebugf("Device error: %s\n", message);
-            },
-            /*userdata=*/nullptr);
 
     skgpu::graphite::DawnBackendContext backendContext;
     backendContext.fInstance = wgpu::Instance(sInstance->Get());

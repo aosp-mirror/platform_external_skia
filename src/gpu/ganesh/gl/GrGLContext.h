@@ -10,8 +10,8 @@
 #define GrGLContext_DEFINED
 
 #include "include/core/SkRefCnt.h"
-#include "include/gpu/gl/GrGLInterface.h"
-#include "include/gpu/gl/GrGLTypes.h"
+#include "include/gpu/ganesh/gl/GrGLInterface.h"
+#include "include/gpu/ganesh/gl/GrGLTypes.h"
 #include "src/gpu/ganesh/gl/GrGLCaps.h"
 #include "src/gpu/ganesh/gl/GrGLUtil.h"
 
@@ -62,6 +62,7 @@ public:
     }
     GrGLANGLEBackend angleBackend() const { return fDriverInfo.fANGLEBackend; }
     GrGLDriver angleDriver() const { return fDriverInfo.fANGLEDriver; }
+    GrGLDriverVersion angleDriverVersion() const { return fDriverInfo.fANGLEDriverVersion; }
     GrGLVendor angleVendor() const { return fDriverInfo.fANGLEVendor; }
     GrGLRenderer angleRenderer() const { return fDriverInfo.fANGLERenderer; }
 

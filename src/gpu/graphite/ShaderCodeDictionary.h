@@ -23,6 +23,7 @@
 #include "src/gpu/Blend.h"
 #include "src/gpu/graphite/BuiltInCodeSnippetID.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
+#include "src/gpu/graphite/ResourceTypes.h"
 #include "src/gpu/graphite/Uniform.h"
 #include "src/gpu/graphite/UniquePaintParamsID.h"
 
@@ -126,6 +127,14 @@ struct ShaderSnippet {
     // The features and args that this shader snippet requires in order to be invoked
     SkEnumBitMask<SnippetRequirementFlags> fSnippetRequirementFlags{SnippetRequirementFlags::kNone};
 
+    // If not null, the list of uniforms in `fUniforms` describes an existing struct type declared
+    // in the Graphite modules with the given name. Instead of inlining the each uniform in the
+    // top-level interface block or aggregate struct, there will be a single member of this struct's
+    // type.
+    const char* fUniformStructName = nullptr;
+    // If the uniforms are being embedded as a sub-struct, this is the required starting alignment.
+    int fRequiredAlignment = -1;
+
     skia_private::TArray<Uniform> fUniforms;
     skia_private::TArray<TextureAndSampler> fTexturesAndSamplers;
 
@@ -154,7 +163,7 @@ public:
         SkASSERT(children.size() == (size_t) fEntry->fNumChildren);
 
         const bool isCompose = codeID == (int) BuiltInCodeSnippetID::kCompose ||
-                               codeID == (int) BuiltInCodeSnippetID::kBlendShader;
+                               codeID == (int) BuiltInCodeSnippetID::kBlendCompose;
         for (const ShaderNode* child : children) {
             // Runtime effects invoke children with explicit parameters so those requirements never
             // need to propagate to the root. Similarly, compose only needs to propagate the
@@ -261,7 +270,7 @@ private:
 // SkRuntimeEffect, including de-duplicating equivalent SkRuntimeEffect objects.
 class ShaderCodeDictionary {
 public:
-    ShaderCodeDictionary();
+    ShaderCodeDictionary(Layout layout);
 
     UniquePaintParamsID findOrCreate(PaintParamsKeyBuilder*) SK_EXCLUDES(fSpinLock);
 
@@ -269,12 +278,6 @@ public:
 
     SkString idToString(UniquePaintParamsID id) const {
         return this->lookup(id).toString(this, /*includeData=*/false);
-    }
-
-    SkSpan<const Uniform> getUniforms(BuiltInCodeSnippetID) const;
-    SkEnumBitMask<SnippetRequirementFlags> getSnippetRequirementFlags(
-            BuiltInCodeSnippetID id) const {
-        return fBuiltInCodeSnippets[(int) id].fSnippetRequirementFlags;
     }
 
 #if defined(SK_DEBUG)
@@ -285,8 +288,9 @@ public:
 
     // This method can return nullptr
     const ShaderSnippet* getEntry(int codeSnippetID) const SK_EXCLUDES(fSpinLock);
-    const ShaderSnippet* getEntry(BuiltInCodeSnippetID codeSnippetID) const SK_EXCLUDES(fSpinLock) {
-        return this->getEntry(SkTo<int>(codeSnippetID));
+    const ShaderSnippet* getEntry(BuiltInCodeSnippetID codeSnippetID) const {
+        // Built-in code snippets are initialized once so there is no need to take a lock
+        return &fBuiltInCodeSnippets[SkTo<int>(codeSnippetID)];
     }
 
     int findOrCreateRuntimeEffectSnippet(const SkRuntimeEffect* effect);
@@ -296,6 +300,8 @@ private:
 
     SkSpan<const Uniform> convertUniforms(const SkRuntimeEffect* effect);
     ShaderSnippet convertRuntimeEffect(const SkRuntimeEffect* effect, const char* name);
+
+    const Layout fLayout;
 
     std::array<ShaderSnippet, kBuiltInCodeSnippetIDCount> fBuiltInCodeSnippets;
 

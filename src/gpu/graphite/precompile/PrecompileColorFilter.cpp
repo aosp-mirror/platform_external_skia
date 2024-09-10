@@ -7,16 +7,18 @@
 
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 
+#include "include/effects/SkRuntimeEffect.h"
+#include "include/gpu/graphite/precompile/PrecompileRuntimeEffect.h"
 #include "include/private/SkColorData.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkKnownRuntimeEffects.h"
 #include "src/gpu/graphite/BuiltInCodeSnippetID.h"
-#include "src/gpu/graphite/FactoryFunctions.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/precompile/PrecompileBaseComplete.h"
 #include "src/gpu/graphite/precompile/PrecompileBasePriv.h"
+#include "src/gpu/graphite/precompile/PrecompileBlenderPriv.h"
 #include "src/gpu/graphite/precompile/PrecompileColorFiltersPriv.h"
 
 namespace skgpu::graphite {
@@ -136,24 +138,58 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::Compose(
 //--------------------------------------------------------------------------------------------------
 class PrecompileBlendModeColorFilter : public PrecompileColorFilter {
 public:
-    PrecompileBlendModeColorFilter() {}
+    PrecompileBlendModeColorFilter(SkSpan<const SkBlendMode> blendModes)
+            : fBlendOptions(blendModes) {}
 
 private:
+    int numIntrinsicCombinations() const override {
+        return fBlendOptions.numCombinations();
+    }
+
     void addToKey(const KeyContext& keyContext,
                   PaintParamsKeyBuilder* builder,
                   PipelineDataGatherer* gatherer,
                   int desiredCombination) const override {
-        SkASSERT(desiredCombination == 0);
+        auto [blender, option ] = fBlendOptions.selectOption(desiredCombination);
+        SkASSERT(option == 0 && blender->priv().asBlendMode().has_value());
 
-        // Here, kSrcOver and the white color are just a stand-ins for some later blend mode
-        // and color.
+        SkBlendMode representativeBlendMode = *blender->priv().asBlendMode();
+
+        // Here the color is just a stand-in for a later value.
         AddBlendModeColorFilter(keyContext, builder, gatherer,
-                                SkBlendMode::kSrcOver, SK_PMColor4fWHITE);
+                                representativeBlendMode, SK_PMColor4fWHITE);
     }
+
+    // NOTE: The BlendMode color filter can only be created with SkBlendModes, not arbitrary
+    // SkBlenders, so this list will only contain consolidated blend functions or fixed blend mode
+    // options.
+    PrecompileBlenderList fBlendOptions;
 };
 
 sk_sp<PrecompileColorFilter> PrecompileColorFilters::Blend() {
-    return sk_make_sp<PrecompileBlendModeColorFilter>();
+    static constexpr SkBlendMode kAllBlendOptions[15] = {
+        SkBlendMode::kSrcOver, // Trigger porter-duff blends
+        SkBlendMode::kHue,     // Trigger HSLC blends
+        // All remaining fixed blend modes:
+        SkBlendMode::kPlus,
+        SkBlendMode::kModulate,
+        SkBlendMode::kScreen,
+        SkBlendMode::kOverlay,
+        SkBlendMode::kDarken,
+        SkBlendMode::kLighten,
+        SkBlendMode::kColorDodge,
+        SkBlendMode::kColorBurn,
+        SkBlendMode::kHardLight,
+        SkBlendMode::kSoftLight,
+        SkBlendMode::kDifference,
+        SkBlendMode::kExclusion,
+        SkBlendMode::kMultiply
+    };
+    return Blend(kAllBlendOptions);
+}
+
+sk_sp<PrecompileColorFilter> PrecompileColorFilters::Blend(SkSpan<const SkBlendMode> blendModes) {
+    return sk_make_sp<PrecompileBlendModeColorFilter>(blendModes);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -169,7 +205,8 @@ class PrecompileMatrixColorFilter : public PrecompileColorFilter {
                                                  0, 0, 1, 0, 0,
                                                  0, 0, 0, 1, 0 };
 
-        MatrixColorFilterBlock::MatrixColorFilterData matrixCFData(kIdentity, /* inHSLA= */ false);
+        MatrixColorFilterBlock::MatrixColorFilterData matrixCFData(
+                kIdentity, /* inHSLA= */ false, /* clamp= */ true);
 
         MatrixColorFilterBlock::AddBlock(keyContext, builder, gatherer, matrixCFData);
     }
@@ -223,22 +260,19 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::Lerp(
     const SkRuntimeEffect* lerpEffect =
             GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kLerp);
 
-    // Since the RuntimeEffect Precompile objects behave differently we have to manually create
-    // all the combinations here (b/332690425).
-    skia_private::TArray<std::array<const PrecompileChildPtr, 2>> combos;
-    combos.reserve(dstOptions.size() * srcOptions.size());
+    skia_private::TArray<sk_sp<PrecompileBase>> dsts, srcs;
+    dsts.reserve(dstOptions.size());
     for (const sk_sp<PrecompileColorFilter>& d : dstOptions) {
-        for (const sk_sp<PrecompileColorFilter>& s : srcOptions) {
-            combos.push_back({ d, s });
-        }
-    }
-    skia_private::TArray<SkSpan<const PrecompileChildPtr>> comboSpans;
-    comboSpans.reserve(combos.size());
-    for (const std::array<const PrecompileChildPtr, 2>& combo : combos) {
-        comboSpans.push_back({ combo });
+        dsts.push_back(d);
     }
 
-    return MakePrecompileColorFilter(sk_ref_sp(lerpEffect), comboSpans);
+    srcs.reserve(srcOptions.size());
+    for (const sk_sp<PrecompileColorFilter>& s : srcOptions) {
+        srcs.push_back(s);
+    }
+
+    return PrecompileRuntimeEffects::MakePrecompileColorFilter(sk_ref_sp(lerpEffect),
+                                                               { dsts, srcs });
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -269,7 +303,8 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::HighContrast() {
     const SkRuntimeEffect* highContrastEffect =
             GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kHighContrast);
 
-    sk_sp<PrecompileColorFilter> cf = MakePrecompileColorFilter(sk_ref_sp(highContrastEffect));
+    sk_sp<PrecompileColorFilter> cf =
+            PrecompileRuntimeEffects::MakePrecompileColorFilter(sk_ref_sp(highContrastEffect));
     if (!cf) {
         return nullptr;
     }
@@ -281,7 +316,7 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::Luma() {
     const SkRuntimeEffect* lumaEffect =
             GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kLuma);
 
-    return MakePrecompileColorFilter(sk_ref_sp(lumaEffect));
+    return PrecompileRuntimeEffects::MakePrecompileColorFilter(sk_ref_sp(lumaEffect));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -289,7 +324,7 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::Overdraw() {
     const SkRuntimeEffect* overdrawEffect =
             GetKnownRuntimeEffect(SkKnownRuntimeEffects::StableKey::kOverdraw);
 
-    return MakePrecompileColorFilter(sk_ref_sp(overdrawEffect));
+    return PrecompileRuntimeEffects::MakePrecompileColorFilter(sk_ref_sp(overdrawEffect));
 }
 
 //--------------------------------------------------------------------------------------------------

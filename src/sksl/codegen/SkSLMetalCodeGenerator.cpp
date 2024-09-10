@@ -138,6 +138,8 @@ protected:
 
     void writeUniformStruct();
 
+    void writeInterpolatedAttributes(const Variable& var);
+
     void writeInputStruct();
 
     void writeOutputStruct();
@@ -426,12 +428,15 @@ std::string MetalCodeGenerator::typeName(const Type& raw) {
     // we need to know the modifiers for textures
     const Type& type = raw.resolve().scalarTypeForLiteral();
     switch (type.typeKind()) {
-        case Type::TypeKind::kArray:
-            SkASSERT(!type.isUnsizedArray());
-            SkASSERTF(type.columns() > 0, "invalid array size: %s", type.description().c_str());
-            return String::printf("array<%s, %d>",
-                                  this->typeName(type.componentType()).c_str(), type.columns());
-
+        case Type::TypeKind::kArray: {
+            std::string typeName = this->typeName(type.componentType());
+            if (type.isUnsizedArray()) {
+                return String::printf("const device %s*", typeName.c_str());
+            } else {
+                SkASSERTF(type.columns() > 0, "invalid array size: %s", type.description().c_str());
+                return String::printf("array<%s, %d>", typeName.c_str(), type.columns());
+            }
+        }
         case Type::TypeKind::kVector:
             return this->typeName(type.componentType()) + std::to_string(type.columns());
 
@@ -1320,16 +1325,6 @@ bool MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
             this->writeExpression(*c.arguments()[1], Precedence::kSequence);
             this->write(", memory_order_relaxed)");
             return true;
-        case k_loadFloatBuffer_IntrinsicKind: {
-            auto indexExpression = IRHelpers::LoadFloatBuffer(
-                                        fContext,
-                                        fCaps,
-                                        c.position(),
-                                        c.arguments()[0]->clone());
-
-            this->writeExpression(*indexExpression, Precedence::kExpression);
-            return true;
-        }
         default:
             return false;
     }
@@ -3126,6 +3121,23 @@ void MetalCodeGenerator::writeUniformStruct() {
     }
 }
 
+void MetalCodeGenerator::writeInterpolatedAttributes(const Variable& var) {
+    SkASSERT((is_output(var) && ProgramConfig::IsVertex(fProgram.fConfig->fKind)) ||
+             (is_input(var) && ProgramConfig::IsFragment(fProgram.fConfig->fKind)));
+    // Always include the location
+    this->write(" [[user(locn");
+    this->write(std::to_string(var.layout().fLocation));
+    this->write(")");
+
+    if (var.modifierFlags().isFlat()) {
+        this->write(" flat");
+    } else if (var.modifierFlags().isNoPerspective()) {
+        this->write(" center_no_perspective");
+    } // else default behavior is center_perspective
+
+    this->write("]]");
+}
+
 void MetalCodeGenerator::writeInputStruct() {
     this->write("struct Inputs {\n");
     for (const ProgramElement* e : fProgram.elements()) {
@@ -3150,8 +3162,9 @@ void MetalCodeGenerator::writeInputStruct() {
                         this->write("  [[attribute(" + std::to_string(var.layout().fLocation) +
                                     ")]]");
                     } else if (ProgramConfig::IsFragment(fProgram.fConfig->fKind)) {
-                        this->write("  [[user(locn" + std::to_string(var.layout().fLocation) +
-                                    ")]]");
+                        // Write attributes for the fragment input that are consistent with
+                        // what's annotated on the vertex output.
+                        this->writeInterpolatedAttributes(var);
                     }
                 }
                 this->write(";\n");
@@ -3200,7 +3213,9 @@ void MetalCodeGenerator::writeOutputStruct() {
                     fContext.fErrors->error(var.fPosition,
                                             "Metal out variables must have 'layout(location=...)'");
                 } else if (ProgramConfig::IsVertex(fProgram.fConfig->fKind)) {
-                    this->write(" [[user(locn" + std::to_string(location) + ")]]");
+                    // Write attributes for the vertex output that are consistent with what's
+                    // annotated on the fragment input.
+                    this->writeInterpolatedAttributes(var);
                 } else if (ProgramConfig::IsFragment(fProgram.fConfig->fKind)) {
                     this->write(" [[color(" + std::to_string(location) + ")");
                     int colorIndex = var.layout().fIndex;
@@ -3602,13 +3617,6 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Function
                     return reqs;
                 }
             }
-        }
-
-        // Loading data from the instrinsic float buffer requires access to the Globals struct.
-        if (f.intrinsicKind() == IntrinsicKind::k_loadFloatBuffer_IntrinsicKind) {
-            Requirements reqs = kGlobals_Requirement;
-            fRequirements.set(&f, reqs);
-            return reqs;
         }
 
         // We never found a definition for this declared function, but it's legal to prototype a
