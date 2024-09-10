@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "b339ed4daf668b7377134347f29a41239dee3ed6",
+        commit = "bda245ad94fff1d511f0e3425501e1f5e811918a",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -50,7 +50,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "expat",
         build_file = ws + "//bazel/external/expat:BUILD.bazel",
-        commit = "441f98d02deafd9b090aea568282b28f66a50e36",
+        commit = "624da0f593bb8d7e146b9f42b06d8e6c80d032a3",
         remote = "https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git",
     )
 
@@ -64,7 +64,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "harfbuzz",
         build_file = ws + "//bazel/external/harfbuzz:BUILD.bazel",
-        commit = "b74a7ecc93e283d059df51ee4f46961a782bcdb8",
+        commit = "a070f9ebbe88dc71b248af9731dd49ec93f4e6e6",
         remote = "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git",
     )
 
