@@ -80,7 +80,7 @@ using RescaleMode        = SkImage::RescaleMode;
 using ReadPixelsCallback = SkImage::ReadPixelsCallback;
 using ReadPixelsContext  = SkImage::ReadPixelsContext;
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
 int gOverrideMaxTextureSizeGraphite = 0;
 // Allows tests to check how many tiles were drawn on the most recent call to
 // Device::drawAsTiledImageRect. This is an atomic because we can write to it from
@@ -573,7 +573,7 @@ sk_sp<Image> Device::makeImageCopy(const SkIRect& subset,
 }
 
 bool Device::onReadPixels(const SkPixmap& pm, int srcX, int srcY) {
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     // This testing-only function should only be called before the Device has detached from its
     // Recorder, since it's accessed via the test-held Surface.
     ASSERT_SINGLE_OWNER
@@ -842,7 +842,7 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
     size_t cacheSize = recorder->priv().getResourceCacheLimit();
     size_t maxTextureSize = recorder->priv().caps()->maxTextureSize();
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     if (gOverrideMaxTextureSizeGraphite) {
         maxTextureSize = gOverrideMaxTextureSizeGraphite;
     }
@@ -870,7 +870,7 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
                                                            constraint,
                                                            cacheSize,
                                                            maxTextureSize);
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     gNumTilesDrawnGraphite.store(numTiles, std::memory_order_relaxed);
 #endif
     return wasTiled;
@@ -1077,7 +1077,7 @@ sktext::gpu::AtlasDrawDelegate Device::atlasDelegate() {
                const SkPaint& paint,
                sk_sp<SkRefCnt> subRunStorage,
                sktext::gpu::RendererData rendererData) {
-        this->drawAtlasSubRun(subRun, drawOrigin, paint, subRunStorage, rendererData);
+        this->drawAtlasSubRun(subRun, drawOrigin, paint, std::move(subRunStorage), rendererData);
     };
 }
 
@@ -1579,7 +1579,7 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
     //    2. Fall back to CPU raster AA if hardware MSAA is disabled or it was explicitly requested
     //       via ContextOptions.
     //    3. Otherwise use tessellation.
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     PathRendererStrategy strategy = fRecorder->priv().caps()->requestedPathRendererStrategy();
 #else
     PathRendererStrategy strategy = PathRendererStrategy::kDefault;
@@ -1798,8 +1798,13 @@ void Device::drawSpecial(SkSpecialImage* special,
         return;
     }
 
+    // The image filtering and layer code paths often rely on the paint being non-AA to avoid
+    // coverage operations. To stay consistent with the other backends, we use an edge AA "quad"
+    // whose flags match the paint's AA request.
+    EdgeAAQuad::Flags aaFlags = paint.isAntiAlias() ? EdgeAAQuad::Flags::kAll
+                                                    : EdgeAAQuad::Flags::kNone;
     this->drawGeometry(Transform(SkM44(localToDevice)),
-                       Geometry(Shape(dst)),
+                       Geometry(EdgeAAQuad(dst, aaFlags)),
                        paintWithShader,
                        DefaultFillStyle(),
                        DrawFlags::kIgnorePathEffect);
@@ -1834,12 +1839,11 @@ void Device::drawCoverageMask(const SkSpecialImage* mask,
 
     // Ensure this is kept alive; normally textures are kept alive by the PipelineDataGatherer for
     // image shaders, or by the PathAtlas. This is a unique circumstance.
-    // TODO: Find a cleaner way to ensure 'maskProxyView' is transferred to the final Recording.
-    TextureDataBlock tdb;
     // NOTE: CoverageMaskRenderStep controls the final sampling options; this texture data block
     // serves only to keep the mask alive so the sampling passed to add() doesn't matter.
-    tdb.add(maskProxyView.refProxy(), {SkFilterMode::kLinear, kClamp});
-    fRecorder->priv().textureDataCache()->insert(tdb);
+    TextureDataBlock::SampledTexture sampledMask{maskProxyView.refProxy(),
+                                                 {SkFilterMode::kLinear, kClamp}};
+    fRecorder->priv().textureDataCache()->insert(TextureDataBlock(sampledMask));
 
     // CoverageMaskShape() wraps a Shape when it's used as a PathAtlas, but in this case the
     // original shape has been long lost, so just use a Rect that bounds the image.

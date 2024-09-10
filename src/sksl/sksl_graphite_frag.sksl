@@ -125,6 +125,30 @@ $pure half4 sk_color_space_transform(half4 halfColor,
     return halfColor;
 }
 
+$pure half4 sk_circular_rrect_clip(float4 rect,
+                                   float2 radiusPlusHalf,
+                                   half4 edgeSelect) {
+    float2 fragCoord = sk_FragCoord.xy;
+
+    // Negative x indicates inverse fill
+    float2 radius = float2(abs(radiusPlusHalf.x));
+    float2 dxy0 = edgeSelect.LT*((rect.LT + radius) - fragCoord);
+    float2 dxy1 = edgeSelect.RB*(fragCoord - (rect.RB - radius));
+    float2 dxy = max(max(dxy0, dxy1), 0.0);
+    // Use more complex length calculation to manage precision issues
+    half circleCornerAlpha = half(saturate(radius.x*(1.0 - length(dxy*radiusPlusHalf.y))));
+
+    half4 rectEdgeAlphas = saturate(half4(fragCoord - rect.LT, rect.RB - fragCoord));
+    rectEdgeAlphas = mix(rectEdgeAlphas, half4(1), edgeSelect);
+
+    half alpha = circleCornerAlpha * rectEdgeAlphas.x * rectEdgeAlphas.y *
+                 rectEdgeAlphas.z * rectEdgeAlphas.w;
+    // Check for inverse fill
+    alpha = radiusPlusHalf.x < 0 ? (1-alpha) : alpha;
+
+    return half4(alpha);
+}
+
 $pure float $tile(int tileMode, float f, float low, float high) {
     switch (tileMode) {
         case $kTileModeClamp:
@@ -639,48 +663,45 @@ $pure half4 $half4_from_array(float[] arr, int offset) {
                  arr[offset + 3]);
 }
 
-$pure half4 $colorize_grad_buf(float[] arr, int bufferOffset, int numStops, float2 t) {
+$pure half4 $colorize_grad_buf(float[] colorAndOffsetData,
+                               int offsetsBaseIndex,
+                               int numStops,
+                               float2 t) {
+    int colorsBaseIndex = offsetsBaseIndex + numStops;
     if (t.y < 0) {
         return half4(0);
     } else if (t.x == 0) {
-        // Start from 1 since bufferOffset + 0 is holding the
-        // color stop's offset value.
-        return $half4_from_array(arr, bufferOffset + 1);
+        return $half4_from_array(colorAndOffsetData, colorsBaseIndex);
     } else if (t.x == 1) {
-        int lastBufferIdx = bufferOffset + (numStops - 1) * 5;
-        return $half4_from_array(arr, lastBufferIdx + 1);
+        int lastColorIndex = colorsBaseIndex + (numStops - 1) * 4;
+        return $half4_from_array(colorAndOffsetData, lastColorIndex);
     } else {
-        // Binary search for the matching adjacent offsets
-        // running log(numStops).
-        int low = 0;
-        int high = numStops - 1;
+        // Binary search for the matching adjacent stop offsets running log2(numStops).
+        int lowOffsetIndex = offsetsBaseIndex;
+        int highOffsetIndex = lowOffsetIndex + numStops - 1;
         for (int i = 1; i < numStops; i += i) {
-            int mid = (low + high) / 2;
-            float offset = arr[bufferOffset + mid * 5];
-            if (t.x < offset) {
-                high = mid;
+            int middleOffsetIndex = (lowOffsetIndex + highOffsetIndex) / 2;
+            if (t.x < colorAndOffsetData[middleOffsetIndex]) {
+                highOffsetIndex = middleOffsetIndex;
             } else {
-                low = mid;
+                lowOffsetIndex = middleOffsetIndex;
             }
         }
-        int lowBufferIdx = bufferOffset + low * 5;
-        float lowOffset = arr[lowBufferIdx];
-        half4 lowColor = $half4_from_array(arr, lowBufferIdx + 1);
+        int lowColorIndex = colorsBaseIndex + (lowOffsetIndex - offsetsBaseIndex) * 4;
+        float lowOffset = colorAndOffsetData[lowOffsetIndex];
+        half4 lowColor = $half4_from_array(colorAndOffsetData, lowColorIndex);
 
-        int highBufferIdx = bufferOffset + high * 5;
-        float highOffset = arr[highBufferIdx];
+        int highColorIndex = colorsBaseIndex + (highOffsetIndex - offsetsBaseIndex) * 4;
+        float highOffset = colorAndOffsetData[highOffsetIndex];
         if (highOffset == lowOffset) {
             // If the t value falls exactly on a color stop, both lowOffset
             // and highOffset will be exactly the same so we avoid having
             // 0/0=NaN as our mix value.
             return lowColor;
         } else {
-            half4 highColor = $half4_from_array(arr, highBufferIdx + 1);
+            half4 highColor = $half4_from_array(colorAndOffsetData, highColorIndex);
 
-            return half4(mix(lowColor,
-                              highColor,
-                              (t.x - lowOffset) /
-                              (highOffset - lowOffset)));
+            return half4(mix(lowColor, highColor, (t.x - lowOffset) / (highOffset - lowOffset)));
         }
     }
 }
@@ -984,7 +1005,7 @@ $pure half4 sk_conical_grad_buf_shader(float2 coords,
     return $interpolated_to_rgb_unpremul(color, colorSpace, doUnpremul);
 }
 
-$pure half4 sk_matrix_colorfilter(half4 colorIn, float4x4 m, float4 v, int inHSLA) {
+$pure half4 sk_matrix_colorfilter(half4 colorIn, float4x4 m, float4 v, int inHSLA, int clampRGB) {
     if (bool(inHSLA)) {
         colorIn = $rgb_to_hsl(colorIn.rgb, colorIn.a); // includes unpremul
     } else {
@@ -996,7 +1017,11 @@ $pure half4 sk_matrix_colorfilter(half4 colorIn, float4x4 m, float4 v, int inHSL
     if (bool(inHSLA)) {
         colorOut = $hsl_to_rgb(colorOut.rgb, colorOut.a); // includes clamp and premul
     } else {
-        colorOut = saturate(colorOut);
+        if (bool(clampRGB)) {
+            colorOut = saturate(colorOut);
+        } else {
+            colorOut.a = saturate(colorOut.a);
+        }
         colorOut.rgb *= colorOut.a;
     }
 
@@ -1153,73 +1178,12 @@ $pure half4 sk_perlin_noise_shader(float2 coords,
     return sk_premul_alpha(color);
 }
 
-$pure half4 sk_blend(half4 src, half4 dst, int blendMode) {
-    const int kClear      = 0;
-    const int kSrc        = 1;
-    const int kDst        = 2;
-    const int kSrcOver    = 3;
-    const int kDstOver    = 4;
-    const int kSrcIn      = 5;
-    const int kDstIn      = 6;
-    const int kSrcOut     = 7;
-    const int kDstOut     = 8;
-    const int kSrcATop    = 9;
-    const int kDstATop    = 10;
-    const int kXor        = 11;
-    const int kPlus       = 12;
-    const int kModulate   = 13;
-    const int kScreen     = 14;
-    const int kOverlay    = 15;
-    const int kDarken     = 16;
-    const int kLighten    = 17;
-    const int kColorDodge = 18;
-    const int kColorBurn  = 19;
-    const int kHardLight  = 20;
-    const int kSoftLight  = 21;
-    const int kDifference = 22;
-    const int kExclusion  = 23;
-    const int kMultiply   = 24;
-    const int kHue        = 25;
-    const int kSaturation = 26;
-    const int kColor      = 27;
-    const int kLuminosity = 28;
-
-    switch (blendMode) {
-        case kClear:      return blend_clear(src, dst);
-        case kSrc:        return blend_src(src, dst);
-        case kDst:        return blend_dst(src, dst);
-        case kSrcOver:    return blend_porter_duff(half4(1, 0,  0, -1), src, dst);
-        case kDstOver:    return blend_porter_duff(half4(0, 1, -1,  0), src, dst);
-        case kSrcIn:      return blend_porter_duff(half4(0, 0,  1,  0), src, dst);
-        case kDstIn:      return blend_porter_duff(half4(0, 0,  0,  1), src, dst);
-        case kSrcOut:     return blend_porter_duff(half4(0, 0, -1,  0), src, dst);
-        case kDstOut:     return blend_porter_duff(half4(0, 0,  0, -1), src, dst);
-        case kSrcATop:    return blend_porter_duff(half4(0, 0,  1, -1), src, dst);
-        case kDstATop:    return blend_porter_duff(half4(0, 0, -1,  1), src, dst);
-        case kXor:        return blend_porter_duff(half4(0, 0, -1, -1), src, dst);
-        case kPlus:       return blend_plus(src, dst);
-        case kModulate:   return blend_modulate(src, dst);
-        case kScreen:     return blend_screen(src, dst);
-        case kOverlay:    return blend_overlay(/*flip=*/0, src, dst);
-        case kDarken:     return blend_darken(/*mode=*/1, src, dst);
-        case kLighten:    return blend_darken(/*mode=*/-1, src, dst);
-        case kColorDodge: return blend_color_dodge(src, dst);
-        case kColorBurn:  return blend_color_burn(src, dst);
-        case kHardLight:  return blend_overlay(/*flip=*/1, src, dst);
-        case kSoftLight:  return blend_soft_light(src, dst);
-        case kDifference: return blend_difference(src, dst);
-        case kExclusion:  return blend_exclusion(src, dst);
-        case kMultiply:   return blend_multiply(src, dst);
-        case kHue:        return blend_hslc(/*flipSat=*/half2(0, 1), src, dst);
-        case kSaturation: return blend_hslc(/*flipSat=*/half2(1), src, dst);
-        case kColor:      return blend_hslc(/*flipSat=*/half2(0), src, dst);
-        case kLuminosity: return blend_hslc(/*flipSat=*/half2(1, 0), src, dst);
-        default:          return half4(0); // avoid 'blend can exit without returning a value' error
-    }
+$pure half4 sk_porter_duff_blend(half4 src, half4 dst, half4 coeffs) {
+    return blend_porter_duff(coeffs, src, dst);
 }
 
-$pure half4 sk_coeff_blend(half4 src, half4 dst, half4 coeffs) {
-    return blend_porter_duff(coeffs, src, dst);
+$pure half4 sk_hslc_blend(half4 src, half4 dst, half2 flipSat) {
+    return blend_hslc(flipSat, src, dst);
 }
 
 $pure half4 sk_table_colorfilter(half4 inColor, sampler2D s) {

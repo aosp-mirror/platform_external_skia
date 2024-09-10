@@ -22,7 +22,7 @@
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/text/gpu/SubRunControl.h"
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
 #include "src/gpu/graphite/ContextOptionsPriv.h"
 #endif
 
@@ -81,7 +81,7 @@ public:
 
     sk_sp<SkCapabilities> capabilities() const;
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     std::string_view deviceName() const { return fDeviceName; }
 
     PathRendererStrategy requestedPathRendererStrategy() const {
@@ -226,6 +226,19 @@ public:
      */
     SkColorType getRenderableColorType(SkColorType) const;
 
+    // Determines the orientation of the NDC coordinates emitted by the vertex stage relative to
+    // both Skia's presumed top-left Y-down system and the viewport coordinates (which are also
+    // always top-left, Y-down for all supported backends).)
+    //
+    // If true is returned, then (-1,-1) in normalized device coords maps to the top-left of the
+    // configured viewport and positive Y points down. This aligns with Skia's conventions.
+    // If false is returned, then (-1,-1) in NDC maps to the bottom-left of the viewport and
+    // positive Y points up (so NDC is flipped relative to sk_Position and the viewport coords).
+    //
+    // There is no backend difference in handling the X axis so it's assumed -1 maps to the left
+    // edge and +1 maps to the right edge.
+    bool ndcYAxisPointsDown() const { return fNDCYAxisPointsDown; }
+
     bool clampToBorderSupport() const { return fClampToBorderSupport; }
 
     bool protectedSupport() const { return fProtectedSupport; }
@@ -251,7 +264,7 @@ public:
     // Returns whether a draw buffer can be mapped.
     bool drawBufferCanBeMapped() const { return fDrawBufferCanBeMapped; }
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     bool drawBufferCanBeMappedForReadback() const { return fDrawBufferCanBeMappedForReadback; }
 #endif
 
@@ -313,7 +326,7 @@ protected:
     // the caps.
     void finishInitialization(const ContextOptions&);
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     void setDeviceName(const char* n) {
         fDeviceName = n;
     }
@@ -372,6 +385,7 @@ protected:
 
     std::unique_ptr<SkSL::ShaderCaps> fShaderCaps;
 
+    bool fNDCYAxisPointsDown = false; // Most backends have NDC +Y pointing up
     bool fClampToBorderSupport = true;
     bool fProtectedSupport = false;
     bool fSemaphoreSupport = false;
@@ -385,7 +399,7 @@ protected:
     bool fSupportsAHardwareBufferImages = false;
     bool fFullCompressedUploadSizeMustAlignToBlockDims = false;
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     bool fDrawBufferCanBeMappedForReadback = true;
 #endif
 
@@ -400,7 +414,7 @@ protected:
      */
     ShaderErrorHandler* fShaderErrorHandler = nullptr;
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     std::string fDeviceName;
     int fMaxTextureAtlasSize = 2048;
     PathRendererStrategy fRequestedPathRendererStrategy;

@@ -138,6 +138,9 @@ protected:
         bool recordUploads(DrawContext*, Recorder*);
         void evict(PlotLocator) override;
         void compact(Recorder*);
+        void purge(Recorder*);
+
+        void evictAll();
 
     protected:
         DrawAtlasMgr(size_t width, size_t height,
