@@ -24,6 +24,7 @@ namespace skgpu::graphite {
 
 class ShaderCodeDictionary;
 class ShaderNode;
+class UniquePaintParamsID;
 
 // This class is a compact representation of the shader needed to implement a given
 // PaintParams. Its structure is a series of nodes where each node consists of:
@@ -58,12 +59,11 @@ public:
     // a fixed function blend (with 1 child being the main effect)).
     SkSpan<const ShaderNode*> getRootNodes(const ShaderCodeDictionary*, SkArenaAlloc*) const;
 
-#if defined(GRAPHITE_TEST_UTILS)
-    // Converts the key to a structured list of snippet names for debugging purposes.
+    // Converts the key to a structured list of snippet names for debugging or labeling purposes.
     SkString toString(const ShaderCodeDictionary* dict) const;
-#endif
+
 #ifdef SK_DEBUG
-    void dump(const ShaderCodeDictionary*) const;
+    void dump(const ShaderCodeDictionary*, UniquePaintParamsID) const;
 #endif
 
     bool operator==(const PaintParamsKey& that) const {

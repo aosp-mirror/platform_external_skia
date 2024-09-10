@@ -18,8 +18,14 @@
 #include "src/gpu/graphite/render/CommonDepthStencilSettings.h"
 #include "src/gpu/graphite/text/TextAtlasManager.h"
 #include "src/sksl/SkSLString.h"
+#include "src/text/gpu/DistanceFieldAdjustTable.h"
 #include "src/text/gpu/SubRunContainer.h"
 #include "src/text/gpu/VertexFiller.h"
+
+#if defined(SK_GAMMA_APPLY_TO_A8)
+#include "include/private/base/SkCPUTypes.h"
+#include "src/core/SkMaskGamma.h"
+#endif
 
 namespace skgpu::graphite {
 
@@ -30,16 +36,14 @@ constexpr int kNumSDFAtlasTextures = 4;
 
 }  // namespace
 
-SDFTextRenderStep::SDFTextRenderStep(bool isLCD)
+SDFTextRenderStep::SDFTextRenderStep()
         : RenderStep("SDFTextRenderStep",
-                     isLCD ? "565" : "A8",
-                     isLCD ? Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage |
-                             Flags::kLCDCoverage
-                           : Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage,
+                     "",
+                     Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage,
                      /*uniforms=*/{{"subRunDeviceMatrix", SkSLType::kFloat4x4},
                                    {"deviceToLocal", SkSLType::kFloat4x4},
                                    {"atlasSizeInv", SkSLType::kFloat2},
-                                   {"distAdjust", SkSLType::kFloat}},
+                                   {"gammaParams", SkSLType::kHalf2}},
                      PrimitiveType::kTriangleStrip,
                      kDirectDepthGEqualPass,
                      /*vertexAttrs=*/ {},
@@ -54,9 +58,7 @@ SDFTextRenderStep::SDFTextRenderStep(bool isLCD)
                      /*varyings=*/
                      {{"unormTexCoords", SkSLType::kFloat2},
                       {"textureCoords", SkSLType::kFloat2},
-                      {"texIndex", SkSLType::kFloat}}) {
-    // TODO: store if it's A8 and adjust shader
-}
+                      {"texIndex", SkSLType::kFloat}}) {}
 
 SDFTextRenderStep::~SDFTextRenderStep() {}
 
@@ -84,7 +86,7 @@ std::string SDFTextRenderStep::texturesAndSamplersSkSL(
 
     for (unsigned int i = 0; i < kNumSDFAtlasTextures; ++i) {
         result += EmitSamplerLayout(bindingReqs, nextBindingIndex);
-        SkSL::String::appendf(&result, " sampler2D sdf_atlas_%d;\n", i);
+        SkSL::String::appendf(&result, " sampler2D sdf_atlas_%u;\n", i);
     }
 
     return result;
@@ -106,7 +108,7 @@ const char* SDFTextRenderStep::fragmentCoverageSkSL() const {
                                                                       "sdf_atlas_1, "
                                                                       "sdf_atlas_2, "
                                                                       "sdf_atlas_3).r, "
-                                                 "half(distAdjust), "
+                                                 "gammaParams, "
                                                  "unormTexCoords);";
 }
 
@@ -142,9 +144,17 @@ void SDFTextRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                    1.f/proxies[0]->dimensions().height()};
     gatherer->write(atlasDimensionsInverse);
 
-    // TODO: get this from DistanceFieldAdjustTable and luminance color (set in SubRunData?)
-    float gammaCorrection = 0.f;
-    gatherer->write(gammaCorrection);
+    float gammaAdjustment = 0;
+    // TODO: generate LCD adjustment
+#if defined(SK_GAMMA_APPLY_TO_A8)
+    auto dfAdjustTable = sktext::gpu::DistanceFieldAdjustTable::Get();
+    // TODO: don't do this for aliased text
+    U8CPU lum = SkColorSpaceLuminance::computeLuminance(SK_GAMMA_EXPONENT,
+                                                        subRunData.luminanceColor());
+    gammaAdjustment = dfAdjustTable->getAdjustment(lum, subRunData.useGammaCorrectDistanceTable());
+#endif
+    SkV2 gammaParams = {gammaAdjustment, subRunData.useGammaCorrectDistanceTable() ? 1.f : 0.f};
+    gatherer->writeHalf(gammaParams);
 
     // write textures and samplers
     const SkSamplingOptions kSamplingOptions(SkFilterMode::kLinear);

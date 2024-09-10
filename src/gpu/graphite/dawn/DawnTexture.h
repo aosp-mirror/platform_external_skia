@@ -55,6 +55,11 @@ private:
 
     void freeGpuData() override;
 
+    static std::pair<wgpu::TextureView, wgpu::TextureView> CreateTextureViews(
+            const wgpu::Texture& texture, const TextureInfo& info);
+
+    void setBackendLabel(char const* label) override;
+
     wgpu::Texture     fTexture;
     wgpu::TextureView fSampleTextureView;
     wgpu::TextureView fRenderTextureView;

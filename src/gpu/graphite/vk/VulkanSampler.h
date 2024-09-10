@@ -9,8 +9,8 @@
 #define skgpu_graphite_VulkanSampler_DEFINED
 
 #include "src/gpu/graphite/Sampler.h"
-#include "src/gpu/graphite/vk/VulkanSamplerYcbcrConversion.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
+#include "src/gpu/graphite/vk/VulkanYcbcrConversion.h"
 
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTileMode.h"
@@ -22,22 +22,24 @@ namespace skgpu::graphite {
 class VulkanSampler : public Sampler {
 public:
     static sk_sp<VulkanSampler> Make(const VulkanSharedContext*,
-                                     const SkSamplingOptions& samplingOptions,
+                                     const SkSamplingOptions&,
                                      SkTileMode xTileMode,
-                                     SkTileMode yTileMode);
+                                     SkTileMode yTileMode,
+                                     sk_sp<VulkanYcbcrConversion> ycbcrConversion = nullptr);
 
     ~VulkanSampler() override {}
 
     VkSampler vkSampler() const { return fSampler; }
 
+    const VulkanYcbcrConversion* ycbcrConversion() const { return fYcbcrConversion.get(); }
+
 private:
-    VulkanSampler(const VulkanSharedContext*, VkSampler);
+    VulkanSampler(const VulkanSharedContext*, VkSampler, sk_sp<VulkanYcbcrConversion>);
 
     void freeGpuData() override;
 
     VkSampler fSampler;
-    // TODO: Add YCbCr conversion information to this class.
-    //sk_sp<VulkanSamplerYcbcrConversion> fYcbcrConversion;
+    sk_sp<VulkanYcbcrConversion> fYcbcrConversion;
 };
 
 } // namepsace skgpu::graphite

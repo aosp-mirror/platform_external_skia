@@ -10,6 +10,8 @@
 #include "include/core/SkPath.h"
 #include "include/effects/SkGradientShader.h"
 #include "src/base/SkRandom.h"
+#include "tools/Resources.h"
+#include "tools/gpu/YUVUtils.h"
 #include "tools/viewer/Slide.h"
 
 // Implementation in C++ of some WebKit MotionMark tests
@@ -174,15 +176,15 @@ public:
             0xffe01040, 0xff10c030, 0xff744cba, 0xffe05010
         };
         fColor = kColors[circle];
-        fLineWidth = sk_float_pow(random->nextF(), 12) * 20 + 3;
+        fLineWidth = std::pow(random->nextF(), 12) * 20 + 3;
         fOmega = random->nextF() * 3 + 0.2f;
         float theta = random->nextRangeF(0, 2*SK_ScalarPI);
-        fCosTheta = sk_float_cos(theta);
-        fSinTheta = sk_float_sin(theta);
+        fCosTheta = std::cos(theta);
+        fSinTheta = std::sin(theta);
         fStart = params.fCircleCenters[circle] + SkPoint::Make(params.fCircleRadius * fCosTheta,
                                                                params.fCircleRadius * fSinTheta);
         fLength = params.fLineMinimum;
-        fLength += sk_float_pow(random->nextF(), 8) * params.fLineLengthMaximum;
+        fLength += std::pow(random->nextF(), 8) * params.fLineLengthMaximum;
         fSegmentDirection = random->nextF() > 0.5 ? -1 : 1;
     }
 
@@ -203,7 +205,7 @@ public:
     }
 
     void animate(double nanos) override {
-        fLength += sk_float_sin(time_counter_value(nanos, 100) * fOmega);
+        fLength += std::sin(time_counter_value(nanos, 100) * fOmega);
     }
 
 private:
@@ -240,8 +242,8 @@ public:
     void draw(SkCanvas* canvas) override {
         canvas->clear(SK_ColorWHITE);
 
-        float dx = fTwoFifthsSizeX * sk_float_cos(fCurrentAngle);
-        float dy = fTwoFifthsSizeX * sk_float_sin(fCurrentAngle);
+        float dx = fTwoFifthsSizeX * std::cos(fCurrentAngle);
+        float dy = fTwoFifthsSizeX * std::sin(fCurrentAngle);
 
         float colorStopStep = SkScalarInterp(-.1f, .1f, fCurrentGradientStep);
         int brightnessStep = SkScalarRoundToInt(SkScalarInterp(32, 64, fCurrentGradientStep));
@@ -303,7 +305,7 @@ public:
 
     bool animate(double nanos) override {
         fCurrentAngle = time_fractional_value(nanos, 3000) * SK_ScalarPI * 2;
-        fCurrentGradientStep = 0.5f + 0.5f * sk_float_sin(
+        fCurrentGradientStep = 0.5f + 0.5f * std::sin(
                                        time_fractional_value(nanos, 5000) * SK_ScalarPI * 2);
 
         this->Stage::animate(nanos);
@@ -344,7 +346,7 @@ public:
 
         fPoint = SkPoint::Make(distanceX * (randX + (randY % 2) / 2), distanceY * (randY + 0.5f));
 
-        fRadius = 20 + sk_float_pow(random->nextF(), 5) * (std::min(distanceX, distanceY) / 1.8f);
+        fRadius = 20 + std::pow(random->nextF(), 5) * (std::min(distanceX, distanceY) / 1.8f);
         fStartAngle = random->nextRangeF(0, 2*SK_ScalarPI);
         fEndAngle = random->nextRangeF(0, 2*SK_ScalarPI);
         fOmega = (random->nextF() - 0.5f) * 0.3f;
@@ -355,7 +357,7 @@ public:
         SkColor bonusColor = bonusColors[(randX + sk_float_ceil2int(randY * 0.5f)) % 3];
         int colorIndex = random->nextRangeU(0, 3);
         fColor = colorIndex == 3 ? bonusColor : baseColors[colorIndex];
-        fLineWidth = 1 + sk_float_pow(random->nextF(), 5) * 30;
+        fLineWidth = 1 + std::pow(random->nextF(), 5) * 30;
         fDoStroke = random->nextRangeU(0, 3) != 0;
     }
 
@@ -461,7 +463,7 @@ public:
         };
         fColor = kColors[random->nextRangeU(0, 6)];
 
-        fWidth = sk_float_pow(random->nextF(), 5) * 20 + 1;
+        fWidth = std::pow(random->nextF(), 5) * 20 + 1;
         fIsSplit = random->nextBool();
 
         this->setEndPoint(random, size, prev);
@@ -616,6 +618,258 @@ public:
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Bouncing Particles
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+SkPoint random_position(SkRandom* random, SkSize maxPosition) {
+    return {(float)random->nextRangeU(0, maxPosition.width()),
+            (float)random->nextRangeU(0, maxPosition.height())};
+}
+
+float random_angle(SkRandom* random) {
+    return random->nextRangeF(0, 2*SK_FloatPI);
+}
+
+float random_velocity(SkRandom* random, float maxVelocity) {
+    return random->nextRangeF(maxVelocity/8, maxVelocity);
+}
+
+class Rotater {
+public:
+    Rotater(float rotateInterval)
+            : fTimeDelta(0)
+            , fRotateInterval(rotateInterval) {}
+
+    void next(float timeDelta) {
+        fTimeDelta = SkScalarMod(fTimeDelta + timeDelta, fRotateInterval);
+    }
+
+    float degrees() {
+        return (360 * fTimeDelta) / fRotateInterval;
+    }
+
+private:
+    float fTimeDelta;
+    float fRotateInterval;
+};
+
+Rotater random_rotater(SkRandom* random) {
+    return Rotater(random->nextRangeF(10, 100));
+}
+
+SkPoint point_on_circle(float angle, float radius) {
+    return {radius * SkScalarCos(angle), radius * SkScalarSin(angle)};
+}
+
+class BouncingParticle : public MMObject {
+public:
+    BouncingParticle(SkRandom* random, SkSize stageSize, SkSize particleSize, float maxVelocity)
+            : fStageSize(stageSize)
+            , fSize(particleSize)
+            , fPosition(random_position(random,
+                                        {stageSize.fWidth - particleSize.fWidth,
+                                         stageSize.fHeight - particleSize.fHeight}))
+            , fAngle(random_angle(random))
+            , fVelocity(random_velocity(random, maxVelocity))
+            , fRotater(random_rotater(random)) {
+    }
+
+    void animate(double deltaNanos) override {
+        // TODO: consolidate and pass in millis to the Stages
+        constexpr double kMillisPerNano = 0.0000001;
+        fPosition += point_on_circle(fAngle, fVelocity * (deltaNanos * kMillisPerNano));
+        fRotater.next(deltaNanos * kMillisPerNano);
+
+        // If particle is going to move off right side
+        if (fPosition.fX + fSize.width() > fStageSize.width()) {
+            // If direction is East-South, go West-South.
+            if (fAngle >= 0 && fAngle < SK_FloatPI / 2)
+                fAngle = SK_FloatPI - fAngle;
+            // If angle is East-North, go West-North.
+            else if (fAngle > SK_FloatPI / 2 * 3)
+                fAngle = fAngle - (fAngle - SK_FloatPI / 2 * 3) * 2;
+            // Make sure the particle does not go outside the stage boundaries.
+            fPosition.fX = fStageSize.width() - fSize.width();
+        }
+
+        // If particle is going to move off left side
+        if (fPosition.fX < 0) {
+            // If angle is West-South, go East-South.
+            if (fAngle > SK_FloatPI / 2 && fAngle < SK_FloatPI)
+                fAngle = SK_FloatPI - fAngle;
+            // If angle is West-North, go East-North.
+            else if (fAngle > SK_FloatPI && fAngle < SK_FloatPI / 2 * 3)
+                fAngle = fAngle + (SK_FloatPI / 2 * 3 - fAngle) * 2;
+            // Make sure the particle does not go outside the stage boundaries.
+            fPosition.fX = 0;
+        }
+
+        // If particle is going to move off bottom side
+        if (fPosition.fY + fSize.height() > fStageSize.height()) {
+            // If direction is South, go North.
+            if (fAngle > 0 && fAngle < SK_FloatPI)
+                fAngle = SK_FloatPI * 2 - fAngle;
+            // Make sure the particle does not go outside the stage boundaries.
+            fPosition.fY = fStageSize.height() - fSize.height();
+        }
+
+        // If particle is going to move off top side
+        if (fPosition.fY < 0) {
+            // If direction is North, go South.
+            if (fAngle > SK_FloatPI && fAngle < SK_FloatPI * 2)
+                fAngle = fAngle - (fAngle - SK_FloatPI) * 2;
+            // Make sure the particle does not go outside the stage boundaries.
+            fPosition.fY = 0;
+        }
+    }
+
+protected:
+    SkSize fStageSize;
+    SkSize fSize;
+    SkPoint fPosition;
+    float fAngle;
+    float fVelocity;
+    Rotater fRotater;
+};
+
+class BouncingParticlesStage : public Stage {
+public:
+    BouncingParticlesStage(SkSize size)
+            : Stage(size, /*startingObjectCount=*/3000, /*objectIncrement=*/500)
+            , fParticleSize({150, 150})
+            , fMaxVelocity(10){
+    }
+
+    bool animate(double nanos) override {
+        // The particles take delta time
+        if (fLastTime < 0) {
+            fLastTime = nanos;
+        }
+        for (size_t i = 0; i < fObjects.size(); ++i) {
+            fObjects[i]->animate(nanos - fLastTime);
+        }
+        fLastTime = nanos;
+        return true;
+    }
+
+protected:
+    SkSize fParticleSize;
+    float fMaxVelocity;
+    double fLastTime = -1;
+};
+
+
+class BouncingTaggedImage : public BouncingParticle {
+public:
+    BouncingTaggedImage(SkRandom* random, SkSize stageSize, SkSize particleSize, float maxVelocity)
+            : BouncingParticle(random, stageSize, particleSize, maxVelocity) {
+        this->move();
+        fRect = SkRect::MakeSize(fSize);
+        fRect.offset(-fSize.width()/2, -fSize.height()/2);
+    }
+
+    void move() {
+        fTransform = SkMatrix::RotateDeg(std::floor(fRotater.degrees()));
+        fTransform.setTranslateX(fPosition.fX);
+        fTransform.setTranslateY(fPosition.fY);
+    }
+
+    void animate(double deltaNanos) override {
+        BouncingParticle::animate(deltaNanos);
+        this->move();
+    }
+
+    void draw(SkCanvas* canvas) override {
+        // handled by the Stage
+    }
+
+    const SkMatrix& transform() { return fTransform; }
+    SkRect rect() { return fRect; }
+
+private:
+    SkMatrix fTransform;
+    SkRect fRect;
+};
+
+
+class BouncingTaggedImagesStage : public BouncingParticlesStage {
+public:
+    BouncingTaggedImagesStage(SkSize size) : BouncingParticlesStage(size) {
+
+        this->initializeObjects();
+    }
+
+    ~BouncingTaggedImagesStage() override = default;
+
+    void initImages(SkCanvas* canvas) {
+        const char* kImageSrcs[kImageCount] = {
+            "images/ducky.jpg",
+            "images/dog.jpg",
+            "images/color_wheel.jpg",
+            "images/mandrill_512_q075.jpg",
+            "images/gainmap_iso21496_1.jpg",
+        };
+
+        auto rContext = canvas->recordingContext();
+#if defined(SK_GRAPHITE)
+        skgpu::graphite::Recorder* recorder = nullptr;
+        recorder = canvas->recorder();
+#endif
+        for (int i = 0; i < kImageCount; ++i) {
+            auto lazyYUV = sk_gpu_test::LazyYUVImage::Make(GetResourceAsData(kImageSrcs[i]),
+                                                           skgpu::Mipmapped::kYes);
+            SkASSERT(lazyYUV);
+#if defined(SK_GRAPHITE)
+            if (recorder) {
+                fImages[i] = lazyYUV->refImage(recorder,
+                                               sk_gpu_test::LazyYUVImage::Type::kFromPixmaps);
+            } else
+#endif
+            {
+                fImages[i] = lazyYUV->refImage(rContext,
+                                               sk_gpu_test::LazyYUVImage::Type::kFromPixmaps);
+            }
+        }
+    }
+
+    void draw(SkCanvas* canvas) override {
+        if (fNeedToInitImages) {
+            this->initImages(canvas);
+            fNeedToInitImages = false;
+        }
+
+        canvas->clear(SK_ColorWHITE);
+
+        SkPaint paint;
+        SkSamplingOptions sampling(SkFilterMode::kLinear,
+                                   SkMipmapMode::kNearest);
+        for (size_t i = 0; i < fObjects.size(); ++i) {
+            BouncingTaggedImage* object = reinterpret_cast<BouncingTaggedImage*>(fObjects[i].get());
+
+            canvas->save();
+            canvas->concat(object->transform());
+            canvas->drawImageRect(fImages[i % kImageCount], object->rect(), sampling, nullptr);
+
+            canvas->restore();
+        }
+    }
+
+    std::unique_ptr<MMObject> createObject() override {
+        return std::make_unique<BouncingTaggedImage>(&fRandom, fSize, fParticleSize, fMaxVelocity);
+    }
+
+    void reset() {
+        fNeedToInitImages = true;
+    }
+
+private:
+    static constexpr int kImageCount = 5;
+
+    bool fNeedToInitImages = true;
+    sk_sp<SkImage> fImages[kImageCount];
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 class CanvasLinesSlide : public MotionMarkSlide {
 public:
@@ -644,6 +898,20 @@ public:
     }
 };
 
+class BouncingTaggedImagesSlide : public MotionMarkSlide {
+public:
+    BouncingTaggedImagesSlide() {fName = "MotionMarkBouncingTaggedImages"; }
+
+    void load(SkScalar w, SkScalar h) override {
+        fStage = std::make_unique<BouncingTaggedImagesStage>(SkSize::Make(w, h));
+    }
+
+    void gpuTeardown() override {
+        reinterpret_cast<BouncingTaggedImagesStage*>(fStage.get())->reset();
+    }
+};
+
 DEF_SLIDE( return new CanvasLinesSlide(); )
 DEF_SLIDE( return new CanvasArcsSlide(); )
 DEF_SLIDE( return new PathsSlide(); )
+DEF_SLIDE( return new BouncingTaggedImagesSlide(); )

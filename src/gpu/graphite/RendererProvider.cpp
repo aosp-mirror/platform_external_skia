@@ -10,6 +10,7 @@
 #include "include/core/SkPathTypes.h"
 #include "include/core/SkVertices.h"
 #include "src/gpu/graphite/Caps.h"
+#include "src/gpu/graphite/render/AnalyticBlurRenderStep.h"
 #include "src/gpu/graphite/render/AnalyticRRectRenderStep.h"
 #include "src/gpu/graphite/render/BitmapTextRenderStep.h"
 #include "src/gpu/graphite/render/CommonDepthStencilSettings.h"
@@ -17,6 +18,7 @@
 #include "src/gpu/graphite/render/CoverageMaskRenderStep.h"
 #include "src/gpu/graphite/render/MiddleOutFanRenderStep.h"
 #include "src/gpu/graphite/render/PerEdgeAAQuadRenderStep.h"
+#include "src/gpu/graphite/render/SDFTextLCDRenderStep.h"
 #include "src/gpu/graphite/render/SDFTextRenderStep.h"
 #include "src/gpu/graphite/render/TessellateCurvesRenderStep.h"
 #include "src/gpu/graphite/render/TessellateStrokesRenderStep.h"
@@ -73,13 +75,17 @@ RendererProvider::RendererProvider(const Caps* caps, StaticBufferManager* buffer
     for (bool lcd : {false, true}) {
         fBitmapText[lcd] = makeFromStep(std::make_unique<BitmapTextRenderStep>(lcd),
                                         DrawTypeFlags::kText);
-        fSDFText[lcd] = makeFromStep(std::make_unique<SDFTextRenderStep>(lcd),
-                                     DrawTypeFlags::kText);
+        fSDFText[lcd] = lcd ? makeFromStep(std::make_unique<SDFTextLCDRenderStep>(),
+                                           DrawTypeFlags::kText)
+                            : makeFromStep(std::make_unique<SDFTextRenderStep>(),
+                                           DrawTypeFlags::kText);
     }
     fAnalyticRRect = makeFromStep(std::make_unique<AnalyticRRectRenderStep>(bufferManager),
-                                  DrawTypeFlags::kShape);
+                                  DrawTypeFlags::kSimpleShape);
     fPerEdgeAAQuad = makeFromStep(std::make_unique<PerEdgeAAQuadRenderStep>(bufferManager),
-                                  DrawTypeFlags::kShape);
+                                  DrawTypeFlags::kSimpleShape);
+    fAnalyticBlur = makeFromStep(std::make_unique<AnalyticBlurRenderStep>(),
+                                 DrawTypeFlags::kSimpleShape);
     for (PrimitiveType primType : {PrimitiveType::kTriangles, PrimitiveType::kTriangleStrip}) {
         for (bool color : {false, true}) {
             for (bool texCoords : {false, true}) {

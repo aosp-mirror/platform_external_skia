@@ -7,7 +7,10 @@
 
 #include "src/gpu/AtlasTypes.h"
 
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkImageInfo.h"
 #include "include/private/base/SkMalloc.h"
+#include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkSwizzlePriv.h"
 
 namespace skgpu {
@@ -31,6 +34,7 @@ Plot::Plot(int pageIndex, int plotIndex, AtlasGenerationCounter* generationCount
         , fOffset(SkIPoint16::Make(fX * fWidth, fY * fHeight))
         , fColorType(colorType)
         , fBytesPerPixel(bpp)
+        , fIsFull(false)
 #ifdef SK_DEBUG
         , fDirty(false)
 #endif
@@ -82,6 +86,16 @@ void* Plot::dataAt(const AtlasLocator& atlasLocator) {
     return dataPtr;
 }
 
+SkIPoint Plot::prepForRender(const AtlasLocator& al, SkAutoPixmapStorage* pixmap) {
+    if (!fData) {
+        fData = reinterpret_cast<unsigned char*>(
+                        sk_calloc_throw(fBytesPerPixel * fWidth * fHeight));
+    }
+    pixmap->reset(SkImageInfo::Make(fWidth, fHeight, fColorType, kOpaque_SkAlphaType),
+                  fData, fBytesPerPixel * fWidth);
+    return al.topLeft() - SkIPoint::Make(fOffset.fX, fOffset.fY);
+}
+
 void Plot::copySubImage(const AtlasLocator& al, const void* image) {
     const unsigned char* imagePtr = (const unsigned char*)image;
     unsigned char* dataPtr = (unsigned char*)this->dataAt(al);
@@ -107,7 +121,7 @@ void Plot::copySubImage(const AtlasLocator& al, const void* image) {
 }
 
 bool Plot::addSubImage(int width, int height, const void* image, AtlasLocator* atlasLocator) {
-    if (!this->addRect(width, height, atlasLocator)) {
+    if (fIsFull || !this->addRect(width, height, atlasLocator)) {
         return false;
     }
     this->copySubImage(*atlasLocator, image);
@@ -137,6 +151,7 @@ std::pair<const void*, SkIRect> Plot::prepareForUpload() {
     offsetRect = fDirtyRect.makeOffset(fOffset.fX, fOffset.fY);
 
     fDirtyRect.setEmpty();
+    fIsFull = false;
     SkDEBUGCODE(fDirty = false);
 
     return { dataPtr, offsetRect };
@@ -155,6 +170,7 @@ void Plot::resetRects() {
     }
 
     fDirtyRect.setEmpty();
+    fIsFull = false;
     SkDEBUGCODE(fDirty = false;)
 }
 

@@ -8,19 +8,25 @@
 #ifndef skgpu_AtlasTypes_DEFINED
 #define skgpu_AtlasTypes_DEFINED
 
-#include <array>
-
 #include "include/core/SkColorType.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkTInternalLList.h"
 #include "src/core/SkIPoint16.h"
 #include "src/gpu/RectanizerSkyline.h"
 
+#include <array>
+#include <cstdint>
+#include <cstring>
+#include <utility>
+
 class GrOpFlushState;
+class SkAutoPixmapStorage;
 class TestingUploadTarget;
 namespace skgpu::graphite { class RecorderPriv; }
 
@@ -346,7 +352,7 @@ public:
     }
 
 private:
-    PlotLocator fPlotLocator{0, 0, 0};
+    PlotLocator fPlotLocator{AtlasGenerationCounter::kInvalidGeneration, 0, 0};
 
     // The inset padded bounds in the atlas in the lower 13 bits, and page index in bits 13 &
     // 14 of the Us.
@@ -456,6 +462,9 @@ public:
     bool addRect(int width, int height, AtlasLocator* atlasLocator);
     void* dataAt(const AtlasLocator& atlasLocator);
     void copySubImage(const AtlasLocator& atlasLocator, const void* image);
+    // Reset Pixmap to point to backing data for this Plot,
+    // and return render location specified by AtlasLocator but relative to this Plot.
+    SkIPoint prepForRender(const AtlasLocator&, SkAutoPixmapStorage*);
     // TODO: Utility method for Ganesh, consider removing
     bool addSubImage(int width, int height, const void* image, AtlasLocator* atlasLocator);
 
@@ -478,6 +487,8 @@ public:
     bool needsUpload() { return !fDirtyRect.isEmpty(); }
     std::pair<const void*, SkIRect> prepareForUpload();
     void resetRects();
+
+    void markFullIfUsed() { fIsFull = !fDirtyRect.isEmpty(); }
 
     /**
      * Create a clone of this plot. The cloned plot will take the place of the current plot in
@@ -520,6 +531,7 @@ private:
     const SkColorType fColorType;
     const size_t fBytesPerPixel;
     SkIRect fDirtyRect;  // area in the Plot that needs to be uploaded
+    bool fIsFull;
     SkDEBUGCODE(bool fDirty;)
 };
 

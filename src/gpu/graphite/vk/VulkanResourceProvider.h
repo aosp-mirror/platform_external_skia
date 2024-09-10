@@ -11,6 +11,8 @@
 #include "src/gpu/graphite/ResourceProvider.h"
 
 #include "include/gpu/vk/VulkanTypes.h"
+#include "src/core/SkLRUCache.h"
+#include "src/core/SkTHash.h"
 #include "src/gpu/graphite/DescriptorData.h"
 
 #ifdef  SK_BUILD_FOR_ANDROID
@@ -27,7 +29,7 @@ class VulkanFramebuffer;
 class VulkanGraphicsPipeline;
 class VulkanRenderPass;
 class VulkanSharedContext;
-class VulkanSamplerYcbcrConversion;
+class VulkanYcbcrConversion;
 
 class VulkanResourceProvider final : public ResourceProvider {
 public:
@@ -43,13 +45,11 @@ public:
 
     ~VulkanResourceProvider() override;
 
-    sk_sp<Texture> createWrappedTexture(const BackendTexture&) override;
-
     sk_sp<Buffer> refIntrinsicConstantBuffer() const;
 
     const Buffer* loadMSAAVertexBuffer() const;
 
-    sk_sp<VulkanSamplerYcbcrConversion> findOrCreateCompatibleSamplerYcbcrConversion(
+    sk_sp<VulkanYcbcrConversion> findOrCreateCompatibleYcbcrConversion(
             const VulkanYcbcrConversionInfo& ycbcrInfo) const;
 
 private:
@@ -60,12 +60,13 @@ private:
                                                    const RenderPassDesc&) override;
     sk_sp<ComputePipeline> createComputePipeline(const ComputePipelineDesc&) override;
 
-    sk_sp<Texture> createTexture(SkISize, const TextureInfo&, skgpu::Budgeted) override;
+    sk_sp<Texture> createTexture(SkISize,
+                                 const TextureInfo&,
+                                 skgpu::Budgeted) override;
+    sk_sp<Texture> onCreateWrappedTexture(const BackendTexture&) override;
     sk_sp<Buffer> createBuffer(size_t size, BufferType type, AccessPattern) override;
+    sk_sp<Sampler> createSampler(const SamplerDesc&) override;
 
-    sk_sp<Sampler> createSampler(const SkSamplingOptions&,
-                                 SkTileMode xTileMode,
-                                 SkTileMode yTileMode) override;
     sk_sp<VulkanFramebuffer> createFramebuffer(
             const VulkanSharedContext*,
             const skia_private::TArray<VkImageView>& attachmentViews,
@@ -84,6 +85,10 @@ private:
     void onDeleteBackendTexture(const BackendTexture&) override;
 
     sk_sp<VulkanDescriptorSet> findOrCreateDescriptorSet(SkSpan<DescriptorData>);
+
+    sk_sp<VulkanDescriptorSet> findOrCreateUniformBuffersDescriptorSet(
+            SkSpan<DescriptorData> requestedDescriptors,
+            SkSpan<BindUniformBufferInfo> bindUniformBufferInfo);
 
     sk_sp<VulkanGraphicsPipeline> findOrCreateLoadMSAAPipeline(const RenderPassDesc&);
 
@@ -119,6 +124,12 @@ private:
     VkShaderModule fMSAALoadFragShaderModule = VK_NULL_HANDLE;
     VkPipelineShaderStageCreateInfo fMSAALoadShaderStageInfo[2];
     VkPipelineLayout fMSAALoadPipelineLayout = VK_NULL_HANDLE;
+
+    struct UniqueKeyHash {
+        uint32_t operator()(const skgpu::UniqueKey& key) const { return key.hash(); }
+    };
+    using DescriptorSetCache = SkLRUCache<UniqueKey, sk_sp<VulkanDescriptorSet>, UniqueKeyHash>;
+    DescriptorSetCache fUniformBufferDescSetCache;
 };
 
 } // namespace skgpu::graphite
