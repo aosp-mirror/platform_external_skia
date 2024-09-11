@@ -27,18 +27,28 @@ public:
     bool useAsyncPipelineCreation() const { return fUseAsyncPipelineCreation; }
     bool allowScopedErrorChecks() const { return fAllowScopedErrorChecks; }
 
+    // If this has no value then loading the resolve texture via a LoadOp is not supported.
+    std::optional<wgpu::LoadOp> resolveTextureLoadOp() const {
+        return fSupportedResolveTextureLoadOp;
+    }
+
     TextureInfo getDefaultSampledTextureInfo(SkColorType,
                                              Mipmapped mipmapped,
                                              Protected,
                                              Renderable) const override;
     TextureInfo getTextureInfoForSampledCopy(const TextureInfo& textureInfo,
                                              Mipmapped mipmapped) const override;
+    TextureInfo getDefaultCompressedTextureInfo(SkTextureCompressionType,
+                                                Mipmapped mipmapped,
+                                                Protected) const override;
     TextureInfo getDefaultMSAATextureInfo(const TextureInfo& singleSampledInfo,
                                           Discardable discardable) const override;
     TextureInfo getDefaultDepthStencilTextureInfo(SkEnumBitMask<DepthStencilFlags>,
                                                   uint32_t sampleCount,
                                                   Protected) const override;
     TextureInfo getDefaultStorageTextureInfo(SkColorType) const override;
+    SkISize getDepthAttachmentDimensions(const TextureInfo&,
+                                         const SkISize colorAttachmentDimensions) const override;
     UniqueKey makeGraphicsPipelineKey(const GraphicsPipelineDesc&,
                                       const RenderPassDesc&) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override;
@@ -50,9 +60,9 @@ public:
                             ResourceType,
                             Shareable,
                             GraphiteResourceKey*) const override;
-    uint64_t getRenderPassDescKey(const RenderPassDesc& renderPassDesc) const;
+    uint64_t getRenderPassDescKeyForPipeline(const RenderPassDesc& renderPassDesc) const;
 
-    static constexpr size_t kFormatCnt = 14;
+    static constexpr size_t kFormatCnt = 18;
 
 private:
     const ColorTypeInfo* getColorTypeInfo(SkColorType, const TextureInfo&) const override;
@@ -118,9 +128,11 @@ private:
     wgpu::TextureFormat fColorTypeToFormatTable[kSkColorTypeCnt];
     void setColorType(SkColorType, std::initializer_list<wgpu::TextureFormat> formats);
 
-#if !defined(__EMSCRIPTEN__)
-    bool fTransientAttachmentSupport = false;
-#endif
+    // When supported, this value will hold the TransientAttachment usage symbol that is only
+    // defined in Dawn native builds and not EMSCRIPTEN but this avoids having to #define guard it.
+    wgpu::TextureUsage fSupportedTransientAttachmentUsage = wgpu::TextureUsage::None;
+    // When supported this holds the ExpandResolveTexture load op, otherwise holds no value.
+    std::optional<wgpu::LoadOp> fSupportedResolveTextureLoadOp;
 
     bool fUseAsyncPipelineCreation = true;
     bool fAllowScopedErrorChecks = true;

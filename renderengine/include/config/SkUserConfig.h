@@ -3,10 +3,6 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
-#ifndef SKSL_ENABLE_TRACING
-#define SKSL_ENABLE_TRACING
-#endif
-
 #ifndef SK_ANDROID_FRAMEWORK_USE_PERFETTO
 #define SK_ANDROID_FRAMEWORK_USE_PERFETTO
 #endif
@@ -17,10 +13,6 @@
 
 #ifndef SK_CODEC_DECODES_WBMP
 #define SK_CODEC_DECODES_WBMP
-#endif
-
-#ifndef SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
-#define SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
 #endif
 
 #ifndef SK_ENABLE_AVX512_OPTS
@@ -41,6 +33,10 @@
 
 #ifndef SK_GL
 #define SK_GL
+#endif
+
+#ifndef SK_GRAPHITE
+#define SK_GRAPHITE
 #endif
 
 #ifndef SK_IN_RENDERENGINE

@@ -62,6 +62,7 @@ enum class SnippetRequirementFlags : uint32_t {
     kPriorStageOutput = 0x2,  // AKA the "input" color, or the "src" argument for a blender
     kBlenderDstColor = 0x4,  // The "dst" argument for a blender
     kSurfaceColor = 0x8,
+    kGradientBuffer = 0x10,
 };
 SK_MAKE_BITMASK_OPS(SnippetRequirementFlags)
 
@@ -197,6 +198,7 @@ public:
                        int* numPaintUniforms,
                        int* renderStepUniformTotalBytes,
                        int* paintUniformsTotalBytes,
+                       bool* hasGradientBuffer,
                        Swizzle writeSwizzle);
 
 private:
@@ -229,6 +231,10 @@ public:
 
     PaintParamsKey lookup(UniquePaintParamsID) const SK_EXCLUDES(fSpinLock);
 
+    SkString idToString(UniquePaintParamsID id) const {
+        return this->lookup(id).toString(this);
+    }
+
     SkSpan<const Uniform> getUniforms(BuiltInCodeSnippetID) const;
     SkEnumBitMask<SnippetRequirementFlags> getSnippetRequirementFlags(
             BuiltInCodeSnippetID id) const {
@@ -237,6 +243,8 @@ public:
 
 #if defined(SK_DEBUG)
     bool isValidID(int snippetID) const SK_EXCLUDES(fSpinLock);
+
+    void dump(UniquePaintParamsID) const;
 #endif
 
     // This method can return nullptr

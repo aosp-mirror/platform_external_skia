@@ -19,6 +19,7 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/private/SkColorData.h"
+#include "include/private/base/SkTArray.h"
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/shaders/SkShaderBase.h"
@@ -29,6 +30,7 @@ class SkRuntimeEffect;
 
 namespace skgpu::graphite {
 
+class DrawContext;
 class KeyContext;
 class PaintParamsKeyBuilder;
 class PipelineDataGatherer;
@@ -102,6 +104,7 @@ struct GradientShaderBlocks {
                      const SkPMColor4f* colors,
                      const float* offsets,
                      sk_sp<TextureProxy> colorsAndOffsetsProxy,
+                     bool useStorageBuffer,
                      const SkGradientShader::Interpolation&);
 
         bool operator==(const GradientData& rhs) const = delete;
@@ -118,13 +121,19 @@ struct GradientShaderBlocks {
 
         SkTileMode             fTM;
         int                    fNumStops;
+        bool                   fUseStorageBuffer;
 
         // For gradients w/ <= kNumInternalStorageStops stops we use fColors and fOffsets.
         // The offsets are packed into a single float4 to save space when the layout is std140.
-        // Otherwise we use fColorsAndOffsetsProxy.
-        SkPMColor4f            fColors[kNumInternalStorageStops];
-        SkV4                   fOffsets[kNumInternalStorageStops / 4];
-        sk_sp<TextureProxy>    fColorsAndOffsetsProxy;
+        //
+        // Otherwise when storage buffers are preferred, we save the colors and offsets pointers
+        // to fSrcColors and fSrcOffsets so we can directly copy to the gatherer gradient buffer,
+        // else we pack the data into the fColorsAndOffsetsProxy texture.
+        SkPMColor4f                   fColors[kNumInternalStorageStops];
+        SkV4                          fOffsets[kNumInternalStorageStops / 4];
+        sk_sp<TextureProxy>           fColorsAndOffsetsProxy;
+        const SkPMColor4f*            fSrcColors;
+        const float*                  fSrcOffsets;
 
         SkGradientShader::Interpolation fInterpolation;
     };
@@ -188,14 +197,15 @@ struct YUVImageShaderBlock {
                   SkRect subset);
 
         SkSamplingOptions fSampling;
+        SkSamplingOptions fSamplingUV;
         SkTileMode fTileModes[2];
         SkISize fImgSize;
+        SkISize fImgSizeUV;  // Size of UV planes relative to Y's texel space
         SkRect fSubset;
+        SkPoint fLinearFilterUVInset = { 0.50001f, 0.50001f };
         SkV4 fChannelSelect[4];
         SkMatrix fYUVtoRGBMatrix;
         SkPoint3 fYUVtoRGBTranslate;
-
-        SkColorSpaceXformSteps fSteps;
 
         // TODO: Currently these are only filled in when we're generating the key from an actual
         // SkImageShader. In the pre-compile case we will need to create Graphite promise
@@ -347,6 +357,7 @@ struct ColorSpaceTransformBlock {
                                 SkAlphaType srcAT,
                                 const SkColorSpace* dst,
                                 SkAlphaType dstAT);
+        ColorSpaceTransformData(const SkColorSpaceXformSteps& steps) { fSteps = steps; }
         SkColorSpaceXformSteps fSteps;
     };
 
@@ -422,6 +433,14 @@ void AddToKey(const KeyContext& keyContext,
               PaintParamsKeyBuilder* builder,
               PipelineDataGatherer* gatherer,
               const SkShader* shader);
+
+// TODO(b/330864257) These visitation functions are redundant with AddToKey, except that they are
+// executed in the Device::drawGeometry() stack frame, whereas the keys are currently deferred until
+// DrawPass::Make. Image use needs to be detected in the draw frame to split tasks to match client
+// actions. Once paint keys are extracted in the draw frame, this can go away entirely.
+void NotifyImagesInUse(Recorder*, DrawContext*, const SkBlender*);
+void NotifyImagesInUse(Recorder*, DrawContext*, const SkColorFilter*);
+void NotifyImagesInUse(Recorder*, DrawContext*, const SkShader*);
 
 } // namespace skgpu::graphite
 

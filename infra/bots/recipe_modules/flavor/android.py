@@ -36,7 +36,6 @@ class AndroidFlavor(default.DefaultFlavor):
         lotties_dir    = android_data_dir + 'lotties',
         skp_dir        = android_data_dir + 'skps',
         svg_dir        = android_data_dir + 'svgs',
-        mskp_dir       = android_data_dir + 'mskp',
         tmp_dir        = android_data_dir,
         texttraces_dir = android_data_dir + 'text_blob_traces')
 
@@ -139,7 +138,7 @@ class AndroidFlavor(default.DefaultFlavor):
     def wait_for_device(attempt):
       return self._wait_for_device(title, attempt)
 
-    with self.m.context(cwd=self.m.path['start_dir'].join('skia')):
+    with self.m.context(cwd=self.m.path.start_dir.join('skia')):
       with self.m.env({'ADB_VENDOR_KEYS': self.ADB_PUB_KEY}):
         return self.m.run.with_retry(self.m.step, title, attempts,
                                      cmd=[self.ADB_BINARY]+list(cmd),

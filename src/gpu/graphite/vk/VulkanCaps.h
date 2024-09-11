@@ -36,6 +36,10 @@ public:
     TextureInfo getTextureInfoForSampledCopy(const TextureInfo& textureInfo,
                                              Mipmapped mipmapped) const override;
 
+    TextureInfo getDefaultCompressedTextureInfo(SkTextureCompressionType,
+                                                Mipmapped mipmapped,
+                                                Protected) const override;
+
     TextureInfo getDefaultMSAATextureInfo(const TextureInfo& singleSampledInfo,
                                           Discardable discardable) const override;
 
@@ -45,9 +49,13 @@ public:
 
     TextureInfo getDefaultStorageTextureInfo(SkColorType) const override;
 
+    ImmutableSamplerInfo getImmutableSamplerInfo(sk_sp<TextureProxy> proxy) const override;
+
     UniqueKey makeGraphicsPipelineKey(const GraphicsPipelineDesc&,
                                       const RenderPassDesc&) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override { return {}; }
+
+    GraphiteResourceKey makeSamplerKey(const SamplerDesc&) const override;
 
     uint32_t channelMask(const TextureInfo&) const override;
 
@@ -180,13 +188,6 @@ private:
 
         // Indicates that a format is only supported if we are wrapping a texture with it.
         SkDEBUGCODE(bool fIsWrappedOnly = false;)
-
-    private:
-        bool isTexturable(VkFormatFeatureFlags) const;
-        bool isRenderable(VkFormatFeatureFlags) const;
-        bool isStorage(VkFormatFeatureFlags) const;
-        bool isTransferSrc(VkFormatFeatureFlags) const;
-        bool isTransferDst(VkFormatFeatureFlags) const;
     };
 
     // Map SkColorType to VkFormat.
@@ -219,7 +220,7 @@ private:
     VkFormat getFormatFromDepthStencilFlags(const SkEnumBitMask<DepthStencilFlags>& flags) const;
 
     // Map depth/stencil VkFormats to DepthStencilFormatInfo.
-    static const size_t kNumDepthStencilVkFormats = 3;
+    static const size_t kNumDepthStencilVkFormats = 5;
     DepthStencilFormatInfo fDepthStencilFormatTable[kNumDepthStencilVkFormats];
 
     DepthStencilFormatInfo& getDepthStencilFormatInfo(VkFormat);
@@ -228,6 +229,13 @@ private:
     uint32_t fMaxVertexAttributes;
     uint64_t fMaxUniformBufferRange;
     VkPhysicalDeviceMemoryProperties2 fPhysicalDeviceMemoryProperties2;
+
+    // ColorTypeInfo struct for use w/ external formats.
+    const ColorTypeInfo fExternalFormatColorTypeInfo = {SkColorType::kRGBA_8888_SkColorType,
+                                                        SkColorType::kRGBA_8888_SkColorType,
+                                                        /*flags=*/0,
+                                                        skgpu::Swizzle::RGBA(),
+                                                        skgpu::Swizzle::RGBA()};
 
     // Various bools to define whether certain Vulkan features are supported.
     bool fSupportsMemorylessAttachments = false;

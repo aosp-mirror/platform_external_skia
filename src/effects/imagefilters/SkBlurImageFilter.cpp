@@ -107,7 +107,7 @@ private:
 sk_sp<SkImageFilter> SkImageFilters::Blur(
         SkScalar sigmaX, SkScalar sigmaY, SkTileMode tileMode, sk_sp<SkImageFilter> input,
         const CropRect& cropRect) {
-    if (!SkScalarsAreFinite(sigmaX, sigmaY) || sigmaX < 0.f || sigmaY < 0.f) {
+    if (!SkIsFinite(sigmaX, sigmaY) || sigmaX < 0.f || sigmaY < 0.f) {
         // Non-finite or negative sigmas are error conditions. We allow 0 sigma for X and/or Y
         // for 1D blurs; onFilterImage() will detect when no visible blurring would occur based on
         // the Context mapping.
@@ -924,15 +924,15 @@ skif::FilterResult SkBlurImageFilter::onFilterImage(const skif::Context& ctx) co
     SkASSERT(sigma.width() >= 0.f && sigma.width() <= kMaxSigma &&
              sigma.height() >= 0.f && sigma.height() <= kMaxSigma);
 
-    // TODO: This is equivalent to what Builder::blur() calculates under the hood, but is calculated
-    // *before* we apply any legacy tile mode since the legacy tiling did not actually cause the
-    // output to extend fully.
-    skif::LayerSpace<SkIRect> maxOutput =
-            this->kernelBounds(ctx.mapping(), childOutput.layerBounds(), gpuBacked);
-    if (!maxOutput.intersect(ctx.desiredOutput())) {
-        return {};
+    // By default, FilterResult::blur() will calculate a more optimal output automatically, so
+    // convey the original output to it.
+    skif::LayerSpace<SkIRect> maxOutput = ctx.desiredOutput();
+    if (!gpuBacked || fLegacyTileMode != SkTileMode::kDecal) {
+        maxOutput = this->kernelBounds(ctx.mapping(), childOutput.layerBounds(), gpuBacked);
+        if (!maxOutput.intersect(ctx.desiredOutput())) {
+            return {};
+        }
     }
-
     if (fLegacyTileMode != SkTileMode::kDecal) {
         // Legacy tiling applied to the input image when there was no explicit crop rect. Use the
         // child's output image's layer bounds as the crop rectangle to adjust the edge tile mode
@@ -987,7 +987,7 @@ skif::LayerSpace<SkSize> SkBlurImageFilter::mapSigma(const skif::Mapping& mappin
 
     // Disable bluring on axes that are not finite, or that are small enough that the blur is
     // effectively an identity.
-    if (!SkScalarIsFinite(sigma.width()) || (!gpuBacked && calculate_window(sigma.width()) <= 1)
+    if (!SkIsFinite(sigma.width()) || (!gpuBacked && calculate_window(sigma.width()) <= 1)
 #if defined(SK_GANESH) || defined(SK_GRAPHITE)
         || (gpuBacked && skgpu::BlurIsEffectivelyIdentity(sigma.width()))
 #endif
@@ -995,7 +995,7 @@ skif::LayerSpace<SkSize> SkBlurImageFilter::mapSigma(const skif::Mapping& mappin
         sigma = skif::LayerSpace<SkSize>({0.f, sigma.height()});
     }
 
-    if (!SkScalarIsFinite(sigma.height()) || (!gpuBacked && calculate_window(sigma.height()) <= 1)
+    if (!SkIsFinite(sigma.height()) || (!gpuBacked && calculate_window(sigma.height()) <= 1)
 #if defined(SK_GANESH) || defined(SK_GRAPHITE)
         || (gpuBacked && skgpu::BlurIsEffectivelyIdentity(sigma.height()))
 #endif

@@ -42,7 +42,6 @@ protected:
                        Ownership::kOwned,
                        skgpu::Budgeted::kYes,
                        size,
-                       /*label=*/"Buffer",
                        /*commandBufferRefsAsUsageRefs=*/commandBufferRefsAsUsageRefs)
             , fSize(size) {}
 
@@ -59,4 +58,3 @@ private:
 } // namespace skgpu::graphite
 
 #endif // skgpu_graphite_Buffer_DEFINED
-

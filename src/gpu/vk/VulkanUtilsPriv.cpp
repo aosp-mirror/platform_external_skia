@@ -7,6 +7,9 @@
 
 #include "src/gpu/vk/VulkanUtilsPriv.h"
 
+#include "include/private/base/SkDebug.h"
+#include "src/gpu/vk/VulkanInterface.h"
+
 #include <vector>
 
 namespace skgpu {
@@ -41,19 +44,28 @@ void SetupSamplerYcbcrConversionInfo(VkSamplerYcbcrConversionCreateInfo* outInfo
     }
 #endif
 
+    VkFilter chromaFilter = conversionInfo.fChromaFilter;
+    if (!(conversionInfo.fFormatFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
+        if (!(conversionInfo.fFormatFeatures &
+              VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT)) {
+            // Because we don't have have separate reconstruction filter, the min, mag and
+            // chroma filter must all match. However, we also don't support linear sampling so
+            // the min/mag filter have to be nearest. Therefore, we force the chrome filter to
+            // be nearest regardless of support for the feature
+            // VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT.
+            chromaFilter = VK_FILTER_NEAREST;
+        }
+    }
+
     outInfo->sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO;
     outInfo->pNext = nullptr;
     outInfo->format = conversionInfo.fFormat;
     outInfo->ycbcrModel = conversionInfo.fYcbcrModel;
     outInfo->ycbcrRange = conversionInfo.fYcbcrRange;
-
-    // Components is ignored for external format conversions. For all other formats identity swizzle
-    // is used. It can be added to VulkanYcbcrConversionInfo if necessary.
-    outInfo->components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-                           VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
+    outInfo->components = conversionInfo.fComponents;
     outInfo->xChromaOffset = conversionInfo.fXChromaOffset;
     outInfo->yChromaOffset = conversionInfo.fYChromaOffset;
-    outInfo->chromaFilter = conversionInfo.fChromaFilter;
+    outInfo->chromaFilter = chromaFilter;
     outInfo->forceExplicitReconstruction = conversionInfo.fForceExplicitReconstruction;
 }
 
@@ -67,6 +79,7 @@ void GetYcbcrConversionInfoFromFormatProps(
         const VkAndroidHardwareBufferFormatPropertiesANDROID& formatProps) {
     outConversionInfo->fYcbcrModel = formatProps.suggestedYcbcrModel;
     outConversionInfo->fYcbcrRange = formatProps.suggestedYcbcrRange;
+    outConversionInfo->fComponents = formatProps.samplerYcbcrConversionComponents;
     outConversionInfo->fXChromaOffset = formatProps.suggestedXChromaOffset;
     outConversionInfo->fYChromaOffset = formatProps.suggestedYChromaOffset;
     outConversionInfo->fForceExplicitReconstruction = VK_FALSE;
