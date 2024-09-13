@@ -11,7 +11,7 @@
 #include "include/gpu/graphite/TextureInfo.h"
 #include "src/core/SkSLTypeShared.h"
 #include "src/core/SkTraceEvent.h"
-#include "src/gpu/PipelineUtils.h"
+#include "src/gpu/SkSLToBackend.h"
 #include "src/gpu/graphite/Attribute.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
@@ -447,7 +447,7 @@ static void setup_shader_stage_info(VkShaderStageFlagBits stage,
 
 static VkDescriptorSetLayout descriptor_data_to_layout(const VulkanSharedContext* sharedContext,
         const SkSpan<DescriptorData>& descriptorData) {
-    if (descriptorData.size() == 0) { return VK_NULL_HANDLE; }
+    if (descriptorData.empty()) { return VK_NULL_HANDLE; }
 
     VkDescriptorSetLayout setLayout;
     DescriptorDataToVkDescSetLayout(sharedContext, descriptorData, &setLayout);
@@ -474,6 +474,7 @@ static VkPipelineLayout setup_pipeline_layout(const VulkanSharedContext* sharedC
                                               bool usesIntrinsicConstantUbo,
                                               bool hasStepUniforms,
                                               bool hasPaintUniforms,
+                                              bool hasGradientBuffer,
                                               int numTextureSamplers,
                                               int numInputAttachments,
                                               SkSpan<sk_sp<VulkanSampler>> immutableSamplers) {
@@ -502,6 +503,13 @@ static VkPipelineLayout setup_pipeline_layout(const VulkanSharedContext* sharedC
             uniformBufferType,
             /*count=*/1,
             VulkanGraphicsPipeline::kPaintUniformBufferIndex,
+            PipelineStageFlags::kFragmentShader});
+    }
+    if (hasGradientBuffer) {
+        uniformDescriptors.push_back({
+            DescriptorType::kStorageBuffer,
+            /*count=*/1,
+            VulkanGraphicsPipeline::kGradientBufferIndex,
             PipelineStageFlags::kFragmentShader});
     }
 
@@ -622,7 +630,9 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
         const RenderPassDesc& renderPassDesc) {
     SkASSERT(rsrcProvider);
     SkSL::Program::Interface vsInterface, fsInterface;
+
     SkSL::ProgramSettings settings;
+    settings.fSharpenTextures = true;
     settings.fForceNoRTFlip = true; // TODO: Confirm
 
     const VulkanSharedContext* sharedContext = rsrcProvider->vulkanSharedContext();
@@ -780,6 +790,7 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
                                   /*usesIntrinsicConstantUbo=*/true,
                                   !step->uniforms().empty(),
                                   fsSkSLInfo.fHasPaintUniforms,
+                                  fsSkSLInfo.fHasGradientBuffer,
                                   fsSkSLInfo.fNumTexturesAndSamplers,
                                   /*numInputAttachments=*/0,
                                   SkSpan<sk_sp<VulkanSampler>>(immutableSamplers));
@@ -842,26 +853,17 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     // After creating the pipeline object, we can clean up the VkShaderModule(s).
     destroy_shader_modules(sharedContext, vsModule, fsModule);
 
-#if defined(GRAPHITE_TEST_UTILS)
-    GraphicsPipeline::PipelineInfo pipelineInfo = {pipelineDesc.renderStepID(),
-                                                   pipelineDesc.paintParamsID(),
-                                                   std::move(vsSkSL),
-                                                   std::move(fsSkSL),
-                                                   "SPIR-V disassembly not available",
-                                                   "SPIR-V disassembly not available"};
-    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = &pipelineInfo;
-#else
-    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = nullptr;
+    PipelineInfo pipelineInfo{vsSkSLInfo, fsSkSLInfo};
+#if defined(GPU_TEST_UTILS)
+    pipelineInfo.fNativeVertexShader   = "SPIR-V disassembly not available";
+    pipelineInfo.fNativeFragmentShader = "SPIR-V disassmebly not available";
 #endif
 
     return sk_sp<VulkanGraphicsPipeline>(
             new VulkanGraphicsPipeline(sharedContext,
-                                       pipelineInfoPtr,
+                                       pipelineInfo,
                                        pipelineLayout,
                                        vkPipeline,
-                                       fsSkSLInfo.fHasPaintUniforms,
-                                       !step->uniforms().empty(),
-                                       fsSkSLInfo.fNumTexturesAndSamplers,
                                        /*ownsPipelineLayout=*/true,
                                        std::move(immutableSamplers)));
 }
@@ -946,6 +948,7 @@ bool VulkanGraphicsPipeline::InitializeMSAALoadPipelineStructs(
                                                /*usesIntrinsicConstantUbo=*/false,
                                                /*hasStepUniforms=*/false,
                                                /*hasPaintUniforms=*/false,
+                                               /*hasGradientBuffer=*/false,
                                                /*numTextureSamplers=*/0,
                                                /*numInputAttachments=*/1,
                                                /*immutableSamplers=*/{});
@@ -1045,38 +1048,29 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::MakeLoadMSAAPipeline(
         return nullptr;
     }
 
-    // TODO: If we want to track GraphicsPipeline::PipelineInfo in debug, we'll need to add
-    // PipelineDesc as an argument for this method. For now, just pass in nullptr.
+    // This is an internal shader, so don't bother filling in the shader code metadata
+    PipelineInfo pipelineInfo{};
     return sk_sp<VulkanGraphicsPipeline>(
             new VulkanGraphicsPipeline(sharedContext,
-                                       /*pipelineInfo=*/nullptr,
+                                       pipelineInfo,
                                        pipelineLayout,
                                        vkPipeline,
-                                       /*hasFragmentUniforms=*/false,
-                                       /*hasStepUniforms=*/false,
-                                       /*numTextureSamplers*/0,
                                        /*ownsPipelineLayout=*/false,
                                        /*immutableSamplers=*/{}));
 }
 
 VulkanGraphicsPipeline::VulkanGraphicsPipeline(
-        const skgpu::graphite::SharedContext* sharedContext,
-        PipelineInfo* pipelineInfo,
+        const VulkanSharedContext* sharedContext,
+        const PipelineInfo& pipelineInfo,
         VkPipelineLayout pipelineLayout,
         VkPipeline pipeline,
-        bool hasFragmentUniforms,
-        bool hasStepUniforms,
-        int numTextureSamplers,
         bool ownsPipelineLayout,
         skia_private::TArray<sk_sp<VulkanSampler>> immutableSamplers)
-        : GraphicsPipeline(sharedContext, pipelineInfo)
-        , fPipelineLayout(pipelineLayout)
-        , fPipeline(pipeline)
-        , fHasFragmentUniforms(hasFragmentUniforms)
-        , fHasStepUniforms(hasStepUniforms)
-        , fNumTextureSamplers(numTextureSamplers)
-        , fOwnsPipelineLayout(ownsPipelineLayout)
-        , fImmutableSamplers(std::move(immutableSamplers)) {}
+    : GraphicsPipeline(sharedContext, pipelineInfo)
+    , fPipelineLayout(pipelineLayout)
+    , fPipeline(pipeline)
+    , fOwnsPipelineLayout(ownsPipelineLayout)
+    , fImmutableSamplers(std::move(immutableSamplers)) {}
 
 void VulkanGraphicsPipeline::freeGpuData() {
     auto sharedCtxt = static_cast<const VulkanSharedContext*>(this->sharedContext());

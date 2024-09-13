@@ -28,10 +28,22 @@ public:
     ~RasterPathAtlas() override {}
     void recordUploads(DrawContext*);
 
-    void postFlush() {
-        fCachedAtlasMgr.postFlush(fRecorder);
-        fSmallPathAtlasMgr.postFlush(fRecorder);
-        fUncachedAtlasMgr.postFlush(fRecorder);
+    void compact() {
+        fCachedAtlasMgr.compact(fRecorder);
+        fSmallPathAtlasMgr.compact(fRecorder);
+        fUncachedAtlasMgr.compact(fRecorder);
+    }
+
+    void purge() {
+        fCachedAtlasMgr.purge(fRecorder);
+        fSmallPathAtlasMgr.purge(fRecorder);
+        fUncachedAtlasMgr.purge(fRecorder);
+    }
+
+    void evictAtlases() {
+        fCachedAtlasMgr.evictAll();
+        fSmallPathAtlasMgr.evictAll();
+        fUncachedAtlasMgr.evictAll();
     }
 
 protected:
