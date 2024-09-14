@@ -1462,11 +1462,7 @@ void Device::drawClipShape(const Transform& localToDevice,
                            DrawOrder order) {
     // A clip draw's state is almost fully defined by the ClipStack. The only thing we need
     // to account for is selecting a Renderer and tracking the stencil buffer usage.
-    Shape drawShape(shape);
-    // For the depth-only clip we need to invert the shape before drawing because
-    // we need to touch every pixel not in the clip.
-    drawShape.setInverted(!shape.inverted());
-    Geometry geometry{drawShape};
+    Geometry geometry{shape};
     auto [renderer, pathAtlas] = this->chooseRenderer(localToDevice,
                                                       geometry,
                                                       DefaultFillStyle(),
@@ -1839,14 +1835,12 @@ void Device::drawCoverageMask(const SkSpecialImage* mask,
     // 'mask' logically has 0 coverage outside of its pixels, which is equivalent to kDecal tiling.
     // However, since we draw geometry tightly fitting 'mask', we can use the better-supported
     // kClamp tiling and behave effectively the same way.
-    const SkTileMode kClamp[2] = {SkTileMode::kClamp, SkTileMode::kClamp};
-
+    TextureDataBlock::SampledTexture sampledMask{maskProxyView.refProxy(),
+                                                 {SkFilterMode::kLinear, SkTileMode::kClamp}};
     // Ensure this is kept alive; normally textures are kept alive by the PipelineDataGatherer for
     // image shaders, or by the PathAtlas. This is a unique circumstance.
     // NOTE: CoverageMaskRenderStep controls the final sampling options; this texture data block
     // serves only to keep the mask alive so the sampling passed to add() doesn't matter.
-    TextureDataBlock::SampledTexture sampledMask{maskProxyView.refProxy(),
-                                                 {SkFilterMode::kLinear, kClamp}};
     fRecorder->priv().textureDataCache()->insert(TextureDataBlock(sampledMask));
 
     // CoverageMaskShape() wraps a Shape when it's used as a PathAtlas, but in this case the
