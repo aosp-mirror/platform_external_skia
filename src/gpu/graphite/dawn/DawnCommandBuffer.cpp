@@ -21,7 +21,6 @@
 #include "src/gpu/graphite/dawn/DawnGraphiteTypesPriv.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
 #include "src/gpu/graphite/dawn/DawnQueueManager.h"
-#include "src/gpu/graphite/dawn/DawnResourceProvider.h"
 #include "src/gpu/graphite/dawn/DawnSampler.h"
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
 #include "src/gpu/graphite/dawn/DawnTexture.h"
@@ -666,7 +665,7 @@ void DawnCommandBuffer::bindTextureAndSamplers(
     wgpu::BindGroup bindGroup;
     // Optimize for single texture with dynamic sampling.
     if (command.fNumTexSamplers == 1 && !usingSingleStaticSampler) {
-        SkASSERT(fActiveGraphicsPipeline->numTexturesAndSamplers() == 2);
+        SkASSERT(fActiveGraphicsPipeline->numFragTexturesAndSamplers() == 2);
 
         const auto* texture =
                 static_cast<const DawnTexture*>(drawPass.getTexture(command.fTextureIndices[0]));
@@ -780,7 +779,7 @@ void DawnCommandBuffer::setScissor(unsigned int left,
 
 bool DawnCommandBuffer::updateIntrinsicUniforms(SkIRect viewport) {
     UniformManager intrinsicValues{Layout::kStd140};
-    CollectIntrinsicUniforms(fSharedContext->caps(), viewport, fReplayTranslation,
+    CollectIntrinsicUniforms(fSharedContext->caps(), viewport, fReplayTranslation, fDstCopyOffset,
                              &intrinsicValues);
 
     BindBufferInfo binding =
