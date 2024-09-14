@@ -45,15 +45,19 @@ struct ResourceBindingRequirements;
 
 struct VertSkSLInfo {
     std::string fSkSL;
-
     std::string fLabel;
+
+    bool fHasStepUniforms = false;
 };
 
 struct FragSkSLInfo {
     std::string fSkSL;
-    BlendInfo fBlendInfo;
-
     std::string fLabel;
+
+    // This represents the HW blending of the final program, and not the logical blending that was
+    // defined on the SkPaint.
+    BlendInfo fBlendInfo;
+    DstReadRequirement fDstReadReq = DstReadRequirement::kNone;
 
     bool fRequiresLocalCoords = false;
     int  fNumTexturesAndSamplers = 0;
@@ -88,10 +92,12 @@ std::tuple<UniformDataBlock, TextureDataBlock> ExtractRenderStepData(
 // `viewport` should hold the actual viewport set as backend state (defining the NDC -> pixel
 // transform).
 // `replayTranslation` should hold the replay translation provided on insertRecording().
+// It is assumed that `dstCopyOffset` has already accounted for the replay translation.
 void CollectIntrinsicUniforms(
         const Caps* caps,
         SkIRect viewport,
         SkIPoint replayTranslation,
+        SkIPoint dstCopyOffset,
         UniformManager*);
 
 DstReadRequirement GetDstReadRequirement(const Caps*, std::optional<SkBlendMode>, Coverage);
