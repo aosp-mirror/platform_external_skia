@@ -3,10 +3,6 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
-#ifndef SKSL_ENABLE_TRACING
-#define SKSL_ENABLE_TRACING
-#endif
-
 #ifndef SK_CODEC_DECODES_BMP
 #define SK_CODEC_DECODES_BMP
 #endif
@@ -37,10 +33,6 @@
 
 #ifndef SK_CODEC_DECODES_WEBP
 #define SK_CODEC_DECODES_WEBP
-#endif
-
-#ifndef SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
-#define SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
 #endif
 
 #ifndef SK_ENABLE_ANDROID_UTILS

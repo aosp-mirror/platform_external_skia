@@ -8,39 +8,30 @@
 #include "src/gpu/vk/VulkanAMDMemoryAllocator.h"
 
 #include "include/gpu/vk/VulkanExtensions.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/vk/VulkanInterface.h"
 
+#include <algorithm>
+#include <cstring>
+
 namespace skgpu {
 
-#ifndef SK_USE_VMA
-sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(
-         VkInstance instance,
-         VkPhysicalDevice physicalDevice,
-         VkDevice device,
-         uint32_t physicalDeviceVersion,
-         const VulkanExtensions* extensions,
-         const VulkanInterface* interface,
-         bool threadSafe) {
-    return nullptr;
-}
-#else
-
-sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(
-        VkInstance instance,
-        VkPhysicalDevice physicalDevice,
-        VkDevice device,
-        uint32_t physicalDeviceVersion,
-        const VulkanExtensions* extensions,
-        const VulkanInterface* interface,
-        bool threadSafe) {
+sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(VkInstance instance,
+                                                            VkPhysicalDevice physicalDevice,
+                                                            VkDevice device,
+                                                            uint32_t physicalDeviceVersion,
+                                                            const VulkanExtensions* extensions,
+                                                            const VulkanInterface* interface,
+                                                            ThreadSafe threadSafe) {
 #define SKGPU_COPY_FUNCTION(NAME) functions.vk##NAME = interface->fFunctions.f##NAME
 #define SKGPU_COPY_FUNCTION_KHR(NAME) functions.vk##NAME##KHR = interface->fFunctions.f##NAME
 
     VmaVulkanFunctions functions;
     // We should be setting all the required functions (at least through vulkan 1.1), but this is
     // just extra belt and suspenders to make sure there isn't unitialized values here.
-    memset(&functions, 0, sizeof(VmaVulkanFunctions));
+    std::memset(&functions, 0, sizeof(VmaVulkanFunctions));
 
     // We don't use dynamic function getting in the allocator so we set the getProc functions to
     // null.
@@ -71,7 +62,7 @@ sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(
 
     VmaAllocatorCreateInfo info;
     info.flags = 0;
-    if (!threadSafe) {
+    if (threadSafe == ThreadSafe::kNo) {
         info.flags |= VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
     }
     if (physicalDeviceVersion >= VK_MAKE_VERSION(1, 1, 0) ||
@@ -82,11 +73,11 @@ sk_sp<VulkanMemoryAllocator> VulkanAMDMemoryAllocator::Make(
 
     info.physicalDevice = physicalDevice;
     info.device = device;
-    // The old value was found to result in roughly 20% wasted space in Chromium. Reducing to only
-    // 64KB cut down the wasted space to about 1%, with no perf regressions and some perf
-    // improvements. The AMD allocator will start making blocks at 1/8 the max size set here and
-    // builds up as needed until capping at this max size.
-    info.preferredLargeHeapBlockSize = 64*1024;
+    // 4MB was picked for the size here by looking at memory usage of Android apps and runs of DM.
+    // It seems to be a good compromise of not wasting unused allocated space and not making too
+    // many small allocations. The AMD allocator will start making blocks at 1/8 the max size and
+    // builds up block size as needed before capping at the max set here.
+    info.preferredLargeHeapBlockSize = 4*1024*1024;
     info.pAllocationCallbacks = nullptr;
     info.pDeviceMemoryCallbacks = nullptr;
     info.pHeapSizeLimit = nullptr;
@@ -274,7 +265,5 @@ std::pair<uint64_t, uint64_t> VulkanAMDMemoryAllocator::totalAllocatedAndUsedMem
     vmaCalculateStatistics(fAllocator, &stats);
     return {stats.total.statistics.blockBytes, stats.total.statistics.allocationBytes};
 }
-
-#endif // SK_USE_VMA
 
 } // namespace skgpu

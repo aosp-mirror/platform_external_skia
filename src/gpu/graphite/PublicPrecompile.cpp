@@ -9,7 +9,7 @@
 
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
-#include "src/gpu/graphite/AttachmentTypes.h"
+#include "include/gpu/graphite/precompile/Precompile.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
@@ -17,12 +17,14 @@
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/Log.h"
-#include "src/gpu/graphite/PaintOptionsPriv.h"
+#include "src/gpu/graphite/PrecompileInternal.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/UniquePaintParamsID.h"
+#include "src/gpu/graphite/precompile/PaintOptionsPriv.h"
 
 namespace {
 
@@ -33,7 +35,7 @@ void compile(const RendererProvider* rendererProvider,
              const KeyContext& keyContext,
              UniquePaintParamsID uniqueID,
              DrawTypeFlags drawTypes,
-             SkSpan<RenderPassDesc> renderPassDescs,
+             SkSpan<const RenderPassDesc> renderPassDescs,
              bool withPrimitiveBlender,
              Coverage coverage) {
     for (const Renderer* r : rendererProvider->renderers()) {
@@ -61,7 +63,7 @@ void compile(const RendererProvider* rendererProvider,
             GraphicsPipelineDesc pipelineDesc(s, paintID);
 
             for (const RenderPassDesc& renderPassDesc : renderPassDescs) {
-                auto pipeline = resourceProvider->findOrCreateGraphicsPipeline(
+                sk_sp<GraphicsPipeline> pipeline = resourceProvider->findOrCreateGraphicsPipeline(
                         keyContext.rtEffectDict(),
                         pipelineDesc,
                         renderPassDesc);
@@ -78,6 +80,24 @@ void compile(const RendererProvider* rendererProvider,
 
 namespace skgpu::graphite {
 
+bool Precompile(Context* context,
+                RuntimeEffectDictionary* rteDict,
+                const GraphicsPipelineDesc& pipelineDesc,
+                const RenderPassDesc& renderPassDesc) {
+    ResourceProvider* resourceProvider = context->priv().resourceProvider();
+
+    sk_sp<GraphicsPipeline> pipeline = resourceProvider->findOrCreateGraphicsPipeline(
+            rteDict,
+            pipelineDesc,
+            renderPassDesc);
+    if (!pipeline) {
+        SKGPU_LOG_W("Failed to create GraphicsPipeline in precompile!");
+        return false;
+    }
+
+    return true;
+}
+
 void Precompile(Context* context, const PaintOptions& options, DrawTypeFlags drawTypes) {
 
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
@@ -89,22 +109,52 @@ void Precompile(Context* context, const PaintOptions& options, DrawTypeFlags dra
     KeyContext keyContext(
             caps, dict, rtEffectDict.get(), ci, /* dstTexture= */ nullptr, /* dstOffset= */ {0, 0});
 
+    for (Coverage coverage : { Coverage::kNone, Coverage::kSingleChannel, Coverage::kLCD }) {
+        PrecompileCombinations(
+                context, options, keyContext,
+                static_cast<DrawTypeFlags>(drawTypes & ~DrawTypeFlags::kDrawVertices),
+                /* withPrimitiveBlender= */ false,
+                coverage);
+    }
+
+    if (drawTypes & DrawTypeFlags::kDrawVertices) {
+        for (Coverage coverage: { Coverage::kNone, Coverage::kSingleChannel, Coverage::kLCD }) {
+            // drawVertices w/ colors use a primitiveBlender while those w/o don't
+            for (bool withPrimitiveBlender : { true, false }) {
+                PrecompileCombinations(context, options, keyContext,
+                                       DrawTypeFlags::kDrawVertices,
+                                       withPrimitiveBlender,
+                                       coverage);
+            }
+        }
+    }
+}
+
+void PrecompileCombinations(Context* context,
+                            const PaintOptions& options,
+                            const KeyContext& keyContext,
+                            DrawTypeFlags drawTypes,
+                            bool withPrimitiveBlender,
+                            Coverage coverage) {
+    const Caps* caps = keyContext.caps();
     // Since the precompilation path's uniforms aren't used and don't change the key,
     // the exact layout doesn't matter
-    PipelineDataGatherer gatherer(Layout::kMetal);
+    PipelineDataGatherer gatherer(caps, Layout::kMetal);
 
+    SkColorType destCT = keyContext.dstColorInfo().colorType();
     // TODO: we need iterate over a broader set of TextureInfos here. Perhaps, allow the client
     // to pass in colorType, mipmapping and protection.
-    TextureInfo info = caps->getDefaultSampledTextureInfo(ci.colorType(),
+    TextureInfo info = caps->getDefaultSampledTextureInfo(destCT,
                                                           Mipmapped::kNo,
                                                           Protected::kNo,
                                                           Renderable::kYes);
 
+    Swizzle writeSwizzle = caps->getWriteSwizzle(destCT, info);
     // Note: at least on Metal, the LoadOp, StoreOp and clearColor fields don't influence the
     // actual RenderPassDescKey.
     // TODO: if all of the Renderers associated w/ the requested drawTypes require MSAA we
     // do not need to generate the combinations w/ the non-MSAA RenderPassDescs.
-    RenderPassDesc renderPassDescs[] = {
+    const RenderPassDesc renderPassDescs[] = {
         RenderPassDesc::Make(caps,
                              info,
                              LoadOp::kClear,
@@ -112,7 +162,7 @@ void Precompile(Context* context, const PaintOptions& options, DrawTypeFlags dra
                              DepthStencilFlags::kDepth,
                              /* clearColor= */ { .0f, .0f, .0f, .0f },
                              /* requiresMSAA= */ true,
-                             caps->getWriteSwizzle(ci.colorType(), info)),
+                             writeSwizzle),
         RenderPassDesc::Make(caps,
                              info,
                              LoadOp::kClear,
@@ -120,7 +170,7 @@ void Precompile(Context* context, const PaintOptions& options, DrawTypeFlags dra
                              DepthStencilFlags::kDepthStencil,
                              /* clearColor= */ { .0f, .0f, .0f, .0f },
                              /* requiresMSAA= */ true,
-                             caps->getWriteSwizzle(ci.colorType(), info)),
+                             writeSwizzle),
         RenderPassDesc::Make(caps,
                              info,
                              LoadOp::kClear,
@@ -128,7 +178,7 @@ void Precompile(Context* context, const PaintOptions& options, DrawTypeFlags dra
                              DepthStencilFlags::kDepth,
                              /* clearColor= */ { .0f, .0f, .0f, .0f },
                              /* requiresMSAA= */ false,
-                             caps->getWriteSwizzle(ci.colorType(), info)),
+                             writeSwizzle),
         RenderPassDesc::Make(caps,
                              info,
                              LoadOp::kClear,
@@ -136,40 +186,28 @@ void Precompile(Context* context, const PaintOptions& options, DrawTypeFlags dra
                              DepthStencilFlags::kDepthStencil,
                              /* clearColor= */ { .0f, .0f, .0f, .0f },
                              /* requiresMSAA= */ false,
-                             caps->getWriteSwizzle(ci.colorType(), info)),
+                             writeSwizzle),
     };
 
-    for (Coverage coverage : {Coverage::kNone, Coverage::kSingleChannel, Coverage::kLCD}) {
-        options.priv().buildCombinations(
-            keyContext,
-            &gatherer,
-            /* addPrimitiveBlender= */ false,
-            coverage,
-             [&](UniquePaintParamsID uniqueID) {
-                 compile(context->priv().rendererProvider(),
-                         context->priv().resourceProvider(),
-                         keyContext, uniqueID,
-                         static_cast<DrawTypeFlags>(drawTypes & ~DrawTypeFlags::kDrawVertices),
-                         renderPassDescs, /* withPrimitiveBlender= */ false, coverage);
-             });
-    }
-
-    if (drawTypes & DrawTypeFlags::kDrawVertices) {
-        for (Coverage coverage : {Coverage::kNone, Coverage::kSingleChannel, Coverage::kLCD}) {
-            options.priv().buildCombinations(
-                keyContext,
-                &gatherer,
-                /* addPrimitiveBlender= */ true,
-                coverage,
-                [&](UniquePaintParamsID uniqueID) {
-                    compile(context->priv().rendererProvider(),
-                            context->priv().resourceProvider(),
-                            keyContext, uniqueID,
-                            DrawTypeFlags::kDrawVertices,
-                            renderPassDescs, /* withPrimitiveBlender= */ true, coverage);
-                });
-        }
-    }
+    options.priv().buildCombinations(
+        keyContext,
+        &gatherer,
+        drawTypes,
+        withPrimitiveBlender,
+        coverage,
+        [context, &keyContext, &renderPassDescs](UniquePaintParamsID uniqueID,
+                                                 DrawTypeFlags drawTypes,
+                                                 bool withPrimitiveBlender,
+                                                 Coverage coverage) {
+               compile(context->priv().rendererProvider(),
+                       context->priv().resourceProvider(),
+                       keyContext,
+                       uniqueID,
+                       drawTypes,
+                       renderPassDescs,
+                       withPrimitiveBlender,
+                       coverage);
+        });
 }
 
 } // namespace skgpu::graphite

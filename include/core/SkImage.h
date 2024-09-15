@@ -98,6 +98,8 @@ SK_API sk_sp<SkImage> RasterFromCompressedTextureData(sk_sp<SkData> data,
  *
  *  If the encoded format is not supported, nullptr is returned.
  *
+ *  If possible, clients should use SkCodecs::DeferredImage instead.
+ *
  *  @param encoded  the encoded data
  *  @return         created SkImage, or nullptr
 
@@ -539,6 +541,13 @@ public:
                     int srcX,
                     int srcY,
                     CachingHint cachingHint = kAllow_CachingHint) const;
+
+#if defined(GRAPHITE_TEST_UTILS)
+    bool readPixelsGraphite(skgpu::graphite::Recorder*,
+                            const SkPixmap& dst,
+                            int srcX,
+                            int srcY) const;
+#endif
 
 #ifndef SK_IMAGE_READ_PIXELS_DISABLE_LEGACY_API
     /** Deprecated. Use the variants that accept a GrDirectContext. */

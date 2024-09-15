@@ -19,6 +19,7 @@
 #include "src/gpu/ResourceKey.h"
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/ResourceTypes.h"
+#include "src/gpu/graphite/TextureProxy.h"
 #include "src/text/gpu/SDFTControl.h"
 
 #if defined(GRAPHITE_TEST_UTILS)
@@ -26,6 +27,7 @@
 #endif
 
 enum class SkBlendMode;
+enum class SkTextureCompressionType;
 class SkCapabilities;
 
 namespace SkSL { struct ShaderCaps; }
@@ -42,7 +44,6 @@ class GraphiteResourceKey;
 class RendererProvider;
 struct RenderPassDesc;
 class TextureInfo;
-class TextureProxy;
 
 struct ResourceBindingRequirements {
     // The required data layout rules for the contents of a uniform buffer.
@@ -91,6 +92,10 @@ public:
     virtual TextureInfo getTextureInfoForSampledCopy(const TextureInfo& textureInfo,
                                                      Mipmapped mipmapped) const = 0;
 
+    virtual TextureInfo getDefaultCompressedTextureInfo(SkTextureCompressionType,
+                                                        Mipmapped mipmapped,
+                                                        Protected) const = 0;
+
     virtual TextureInfo getDefaultMSAATextureInfo(const TextureInfo& singleSampledInfo,
                                                   Discardable discardable) const = 0;
 
@@ -100,9 +105,26 @@ public:
 
     virtual TextureInfo getDefaultStorageTextureInfo(SkColorType) const = 0;
 
+    // Get required depth attachment dimensions for a givin color attachment info and dimensions.
+    virtual SkISize getDepthAttachmentDimensions(const TextureInfo&,
+                                                 const SkISize colorAttachmentDimensions) const;
+
     virtual UniqueKey makeGraphicsPipelineKey(const GraphicsPipelineDesc&,
                                               const RenderPassDesc&) const = 0;
     virtual UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const = 0;
+
+    // Returns a GraphiteResourceKey based upon a SamplerDesc with any additional information that
+    // backends append within their implementation. By default, simply returns a key based upon
+    // the SamplerDesc with no extra info.
+    // TODO: Rather than going through a GraphiteResourceKey, migrate to having a cache of samplers
+    // keyed off of SamplerDesc to minimize heap allocations.
+    virtual GraphiteResourceKey makeSamplerKey(const SamplerDesc& samplerDesc) const;
+
+    // Backends can optionally override this method to return meaningful sampler conversion info.
+    // By default, simply return a default ImmutableSamplerInfo.
+    virtual ImmutableSamplerInfo getImmutableSamplerInfo(sk_sp<TextureProxy> proxy) const {
+        return {};
+    }
 
     virtual bool extractGraphicsDescs(const UniqueKey&,
                                       GraphicsPipelineDesc*,
@@ -257,13 +279,22 @@ public:
     float glyphsAsPathsFontSize() const { return fGlyphsAsPathsFontSize; }
 
     size_t glyphCacheTextureMaximumBytes() const { return fGlyphCacheTextureMaximumBytes; }
+    int maxPathAtlasTextureSize() const { return fMaxPathAtlasTextureSize; }
 
-    bool allowMultipleGlyphCacheTextures() const { return fAllowMultipleGlyphCacheTextures; }
+    bool allowMultipleAtlasTextures() const { return fAllowMultipleAtlasTextures; }
     bool supportBilerpFromGlyphAtlas() const { return fSupportBilerpFromGlyphAtlas; }
 
     bool requireOrderedRecordings() const { return fRequireOrderedRecordings; }
 
+    // When uploading to a full compressed texture do we need to pad the size out to a multiple of
+    // the block width and height.
+    bool fullCompressedUploadSizeMustAlignToBlockDims() const {
+        return fFullCompressedUploadSizeMustAlignToBlockDims;
+    }
+
     sktext::gpu::SDFTControl getSDFTControl(bool useSDFTForSmallText) const;
+
+    bool setBackendLabels() const { return fSetBackendLabels; }
 
 protected:
     Caps();
@@ -297,9 +328,17 @@ protected:
         }
     }
 
-    // ColorTypeInfo for a specific format.
-    // Used in format tables.
+    // ColorTypeInfo for a specific format. Used in format tables.
     struct ColorTypeInfo {
+        ColorTypeInfo() = default;
+        ColorTypeInfo(SkColorType ct, SkColorType transferCt, uint32_t flags,
+                      skgpu::Swizzle readSwizzle, skgpu::Swizzle writeSwizzle)
+                : fColorType(ct)
+                , fTransferColorType(transferCt)
+                , fFlags(flags)
+                , fReadSwizzle(readSwizzle)
+                , fWriteSwizzle(writeSwizzle) {}
+
         SkColorType fColorType = kUnknown_SkColorType;
         SkColorType fTransferColorType = kUnknown_SkColorType;
         enum {
@@ -335,6 +374,7 @@ protected:
 
     bool fComputeSupport = false;
     bool fSupportsAHardwareBufferImages = false;
+    bool fFullCompressedUploadSizeMustAlignToBlockDims = false;
 
 #if defined(GRAPHITE_TEST_UTILS)
     bool fDrawBufferCanBeMappedForReadback = true;
@@ -361,11 +401,15 @@ protected:
     float fMinDistanceFieldFontSize = 18;
     float fGlyphsAsPathsFontSize = 324;
 
-    bool fAllowMultipleGlyphCacheTextures = true;
+    int fMaxPathAtlasTextureSize = 8192;
+
+    bool fAllowMultipleAtlasTextures = true;
     bool fSupportBilerpFromGlyphAtlas = false;
 
     // Set based on client options
     bool fRequireOrderedRecordings = false;
+
+    bool fSetBackendLabels = false;
 
 private:
     virtual bool onIsTexturable(const TextureInfo&) const = 0;
