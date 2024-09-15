@@ -273,7 +273,11 @@ private:
                                           Precedence parentPrecedence);
     std::string assembleVectorizedIntrinsic(std::string_view intrinsicName,
                                             const FunctionCall& call);
-    std::string assemblePartialSampleCall(std::string_view functionName,
+    std::string assembleOutAssignedIntrinsic(std::string_view intrinsicName,
+                                             std::string_view returnFieldName,
+                                             std::string_view outFieldName,
+                                             const FunctionCall& call);
+    std::string assemblePartialSampleCall(std::string_view intrinsicName,
                                           const Expression& sampler,
                                           const Expression& coords);
     std::string assembleInversePolyfill(const FunctionCall& call);
@@ -1190,17 +1194,36 @@ public:
         }
 
         // The reintegration swizzle needs to move the components back into their proper slots.
-        // First, place the new-value components into the proper slots.
         fReintegrationSwizzle.resize(fullSlotCount);
-        for (int index = 0; index < fComponents.size(); ++index) {
-            fReintegrationSwizzle[fComponents[index]] = index;
-        }
-        // Then, refill the untouched slots with the original values.
-        int originalValueComponentIndex = fComponents.size();
-        for (int index = 0; index < fullSlotCount; ++index) {
-            if (!used[index]) {
-                fReintegrationSwizzle[index] = originalValueComponentIndex++;
+        int reintegrateIndex = 0;
+
+        // This refills the untouched slots with the original values.
+        auto refillUntouchedSlots = [&] {
+            for (int index = 0; index < fullSlotCount; ++index) {
+                if (!used[index]) {
+                    fReintegrationSwizzle[index] = reintegrateIndex++;
+                }
             }
+        };
+
+        // This places the new-value components into the proper slots.
+        auto insertNewValuesIntoSlots = [&] {
+            for (int index = 0; index < fComponents.size(); ++index) {
+                fReintegrationSwizzle[fComponents[index]] = reintegrateIndex++;
+            }
+        };
+
+        // When reintegrating the untouched and new values, if the `x` slot is overwritten, we
+        // reintegrate the new value first. Otherwise, we reintegrate the original value first.
+        // This increases our odds of getting an identity swizzle for the reintegration.
+        if (used[0]) {
+            fReintegrateNewValueFirst = true;
+            insertNewValuesIntoSlots();
+            refillUntouchedSlots();
+        } else {
+            fReintegrateNewValueFirst = false;
+            refillUntouchedSlots();
+            insertNewValuesIntoSlots();
         }
     }
 
@@ -1214,25 +1237,42 @@ public:
         result += " = ";
 
         if (fUntouchedComponents.empty()) {
-            // `(new_value).wzyx;`
+            // `(new_value);`
             result += '(';
             result += value;
-            result += ").";
-            result += Swizzle::MaskString(fReintegrationSwizzle);
-        } else {
+            result += ")";
+        } else if (fReintegrateNewValueFirst) {
             // `vec4<f32>((new_value), `
             result += to_wgsl_type(fContext, fType);
             result += "((";
             result += value;
             result += "), ";
 
-            // `variable.yz).xzwy;`
+            // `variable.yz)`
             result += fName;
             result += '.';
             result += Swizzle::MaskString(fUntouchedComponents);
-            result += ").";
+            result += ')';
+        } else {
+            // `vec4<f32>(variable.yz`
+            result += to_wgsl_type(fContext, fType);
+            result += '(';
+            result += fName;
+            result += '.';
+            result += Swizzle::MaskString(fUntouchedComponents);
+
+            // `, (new_value))`
+            result += ", (";
+            result += value;
+            result += "))";
+        }
+
+        if (!Swizzle::IsIdentity(fReintegrationSwizzle)) {
+            // `.wzyx`
+            result += '.';
             result += Swizzle::MaskString(fReintegrationSwizzle);
         }
+
         return result + ';';
     }
 
@@ -1243,6 +1283,7 @@ private:
     ComponentArray fComponents;
     ComponentArray fUntouchedComponents;
     ComponentArray fReintegrationSwizzle;
+    bool fReintegrateNewValueFirst = false;
 };
 
 bool WGSLCodeGenerator::generateCode() {
@@ -1510,11 +1551,13 @@ void WGSLCodeGenerator::write(std::string_view s) {
     if (s.empty()) {
         return;
     }
+#if defined(SK_DEBUG) || defined(SKSL_STANDALONE)
     if (fAtLineStart) {
         for (int i = 0; i < fIndentation; i++) {
             fOut->writeText("  ");
         }
     }
+#endif
     fOut->writeText(std::string(s).c_str());
     fAtLineStart = false;
 }
@@ -2903,6 +2946,45 @@ std::string WGSLCodeGenerator::assembleBinaryOpIntrinsic(Operator op,
     return expr;
 }
 
+// Rewrite a WGSL intrinsic of the form "intrinsicName(in) -> struct" to the SkSL's
+// "intrinsicName(in, outField) -> returnField", where outField and returnField are the names of the
+// fields in the struct returned by the WGSL intrinsic.
+std::string WGSLCodeGenerator::assembleOutAssignedIntrinsic(std::string_view intrinsicName,
+                                                            std::string_view returnField,
+                                                            std::string_view outField,
+                                                            const FunctionCall& call) {
+    SkASSERT(call.type().componentType().isNumber());
+    SkASSERT(call.arguments().size() == 2);
+    SkASSERT(call.function().parameters()[1]->modifierFlags() & ModifierFlag::kOut);
+
+    std::string expr = std::string(intrinsicName);
+    expr += "(";
+
+    // Invoke the intrinsic with the first parameter. Use a scratch-let if argument is a constant
+    // to dodge WGSL overflow errors. (skia:14385)
+    std::string argument = this->assembleExpression(*call.arguments()[0], Precedence::kSequence);
+    expr += ConstantFolder::GetConstantValueOrNull(*call.arguments()[0])
+            ? this->writeScratchLet(argument) : argument;
+    expr += ")";
+    // In WGSL the intrinsic returns a struct; assign it to a local so that its fields can be
+    // accessed multiple times.
+    expr = this->writeScratchLet(expr);
+    expr += ".";
+
+    // Store the outField of `expr` to the intended "out" argument
+    std::unique_ptr<LValue> lvalue = this->makeLValue(*call.arguments()[1]);
+    if (!lvalue) {
+        return "";
+    }
+    std::string outValue = expr;
+    outValue += outField;
+    this->writeLine(lvalue->store(outValue));
+
+    // And return the expression accessing the returnField.
+    expr += returnField;
+    return expr;
+}
+
 std::string WGSLCodeGenerator::assemblePartialSampleCall(std::string_view functionName,
                                                          const Expression& sampler,
                                                          const Expression& coords) {
@@ -3011,6 +3093,11 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
             }
             return this->assembleSimpleIntrinsic("faceForward", call);
         }
+        case k_frexp_IntrinsicKind:
+            // SkSL frexp is "$genType fract = frexp($genType, out $genIType exp)" whereas WGSL
+            // returns a struct with no out param: "let [fract, exp] = frexp($genType)".
+            return this->assembleOutAssignedIntrinsic("frexp", "fract", "exp", call);
+
         case k_greaterThan_IntrinsicKind:
             return this->assembleBinaryOpIntrinsic(OperatorKind::GT, call, parentPrecedence);
 
@@ -3058,6 +3145,12 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
             return this->writeScratchLet(arg0 + " - " + arg1 + " * floor(" +
                                          arg0 + " / " + arg1 + ")");
         }
+
+        case k_modf_IntrinsicKind:
+            // SkSL modf is "$genType fract = modf($genType, out $genType whole)" whereas WGSL
+            // returns a struct with no out param: "let [fract, whole] = modf($genType)".
+            return this->assembleOutAssignedIntrinsic("modf", "fract", "whole", call);
+
         case k_normalize_IntrinsicKind: {
             const char* name = arguments[0]->type().isScalar() ? "sign" : "normalize";
             return this->assembleSimpleIntrinsic(name, call);
@@ -4166,7 +4259,7 @@ void WGSLCodeGenerator::writeEnables() {
         this->writeLine("enable chromium_experimental_framebuffer_fetch;");
     }
     if (fProgram.fInterface.fOutputSecondaryColor) {
-        this->writeLine("enable chromium_internal_dual_source_blending;");
+        this->writeLine("enable dual_source_blending;");
     }
 }
 
@@ -4454,7 +4547,7 @@ static bool validate_wgsl(ErrorReporter& reporter, const std::string& wgsl, std:
     // Enable the WGSL optional features that Skia might rely on.
     tint::wgsl::reader::Options options;
     for (auto extension : {tint::wgsl::Extension::kChromiumExperimentalPixelLocal,
-                           tint::wgsl::Extension::kChromiumInternalDualSourceBlending}) {
+                           tint::wgsl::Extension::kDualSourceBlending}) {
         options.allowed_features.extensions.insert(extension);
     }
 
@@ -4463,15 +4556,16 @@ static bool validate_wgsl(ErrorReporter& reporter, const std::string& wgsl, std:
     tint::Program program(tint::wgsl::reader::Parse(&srcFile, options));
 
     if (program.Diagnostics().ContainsErrors()) {
-        // The program isn't valid WGSL. In debug, report the error via SkDEBUGFAIL. We also append
-        // the generated program for ease of debugging.
+        // The program isn't valid WGSL.
+#if defined(SKSL_STANDALONE)
+        reporter.error(Position(), std::string("Tint compilation failed.\n\n") + wgsl);
+#else
+        // In debug, report the error via SkDEBUGFAIL. We also append the generated program for
+        // ease of debugging.
         tint::diag::Formatter diagFormatter;
         std::string diagOutput = diagFormatter.Format(program.Diagnostics()).Plain();
         diagOutput += "\n";
         diagOutput += wgsl;
-#if defined(SKSL_STANDALONE)
-        reporter.error(Position(), diagOutput);
-#else
         SkDEBUGFAILF("%s", diagOutput.c_str());
 #endif
         return false;
@@ -4500,9 +4594,7 @@ bool ToWGSL(Program& program, const ShaderCaps* caps, OutputStream& out) {
         std::string warnings;
         result = validate_wgsl(*program.fContext->fErrors, wgslString, &warnings);
         if (!warnings.empty()) {
-            out.writeText("/*\n\n");
-            out.writeString(warnings);
-            out.writeText("*/\n\n");
+            out.writeText("/* Tint reported warnings. */\n\n");
         }
         out.writeString(wgslString);
     }

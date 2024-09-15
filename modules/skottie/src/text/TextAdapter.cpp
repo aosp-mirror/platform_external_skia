@@ -39,6 +39,7 @@
 #include "modules/sksg/include/SkSGRenderNode.h"
 #include "modules/sksg/include/SkSGTransform.h"
 #include "modules/sksg/src/SkSGTransformPriv.h"
+#include "modules/skshaper/include/SkShaper_factory.h"
 #include "src/utils/SkJSON.h"
 
 #include <algorithm>
@@ -297,7 +298,8 @@ sk_sp<TextAdapter> TextAdapter::Make(const skjson::ObjectValue& jlayer,
                                      const AnimationBuilder* abuilder,
                                      sk_sp<SkFontMgr> fontmgr,
                                      sk_sp<CustomFont::GlyphCompMapper> custom_glyph_mapper,
-                                     sk_sp<Logger> logger) {
+                                     sk_sp<Logger> logger,
+                                     sk_sp<::SkShapers::Factory> factory) {
     // General text node format:
     // "t": {
     //    "a": [], // animators (see TextAnimator)
@@ -361,6 +363,7 @@ sk_sp<TextAdapter> TextAdapter::Make(const skjson::ObjectValue& jlayer,
     auto adapter = sk_sp<TextAdapter>(new TextAdapter(std::move(fontmgr),
                                                       std::move(custom_glyph_mapper),
                                                       std::move(logger),
+                                                      std::move(factory),
                                                       gGroupingMap[SkToSizeT(apg - 1)]));
 
     adapter->bind(*abuilder, jd, adapter->fText.fCurrentValue);
@@ -431,11 +434,13 @@ sk_sp<TextAdapter> TextAdapter::Make(const skjson::ObjectValue& jlayer,
 TextAdapter::TextAdapter(sk_sp<SkFontMgr> fontmgr,
                          sk_sp<CustomFont::GlyphCompMapper> custom_glyph_mapper,
                          sk_sp<Logger> logger,
+                         sk_sp<SkShapers::Factory> factory,
                          AnchorPointGrouping apg)
     : fRoot(sksg::Group::Make())
     , fFontMgr(std::move(fontmgr))
     , fCustomGlyphMapper(std::move(custom_glyph_mapper))
     , fLogger(std::move(logger))
+    , fShapingFactory(std::move(factory))
     , fAnchorPointGrouping(apg)
     , fHasBlurAnimator(false)
     , fRequiresAnchorPoint(false)
@@ -588,13 +593,17 @@ void TextAdapter::buildDomainMaps(const Shaper::Result& shape_result) {
     // TODO: use ICU for building the word map?
     for (; i  < shape_result.fFragments.size(); ++i) {
         const auto& frag = shape_result.fFragments[i];
+        const bool is_new_line = frag.fLineIndex != line;
 
-        if (frag.fIsWhitespace) {
+        if (frag.fIsWhitespace || is_new_line) {
+            // Both whitespace and new lines break words.
             if (in_word) {
                 in_word = false;
                 fMaps.fWordsMap.push_back({word_start, i - word_start, word_advance, word_ascent});
             }
-        } else {
+        }
+
+        if (!frag.fIsWhitespace) {
             fMaps.fNonWhitespaceMap.push_back({i, 1, 0, 0});
 
             if (!in_word) {
@@ -607,7 +616,7 @@ void TextAdapter::buildDomainMaps(const Shaper::Result& shape_result) {
             word_ascent   = std::min(word_ascent, frag.fAscent); // negative ascent
         }
 
-        if (frag.fLineIndex != line) {
+        if (is_new_line) {
             SkASSERT(frag.fLineIndex == line + 1);
             fMaps.fLinesMap.push_back({line_start, i - line_start, line_advance, line_ascent});
             line = frag.fLineIndex;
@@ -680,7 +689,8 @@ void TextAdapter::reshape() {
         fText->fLocale.isEmpty()     ? nullptr : fText->fLocale.c_str(),
         fText->fFontFamily.isEmpty() ? nullptr : fText->fFontFamily.c_str(),
     };
-    auto shape_result = Shaper::Shape(fText->fText, text_desc, fText->fBox, fFontMgr);
+    auto shape_result = Shaper::Shape(fText->fText, text_desc, fText->fBox, fFontMgr,
+        fShapingFactory);
 
     if (fLogger) {
         if (shape_result.fFragments.empty() && fText->fText.size() > 0) {

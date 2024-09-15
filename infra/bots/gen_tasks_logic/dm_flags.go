@@ -304,6 +304,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "ImageReadPixels_Gpu")
 			skip(ALL, "test", ALL, "ImageScalePixels_Gpu")
 			skip(ALL, "test", ALL, "ImageShaderTest")
+			skip(ALL, "test", ALL, "ImageWrapTextureMipmapsTest")
 			skip(ALL, "test", ALL, "MatrixColorFilter_TransparentBlack")
 			skip(ALL, "test", ALL, "MorphologyFilterRadiusWithMirrorCTM_Gpu")
 			skip(ALL, "test", ALL, "MultisampleRetainTest")
@@ -418,8 +419,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
 				skip(ALL, "test", ALL, "PaintParamsKeyTest")
 
-				if b.matchOs("Win10") || b.matchGpu("MaliG78", "Adreno620") {
-					// The Dawn Win10 and some Android device jobs OOMs (skbug.com/14410, b/318725123)
+				if b.matchOs("Win10") || b.matchGpu("MaliG78", "Adreno620", "QuadroP400") {
+					// The Dawn Win10 and some Android/Linux device jobs OOMs (skbug.com/14410, b/318725123)
 					skip(ALL, "test", ALL, "BigImageTest_Graphite")
 				}
 				if b.matchGpu("Adreno620") {
@@ -903,13 +904,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "test", ALL, "InitialTextureClear")
 	}
 
-	if b.model("Pixel3") {
-		// skbug.com/10546
-		skip("vkddl", "gm", ALL, "compressed_textures_nmof")
-		skip("vkddl", "gm", ALL, "compressed_textures_npot")
-		skip("vkddl", "gm", ALL, "compressed_textures")
-	}
-
 	if b.model("TecnoSpark3Pro", "Wembley") {
 		// skbug.com/9421
 		skip(ALL, "test", ALL, "InitialTextureClear")
@@ -1294,7 +1288,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	// Pixel4XL on the tree is still on Android 10 (Q), and the vulkan drivers
 	// crash during this GM. It works correctly on newer versions of Android.
-	if b.extraConfig("Vulkan") && b.model("Pixel4XL") {
+	// The Pixel3a is also failing on this GM with an invalid return value from
+	// vkCreateGraphicPipelines.
+	if b.extraConfig("Vulkan") && (b.model("Pixel4XL") || b.model("Pixel3a")) {
 		skip("vk", "gm", ALL, "custommesh_cs_uniforms")
 	}
 
@@ -1475,6 +1471,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	if b.extraConfig("GDI") {
 		args = append(args, "--gdi")
+	}
+
+	if b.extraConfig("Fontations") {
+		args = append(args, "--fontations")
 	}
 
 	// Let's make all tasks produce verbose output by default.

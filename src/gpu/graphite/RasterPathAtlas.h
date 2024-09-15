@@ -8,10 +8,6 @@
 #ifndef skgpu_graphite_RasterPathAtlas_DEFINED
 #define skgpu_graphite_RasterPathAtlas_DEFINED
 
-#include "src/base/SkTInternalLList.h"
-#include "src/core/SkTHash.h"
-#include "src/gpu/AtlasTypes.h"
-#include "src/gpu/ResourceKey.h"
 #include "src/gpu/graphite/PathAtlas.h"
 
 namespace skgpu::graphite {
@@ -32,6 +28,12 @@ public:
     ~RasterPathAtlas() override {}
     void recordUploads(DrawContext*);
 
+    void postFlush() {
+        fCachedAtlasMgr.postFlush(fRecorder);
+        fSmallPathAtlasMgr.postFlush(fRecorder);
+        fUncachedAtlasMgr.postFlush(fRecorder);
+    }
+
 protected:
     const TextureProxy* onAddShape(const Shape&,
                                    const Transform& transform,
@@ -39,63 +41,26 @@ protected:
                                    skvx::half2 maskSize,
                                    skvx::half2* outPos) override;
 private:
-    // TODO: select atlas size dynamically? Take ContextOptions::fMaxTextureAtlasSize into account?
-    static constexpr int kDefaultAtlasDim = 4096;
+    class RasterAtlasMgr : public PathAtlas::DrawAtlasMgr {
+    public:
+        RasterAtlasMgr(size_t width, size_t height,
+                       size_t plotWidth, size_t plotHeight,
+                       const Caps* caps)
+            : PathAtlas::DrawAtlasMgr(width, height, plotWidth, plotHeight,
+                                      DrawAtlas::UseStorageTextures::kNo,
+                                      /*label=*/"RasterPathAtlas", caps) {}
 
-    struct Page {
-        Page(int width, int height, uint16_t identifier)
-                : fRectanizer(width, height)
-                , fIdentifier(identifier) {}
-        bool initializeTextureIfNeeded(Recorder* recorder, uint16_t identifier);
-
-        // A Page lazily requests a texture from the AtlasProvider when the first shape gets added
-        // to it and references the same texture for the duration of its lifetime. A reference to
-        // this texture is stored here, which is used by CoverageMaskRenderStep when encoding the
-        // render pass.
-        sk_sp<TextureProxy> fTexture;
-        // Tracks placement of paths in a Page
-        skgpu::RectanizerSkyline fRectanizer;
-        // Rendered data that gets uploaded
-        SkAutoPixmapStorage fPixels;
-        // Area that's needed to be uploaded
-        SkIRect fDirtyRect;
-        // Tracks whether a path is already in this Page, and its location in the atlas
-        struct UniqueKeyHash {
-            uint32_t operator()(const skgpu::UniqueKey& key) const { return key.hash(); }
-        };
-        skia_private::THashMap<skgpu::UniqueKey, skvx::half2, UniqueKeyHash> fCachedShapes;
-        // Tracks current state relative to last flush
-        AtlasToken fLastUse = AtlasToken::InvalidToken();
-
-        uint16_t fIdentifier;
-
-        SK_DECLARE_INTERNAL_LLIST_INTERFACE(Page);
+    protected:
+        bool onAddToAtlas(const Shape&,
+                          const Transform& transform,
+                          const SkStrokeRec&,
+                          SkIRect shapeBounds,
+                          const AtlasLocator&) override;
     };
 
-    // Free up atlas allocations, if necessary. After this call the atlas can be considered
-    // available for new shape insertions. However this method does not have any bearing on the
-    // contents of any atlas textures themselves, which may be in use by GPU commands that are
-    // in-flight or yet to be submitted.
-    void reset(Page*);
-
-    // Investigation shows that eight pages helps with some of the more complex skps, and
-    // since we're using less complex vertex setups with the RPA, we have more GPU memory
-    // to take advantage of.
-    static constexpr int kMaxCachedPages = 6;
-    static constexpr int kMaxUncachedPages = 2;
-    typedef SkTInternalLList<Page> PageList;
-    // LRU lists of Pages (MRU at head - LRU at tail)
-    // We have two lists, one for cached paths and one for uncached
-    PageList fCachedPageList;
-    PageList fUncachedPageList;
-    // Allocated array of pages (backing data for lists)
-    std::unique_ptr<std::unique_ptr<Page>[]> fPageArray;
-
-    Page* addRect(PageList* pageList,
-                  skvx::half2 maskSize,
-                  SkIPoint16* outPos);
-    void makeMRU(Page*, PageList*);
-    void uploadPages(DrawContext* dc, PageList* pageList);
+    RasterAtlasMgr fCachedAtlasMgr;
+    RasterAtlasMgr fSmallPathAtlasMgr;
+    RasterAtlasMgr fUncachedAtlasMgr;
 };
 
 }  // namespace skgpu::graphite

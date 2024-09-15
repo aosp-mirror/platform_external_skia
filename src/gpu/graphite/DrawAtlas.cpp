@@ -53,11 +53,12 @@ std::unique_ptr<DrawAtlas> DrawAtlas::Make(SkColorType colorType, size_t bpp, in
                                            int height, int plotWidth, int plotHeight,
                                            AtlasGenerationCounter* generationCounter,
                                            AllowMultitexturing allowMultitexturing,
+                                           UseStorageTextures useStorageTextures,
                                            PlotEvictionCallback* evictor,
                                            std::string_view label) {
     std::unique_ptr<DrawAtlas> atlas(new DrawAtlas(colorType, bpp, width, height,
                                                    plotWidth, plotHeight, generationCounter,
-                                                   allowMultitexturing, label));
+                                                   allowMultitexturing, useStorageTextures, label));
 
     if (evictor != nullptr) {
         atlas->fEvictionCallbacks.emplace_back(evictor);
@@ -76,20 +77,23 @@ static uint32_t next_id() {
 }
 DrawAtlas::DrawAtlas(SkColorType colorType, size_t bpp, int width, int height,
                      int plotWidth, int plotHeight, AtlasGenerationCounter* generationCounter,
-                     AllowMultitexturing allowMultitexturing, std::string_view label)
+                     AllowMultitexturing allowMultitexturing,
+                     UseStorageTextures useStorageTextures,
+                     std::string_view label)
         : fColorType(colorType)
         , fBytesPerPixel(bpp)
         , fTextureWidth(width)
         , fTextureHeight(height)
         , fPlotWidth(plotWidth)
         , fPlotHeight(plotHeight)
+        , fUseStorageTextures(useStorageTextures)
         , fLabel(label)
         , fAtlasID(next_id())
         , fGenerationCounter(generationCounter)
         , fAtlasGeneration(fGenerationCounter->next())
         , fPrevFlushToken(AtlasToken::InvalidToken())
         , fFlushesSinceLastUse(0)
-        , fMaxPages(AllowMultitexturing::kYes == allowMultitexturing ?
+        , fMaxPages(allowMultitexturing == AllowMultitexturing::kYes ?
                             PlotLocator::kMaxMultitexturePages : 1)
         , fNumActivePages(0) {
     int numPlotsX = width/plotWidth;
@@ -113,7 +117,7 @@ inline void DrawAtlas::processEviction(PlotLocator plotLocator) {
     fAtlasGeneration = fGenerationCounter->next();
 }
 
-inline bool DrawAtlas::updatePlot(Plot* plot, AtlasLocator* atlasLocator) {
+inline void DrawAtlas::updatePlot(Plot* plot, AtlasLocator* atlasLocator) {
     int pageIdx = plot->pageIndex();
     this->makeMRU(plot, pageIdx);
 
@@ -121,7 +125,6 @@ inline bool DrawAtlas::updatePlot(Plot* plot, AtlasLocator* atlasLocator) {
 
     atlasLocator->updatePlotLocator(plot->plotLocator());
     SkDEBUGCODE(this->validate(*atlasLocator);)
-    return true;
 }
 
 bool DrawAtlas::addRectToPage(unsigned int pageIdx, int width, int height,
@@ -134,7 +137,8 @@ bool DrawAtlas::addRectToPage(unsigned int pageIdx, int width, int height,
 
     for (Plot* plot = plotIter.get(); plot; plot = plotIter.next()) {
         if (plot->addRect(width, height, atlasLocator)) {
-            return this->updatePlot(plot, atlasLocator);
+            this->updatePlot(plot, atlasLocator);
+            return true;
         }
     }
 
@@ -185,8 +189,23 @@ static constexpr auto kAtlasRecentlyUsedCount = 128;
 DrawAtlas::ErrorCode DrawAtlas::addRect(Recorder* recorder,
                                         int width, int height,
                                         AtlasLocator* atlasLocator) {
-    if (width > fPlotWidth || height > fPlotHeight) {
+    if (width > fPlotWidth || height > fPlotHeight || width < 0 || height < 0) {
         return ErrorCode::kError;
+    }
+
+    // We permit zero-sized rects to allow inverse fills in the PathAtlases to work,
+    // but we don't want to enter them in the Rectanizer. So we handle this special case here.
+    // For text this should be caught at a higher level, but if not the only end result
+    // will be rendering a degenerate quad.
+    if (width == 0 || height == 0) {
+        if (fNumActivePages == 0) {
+            // Make sure we have a Page for the AtlasLocator to refer to
+            this->activateNewPage(recorder);
+        }
+        atlasLocator->updateRect(skgpu::IRect16::MakeXYWH(0, 0, 0, 0));
+        // Use the MRU Plot from the first Page
+        atlasLocator->updatePlotLocator(fPages[0].fPlotList.head()->plotLocator());
+        return ErrorCode::kSucceeded;
     }
 
     // Look through each page to see if we can upload without having to flush
@@ -211,9 +230,7 @@ DrawAtlas::ErrorCode DrawAtlas::addRect(Recorder* recorder,
                 this->processEvictionAndResetRects(plot);
                 SkDEBUGCODE(bool verify = )plot->addRect(width, height, atlasLocator);
                 SkASSERT(verify);
-                if (!this->updatePlot(plot, atlasLocator)) {
-                    return ErrorCode::kError;
-                }
+                this->updatePlot(plot, atlasLocator);
                 return ErrorCode::kSucceeded;
             }
         }
@@ -253,6 +270,11 @@ DrawAtlas::ErrorCode DrawAtlas::addToAtlas(Recorder* recorder,
     }
 
     return ec;
+}
+
+SkIPoint DrawAtlas::prepForRender(const AtlasLocator& locator, SkAutoPixmapStorage* pixmap) {
+    Plot* plot = this->findPlot(locator);
+    return plot->prepForRender(locator, pixmap);
 }
 
 void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
@@ -295,7 +317,7 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
         // if there are any in the first pages that the last page can safely upload to.
         for (uint32_t pageIndex = 0; pageIndex < lastPageIndex; ++pageIndex) {
             if constexpr (kDumpAtlasData) {
-                SkDebugf("page %d: ", pageIndex);
+                SkDebugf("page %u: ", pageIndex);
             }
 
             plotIter.init(fPages[pageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
@@ -332,7 +354,7 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
         plotIter.init(fPages[lastPageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
         unsigned int usedPlots = 0;
         if constexpr (kDumpAtlasData) {
-            SkDebugf("page %d: ", lastPageIndex);
+            SkDebugf("page %u: ", lastPageIndex);
         }
         while (Plot* plot = plotIter.get()) {
             // Update number of flushes since plot was last used
@@ -387,7 +409,7 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
         // If none of the plots in the last page have been used recently, delete it.
         if (!usedPlots) {
             if constexpr (kDumpAtlasData) {
-                SkDebugf("delete %d\n", fNumActivePages-1);
+                SkDebugf("delete %u\n", fNumActivePages-1);
             }
 
             this->deactivateLastPage();
@@ -424,7 +446,6 @@ bool DrawAtlas::createPages(AtlasGenerationCounter* generationCounter) {
                 ++currPlot;
             }
         }
-
     }
 
     return true;
@@ -435,18 +456,24 @@ bool DrawAtlas::activateNewPage(Recorder* recorder) {
     SkASSERT(!fProxies[fNumActivePages]);
 
     const Caps* caps = recorder->priv().caps();
-    auto textureInfo = caps->getDefaultSampledTextureInfo(fColorType,
-                                                          /*mipmapped=*/Mipmapped::kNo,
-                                                          recorder->priv().isProtected(),
-                                                          Renderable::kNo);
-    fProxies[fNumActivePages] = TextureProxy::Make(
-            caps, {fTextureWidth, fTextureHeight}, textureInfo, skgpu::Budgeted::kYes);
+    auto textureInfo = fUseStorageTextures == UseStorageTextures::kYes
+                               ? caps->getDefaultStorageTextureInfo(fColorType)
+                               : caps->getDefaultSampledTextureInfo(fColorType,
+                                                                    Mipmapped::kNo,
+                                                                    recorder->priv().isProtected(),
+                                                                    Renderable::kNo);
+    fProxies[fNumActivePages] = TextureProxy::Make(caps,
+                                                   recorder->priv().resourceProvider(),
+                                                   {fTextureWidth, fTextureHeight},
+                                                   textureInfo,
+                                                   fLabel,
+                                                   skgpu::Budgeted::kYes);
     if (!fProxies[fNumActivePages]) {
         return false;
     }
 
     if constexpr (kDumpAtlasData) {
-        SkDebugf("activated page#: %d\n", fNumActivePages);
+        SkDebugf("activated page#: %u\n", fNumActivePages);
     }
 
     ++fNumActivePages;
@@ -479,6 +506,17 @@ inline void DrawAtlas::deactivateLastPage() {
     // remove ref to the texture proxy
     fProxies[lastPageIndex].reset();
     --fNumActivePages;
+}
+
+void DrawAtlas::markUsedPlotsAsFull() {
+    PlotList::Iter plotIter;
+    for (uint32_t pageIndex = 0; pageIndex < fNumActivePages; ++pageIndex) {
+        plotIter.init(fPages[pageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
+        while (Plot* plot = plotIter.get()) {
+            plot->markFullIfUsed();
+            plotIter.next();
+        }
+    }
 }
 
 void DrawAtlas::evictAllPlots() {

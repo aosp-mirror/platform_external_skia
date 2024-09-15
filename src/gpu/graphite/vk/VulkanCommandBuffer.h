@@ -17,6 +17,7 @@
 namespace skgpu::graphite {
 
 class VulkanBuffer;
+class VulkanDescriptorSet;
 class VulkanResourceProvider;
 class VulkanSharedContext;
 class VulkanTexture;
@@ -83,7 +84,7 @@ private:
     void addDrawPass(const DrawPass*);
 
     // Track descriptor changes for binding prior to draw calls
-    void recordBufferBindingInfo(const BindBufferInfo& info, UniformSlot);
+    void recordBufferBindingInfo(const BindUniformBufferInfo& info, UniformSlot);
     void recordTextureAndSamplerDescSet(
             const DrawPass&, const DrawPassCommands::BindTexturesAndSamplers&);
 
@@ -119,7 +120,7 @@ private:
 
     // TODO: The virtuals in this class have not yet been implemented as we still haven't
     // implemented the objects they use.
-    bool onAddComputePass(const DispatchGroupList&) override;
+    bool onAddComputePass(DispatchGroupSpan) override;
 
     bool onCopyBufferToBuffer(const Buffer* srcBuffer,
                               size_t srcOffset,
@@ -203,8 +204,8 @@ private:
     bool fBindUniformBuffers = false;
     bool fBindTextureSamplers = false;
 
-    std::array<BindBufferInfo, VulkanGraphicsPipeline::kNumUniformBuffers> fUniformBuffersToBind
-            = {{{nullptr, 0}}};
+    std::array<BindUniformBufferInfo, VulkanGraphicsPipeline::kNumUniformBuffers>
+            fUniformBuffersToBind;
     VkDescriptorSet fTextureSamplerDescSetToBind = VK_NULL_HANDLE;
 
     int fNumTextureSamplers = 0;

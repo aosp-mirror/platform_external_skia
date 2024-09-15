@@ -16,7 +16,6 @@ declare_args() {
   skia_enable_api_available_macro = true
   skia_enable_android_utils = is_skia_dev_build
   skia_enable_discrete_gpu = true
-  skia_enable_flutter_defines = false
   skia_enable_fontmgr_empty = false
   skia_enable_fontmgr_fuchsia = is_fuchsia
   skia_enable_fontmgr_win = is_win
@@ -43,6 +42,7 @@ declare_args() {
   skia_use_dawn = false
   skia_use_direct3d = false
   skia_use_egl = false
+  skia_use_epoxy_egl = false
   skia_use_expat = !is_wasm
   skia_use_ffmpeg = false
   skia_use_fixed_gamma_text = is_android
@@ -95,6 +95,9 @@ declare_args() {
   if (is_ios) {
     skia_ios_identity = ".*Google.*"
     skia_ios_profile = "Google Development"
+
+    # should only code sign when running on a device, not the simulator
+    skia_ios_use_signing = !ios_use_simulator
   }
 
   skia_build_rust_targets = false
@@ -105,7 +108,8 @@ declare_args() {
 }
 
 declare_args() {
-  skia_enable_sksl_tracing = is_skia_dev_build && !skia_enable_optimize_size
+  # This is now a no-op. TODO(kjlubick) remove after Flutter stops using this.
+  skia_enable_sksl_tracing = false
 }
 
 declare_args() {
@@ -155,7 +159,6 @@ declare_args() {
   skia_enable_spirv_validation = is_skia_dev_build && is_debug && !skia_use_dawn
   skia_use_dng_sdk =
       !is_fuchsia && !is_wasm && skia_use_libjpeg_turbo_decode && skia_use_zlib
-  skia_use_sfntly = skia_use_icu
   skia_enable_vulkan_debug_layers = skia_enable_gpu_debug_layers
   skia_enable_direct3d_debug_layer = skia_enable_gpu_debug_layers
   skia_enable_metal_debug_info = skia_enable_gpu_debug_layers
