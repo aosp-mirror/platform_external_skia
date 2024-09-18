@@ -107,10 +107,6 @@
 #define SK_TOOLS_REQUIRE_RESOURCES
 #endif
 
-#ifndef SK_USE_INTERNAL_VULKAN_HEADERS
-#define SK_USE_INTERNAL_VULKAN_HEADERS
-#endif
-
 #ifndef SK_USE_VMA
 #define SK_USE_VMA
 #endif
