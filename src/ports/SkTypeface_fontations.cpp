@@ -374,6 +374,8 @@ public:
                 SkScalerContextRec::PreMatrixScale::kVertical, &scale, &remainingMatrix);
 
         fDoLinearMetrics = this->isLinearMetrics();
+        bool forceAutohinting = SkToBool(fRec.fFlags & kForceAutohinting_Flag);
+
         if (SkMask::kBW_Format == fRec.fMaskFormat) {
             if (fRec.getHinting() == SkFontHinting::kNone) {
                 fHintingInstance = fontations_ffi::no_hinting_instance();
@@ -395,9 +397,10 @@ public:
                             fOutlines,
                             scale.fY,
                             fBridgeNormalizedCoords,
+                            true /* do_light_hinting */,
                             false /* do_lcd_antialiasing */,
                             false /* lcd_orientation_vertical */,
-                            true /* preserve_linear_metrics */);
+                            true /* force_autohinting */);
                     fDoLinearMetrics = true;
                     break;
                 case SkFontHinting::kNormal:
@@ -406,9 +409,10 @@ public:
                             fOutlines,
                             scale.fY,
                             fBridgeNormalizedCoords,
+                            false /* do_light_hinting */,
                             false /* do_lcd_antialiasing */,
                             false /* lcd_orientation_vertical */,
-                            fDoLinearMetrics /* preserve_linear_metrics */);
+                            forceAutohinting /* force_autohinting */);
                     break;
                 case SkFontHinting::kFull:
                     // Attempt to make use of hinting to subpixel coordinates.
@@ -416,11 +420,12 @@ public:
                             fOutlines,
                             scale.fY,
                             fBridgeNormalizedCoords,
+                            false /* do_light_hinting */,
                             isLCD(fRec) /* do_lcd_antialiasing */,
                             SkToBool(fRec.fFlags &
                                      SkScalerContext::
                                              kLCD_Vertical_Flag) /* lcd_orientation_vertical */,
-                            fDoLinearMetrics /* preserve_linear_metrics */);
+                            forceAutohinting /* force_autohinting */);
             }
         }
     }
@@ -501,6 +506,12 @@ protected:
             float hinted_advance = 0;
             fontations_ffi::scaler_hinted_advance_width(
                     fOutlines, *fHintingInstance, glyph.getGlyphID(), hinted_advance);
+            // FreeType rounds the advance to full pixels when in hinting modes.
+            // Match FreeType and round here.
+            // See
+            // * https://gitlab.freedesktop.org/freetype/freetype/-/blob/57617782464411201ce7bbc93b086c1b4d7d84a5/src/autofit/afloader.c#L422
+            // * https://gitlab.freedesktop.org/freetype/freetype/-/blob/57617782464411201ce7bbc93b086c1b4d7d84a5/src/truetype/ttgload.c#L823
+            hinted_advance = roundf(hinted_advance);
             // TODO(drott): Remove this workaround for fontations returning 0
             // for a space glyph without contours, compare
             // https://github.com/googlefonts/fontations/issues/905
@@ -700,6 +711,9 @@ protected:
             const bool doVert = SkToBool(fRec.fFlags & SkScalerContext::kLCD_Vertical_Flag);
             const bool a8LCD = SkToBool(fRec.fFlags & SkScalerContext::kGenA8FromLCD_Flag);
             const bool hairline = glyph.pathIsHairline();
+
+            // Path offseting for subpixel positioning is not needed here,
+            // as this is done in SkScalerContext::internalGetPath.
             GenerateImageFromPath(mask, *devPath, fPreBlend, doBGR, doVert, a8LCD, hairline);
 
         } else if (format == ScalerContextBits::COLRv1 || format == ScalerContextBits::COLRv0) {
