@@ -266,6 +266,10 @@ using namespace ycbcrUtils;
 bool gather_immutable_samplers(const SkSpan<uint32_t> samplerData,
                                DawnResourceProvider* resourceProvider,
                                skia_private::AutoTArray<sk_sp<DawnSampler>>& outImmutableSamplers) {
+    if (samplerData.empty()) {
+        return true;
+    }
+
     // The quantity of int32s needed to represent immutable sampler data varies, so handle
     // incrementing i within the loop. Sampler data can be anywhere from 1-3 uint32s depending upon
     // whether a sampler is immutable or dynamic and whether it uses a known or external format.
@@ -310,9 +314,8 @@ bool gather_immutable_samplers(const SkSpan<uint32_t> samplerData,
         outImmutableSamplers[samplerIdx++] = std::move(dawnImmutableSampler);
         i += samplerDataLength;
     }
-    // If there was any sampler data, then assert that we appropriately analyzed the correct number
-    // of samplers.
-    SkASSERT(samplerData.empty() || samplerIdx == outImmutableSamplers.size());
+    // TODO(b/366220690): Once the root cause of b/366220690 is fixed, assert that we traverse the
+    // correct number of samplers (samplerIdx == outImmutableSamplers.size()).
     return true;
 }
 #endif
@@ -473,7 +476,9 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
     // Determine the BindGroupLayouts that will be used to make up the pipeline layout.
     BindGroupLayouts groupLayouts;
 
-    // The quantity of samplers = 1/2 the cumulative number of textures AND samplers.
+    // The quantity of samplers = 1/2 the cumulative number of textures AND samplers. The count
+    // reported by the generated SkSL already includes any texture/sampler required for dst reads
+    // via texture copy so no additional logic is needed when preparing the BindGroupLayout.
     const int numSamplers = numTexturesAndSamplers / 2;
     // Determine and store any immutable samplers to be included in the pipeline layout. A sampler's
     // binding index can be determined by multiplying its index within the immutableSamplers array
