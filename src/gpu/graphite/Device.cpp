@@ -868,6 +868,7 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
                                                            sampling,
                                                            &paint,
                                                            constraint,
+                                                           /* sharpenMM= */ true,
                                                            cacheSize,
                                                            maxTextureSize);
 #if defined(GPU_TEST_UTILS)
@@ -1762,7 +1763,7 @@ void Device::internalFlush() {
     fCurrentDepth = DrawOrder::kClearDepth;
 
      // Any cleanup in the AtlasProvider
-    fRecorder->priv().atlasProvider()->compact();
+    fRecorder->priv().atlasProvider()->compact(/*forceCompact=*/false);
 }
 
 bool Device::needsFlushBeforeDraw(int numNewRenderSteps, DstReadRequirement dstReadReq) const {
