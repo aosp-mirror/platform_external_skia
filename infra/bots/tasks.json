@@ -3690,7 +3690,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -3760,7 +3760,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -3830,7 +3830,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -3906,7 +3906,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -3976,7 +3976,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4052,7 +4052,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4122,7 +4122,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4188,7 +4188,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4258,7 +4258,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4328,7 +4328,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4404,7 +4404,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4474,7 +4474,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4544,7 +4544,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4610,7 +4610,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -4680,7 +4680,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -6064,7 +6064,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -6768,7 +6768,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -6875,7 +6875,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -7402,7 +7402,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -7509,7 +7509,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -8213,7 +8213,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -8320,7 +8320,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -8953,7 +8953,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -9348,7 +9348,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -9562,7 +9562,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -9682,7 +9682,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -10938,7 +10938,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -11332,7 +11332,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -11735,7 +11735,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -12036,7 +12036,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -12156,7 +12156,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -12463,7 +12463,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -13425,7 +13425,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -15040,7 +15040,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -15159,7 +15159,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -15831,7 +15831,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -15950,7 +15950,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -17121,7 +17121,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -17217,7 +17217,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -17313,7 +17313,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -17402,7 +17402,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -17432,7 +17432,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -17528,7 +17528,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -17700,7 +17700,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -17730,7 +17730,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -17819,7 +17819,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -17849,7 +17849,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -17938,7 +17938,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -17968,7 +17968,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -18061,7 +18061,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -18091,7 +18091,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/bazelisk_mac_amd64",
@@ -18192,7 +18192,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -18288,7 +18288,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -18384,7 +18384,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -18477,7 +18477,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -18507,7 +18507,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/bazelisk_mac_amd64",
@@ -18608,7 +18608,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -18704,7 +18704,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -18800,7 +18800,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -18901,7 +18901,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19002,7 +19002,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19103,7 +19103,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19204,7 +19204,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19305,7 +19305,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19401,7 +19401,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19490,7 +19490,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -19520,7 +19520,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19616,7 +19616,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19712,7 +19712,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19808,7 +19808,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -19909,7 +19909,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -20010,7 +20010,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -20111,7 +20111,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -20212,7 +20212,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -20313,7 +20313,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -20414,7 +20414,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -20510,7 +20510,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -20606,7 +20606,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -20702,7 +20702,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -20795,7 +20795,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -20825,7 +20825,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/bazelisk_mac_amd64",
@@ -20919,7 +20919,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -20949,7 +20949,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -21042,7 +21042,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -21072,7 +21072,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/bazelisk_mac_amd64",
@@ -21173,7 +21173,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -21266,7 +21266,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -21296,7 +21296,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/bazelisk_mac_amd64",
@@ -21397,7 +21397,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -21493,7 +21493,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -21589,7 +21589,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -21678,7 +21678,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -21708,7 +21708,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -21801,7 +21801,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -21831,7 +21831,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/bazelisk_mac_amd64",
@@ -21932,7 +21932,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -22025,7 +22025,7 @@
         {
           "name": "infra/3pp/tools/git/mac-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -22055,7 +22055,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/bazelisk_mac_amd64",
@@ -22156,7 +22156,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -22252,7 +22252,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -22348,7 +22348,7 @@
         {
           "name": "infra/tools/mac_toolchain/${platform}",
           "path": "mac_toolchain",
-          "version": "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9"
+          "version": "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd"
         },
         {
           "name": "skia/bots/ccache_mac",
@@ -23538,7 +23538,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -23646,7 +23646,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -24264,7 +24264,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -24372,7 +24372,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -24480,7 +24480,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -25483,7 +25483,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -25586,7 +25586,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -25689,7 +25689,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -26032,7 +26032,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -26375,7 +26375,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -26478,7 +26478,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -26581,7 +26581,7 @@
         {
           "name": "infra/3pp/tools/git/windows-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -26928,7 +26928,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -27042,7 +27042,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -27156,7 +27156,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -27270,7 +27270,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -27384,7 +27384,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -27498,7 +27498,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -27612,7 +27612,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -27726,7 +27726,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -28466,7 +28466,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -28571,7 +28571,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/recipe_bundles/chromium.googlesource.com/chromium/tools/build",
@@ -28675,7 +28675,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -28860,7 +28860,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -28922,7 +28922,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -28990,7 +28990,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -29075,7 +29075,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
@@ -29375,7 +29375,7 @@
         {
           "name": "infra/3pp/tools/git/linux-amd64",
           "path": "cipd_bin_packages",
-          "version": "version:3@2.46.1.chromium.11"
+          "version": "version:3@2.46.2.chromium.11"
         },
         {
           "name": "infra/tools/git/${platform}",
