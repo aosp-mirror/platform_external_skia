@@ -203,7 +203,7 @@ var (
 			Path: "mac_toolchain",
 			// When this is updated, also update
 			// https://skia.googlesource.com/skcms.git/+/f1e2b45d18facbae2dece3aca673fe1603077846/infra/bots/gen_tasks.go#56
-			Version: "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9",
+			Version: "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd",
 		},
 	}
 
@@ -732,7 +732,8 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 				"DDLRecord", "BonusConfigs", "ColorSpaces", "GL",
 				"SkottieTracing", "SkottieWASM", "GpuTess", "DMSAAStats", "Docker", "PDF",
 				"Puppeteer", "SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile",
-				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "TintIR", "Protected"}
+				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "TintIR", "Protected",
+				"AndroidNDKFonts"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -843,6 +844,7 @@ var androidDeviceInfos = map[string][]string{
 	"Pixel5":          {"redfin", "RD1A.200810.022.A4"},
 	"Pixel6":          {"oriole", "SD1A.210817.037"},
 	"Pixel7":          {"cheetah", "TD1A.221105.002"},
+	"Pixel9":          {"tokay", "AD1A.240905.004"},
 	"TecnoSpark3Pro":  {"TECNO-KB8", "PPR1.180610.011"},
 	"Wembley":         {"wembley", "SP2A.220505.008"},
 }

@@ -185,10 +185,14 @@ impl<'a> OutlinePen for NoOpPen {
 
 struct ColorPainterImpl<'a> {
     color_painter_wrapper: Pin<&'a mut ffi::ColorPainterWrapper>,
+    clip_level: usize,
 }
 
 impl<'a> ColorPainter for ColorPainterImpl<'a> {
     fn push_transform(&mut self, transform: Transform) {
+        if self.clip_level > 0 {
+            return;
+        }
         self.color_painter_wrapper
             .as_mut()
             .push_transform(&ffi::Transform {
@@ -202,30 +206,51 @@ impl<'a> ColorPainter for ColorPainterImpl<'a> {
     }
 
     fn pop_transform(&mut self) {
+        if self.clip_level > 0 {
+            return;
+        }
         self.color_painter_wrapper.as_mut().pop_transform();
     }
 
     fn push_clip_glyph(&mut self, glyph: GlyphId) {
-        // TODO(drott): Handle large glyph ids in clip operation.
-        self.color_painter_wrapper
-            .as_mut()
-            .push_clip_glyph(glyph.to_u32().try_into().ok().unwrap_or_default());
+        if self.clip_level == 0 {
+            // TODO(drott): Handle large glyph ids in clip operation.
+            self.color_painter_wrapper
+                .as_mut()
+                .push_clip_glyph(glyph.to_u32().try_into().ok().unwrap_or_default());
+        }
+        if self.color_painter_wrapper.as_mut().is_bounds_mode() {
+            self.clip_level += 1;
+        }
     }
 
     fn push_clip_box(&mut self, clip_box: BoundingBox<f32>) {
-        self.color_painter_wrapper.as_mut().push_clip_rectangle(
-            clip_box.x_min,
-            clip_box.y_min,
-            clip_box.x_max,
-            clip_box.y_max,
-        );
+        if self.clip_level == 0 {
+            self.color_painter_wrapper.as_mut().push_clip_rectangle(
+                clip_box.x_min,
+                clip_box.y_min,
+                clip_box.x_max,
+                clip_box.y_max,
+            );
+        }
+        if self.color_painter_wrapper.as_mut().is_bounds_mode() {
+            self.clip_level += 1;
+        }
     }
 
     fn pop_clip(&mut self) {
-        self.color_painter_wrapper.as_mut().pop_clip();
+        if self.color_painter_wrapper.as_mut().is_bounds_mode() {
+            self.clip_level -= 1;
+        }
+        if self.clip_level == 0 {
+            self.color_painter_wrapper.as_mut().pop_clip();
+        }
     }
 
     fn fill(&mut self, fill_type: Brush) {
+        if self.clip_level > 0 {
+            return;
+        }
         let color_painter = self.color_painter_wrapper.as_mut();
         match fill_type {
             Brush::Solid {
@@ -307,6 +332,12 @@ impl<'a> ColorPainter for ColorPainterImpl<'a> {
     }
 
     fn fill_glyph(&mut self, glyph: GlyphId, brush_transform: Option<Transform>, brush: Brush) {
+        if self.color_painter_wrapper.as_mut().is_bounds_mode() {
+            self.push_clip_glyph(glyph);
+            self.pop_clip();
+            return;
+        }
+
         let color_painter = self.color_painter_wrapper.as_mut();
         let brush_transform = brush_transform.unwrap_or_default();
         match brush {
@@ -423,11 +454,17 @@ impl<'a> ColorPainter for ColorPainterImpl<'a> {
     }
 
     fn push_layer(&mut self, composite_mode: CompositeMode) {
+        if self.clip_level > 0 {
+            return;
+        }
         self.color_painter_wrapper
             .as_mut()
             .push_layer(composite_mode as u8);
     }
     fn pop_layer(&mut self) {
+        if self.clip_level > 0 {
+            return;
+        }
         self.color_painter_wrapper.as_mut().pop_layer();
     }
 }
@@ -864,11 +901,30 @@ fn make_font_ref_internal<'a>(font_data: &'a [u8], index: u32) -> Result<FontRef
 }
 
 fn make_font_ref<'a>(font_data: &'a [u8], index: u32) -> Box<BridgeFontRef<'a>> {
-    Box::new(BridgeFontRef(make_font_ref_internal(font_data, index).ok()))
+    let font = make_font_ref_internal(font_data, index).ok();
+    let has_any_color = font
+        .as_ref()
+        .map(|f| {
+            f.cbdt().is_ok() ||
+            f.sbix().is_ok() ||
+            // ColorGlyphCollection::get_with_format() first thing checks for presence of colr(),
+            // so we do the same:
+            f.colr().is_ok()
+        })
+        .unwrap_or_default();
+
+    Box::new(BridgeFontRef {
+        font,
+        has_any_color,
+    })
 }
 
 fn font_ref_is_valid(bridge_font_ref: &BridgeFontRef) -> bool {
-    bridge_font_ref.0.is_some()
+    bridge_font_ref.font.is_some()
+}
+
+fn has_any_color_table(bridge_font_ref: &BridgeFontRef) -> bool {
+    bridge_font_ref.has_any_color
 }
 
 fn get_outline_collection<'a>(font_ref: &'a BridgeFontRef<'a>) -> Box<BridgeOutlineCollection<'a>> {
@@ -939,6 +995,9 @@ fn draw_colr_glyph(
 ) -> bool {
     let mut color_painter_impl = ColorPainterImpl {
         color_painter_wrapper: color_painter,
+        // In bounds mode, we do not need to track or forward to the client anything below the
+        // first clip layer, as the bounds cannot grow after that.
+        clip_level: 0,
     };
     font_ref
         .with_font(|f| {
@@ -1114,11 +1173,14 @@ fn italic_angle(font_ref: &BridgeFontRef) -> i32 {
         .unwrap_or_default()
 }
 
-pub struct BridgeFontRef<'a>(Option<FontRef<'a>>);
+pub struct BridgeFontRef<'a> {
+    font: Option<FontRef<'a>>,
+    has_any_color: bool,
+}
 
 impl<'a> BridgeFontRef<'a> {
     fn with_font<T>(&'a self, f: impl FnOnce(&'a FontRef) -> Option<T>) -> Option<T> {
-        f(self.0.as_ref()?)
+        f(self.font.as_ref()?)
     }
 }
 
@@ -1261,9 +1323,9 @@ mod bitmap {
     }
 
     pub fn has_bitmap_glyph(font_ref: &BridgeFontRef, glyph_id: u16) -> bool {
-        let glyph_id = GlyphId::from(glyph_id);
         font_ref
             .with_font(|font| {
+                let glyph_id = GlyphId::from(glyph_id);
                 let has_sbix = sbix_glyph(font, glyph_id, None).is_some();
                 let has_cblc = cblc_glyph(font, glyph_id, None).is_some();
                 Some(has_sbix || has_cblc)
@@ -1498,6 +1560,9 @@ mod ffi {
         // accessible.
         fn font_ref_is_valid(bridge_font_ref: &BridgeFontRef) -> bool;
 
+        // Optimization to quickly rule out that the font has any color tables.
+        fn has_any_color_table(bridge_font_ref: &BridgeFontRef) -> bool;
+
         type BridgeOutlineCollection<'a>;
         unsafe fn get_outline_collection<'a>(
             font_ref: &'a BridgeFontRef<'a>,
@@ -1709,6 +1774,7 @@ mod ffi {
 
         type ColorPainterWrapper;
 
+        fn is_bounds_mode(self: Pin<&mut ColorPainterWrapper>) -> bool;
         fn push_transform(self: Pin<&mut ColorPainterWrapper>, transform: &Transform);
         fn pop_transform(self: Pin<&mut ColorPainterWrapper>);
         fn push_clip_glyph(self: Pin<&mut ColorPainterWrapper>, glyph_id: u16);
