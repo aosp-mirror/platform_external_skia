@@ -74,9 +74,10 @@ RendererProvider::RendererProvider(const Caps* caps, StaticBufferManager* buffer
     fTessellatedStrokes = makeFromStep(
             std::make_unique<TessellateStrokesRenderStep>(infinitySupport),
             DrawTypeFlags::kNonSimpleShape);
-    fCoverageMask = makeFromStep(std::make_unique<CoverageMaskRenderStep>(),
-                                 static_cast<DrawTypeFlags>(DrawTypeFlags::kNonSimpleShape|
-                                                            InternalDrawTypeFlags::kCoverageMask));
+    fCoverageMask = makeFromStep(
+            std::make_unique<CoverageMaskRenderStep>(),
+            static_cast<DrawTypeFlags>(static_cast<int>(DrawTypeFlags::kNonSimpleShape) |
+                                       static_cast<int>(InternalDrawTypeFlags::kCoverageMask)));
 
     static constexpr struct {
         skgpu::MaskFormat fFormat;
@@ -99,10 +100,10 @@ RendererProvider::RendererProvider(const Caps* caps, StaticBufferManager* buffer
                             : makeFromStep(std::make_unique<SDFTextRenderStep>(),
                                            DrawTypeFlags::kSDFText);
     }
-    fAnalyticRRect =
-            makeFromStep(std::make_unique<AnalyticRRectRenderStep>(bufferManager),
-                         static_cast<DrawTypeFlags>(DrawTypeFlags::kSimpleShape |
-                                                    InternalDrawTypeFlags::kAnalyticRRect));
+    fAnalyticRRect = makeFromStep(
+            std::make_unique<AnalyticRRectRenderStep>(bufferManager),
+            static_cast<DrawTypeFlags>(static_cast<int>(DrawTypeFlags::kSimpleShape) |
+                                       static_cast<int>(InternalDrawTypeFlags::kAnalyticRRect)));
     fPerEdgeAAQuad = makeFromStep(std::make_unique<PerEdgeAAQuadRenderStep>(bufferManager),
                                   DrawTypeFlags::kSimpleShape);
     fNonAABoundsFill = makeFromStep(std::make_unique<CoverBoundsRenderStep>(
