@@ -36,21 +36,24 @@ public:
 
 private:
     struct DecodingState {
-        // `dst` is based on `pixels` passed to `onGetPixels` or
+        // `fDst` is based on `pixels` passed to `onGetPixels` or
         // `onStartIncrementalDecode`.  For interlaced and non-interlaced
-        // images, `startDecoding` initializes `dst` to start at the (0,0)
+        // images, `startDecoding` initializes `fDst` to start at the (0,0)
         // (top-left) pixel of the current frame (which may be offset from
         // `pixels` if the current frame is a sub-rect of the full image).
-        // After decoding a non-interlaced row this moves (by `dstRowSize`) to
+        // After decoding a non-interlaced row this moves (by `fDstRowSize`) to
         // the next row.
-        SkSpan<uint8_t> dst;
+        SkSpan<uint8_t> fDst;
 
         // Size of a row (in bytes) in the full image.  Based on `rowBytes`
         // passed to `onGetPixels` or `onStartIncrementalDecode`.
-        size_t dstRowSize = 0;
+        size_t fDstRowSize = 0;
 
         // Stashed `dstInfo.bytesPerPixel()`
-        size_t bytesPerPixel = 0;
+        size_t fBytesPerPixel = 0;
+
+        // Index (in `fFrameHolder`) of the frame being currently decoded.
+        size_t fFrameIndex = 0;
     };
 
     // Helper for validating parameters of `onGetPixels` and/or
@@ -81,12 +84,14 @@ private:
     bool onGetFrameInfo(int, FrameInfo*) const override;
     int onGetRepetitionCount() override;
     const SkFrameHolder* getFrameHolder() const override;
+    std::unique_ptr<SkStream> getEncodedData() const override;
 
     // SkPngCodecBase overrides:
     std::optional<SkSpan<const PaletteColorEntry>> onTryGetPlteChunk() override;
     std::optional<SkSpan<const uint8_t>> onTryGetTrnsChunk() override;
 
     rust::Box<rust_png::Reader> fReader;
+    const std::unique_ptr<SkStream> fPrivStream;
 
     std::optional<DecodingState> fIncrementalDecodingState;
 
@@ -103,6 +108,8 @@ private:
         size_t size() const;
 
         void appendNewFrame(const rust_png::Reader& reader, const SkEncodedInfo& info);
+        void markFrameAsFullyReceived(size_t index);
+        bool getFrameInfo(int index, FrameInfo* info) const;
 
     private:
         const SkFrame* onGetFrame(int i) const override;
@@ -112,8 +119,6 @@ private:
         std::vector<PngFrame> fFrames;
     };
     FrameHolder fFrameHolder;
-
-    size_t fNumOfFullyReceivedFrames = 0;
 };
 
 #endif  // SkPngRustCodec_DEFINED
