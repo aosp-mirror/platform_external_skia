@@ -1954,6 +1954,7 @@ void check_draw(skiatest::Reporter* reporter,
         dump_keys(context, precompileKeys, drawKeys, "precompile", "draw");
     }
 #endif // SK_DEBUG
+
 }
 
 KeyContext create_key_context(Context* context, RuntimeEffectDictionary* rtDict) {
@@ -2055,7 +2056,7 @@ void extract_vs_build_subtest(skiatest::Reporter* reporter,
                     SkColorFilters::Blend(0xFFFFFFFF, SkBlendMode::kSrcOut));
         }
 
-        auto [paintID, uData, tData] =
+        UniquePaintParamsID paintID =
                 ExtractPaintData(recorder,
                                  &paramsGatherer,
                                  &builder,
