@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "experimental/rust_png/ffi/FFI.rs.h"
+#include "src/codec/SkFrameHolder.h"
 #include "src/codec/SkPngCodecBase.h"
 #include "third_party/rust/cxx/v1/cxx.h"
 
@@ -35,9 +36,24 @@ public:
 
 private:
     struct DecodingState {
-        SkSpan<uint8_t> dst;
-        size_t dstRowSize;  // in bytes.
-        size_t bytesPerPixel;
+        // `fDst` is based on `pixels` passed to `onGetPixels` or
+        // `onStartIncrementalDecode`.  For interlaced and non-interlaced
+        // images, `startDecoding` initializes `fDst` to start at the (0,0)
+        // (top-left) pixel of the current frame (which may be offset from
+        // `pixels` if the current frame is a sub-rect of the full image).
+        // After decoding a non-interlaced row this moves (by `fDstRowSize`) to
+        // the next row.
+        SkSpan<uint8_t> fDst;
+
+        // Size of a row (in bytes) in the full image.  Based on `rowBytes`
+        // passed to `onGetPixels` or `onStartIncrementalDecode`.
+        size_t fDstRowSize = 0;
+
+        // Stashed `dstInfo.bytesPerPixel()`
+        size_t fBytesPerPixel = 0;
+
+        // Index (in `fFrameHolder`) of the frame being currently decoded.
+        size_t fFrameIndex = 0;
     };
 
     // Helper for validating parameters of `onGetPixels` and/or
@@ -64,21 +80,45 @@ private:
                                     size_t rowBytes,
                                     const Options&) override;
     Result onIncrementalDecode(int* rowsDecoded) override;
+    int onGetFrameCount() override;
     bool onGetFrameInfo(int, FrameInfo*) const override;
     int onGetRepetitionCount() override;
+    const SkFrameHolder* getFrameHolder() const override;
+    std::unique_ptr<SkStream> getEncodedData() const override;
 
     // SkPngCodecBase overrides:
     std::optional<SkSpan<const PaletteColorEntry>> onTryGetPlteChunk() override;
     std::optional<SkSpan<const uint8_t>> onTryGetTrnsChunk() override;
 
     rust::Box<rust_png::Reader> fReader;
+    const std::unique_ptr<SkStream> fPrivStream;
 
     std::optional<DecodingState> fIncrementalDecodingState;
 
-    class PngFrame;
-    std::vector<PngFrame> fFrames;
+    class FrameHolder final : public SkFrameHolder {
+    public:
+        FrameHolder(int width, int height);
+        ~FrameHolder() override;
 
-    size_t fNumOfFullyReceivedFrames = 0;
+        FrameHolder(const FrameHolder&) = delete;
+        FrameHolder(FrameHolder&&) = delete;
+        FrameHolder& operator=(const FrameHolder&) = delete;
+        FrameHolder& operator=(FrameHolder&&) = delete;
+
+        size_t size() const;
+
+        void appendNewFrame(const rust_png::Reader& reader, const SkEncodedInfo& info);
+        void markFrameAsFullyReceived(size_t index);
+        bool getFrameInfo(int index, FrameInfo* info) const;
+
+    private:
+        const SkFrame* onGetFrame(int i) const override;
+        void setLastFrameInfoFromCurrentFctlChunk(const rust_png::Reader& reader);
+
+        class PngFrame;
+        std::vector<PngFrame> fFrames;
+    };
+    FrameHolder fFrameHolder;
 };
 
 #endif  // SkPngRustCodec_DEFINED

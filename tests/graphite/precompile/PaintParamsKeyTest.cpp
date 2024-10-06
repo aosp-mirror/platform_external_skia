@@ -1785,6 +1785,7 @@ void simple_draws(SkCanvas* canvas, const SkPaint& paint) {
     canvas->drawRRect(SkRRect::MakeOval({0, 0, 16, 16}), paint);
     canvas->drawRRect(SkRRect::MakeRectXY({0, 0, 16, 16}, 4, 4), paint);
 
+    // TODO: add a case that uses the SkCanvas::experimental_DrawEdgeAAImageSet entry point
     if (!paint.getShader() &&
         !paint.getColorFilter() &&
         !paint.getImageFilter() &&
@@ -1953,6 +1954,7 @@ void check_draw(skiatest::Reporter* reporter,
         dump_keys(context, precompileKeys, drawKeys, "precompile", "draw");
     }
 #endif // SK_DEBUG
+
 }
 
 KeyContext create_key_context(Context* context, RuntimeEffectDictionary* rtDict) {
@@ -2054,7 +2056,7 @@ void extract_vs_build_subtest(skiatest::Reporter* reporter,
                     SkColorFilters::Blend(0xFFFFFFFF, SkBlendMode::kSrcOut));
         }
 
-        auto [paintID, uData, tData] =
+        UniquePaintParamsID paintID =
                 ExtractPaintData(recorder,
                                  &paramsGatherer,
                                  &builder,

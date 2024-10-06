@@ -446,6 +446,8 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
 
     // The uniforms are mangled by having their index in 'fEntries' as a suffix (i.e., "_%d")
     const ResourceBindingRequirements& bindingReqs = caps->resourceBindingRequirements();
+    preamble += EmitIntrinsicUniforms(bindingReqs.fIntrinsicBufferBinding,
+                                      bindingReqs.fUniformBufferLayout);
     if (hasStepUniforms) {
         if (useStepStorageBuffer) {
             preamble += EmitRenderStepStorageBuffer(bindingReqs.fRenderStepBufferBinding,
@@ -485,8 +487,20 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
     {
         int binding = 0;
         preamble += EmitTexturesAndSamplers(bindingReqs, fRootNodes, &binding, outDescs);
+        int paintTextureCount = binding;
         if (step->hasTextures()) {
             preamble += step->texturesAndSamplersSkSL(bindingReqs, &binding);
+            if (outDescs) {
+                // Determine how many render step samplers were used by comparing the binding value
+                // against paintTextureCount, taking into account the binding requirements. We
+                // assume and do not anticipate the render steps to use immutable samplers.
+                int renderStepSamplerCount =  bindingReqs.fSeparateTextureAndSamplerBinding
+                        ? (binding - paintTextureCount) / 2
+                        : binding - paintTextureCount;
+                // Add default SamplerDescs for all the dynamic samplers used by the render step so
+                // the size of outDescs will be equivalent to the total number of samplers.
+                outDescs->push_back_n(renderStepSamplerCount);
+            }
         }
 
         // Report back to the caller how many textures and samplers are used.
@@ -567,11 +581,13 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
         mainBody += step->fragmentCoverageSkSL();
 
         if (clipBlockNode) {
-            // The clip block node is invoked with fragment coords, not local coords like the main
-            // shading root node.
+            // The clip block node is invoked with device coords, not local coords like the main
+            // shading root node. However sk_FragCoord includes any replay translation and we
+            // need to recover the original device coordinate.
+            mainBody += "float2 devCoord = sk_FragCoord.xy - viewport.xy;";
             // TODO: The actual clipBlockNode can go away once we can enforce that a PaintParamsKey
             // has only 1-2 roots and the 2nd root is always the clip node.
-            args.fFragCoord = "sk_FragCoord.xy";
+            args.fFragCoord = "devCoord";
             std::string clipBlockOutput =
                     invoke_and_assign_node(*this, clipBlockNode->child(0), args, &mainBody);
             SkSL::String::appendf(&mainBody, "outputCoverage *= %s.a;", clipBlockOutput.c_str());
