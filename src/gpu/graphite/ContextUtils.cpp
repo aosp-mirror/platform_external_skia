@@ -29,17 +29,16 @@
 
 namespace skgpu::graphite {
 
-std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaintData(
-        Recorder* recorder,
-        PipelineDataGatherer* gatherer,
-        PaintParamsKeyBuilder* builder,
-        const Layout layout,
-        const SkM44& local2Dev,
-        const PaintParams& p,
-        const Geometry& geometry,
-        sk_sp<TextureProxy> dstTexture,
-        SkIPoint dstOffset,
-        const SkColorInfo& targetColorInfo) {
+UniquePaintParamsID ExtractPaintData(Recorder* recorder,
+                                     PipelineDataGatherer* gatherer,
+                                     PaintParamsKeyBuilder* builder,
+                                     const Layout layout,
+                                     const SkM44& local2Dev,
+                                     const PaintParams& p,
+                                     const Geometry& geometry,
+                                     sk_sp<TextureProxy> dstTexture,
+                                     SkIPoint dstOffset,
+                                     const SkColorInfo& targetColorInfo) {
     SkDEBUGCODE(builder->checkReset());
 
     gatherer->resetWithNewLayout(layout);
@@ -55,41 +54,7 @@ std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaint
                           dstOffset);
     p.toKey(keyContext, builder, gatherer);
 
-    UniquePaintParamsID paintID = recorder->priv().shaderCodeDictionary()->findOrCreate(builder);
-    UniformDataBlock uniforms;
-    TextureDataBlock textures;
-    if (paintID.isValid()) {
-        if (gatherer->hasUniforms()) {
-            UniformDataCache* uniformDataCache = recorder->priv().uniformDataCache();
-            uniforms = uniformDataCache->insert(gatherer->finishUniformDataBlock());
-        }
-        if (gatherer->hasTextures()) {
-            TextureDataCache* textureDataCache = recorder->priv().textureDataCache();
-            textures = textureDataCache->insert(gatherer->textureDataBlock());
-        }
-    }
-
-    return { paintID, uniforms, textures };
-}
-
-std::tuple<UniformDataBlock, TextureDataBlock> ExtractRenderStepData(
-        UniformDataCache* uniformDataCache,
-        TextureDataCache* textureDataCache,
-        PipelineDataGatherer* gatherer,
-        const Layout layout,
-        const RenderStep* step,
-        const DrawParams& params) {
-    gatherer->resetWithNewLayout(layout);
-    step->writeUniformsAndTextures(params, gatherer);
-
-    UniformDataBlock uniforms =
-            gatherer->hasUniforms() ? uniformDataCache->insert(gatherer->finishUniformDataBlock())
-                                    : UniformDataBlock();
-    TextureDataBlock textures =
-            gatherer->hasTextures() ? textureDataCache->insert(gatherer->textureDataBlock())
-                                    : TextureDataBlock();
-
-    return { uniforms, textures };
+    return recorder->priv().shaderCodeDictionary()->findOrCreate(builder);
 }
 
 DstReadRequirement GetDstReadRequirement(const Caps* caps,
@@ -254,6 +219,35 @@ std::string get_node_ssbo_fields(const ShaderNode* node, bool* wrotePaintColor) 
     return result;
 }
 
+void append_sampler_descs(const SkSpan<const uint32_t> samplerData,
+                          skia_private::TArray<SamplerDesc>& outDescs) {
+    // Sampler data consists of variable-length SamplerDesc representations which can differ based
+    // upon a sampler's immutability and format. For this reason, handle incrementing i in the loop.
+    for (size_t i = 0; i < samplerData.size();) {
+        // Create a default-initialized SamplerDesc (which only takes up one uint32). If we are
+        // using a dynamic sampler, this will be directly inserted into outDescs. Otherwise, it will
+        // be populated with actual immutable sampler data and then inserted.
+        SamplerDesc desc {};
+        size_t samplerDescLength = 1;
+        SkASSERT(desc.asSpan().size() == samplerDescLength);
+
+        // Isolate the ImmutableSamplerInfo portion of the SamplerDesc represented by samplerData.
+        // If immutableSamplerInfo is non-zero, that means we are using an immutable sampler.
+        uint32_t immutableSamplerInfo = samplerData[i] >> SamplerDesc::kImmutableSamplerInfoShift;
+        if (immutableSamplerInfo != 0) {
+            // Consult the first bit of immutableSamplerInfo which tells us whether the sampler uses
+            // a known or external format. With this, update sampler description length.
+            bool usesExternalFormat = immutableSamplerInfo & 0b1;
+            samplerDescLength = usesExternalFormat ? SamplerDesc::kInt32sNeededExternalFormat
+                                                   : SamplerDesc::kInt32sNeededKnownFormat;
+            // Populate a SamplerDesc with samplerDescLength quantity of immutable sampler data
+            memcpy(&desc, samplerData.begin() + i, samplerDescLength * sizeof(uint32_t));
+        }
+        outDescs.push_back(desc);
+        i += samplerDescLength;
+    }
+}
+
 std::string get_node_texture_samplers(const ResourceBindingRequirements& bindingReqs,
                                       const ShaderNode* node,
                                       int* binding,
@@ -265,7 +259,27 @@ std::string get_node_texture_samplers(const ResourceBindingRequirements& binding
         SkSL::String::appendf(&result, "// %d - %s samplers\n",
                               node->keyIndex(), node->entry()->fName);
 
-        // TODO(b/898301): If outDescs is a valid ptr, populate it appropriately.
+        // Determine whether we need to analyze & interpret a ShaderNode's data as immutable
+        // SamplerDescs based upon whether:
+        // 1) A backend passes in a non-nullptr outImmutableSamplers param (may be nullptr in
+        //    backends or circumstances where we know immutable sampler data is never stored)
+        // 2) Any data is stored on the ShaderNode
+        // 3) Whether the ShaderNode snippet's ID matches that of any snippet ID that could store
+        //    immutable sampler data.
+        int32_t snippetId = node->codeSnippetId();
+        if (outDescs) {
+            // TODO(b/369846881): Refactor checking snippet ID to instead having a named
+            // snippet requirement flag that we can check here to decrease fragility.
+            if (!node->data().empty() &&
+                (snippetId == static_cast<int32_t>(BuiltInCodeSnippetID::kImageShader) ||
+                 snippetId == static_cast<int32_t>(BuiltInCodeSnippetID::kCubicImageShader) ||
+                 snippetId == static_cast<int32_t>(BuiltInCodeSnippetID::kHWImageShader))) {
+                append_sampler_descs(node->data(), *outDescs);
+            } else {
+                // Add default SamplerDescs for any dynamic samplers to outDescs.
+                outDescs->push_back_n(samplers.size());
+            }
+        }
 
         for (const TextureAndSampler& t : samplers) {
             result += EmitSamplerLayout(bindingReqs, binding);
@@ -282,19 +296,6 @@ std::string get_node_texture_samplers(const ResourceBindingRequirements& binding
 
 static constexpr Uniform kIntrinsicUniforms[] = { {"viewport",      SkSLType::kFloat4},
                                                   {"dstCopyBounds", SkSLType::kFloat4} };
-
-std::string emit_intrinsic_uniforms(int bufferID, Layout layout) {
-    auto offsetter = UniformOffsetCalculator::ForTopLevel(layout);
-
-    std::string result = get_uniform_header(bufferID, "Intrinsic");
-    result += get_uniforms(&offsetter, kIntrinsicUniforms, -1, /* wrotePaintColor= */ nullptr);
-    result.append("};\n\n");
-
-    SkASSERTF(result.find('[') == std::string::npos,
-              "Arrays are not supported in intrinsic uniforms");
-
-    return result;
-}
 
 }  // anonymous namespace
 
@@ -335,6 +336,19 @@ void CollectIntrinsicUniforms(const Caps* caps,
     }
 
     SkDEBUGCODE(uniforms->doneWithExpectedUniforms());
+}
+
+std::string EmitIntrinsicUniforms(int bufferID, Layout layout) {
+    auto offsetter = UniformOffsetCalculator::ForTopLevel(layout);
+
+    std::string result = get_uniform_header(bufferID, "Intrinsic");
+    result += get_uniforms(&offsetter, kIntrinsicUniforms, -1, /* wrotePaintColor= */ nullptr);
+    result.append("};\n\n");
+
+    SkASSERTF(result.find('[') == std::string::npos,
+              "Arrays are not supported in intrinsic uniforms");
+
+    return result;
 }
 
 std::string EmitPaintParamsUniforms(int bufferID,
@@ -525,7 +539,7 @@ std::string EmitVaryings(const RenderStep* step,
     };
 
     if (emitSsboIndicesVarying) {
-        appendVarying({RenderStep::ssboIndicesVarying(), SkSLType::kUShort2});
+        appendVarying({RenderStep::ssboIndicesVarying(), SkSLType::kUInt2});
     }
 
     if (emitLocalCoordsVarying) {
@@ -550,8 +564,8 @@ VertSkSLInfo BuildVertexSkSL(const ResourceBindingRequirements& bindingReqs,
     const bool useShadingStorageBuffer = useStorageBuffers && step->performsShading();
 
     // Fixed program header (intrinsics are always declared as an uniform interface block)
-    std::string sksl = emit_intrinsic_uniforms(bindingReqs.fIntrinsicBufferBinding,
-                                               bindingReqs.fUniformBufferLayout);
+    std::string sksl = EmitIntrinsicUniforms(bindingReqs.fIntrinsicBufferBinding,
+                                             bindingReqs.fUniformBufferLayout);
 
     if (step->numVertexAttributes() > 0 || step->numInstanceAttributes() > 0) {
         sksl += emit_attributes(step->vertexAttributes(), step->instanceAttributes());
