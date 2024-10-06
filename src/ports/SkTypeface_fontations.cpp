@@ -17,6 +17,7 @@
 #include "include/core/SkStream.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/pathops/SkPathOps.h"
+#include "src/base/SkScopeExit.h"
 #include "src/core/SkFontDescriptor.h"
 #include "src/core/SkFontPriv.h"
 #include "src/ports/SkTypeface_fontations_priv.h"
@@ -189,55 +190,6 @@ sk_sp<SkTypeface> SkTypeface_Fontations::MakeFromData(sk_sp<SkData> data,
 
 namespace sk_fontations {
 
-// Path sanitization ported from SkFTGeometrySink.
-void PathGeometrySink::going_to(SkPoint point) {
-    if (!fStarted) {
-        fStarted = true;
-        fPath.moveTo(fCurrent);
-    }
-    fCurrent = point;
-}
-
-bool PathGeometrySink::current_is_not(SkPoint point) { return fCurrent != point; }
-
-void PathGeometrySink::move_to(float x, float y) {
-    if (fStarted) {
-        fPath.close();
-        fStarted = false;
-    }
-    fCurrent = SkPoint::Make(SkFloatToScalar(x), SkFloatToScalar(y));
-}
-
-void PathGeometrySink::line_to(float x, float y) {
-    SkPoint pt0 = SkPoint::Make(SkFloatToScalar(x), SkFloatToScalar(y));
-    if (current_is_not(pt0)) {
-        going_to(pt0);
-        fPath.lineTo(pt0);
-    }
-}
-
-void PathGeometrySink::quad_to(float cx0, float cy0, float x, float y) {
-    SkPoint pt0 = SkPoint::Make(SkFloatToScalar(cx0), SkFloatToScalar(cy0));
-    SkPoint pt1 = SkPoint::Make(SkFloatToScalar(x), SkFloatToScalar(y));
-    if (current_is_not(pt0) || current_is_not(pt1)) {
-        going_to(pt1);
-        fPath.quadTo(pt0, pt1);
-    }
-}
-void PathGeometrySink::curve_to(float cx0, float cy0, float cx1, float cy1, float x, float y) {
-    SkPoint pt0 = SkPoint::Make(SkFloatToScalar(cx0), SkFloatToScalar(cy0));
-    SkPoint pt1 = SkPoint::Make(SkFloatToScalar(cx1), SkFloatToScalar(cy1));
-    SkPoint pt2 = SkPoint::Make(SkFloatToScalar(x), SkFloatToScalar(y));
-    if (current_is_not(pt0) || current_is_not(pt1) || current_is_not(pt2)) {
-        going_to(pt2);
-        fPath.cubicTo(pt0, pt1, pt2);
-    }
-}
-
-void PathGeometrySink::close() { fPath.close(); }
-
-SkPath PathGeometrySink::into_inner() && { return std::move(fPath); }
-
 AxisWrapper::AxisWrapper(SkFontParameters::Variation::Axis axisArray[], size_t axisCount)
         : fAxisArray(axisArray), fAxisCount(axisCount) {}
 
@@ -366,12 +318,8 @@ public:
             , fOutlines(static_cast<SkTypeface_Fontations*>(this->getTypeface())->getOutlines())
             , fPalette(static_cast<SkTypeface_Fontations*>(this->getTypeface())->getPalette())
             , fHintingInstance(fontations_ffi::no_hinting_instance()) {
-        fRec.getSingleMatrix(&fMatrix);
-
-        SkVector scale;
-        SkMatrix remainingMatrix;
         fRec.computeMatrices(
-                SkScalerContextRec::PreMatrixScale::kVertical, &scale, &remainingMatrix);
+                SkScalerContextRec::PreMatrixScale::kVertical, &fScale, &fRemainingMatrix);
 
         fDoLinearMetrics = this->isLinearMetrics();
         bool forceAutohinting = SkToBool(fRec.fFlags & kForceAutohinting_Flag);
@@ -382,7 +330,7 @@ public:
                 fDoLinearMetrics = true;
             } else {
                 fHintingInstance = fontations_ffi::make_mono_hinting_instance(
-                        fOutlines, scale.fY, fBridgeNormalizedCoords);
+                        fOutlines, fScale.y(), fBridgeNormalizedCoords);
                 fDoLinearMetrics = false;
             }
         } else {
@@ -395,7 +343,7 @@ public:
                     // Unhinted metrics.
                     fHintingInstance = fontations_ffi::make_hinting_instance(
                             fOutlines,
-                            scale.fY,
+                            fScale.y(),
                             fBridgeNormalizedCoords,
                             true /* do_light_hinting */,
                             false /* do_lcd_antialiasing */,
@@ -407,7 +355,7 @@ public:
                     // No hinting to subpixel coordinates.
                     fHintingInstance = fontations_ffi::make_hinting_instance(
                             fOutlines,
-                            scale.fY,
+                            fScale.y(),
                             fBridgeNormalizedCoords,
                             false /* do_light_hinting */,
                             false /* do_lcd_antialiasing */,
@@ -418,7 +366,7 @@ public:
                     // Attempt to make use of hinting to subpixel coordinates.
                     fHintingInstance = fontations_ffi::make_hinting_instance(
                             fOutlines,
-                            scale.fY,
+                            fScale.y(),
                             fBridgeNormalizedCoords,
                             false /* do_light_hinting */,
                             isLCD(fRec) /* do_lcd_antialiasing */,
@@ -439,19 +387,29 @@ public:
             SkPath* path,
             float yScale,
             const fontations_ffi::BridgeHintingInstance& hintingInstance) {
-        sk_fontations::PathGeometrySink pathWrapper;
         fontations_ffi::BridgeScalerMetrics scalerMetrics;
 
-        if (!fontations_ffi::get_path(fOutlines,
-                                      glyphId,
-                                      yScale,
-                                      fBridgeNormalizedCoords,
-                                      hintingInstance,
-                                      pathWrapper,
-                                      scalerMetrics)) {
+        // Keep allocations in check. The rust side pre-allocates a fixed amount,
+        // and afer leaving this function, we shrink to the same amount.
+        SK_AT_SCOPE_EXIT(fontations_ffi::shrink_verbs_points_if_needed(fPathVerbs, fPathPoints));
+
+        if (!fontations_ffi::get_path_verbs_points(fOutlines,
+                                                   glyphId,
+                                                   yScale,
+                                                   fBridgeNormalizedCoords,
+                                                   hintingInstance,
+                                                   fPathVerbs,
+                                                   fPathPoints,
+                                                   scalerMetrics)) {
             return false;
         }
-        *path = std::move(pathWrapper).into_inner();
+        *path = SkPath::Make(reinterpret_cast<const SkPoint*>(fPathPoints.data()),
+                             fPathPoints.size(),
+                             fPathVerbs.data(),
+                             fPathVerbs.size(),
+                             nullptr,
+                             0,
+                             SkPathFillType::kWinding);
 
         // See https://issues.skia.org/345178242 for details:
         // The FreeType backend performs a path simplification here based on the
@@ -495,15 +453,9 @@ protected:
             doLinearMetrics = true;
         }
 
-        SkVector scale;
-        SkMatrix remainingMatrix;
-        if (!fRec.computeMatrices(
-                    SkScalerContextRec::PreMatrixScale::kVertical, &scale, &remainingMatrix)) {
-            return mx;
-        }
         float x_advance = 0.0f;
         x_advance = fontations_ffi::unhinted_advance_width_or_zero(
-                fBridgeFontRef, scale.y(), fBridgeNormalizedCoords, glyph.getGlyphID());
+                fBridgeFontRef, fScale.y(), fBridgeNormalizedCoords, glyph.getGlyphID());
         if (!doLinearMetrics) {
             float hinted_advance = 0;
             fontations_ffi::scaler_hinted_advance_width(
@@ -521,7 +473,7 @@ protected:
                 x_advance = hinted_advance;
             }
         }
-        mx.advance = remainingMatrix.mapXY(x_advance, SkFloatToScalar(0.f));
+        mx.advance = fRemainingMatrix.mapXY(x_advance, SkFloatToScalar(0.f));
 
         if (has_colrv1_glyph || has_colrv0_glyph) {
             mx.extraBits = has_colrv1_glyph ? ScalerContextBits::COLRv1 : ScalerContextBits::COLRv0;
@@ -532,15 +484,15 @@ protected:
             if (has_colrv1_glyph && fontations_ffi::get_colrv1_clip_box(fBridgeFontRef,
                                                                         fBridgeNormalizedCoords,
                                                                         glyph.getGlyphID(),
-                                                                        scale.y(),
+                                                                        fScale.y(),
                                                                         clipBox)) {
                 // Flip y.
                 SkRect boundsRect = SkRect::MakeLTRB(
                         clipBox.x_min, -clipBox.y_max, clipBox.x_max, -clipBox.y_min);
 
-                if (!remainingMatrix.isIdentity()) {
+                if (!fRemainingMatrix.isIdentity()) {
                     SkPath boundsPath = SkPath::Rect(boundsRect);
-                    boundsPath.transform(remainingMatrix);
+                    boundsPath.transform(fRemainingMatrix);
                     boundsRect = boundsPath.getBounds();
                 }
 
@@ -573,7 +525,7 @@ protected:
             mx.extraBits = ScalerContextBits::BITMAP;
 
             rust::cxxbridge1::Box<fontations_ffi::BridgeBitmapGlyph> bitmap_glyph =
-                    fontations_ffi::bitmap_glyph(fBridgeFontRef, glyph.getGlyphID(), scale.fY);
+                    fontations_ffi::bitmap_glyph(fBridgeFontRef, glyph.getGlyphID(), fScale.y());
             rust::cxxbridge1::Slice<const uint8_t> png_data =
                     fontations_ffi::png_data(*bitmap_glyph);
 
@@ -593,14 +545,14 @@ protected:
             SkImageInfo info = codec->getInfo();
 
             SkRect bounds = SkRect::Make(info.bounds());
-            SkMatrix matrix = remainingMatrix;
+            SkMatrix matrix = fRemainingMatrix;
 
             // We deal with two scale factors here: Scaling from font units to
             // device pixels, and scaling the embedded PNG from its number of
             // rows to a specific size, depending on the ppem values in the
             // bitmap glyph information.
-            SkScalar imageToSize = scale.fY / bitmapMetrics.ppem_y;
-            float fontUnitsToSize = scale.fY / fontations_ffi::units_per_em_or_zero(fBridgeFontRef);
+            SkScalar imageToSize = fScale.y() / bitmapMetrics.ppem_y;
+            float fontUnitsToSize = fScale.y() / fontations_ffi::units_per_em_or_zero(fBridgeFontRef);
 
             // The offset from origin is given in font units, so requires a
             // different scale factor than the scaling of the image.
@@ -645,15 +597,8 @@ protected:
 
         canvas.translate(-glyph.left(), -glyph.top());
 
-        SkVector scale;
-        SkMatrix remainingMatrix;
-        if (!fRec.computeMatrices(
-                    SkScalerContextRec::PreMatrixScale::kVertical, &scale, &remainingMatrix)) {
-            return;
-        }
-
         rust::cxxbridge1::Box<fontations_ffi::BridgeBitmapGlyph> bitmap_glyph =
-                fontations_ffi::bitmap_glyph(fBridgeFontRef, glyph.getGlyphID(), scale.fY);
+                fontations_ffi::bitmap_glyph(fBridgeFontRef, glyph.getGlyphID(), fScale.y());
         rust::cxxbridge1::Slice<const uint8_t> png_data = fontations_ffi::png_data(*bitmap_glyph);
         SkASSERT(png_data.size());
 
@@ -670,7 +615,7 @@ protected:
         }
 
         canvas.clear(SK_ColorTRANSPARENT);
-        canvas.concat(remainingMatrix);
+        canvas.concat(fRemainingMatrix);
 
         if (this->isSubpixel()) {
             canvas.translate(SkFixedToScalar(glyph.getSubXFixed()),
@@ -681,9 +626,9 @@ protected:
 
         // We need two different scale factors here, one for font units to size,
         // one for scaling the embedded PNG, see generateMetrics() for details.
-        SkScalar imageScaleFactor = scale.fY / bitmapMetrics.ppem_y;
+        SkScalar imageScaleFactor = fScale.y() / bitmapMetrics.ppem_y;
 
-        float fontUnitsToSize = scale.fY / fontations_ffi::units_per_em_or_zero(fBridgeFontRef);
+        float fontUnitsToSize = fScale.y() / fontations_ffi::units_per_em_or_zero(fBridgeFontRef);
         canvas.translate( bitmapMetrics.bearing_x * fontUnitsToSize,
                          -bitmapMetrics.bearing_y * fontUnitsToSize);
         canvas.scale(imageScaleFactor, imageScaleFactor);
@@ -746,21 +691,15 @@ protected:
     bool generatePath(const SkGlyph& glyph, SkPath* path, bool* modified) override {
         SkASSERT(glyph.extraBits() == ScalerContextBits::PATH);
 
-        SkVector scale;
-        SkMatrix remainingMatrix;
-        if (!fRec.computeMatrices(
-                    SkScalerContextRec::PreMatrixScale::kVertical, &scale, &remainingMatrix)) {
-            return false;
-        }
         bool result = generateYScalePathForGlyphId(
-                glyph.getGlyphID(), path, scale.y(), *fHintingInstance);
+                glyph.getGlyphID(), path, fScale.y(), *fHintingInstance);
         if (!result) {
             return false;
         }
 
-        *path = path->makeTransform(remainingMatrix);
+        *path = path->makeTransform(fRemainingMatrix);
 
-        if (scale.y() != 1.0f || !remainingMatrix.isIdentity()) {
+        if (fScale.y() != 1.0f || !fRemainingMatrix.isIdentity()) {
             *modified = true;
         }
         return true;
@@ -821,12 +760,8 @@ protected:
     }
 
     void generateFontMetrics(SkFontMetrics* out_metrics) override {
-        SkVector scale;
-        SkMatrix remainingMatrix;
-        fRec.computeMatrices(
-                SkScalerContextRec::PreMatrixScale::kVertical, &scale, &remainingMatrix);
         fontations_ffi::Metrics metrics =
-                fontations_ffi::get_skia_metrics(fBridgeFontRef, scale.fY, fBridgeNormalizedCoords);
+                fontations_ffi::get_skia_metrics(fBridgeFontRef, fScale.y(), fBridgeNormalizedCoords);
         out_metrics->fTop = -metrics.top;
         out_metrics->fAscent = -metrics.ascent;
         out_metrics->fDescent = -metrics.descent;
@@ -867,7 +802,8 @@ protected:
     }
 
 private:
-    SkMatrix fMatrix;
+    SkVector fScale;
+    SkMatrix fRemainingMatrix;
     sk_sp<SkData> fFontData = nullptr;
     const fontations_ffi::BridgeFontRef& fBridgeFontRef;
     const fontations_ffi::BridgeNormalizedCoords& fBridgeNormalizedCoords;
@@ -875,6 +811,10 @@ private:
     const SkSpan<const SkColor> fPalette;
     rust::Box<fontations_ffi::BridgeHintingInstance> fHintingInstance;
     bool fDoLinearMetrics = false;
+    // Keeping the path extraction target buffers around significantly avoids
+    // allocation churn.
+    rust::Vec<uint8_t> fPathVerbs;
+    rust::Vec<fontations_ffi::FfiPoint> fPathPoints;
 
     friend class sk_fontations::ColorPainter;
 };
