@@ -345,14 +345,15 @@ ShaderInfo::ShaderInfo(UniquePaintParamsID id,
         // function blend block at the root level. This can be improved with more structure to the
         // key creation.
         if (root->codeSnippetId() < kBuiltInCodeSnippetIDCount &&
-            root->codeSnippetId() >= kFixedFunctionBlendModeIDOffset) {
+            root->codeSnippetId() >= kFixedBlendIDOffset) {
             SkASSERT(root->numChildren() == 0);
             // This should occur at most once
             SkASSERT(!fixedFuncBlendFound);
             SkDEBUGCODE(fixedFuncBlendFound = true;)
 
-            fBlendMode = static_cast<SkBlendMode>(root->codeSnippetId() -
-                                                  kFixedFunctionBlendModeIDOffset);
+            fBlendMode = static_cast<SkBlendMode>(root->codeSnippetId() - kFixedBlendIDOffset);
+            // All SkBlendModes have fixed blend code IDs but Graphite does not yet support mapping
+            // the advanced blend modes to fixed function blending.
             SkASSERT(static_cast<int>(fBlendMode) >= 0 &&
                      fBlendMode <= SkBlendMode::kLastCoeffMode);
             fBlendInfo = gBlendTable[static_cast<int>(fBlendMode)];
@@ -372,7 +373,7 @@ void ShaderInfo::aggregateSnippetData(const ShaderNode* node) {
         this->aggregateSnippetData(child);
     }
 
-    if (node->requiredFlags() & SnippetRequirementFlags::kStoresData && node->data().size()) {
+    if (node->requiredFlags() & SnippetRequirementFlags::kStoresData && !node->data().empty()) {
         fData.push_back_n(node->data().size(), node->data().data());
     }
 }
@@ -423,10 +424,11 @@ void append_color_output(std::string* mainBody,
 std::string ShaderInfo::toSkSL(const Caps* caps,
                                const RenderStep* step,
                                bool useStorageBuffers,
-                               int* numTexturesAndSamplersUsed,
-                               bool* hasPaintUniforms,
-                               bool* hasGradientBuffer,
-                               Swizzle writeSwizzle) {
+                               Swizzle writeSwizzle,
+                               int* outNumTexturesAndSamplersUsed,
+                               bool* outHasPaintUniforms,
+                               bool* outHasGradientBuffer,
+                               skia_private::TArray<SamplerDesc>* outDescs) {
     // If we're doing analytic coverage, we must also be doing shading.
     SkASSERT(step->coverage() == Coverage::kNone || step->performsShading());
     const bool hasStepUniforms = step->numUniforms() > 0 && step->coverage() != Coverage::kNone;
@@ -444,6 +446,8 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
 
     // The uniforms are mangled by having their index in 'fEntries' as a suffix (i.e., "_%d")
     const ResourceBindingRequirements& bindingReqs = caps->resourceBindingRequirements();
+    preamble += EmitIntrinsicUniforms(bindingReqs.fIntrinsicBufferBinding,
+                                      bindingReqs.fUniformBufferLayout);
     if (hasStepUniforms) {
         if (useStepStorageBuffer) {
             preamble += EmitRenderStepStorageBuffer(bindingReqs.fRenderStepBufferBinding,
@@ -459,14 +463,14 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
     if (useShadingStorageBuffer) {
         preamble += EmitPaintParamsStorageBuffer(bindingReqs.fPaintParamsBufferBinding,
                                                  fRootNodes,
-                                                 hasPaintUniforms,
+                                                 outHasPaintUniforms,
                                                  &wrotePaintColor);
         SkSL::String::appendf(&preamble, "uint %s;\n", this->ssboIndex());
     } else {
         preamble += EmitPaintParamsUniforms(bindingReqs.fPaintParamsBufferBinding,
                                             bindingReqs.fUniformBufferLayout,
                                             fRootNodes,
-                                            hasPaintUniforms,
+                                            outHasPaintUniforms,
                                             &wrotePaintColor);
     }
 
@@ -477,19 +481,31 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
                               "};\n",
                               bindingReqs.fGradientBufferBinding,
                               kGradientBufferName);
-        *hasGradientBuffer = true;
+        *outHasGradientBuffer = true;
     }
 
     {
         int binding = 0;
-        preamble += EmitTexturesAndSamplers(bindingReqs, fRootNodes, &binding);
+        preamble += EmitTexturesAndSamplers(bindingReqs, fRootNodes, &binding, outDescs);
+        int paintTextureCount = binding;
         if (step->hasTextures()) {
             preamble += step->texturesAndSamplersSkSL(bindingReqs, &binding);
+            if (outDescs) {
+                // Determine how many render step samplers were used by comparing the binding value
+                // against paintTextureCount, taking into account the binding requirements. We
+                // assume and do not anticipate the render steps to use immutable samplers.
+                int renderStepSamplerCount =  bindingReqs.fSeparateTextureAndSamplerBinding
+                        ? (binding - paintTextureCount) / 2
+                        : binding - paintTextureCount;
+                // Add default SamplerDescs for all the dynamic samplers used by the render step so
+                // the size of outDescs will be equivalent to the total number of samplers.
+                outDescs->push_back_n(renderStepSamplerCount);
+            }
         }
 
         // Report back to the caller how many textures and samplers are used.
-        if (numTexturesAndSamplersUsed) {
-            *numTexturesAndSamplersUsed = binding;
+        if (outNumTexturesAndSamplersUsed) {
+            *outNumTexturesAndSamplersUsed = binding;
         }
     }
 
@@ -514,9 +530,9 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
         SkASSERT(!(fRootNodes[0]->requiredFlags() & SnippetRequirementFlags::kPrimitiveColor));
     }
 
-    // While looping through root nodes to emit shader code, skip the clip shader node if it's found
+    // While looping through root nodes to emit shader code, skip the clip block node if it's found
     // and keep it to apply later during coverage calculation.
-    const ShaderNode* clipShaderNode = nullptr;
+    const ShaderNode* clipBlockNode = nullptr;
 
     // Using kDefaultArgs as the initial value means it will refer to undefined variables, but the
     // root nodes should--at most--be depending on the coordinate when "needsLocalCoords" is true.
@@ -532,15 +548,15 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
     // Emit shader main body code, invoking each root node's expression, forwarding the previous
     // node's output to the next.
     for (const ShaderNode* node : fRootNodes) {
-        if (node->codeSnippetId() == (int) BuiltInCodeSnippetID::kClipShader) {
-            SkASSERT(!clipShaderNode);
-            clipShaderNode = node;
+        if (node->codeSnippetId() == (int) BuiltInCodeSnippetID::kClip) {
+            SkASSERT(!clipBlockNode);
+            clipBlockNode = node;
             continue;
         }
         // This exclusion of the final Blend can be removed once we've resolved the final
         // blend parenting issue w/in the key
         if (node->codeSnippetId() >= kBuiltInCodeSnippetIDCount ||
-            node->codeSnippetId() < kFixedFunctionBlendModeIDOffset) {
+            node->codeSnippetId() < kFixedBlendIDOffset) {
             args.fPriorStageOutput = invoke_and_assign_node(*this, node, args, &mainBody);
         }
     }
@@ -553,7 +569,7 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
 
     const char* outColor = args.fPriorStageOutput.c_str();
     const Coverage coverage = step->coverage();
-    if (coverage != Coverage::kNone || clipShaderNode) {
+    if (coverage != Coverage::kNone || clipBlockNode) {
         if (useStepStorageBuffer) {
             SkSL::String::appendf(&mainBody,
                                   "uint stepSsboIndex = %s.x;\n",
@@ -564,15 +580,17 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
         mainBody += "half4 outputCoverage = half4(1);";
         mainBody += step->fragmentCoverageSkSL();
 
-        if (clipShaderNode) {
-            // The clip shader node is invoked with fragment coords, not local coords like the main
-            // shading root node.
-            // TODO: The actual clipShaderNode can go away once we can enforce that a PaintParamsKey
+        if (clipBlockNode) {
+            // The clip block node is invoked with device coords, not local coords like the main
+            // shading root node. However sk_FragCoord includes any replay translation and we
+            // need to recover the original device coordinate.
+            mainBody += "float2 devCoord = sk_FragCoord.xy - viewport.xy;";
+            // TODO: The actual clipBlockNode can go away once we can enforce that a PaintParamsKey
             // has only 1-2 roots and the 2nd root is always the clip node.
-            args.fFragCoord = "sk_FragCoord.xy";
-            std::string clipShaderOutput =
-                    invoke_and_assign_node(*this, clipShaderNode->child(0), args, &mainBody);
-            SkSL::String::appendf(&mainBody, "outputCoverage *= %s.a;", clipShaderOutput.c_str());
+            args.fFragCoord = "devCoord";
+            std::string clipBlockOutput =
+                    invoke_and_assign_node(*this, clipBlockNode->child(0), args, &mainBody);
+            SkSL::String::appendf(&mainBody, "outputCoverage *= %s.a;", clipBlockOutput.c_str());
         }
 
         // TODO: Determine whether draw is opaque and pass that to GetBlendFormula.
@@ -745,8 +763,9 @@ std::string GenerateDstReadFetchPreamble(const ShaderInfo& shaderInfo, const Sha
 
 //--------------------------------------------------------------------------------------------------
 
-std::string GenerateClipShaderPreamble(const ShaderInfo& shaderInfo, const ShaderNode* node) {
-    // No preamble is used for clip shaders. The child shader is called directly with sk_FragCoord.
+std::string GenerateClipPreamble(const ShaderInfo& shaderInfo, const ShaderNode* node) {
+    // No preamble is used for clip shaders or analytic clips. The child shader is called
+    // directly with sk_FragCoord.
     return "";
 }
 
@@ -1084,7 +1103,7 @@ ShaderSnippet ShaderCodeDictionary::convertRuntimeEffect(const SkRuntimeEffect* 
                          /*staticFn=*/nullptr,
                          snippetFlags,
                          this->convertUniforms(effect),
-                         /*textures=*/{},
+                         /*texturesAndSamplers=*/{},
                          GenerateRuntimeShaderPreamble,
                          numChildrenIncColorTransforms);
 }
@@ -1191,7 +1210,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "tilemode",    SkSLType::kInt },
                            { "colorSpace",  SkSLType::kInt },
                            { "doUnPremul",  SkSLType::kInt } },
-            /*textures=*/{"colorAndOffsetSampler"}
+            /*texturesAndSamplers=*/{"colorAndOffsetSampler"}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kLinearGradientShaderBuffer] = {
             /*name=*/"LinearGradientBuffer",
@@ -1231,7 +1250,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "tilemode",    SkSLType::kInt },
                            { "colorSpace",  SkSLType::kInt },
                            { "doUnPremul",  SkSLType::kInt } },
-            /*textures=*/{"colorAndOffsetSampler"}
+            /*texturesAndSamplers=*/{"colorAndOffsetSampler"}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kRadialGradientShaderBuffer] = {
             /*name=*/"RadialGradientBuffer",
@@ -1277,7 +1296,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                             { "tilemode",   SkSLType::kInt },
                             { "colorSpace", SkSLType::kInt },
                             { "doUnPremul", SkSLType::kInt } },
-            /*textures=*/{"colorAndOffsetSampler"}
+            /*texturesAndSamplers=*/{"colorAndOffsetSampler"}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kSweepGradientShaderBuffer] = {
             /*name=*/"SweepGradientBuffer",
@@ -1331,7 +1350,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "tilemode",    SkSLType::kInt },
                            { "colorSpace",  SkSLType::kInt },
                            { "doUnPremul",  SkSLType::kInt } },
-            /*textures=*/{"colorAndOffsetSampler"}
+            /*texturesAndSamplers=*/{"colorAndOffsetSampler"}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kConicalGradientShaderBuffer] = {
             /*name=*/"ConicalGradientBuffer",
@@ -1356,7 +1375,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
             /*uniforms=*/{ { "localMatrix", SkSLType::kFloat4x4 } },
-            /*textures=*/{},
+            /*texturesAndSamplers=*/{},
             GenerateCoordManipulationPreamble,
             /*numChildren=*/kNumCoordinateManipulateChildren
     };
@@ -1365,7 +1384,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
             /*uniforms=*/{ { "localMatrix", SkSLType::kFloat4x4 } },
-            /*textures=*/{},
+            /*texturesAndSamplers=*/{},
             GenerateCoordManipulationPreamble,
             /*numChildren=*/kNumCoordinateManipulateChildren
     };
@@ -1379,7 +1398,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "tilemodeX",             SkSLType::kInt },
                            { "tilemodeY",             SkSLType::kInt },
                            { "filterMode",            SkSLType::kInt } },
-            /*textures=*/{"image"}
+            /*texturesAndSamplers=*/{"image"}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCubicImageShader] = {
             /*name=*/"CubicImageShader",
@@ -1390,14 +1409,14 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "tilemodeX",             SkSLType::kInt },
                            { "tilemodeY",             SkSLType::kInt },
                            { "cubicCoeffs",           SkSLType::kHalf4x4 } },
-            /*textures=*/{"image"}
+            /*texturesAndSamplers=*/{"image"}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWImageShader] = {
             /*name=*/"HardwareImageShader",
             /*staticFn=*/"sk_hw_image_shader",
             SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresData,
             /*uniforms=*/{ { "invImgSize",            SkSLType::kFloat2 } },
-            /*textures=*/{"image"}
+            /*texturesAndSamplers=*/{"image"}
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kYUVImageShader] = {
@@ -1418,10 +1437,10 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "channelSelectA",      SkSLType::kHalf4 },
                            { "yuvToRGBMatrix",      SkSLType::kHalf3x3 },
                            { "yuvToRGBTranslate",   SkSLType::kHalf3 } },
-            /*textures=*/ {{ "samplerY" },
-                           { "samplerU" },
-                           { "samplerV" },
-                           { "samplerA" }}
+            /*texturesAndSamplers=*/ {{ "samplerY" },
+                                      { "samplerU" },
+                                      { "samplerV" },
+                                      { "samplerA" }}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCubicYUVImageShader] = {
             /*name=*/"CubicYUVImageShader",
@@ -1439,10 +1458,10 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "channelSelectA",    SkSLType::kHalf4 },
                            { "yuvToRGBMatrix",    SkSLType::kHalf3x3 },
                            { "yuvToRGBTranslate", SkSLType::kHalf3 } },
-            /*textures=*/ {{ "samplerY" },
-                           { "samplerU" },
-                           { "samplerV" },
-                           { "samplerA" }}
+            /*texturesAndSamplers=*/ {{ "samplerY" },
+                                      { "samplerU" },
+                                      { "samplerV" },
+                                      { "samplerA" }}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWYUVImageShader] = {
             /*name=*/"HWYUVImageShader",
@@ -1456,10 +1475,10 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "channelSelectA",        SkSLType::kHalf4 },
                            { "yuvToRGBMatrix",        SkSLType::kHalf3x3 },
                            { "yuvToRGBTranslate",     SkSLType::kHalf3 } },
-            /*textures=*/ {{ "samplerY" },
-                           { "samplerU" },
-                           { "samplerV" },
-                           { "samplerA" }}
+            /*texturesAndSamplers=*/ {{ "samplerY" },
+                                      { "samplerU" },
+                                      { "samplerV" },
+                                      { "samplerA" }}
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWYUVNoSwizzleImageShader] = {
@@ -1470,10 +1489,10 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "invImgSizeUV",             SkSLType::kFloat2 }, // Relative to Y space
                            { "yuvToRGBMatrix",           SkSLType::kHalf3x3 },
                            { "yuvToRGBXlateAlphaParams", SkSLType::kHalf4 } },
-            /*textures=*/ {{ "samplerY" },
-                           { "samplerU" },
-                           { "samplerV" },
-                           { "samplerA" }}
+            /*texturesAndSamplers=*/ {{ "samplerY" },
+                                      { "samplerU" },
+                                      { "samplerV" },
+                                      { "samplerA" }}
     };
 
     // Like the local matrix shader, this is a no-op if the child doesn't need coords
@@ -1482,7 +1501,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
             /*uniforms=*/{ { "subset", SkSLType::kFloat4 } },
-            /*textures=*/{},
+            /*texturesAndSamplers=*/{},
             GenerateCoordManipulationPreamble,
             /*numChildren=*/kNumCoordinateManipulateChildren
     };
@@ -1492,7 +1511,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*staticFn=*/"sk_dither",
             SnippetRequirementFlags::kPriorStageOutput,
             /*uniforms=*/{ { "range", SkSLType::kHalf } },
-            /*textures=*/{ { "ditherLUT" } }
+            /*texturesAndSamplers=*/{ { "ditherLUT" } }
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPerlinNoiseShader] = {
@@ -1504,8 +1523,8 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "noiseType",     SkSLType::kInt },
                            { "numOctaves",    SkSLType::kInt },
                            { "stitching",     SkSLType::kInt } },
-            /*textures=*/{ { "permutationsSampler" },
-                           { "noiseSampler" } }
+            /*texturesAndSamplers=*/{ { "permutationsSampler" },
+                                      { "noiseSampler" } }
     };
 
     // SkColorFilter snippets
@@ -1525,7 +1544,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*staticFn=*/"sk_table_colorfilter",
             SnippetRequirementFlags::kPriorStageOutput,
             /*uniforms=*/{},
-            /*textures=*/{ {"table"} }};
+            /*texturesAndSamplers=*/{ {"table"} }};
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kGaussianColorFilter] = {
             /*name=*/"GaussianColorFilter",
             /*staticFn=*/"sk_gaussian_colorfilter",
@@ -1549,28 +1568,6 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*uniforms=*/{}
     };
 
-    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kBlendShader] = {
-            /*name=*/"BlendShader",
-            /*staticFn=*/nullptr,
-            SnippetRequirementFlags::kNone,
-            /*uniforms=*/{},
-            /*textures=*/{},
-            GenerateComposePreamble,
-            /*numChildren=*/3
-    };
-    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCoeffBlender] = {
-            /*name=*/"CoeffBlender",
-            /*staticFn=*/"sk_coeff_blend",
-            SnippetRequirementFlags::kPriorStageOutput | SnippetRequirementFlags::kBlenderDstColor,
-            /*uniforms=*/{ { "coeffs", SkSLType::kHalf4 } }
-    };
-    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kBlendModeBlender] = {
-            /*name=*/"BlendModeBlender",
-            /*staticFn=*/"sk_blend",
-            SnippetRequirementFlags::kPriorStageOutput | SnippetRequirementFlags::kBlenderDstColor,
-            /*uniforms=*/{ { "blendMode", SkSLType::kInt } }
-    };
-
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPrimitiveColor] = {
             /*name=*/"PrimitiveColor",
             /*staticFn=*/"sk_color_space_transform",
@@ -1580,7 +1577,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
                            { "csXformGamutTransform", SkSLType::kHalf3x3 },
                            { "csXformDstKind",        SkSLType::kInt },
                            { "csXformCoeffs",         SkSLType::kHalf4x4 } },
-            /*textures=*/{}
+            /*texturesAndSamplers=*/{}
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kDstReadSample] = {
@@ -1588,7 +1585,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*staticFn=*/"$dst_read_sample", // "static" function injected by custom preamble
             SnippetRequirementFlags::kSurfaceColor,
             /*uniforms=*/{ {"dstOffsetAndInvWH", SkSLType::kFloat4} },
-            /*textures=*/{ {"dstCopy"} },
+            /*texturesAndSamplers=*/{ {"dstCopy"} },
             GenerateDstReadSamplePreamble,
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kDstReadFetch] = {
@@ -1596,26 +1593,26 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*staticFn=*/"$dst_read_fetch", // "static" function injected by custom preamble
             SnippetRequirementFlags::kSurfaceColor,
             /*uniforms=*/{},
-            /*textures=*/{},
+            /*texturesAndSamplers=*/{},
             GenerateDstReadFetchPreamble,
     };
 
-    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kClipShader] = {
-            /*name=*/"ClipShader",
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kClip] = {
+            /*name=*/"Clip",
             /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
             /*uniforms=*/{},
-            /*textures=*/{},
-            GenerateClipShaderPreamble,
+            /*texturesAndSamplers=*/{},
+            GenerateClipPreamble,
             /*numChildren=*/1
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCircularRRectClip] = {
             /*name=*/"CircularRRectClip",
             /*staticFn=*/"sk_circular_rrect_clip",
-            SnippetRequirementFlags::kPriorStageOutput,
+            SnippetRequirementFlags::kNone,
             /*uniforms=*/{ { "rect",           SkSLType::kFloat4 },
-                           { "radiusPlusHalf", SkSLType::kHalf2 },
+                           { "radiusPlusHalf", SkSLType::kFloat2 },
                            { "edgeSelect",     SkSLType::kHalf4 } }
     };
 
@@ -1624,15 +1621,37 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
             /*uniforms=*/{},
-            /*textures=*/{},
+            /*texturesAndSamplers=*/{},
             GenerateComposePreamble,
             /*numChildren=*/2
+    };
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kBlendCompose] = {
+            /*name=*/"BlendCompose",
+            /*staticFn=*/nullptr,
+            SnippetRequirementFlags::kNone,
+            /*uniforms=*/{},
+            /*texturesAndSamplers=*/{},
+            GenerateComposePreamble,
+            /*numChildren=*/3
+    };
+
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPorterDuffBlender] = {
+            /*name=*/"PorterDuffBlender",
+            /*staticFn=*/"sk_porter_duff_blend",
+            SnippetRequirementFlags::kPriorStageOutput | SnippetRequirementFlags::kBlenderDstColor,
+            /*uniforms=*/{ { "coeffs", SkSLType::kHalf4 } }
+    };
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHSLCBlender] = {
+            /*name=*/"HSLCBlender",
+            /*staticFn=*/"sk_hslc_blend",
+            SnippetRequirementFlags::kPriorStageOutput | SnippetRequirementFlags::kBlenderDstColor,
+            /*uniforms=*/{ { "flipSat", SkSLType::kHalf2 } }
     };
 
     // Fixed-function blend mode snippets are all the same, their functionality is entirely defined
     // by their unique code snippet IDs.
-    for (int i = 0; i <= (int) SkBlendMode::kLastCoeffMode; ++i) {
-        int ffBlendModeID = kFixedFunctionBlendModeIDOffset + i;
+    for (int i = 0; i <= (int) SkBlendMode::kLastMode; ++i) {
+        int ffBlendModeID = kFixedBlendIDOffset + i;
         fBuiltInCodeSnippets[ffBlendModeID] = {
                 /*name=*/SkBlendMode_Name(static_cast<SkBlendMode>(i)),
                 /*staticFn=*/skgpu::BlendFuncName(static_cast<SkBlendMode>(i)),
@@ -1662,21 +1681,34 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
 // clang-format off
 
 // Verify that the built-in code IDs for fixed function blending are consistent with SkBlendMode.
-static_assert((int)SkBlendMode::kClear    == (int)BuiltInCodeSnippetID::kFixedFunctionClearBlendMode    - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kSrc      == (int)BuiltInCodeSnippetID::kFixedFunctionSrcBlendMode      - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kDst      == (int)BuiltInCodeSnippetID::kFixedFunctionDstBlendMode      - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kSrcOver  == (int)BuiltInCodeSnippetID::kFixedFunctionSrcOverBlendMode  - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kDstOver  == (int)BuiltInCodeSnippetID::kFixedFunctionDstOverBlendMode  - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kSrcIn    == (int)BuiltInCodeSnippetID::kFixedFunctionSrcInBlendMode    - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kDstIn    == (int)BuiltInCodeSnippetID::kFixedFunctionDstInBlendMode    - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kSrcOut   == (int)BuiltInCodeSnippetID::kFixedFunctionSrcOutBlendMode   - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kDstOut   == (int)BuiltInCodeSnippetID::kFixedFunctionDstOutBlendMode   - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kSrcATop  == (int)BuiltInCodeSnippetID::kFixedFunctionSrcATopBlendMode  - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kDstATop  == (int)BuiltInCodeSnippetID::kFixedFunctionDstATopBlendMode  - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kXor      == (int)BuiltInCodeSnippetID::kFixedFunctionXorBlendMode      - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kPlus     == (int)BuiltInCodeSnippetID::kFixedFunctionPlusBlendMode     - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kModulate == (int)BuiltInCodeSnippetID::kFixedFunctionModulateBlendMode - kFixedFunctionBlendModeIDOffset);
-static_assert((int)SkBlendMode::kScreen   == (int)BuiltInCodeSnippetID::kFixedFunctionScreenBlendMode   - kFixedFunctionBlendModeIDOffset);
+static_assert((int)SkBlendMode::kClear      == (int)BuiltInCodeSnippetID::kFixedBlend_Clear      - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kSrc        == (int)BuiltInCodeSnippetID::kFixedBlend_Src        - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kDst        == (int)BuiltInCodeSnippetID::kFixedBlend_Dst        - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kSrcOver    == (int)BuiltInCodeSnippetID::kFixedBlend_SrcOver    - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kDstOver    == (int)BuiltInCodeSnippetID::kFixedBlend_DstOver    - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kSrcIn      == (int)BuiltInCodeSnippetID::kFixedBlend_SrcIn      - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kDstIn      == (int)BuiltInCodeSnippetID::kFixedBlend_DstIn      - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kSrcOut     == (int)BuiltInCodeSnippetID::kFixedBlend_SrcOut     - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kDstOut     == (int)BuiltInCodeSnippetID::kFixedBlend_DstOut     - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kSrcATop    == (int)BuiltInCodeSnippetID::kFixedBlend_SrcATop    - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kDstATop    == (int)BuiltInCodeSnippetID::kFixedBlend_DstATop    - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kXor        == (int)BuiltInCodeSnippetID::kFixedBlend_Xor        - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kPlus       == (int)BuiltInCodeSnippetID::kFixedBlend_Plus       - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kModulate   == (int)BuiltInCodeSnippetID::kFixedBlend_Modulate   - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kScreen     == (int)BuiltInCodeSnippetID::kFixedBlend_Screen     - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kOverlay    == (int)BuiltInCodeSnippetID::kFixedBlend_Overlay    - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kDarken     == (int)BuiltInCodeSnippetID::kFixedBlend_Darken     - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kColorDodge == (int)BuiltInCodeSnippetID::kFixedBlend_ColorDodge - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kColorBurn  == (int)BuiltInCodeSnippetID::kFixedBlend_ColorBurn  - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kHardLight  == (int)BuiltInCodeSnippetID::kFixedBlend_HardLight  - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kSoftLight  == (int)BuiltInCodeSnippetID::kFixedBlend_SoftLight  - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kDifference == (int)BuiltInCodeSnippetID::kFixedBlend_Difference - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kExclusion  == (int)BuiltInCodeSnippetID::kFixedBlend_Exclusion  - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kMultiply   == (int)BuiltInCodeSnippetID::kFixedBlend_Multiply   - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kHue        == (int)BuiltInCodeSnippetID::kFixedBlend_Hue        - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kSaturation == (int)BuiltInCodeSnippetID::kFixedBlend_Saturation - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kColor      == (int)BuiltInCodeSnippetID::kFixedBlend_Color      - kFixedBlendIDOffset);
+static_assert((int)SkBlendMode::kLuminosity == (int)BuiltInCodeSnippetID::kFixedBlend_Luminosity - kFixedBlendIDOffset);
 
 // Verify enum constants match values expected by static module SkSL functions
 static_assert(0 == static_cast<int>(skcms_TFType_Invalid),   "ColorSpaceTransform code depends on skcms_TFType");

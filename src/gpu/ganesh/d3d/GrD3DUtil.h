@@ -9,8 +9,8 @@
 #define GrD3DUtil_DEFINED
 
 #include "include/core/SkImage.h"
-#include "include/gpu/GrTypes.h"
-#include "include/gpu/d3d/GrD3DTypes.h"
+#include "include/gpu/ganesh/GrTypes.h"
+#include "include/gpu/ganesh/d3d/GrD3DTypes.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 
 #include <string>

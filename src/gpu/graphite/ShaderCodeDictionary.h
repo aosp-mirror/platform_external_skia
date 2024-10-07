@@ -92,14 +92,14 @@ struct ShaderSnippet {
                   const char* staticFn,
                   SkEnumBitMask<SnippetRequirementFlags> snippetRequirementFlags,
                   SkSpan<const Uniform> uniforms,
-                  SkSpan<const TextureAndSampler> textures = {},
+                  SkSpan<const TextureAndSampler> texturesAndSamplers = {},
                   GeneratePreambleForSnippetFn preambleGenerator = nullptr,
                   int numChildren = 0)
             : fName(name)
             , fStaticFunctionName(staticFn)
             , fSnippetRequirementFlags(snippetRequirementFlags)
             , fUniforms(uniforms)
-            , fTexturesAndSamplers(textures)
+            , fTexturesAndSamplers(texturesAndSamplers)
             , fNumChildren(numChildren)
             , fPreambleGenerator(preambleGenerator) {
         // Must always provide a name; static function is not optional if using the default (null)
@@ -163,7 +163,7 @@ public:
         SkASSERT(children.size() == (size_t) fEntry->fNumChildren);
 
         const bool isCompose = codeID == (int) BuiltInCodeSnippetID::kCompose ||
-                               codeID == (int) BuiltInCodeSnippetID::kBlendShader;
+                               codeID == (int) BuiltInCodeSnippetID::kBlendCompose;
         for (const ShaderNode* child : children) {
             // Runtime effects invoke children with explicit parameters so those requirements never
             // need to propagate to the root. Similarly, compose only needs to propagate the
@@ -231,13 +231,16 @@ public:
 
     const skia_private::TArray<uint32_t>& data() const { return fData; }
 
+    // Determines numTexturesAndSamplersUsed, hasPaintUniforms, hasGradientBuffer, and if a valid
+    // SamplerDesc ptr is passed in, any immutable sampler SamplerDescs.
     std::string toSkSL(const Caps* caps,
                        const RenderStep* step,
                        bool useStorageBuffers,
-                       int* numTexturesAndSamplersUsed,
-                       bool* hasPaintUniforms,
-                       bool* hasGradientBuffer,
-                       Swizzle writeSwizzle);
+                       Swizzle writeSwizzle,
+                       int* outNumTexturesAndSamplersUsed,
+                       bool* outHasPaintUniforms,
+                       bool* outHasGradientBuffer,
+                       skia_private::TArray<SamplerDesc>* outDescs = nullptr);
 
 private:
     // Recursive method which traverses ShaderNodes in a depth-first manner to aggregate all

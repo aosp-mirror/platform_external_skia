@@ -39,11 +39,11 @@
 #include "include/core/SkVertices.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContextOptions.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrContextOptions.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/SkColorData.h"
 #include "include/private/base/SingleOwner.h"
@@ -1039,6 +1039,7 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
             sampling,
             &paint,
             constraint,
+            rCtx->priv().options().fSharpenMipmappedTextures,
             cacheSize,
             maxTextureSize);
 #if defined(GPU_TEST_UTILS)
@@ -1359,7 +1360,7 @@ bool Device::replaceBackingProxy(SkSurface::ContentChangeMode mode) {
                                        oldView.mipmapped(),
                                        SkBackingFit::kExact,
                                        oldRTP->isBudgeted(),
-                                       GrProtected::kNo,
+                                       oldRTP->isProtected(),
                                        /*label=*/"BaseDevice_ReplaceBackingProxy");
     if (!proxy) {
         return false;

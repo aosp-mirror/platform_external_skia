@@ -143,6 +143,8 @@ public:
     virtual bool isRenderable(const TextureInfo&) const = 0;
     virtual bool isStorage(const TextureInfo&) const = 0;
 
+    virtual bool loadOpAffectsMSAAPipelines() const { return false; }
+
     int maxTextureSize() const { return fMaxTextureSize; }
     int defaultMSAASamplesCount() const { return fDefaultMSAASamples; }
 
@@ -225,6 +227,19 @@ public:
      * color type that is supported or kUnknown if there no renderable fallback format.
      */
     SkColorType getRenderableColorType(SkColorType) const;
+
+    // Determines the orientation of the NDC coordinates emitted by the vertex stage relative to
+    // both Skia's presumed top-left Y-down system and the viewport coordinates (which are also
+    // always top-left, Y-down for all supported backends).)
+    //
+    // If true is returned, then (-1,-1) in normalized device coords maps to the top-left of the
+    // configured viewport and positive Y points down. This aligns with Skia's conventions.
+    // If false is returned, then (-1,-1) in NDC maps to the bottom-left of the viewport and
+    // positive Y points up (so NDC is flipped relative to sk_Position and the viewport coords).
+    //
+    // There is no backend difference in handling the X axis so it's assumed -1 maps to the left
+    // edge and +1 maps to the right edge.
+    bool ndcYAxisPointsDown() const { return fNDCYAxisPointsDown; }
 
     bool clampToBorderSupport() const { return fClampToBorderSupport; }
 
@@ -372,6 +387,7 @@ protected:
 
     std::unique_ptr<SkSL::ShaderCaps> fShaderCaps;
 
+    bool fNDCYAxisPointsDown = false; // Most backends have NDC +Y pointing up
     bool fClampToBorderSupport = true;
     bool fProtectedSupport = false;
     bool fSemaphoreSupport = false;

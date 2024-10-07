@@ -58,7 +58,6 @@ class UploadBufferManager;
 class UploadList;
 
 template<typename T> class PipelineDataCache;
-using UniformDataCache = PipelineDataCache<UniformDataBlock>;
 using TextureDataCache = PipelineDataCache<TextureDataBlock>;
 
 struct SK_API RecorderOptions final {
@@ -121,7 +120,9 @@ public:
      * to insert a Recording into the Context and call `submit` to send the upload work to the gpu.
      * The backend texture must be compatible with the provided pixmap(s). Compatible, in this case,
      * means that the backend format is compatible with the base pixmap's colortype. The src data
-     * can be deleted when this call returns.
+     * can be deleted when this call returns. When the BackendTexture is safe to be destroyed by the
+     * client, Skia will call the passed in GpuFinishedProc. The BackendTexture should not be
+     * destroyed before that.
      * If the backend texture is mip mapped, the data for all the mipmap levels must be provided.
      * In the mipmapped case all the colortypes of the provided pixmaps must be the same.
      * Additionally, all the miplevels must be sized correctly (please see
@@ -132,13 +133,16 @@ public:
      */
     bool updateBackendTexture(const BackendTexture&,
                               const SkPixmap srcData[],
-                              int numLevels);
+                              int numLevels,
+                              GpuFinishedProc = nullptr,
+                              GpuFinishedContext = nullptr);
 
     /**
      * If possible, updates a compressed backend texture filled with the provided raw data. The
      * client should check the return value to see if the update was successful. The client is
      * required to insert a Recording into the Context and call `submit` to send the upload work to
-     * the gpu.
+     * the gpu. When the BackendTexture is safe to be destroyed by the client, Skia will call the
+     * passed in GpuFinishedProc. The BackendTexture should not be destroyed before that.
      * If the backend texture is mip mapped, the data for all the mipmap levels must be provided.
      * Additionally, all the miplevels must be sized correctly (please see
      * SkMipMap::ComputeLevelSize and ComputeLevelCount).
@@ -147,7 +151,9 @@ public:
      */
     bool updateCompressedBackendTexture(const BackendTexture&,
                                         const void* data,
-                                        size_t dataSize);
+                                        size_t dataSize,
+                                        GpuFinishedProc = nullptr,
+                                        GpuFinishedContext = nullptr);
 
     /**
      * Called to delete the passed in BackendTexture. This should only be called if the
@@ -255,7 +261,6 @@ private:
     // Aggregated one-time uploads that preceed all tasks in the root task list.
     std::unique_ptr<UploadList> fRootUploads;
 
-    std::unique_ptr<UniformDataCache> fUniformDataCache;
     std::unique_ptr<TextureDataCache> fTextureDataCache;
     std::unique_ptr<DrawBufferManager> fDrawBufferManager;
     std::unique_ptr<UploadBufferManager> fUploadBufferManager;

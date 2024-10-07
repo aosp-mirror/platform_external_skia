@@ -73,23 +73,6 @@ split_srcs_and_hdrs(
     files = MTL_FILES,
 )
 
-skia_filegroup(
-    name = "objc_srcs",
-    srcs = [
-        ":mtl_srcs",
-    ],
-    visibility = ["//src/gpu/ganesh:__pkg__"],
-)
-
-skia_filegroup(
-    name = "private_hdrs",
-    srcs = [
-        ":mtl_cpp_hdrs",
-        ":mtl_hdrs",
-    ],
-    visibility = ["//src/gpu/ganesh:__pkg__"],
-)
-
 skia_objc_library(
     name = "ganesh_metal",
     srcs = [
@@ -99,7 +82,7 @@ skia_objc_library(
         "//src/gpu/ganesh/surface:mtl_objc_srcs",
     ],
     hdrs = [
-        "//include/gpu:ganesh_hdrs",
+        "//include/gpu:shared_gpu_hdrs",
         "//include/gpu/ganesh:ganesh_hdrs",
         "//include/gpu/ganesh/mtl:public_hdrs",
         "//include/gpu/mtl:public_hdrs",
@@ -134,7 +117,7 @@ skia_objc_library(
         "//src/gpu/ganesh/surface:mtl_objc_srcs",
     ],
     hdrs = [
-        "//include/gpu:ganesh_hdrs",
+        "//include/gpu:shared_gpu_hdrs",
         "//include/gpu/ganesh:ganesh_hdrs",
         "//include/gpu/ganesh/mtl:public_hdrs",
         "//include/gpu/mtl:public_hdrs",
