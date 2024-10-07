@@ -9,6 +9,7 @@
 
 #include "include/core/SkData.h"
 #include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkTFitsIn.h"
 #include "include/private/base/SkTo.h"
 #include "src/core/SkTraceEvent.h"
 
@@ -21,6 +22,13 @@ namespace {
 // Different zlib implementations use different T.
 // We've seen size_t and unsigned.
 template <typename T> void* skia_alloc_func(void*, T items, T size) {
+    if (!SkTFitsIn<size_t>(size)) {
+        return nullptr;
+    }
+    const size_t maxItems = SIZE_MAX / size;
+    if (maxItems < items) {
+        return nullptr;
+    }
     return sk_calloc_throw(SkToSizeT(items) * SkToSizeT(size));
 }
 
