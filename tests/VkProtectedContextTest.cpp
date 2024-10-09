@@ -69,7 +69,7 @@ DEF_GANESH_TEST(VkProtectedContext_CreateNonprotectedContext,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_CreateNonprotectedContext_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     create_nonprotected_context(reporter, skiatest::TestType::kGraphite);
 }
 
@@ -85,7 +85,7 @@ DEF_GANESH_TEST(VkProtectedContext_CreateProtectedContext,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_CreateProtectedContext_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     std::unique_ptr<VkTestHelper> helper = VkTestHelper::Make(skiatest::TestType::kGraphite,
                                                               /* isProtected= */ true);
 }
@@ -123,7 +123,7 @@ DEF_GANESH_TEST(VkProtectedContext_CreateProtectedSkSurface,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_CreateProtectedSkSurface_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     create_protected_surface(reporter, skiatest::TestType::kGraphite);
 }
 
@@ -210,7 +210,7 @@ void create_backend_texture_graphite(skiatest::Reporter* reporter,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_CreateBackendTextures_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     for (bool contextIsProtected : { true, false }) {
         for (bool beTexIsProtected : { true, false }) {
             create_backend_texture_graphite(reporter, contextIsProtected, beTexIsProtected);
@@ -289,7 +289,7 @@ DEF_GANESH_TEST(VkProtectedContext_AsyncReadFromProtectedSurface,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_AsyncReadFromProtectedSurface_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     async_read_from_protected_surface(reporter, skiatest::TestType::kGraphite);
 }
 
@@ -325,7 +325,7 @@ DEF_GANESH_TEST(VkProtectedContext_DrawRectangle,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_DrawRectangle_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     draw_rectangle(reporter, skiatest::TestType::kGraphite);
 }
 
@@ -362,7 +362,7 @@ DEF_GANESH_TEST(VkProtectedContext_DrawRectangleWithAntiAlias,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_DrawRectangleWithAntiAlias_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     draw_rectangle_with_aa(reporter, skiatest::TestType::kGraphite);
 }
 
@@ -399,7 +399,7 @@ DEF_GANESH_TEST(VkProtectedContext_DrawRectangleWithBlendMode,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_DrawRectangleWithBlendMode_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     draw_rectangle_with_blendmode(reporter, skiatest::TestType::kGraphite);
 }
 
@@ -437,7 +437,7 @@ DEF_GANESH_TEST(VkProtectedContext_DrawRectangleWithFilter,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_DrawRectangleWithFilter_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     draw_rectangle_with_filter(reporter, skiatest::TestType::kGraphite);
 }
 
@@ -478,7 +478,7 @@ DEF_GANESH_TEST(VkProtectedContext_DrawThinPath,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_DrawThinPath_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     draw_thin_path(reporter, skiatest::TestType::kGraphite);
 }
 
@@ -516,7 +516,7 @@ DEF_GANESH_TEST(VkProtectedContext_SaveLayer,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_SaveLayer_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     save_layer(reporter, skiatest::TestType::kGraphite);
 }
 
@@ -564,7 +564,7 @@ DEF_GANESH_TEST(VkProtectedContext_DrawProtectedImageOnProtectedSurface,
 
 DEF_GRAPHITE_TEST(VkProtectedContext_DrawProtectedImageOnProtectedSurface_Graphite,
                   reporter,
-                  CtsEnforcement::kApiLevel_V) {
+                  CtsEnforcement::kNextRelease) {
     draw_protected_image_on_protected_surface(reporter, skiatest::TestType::kGraphite);
 }
 
