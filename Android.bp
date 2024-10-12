@@ -1678,6 +1678,7 @@ cc_library_static {
       android: {
         srcs: [
           "src/android/SkAndroidFrameworkPerfettoStaticStorage.cpp",
+          "src/codec/SkCrabbyAvifCodec.cpp",
           "src/codec/SkHeifCodec.cpp",
           "src/codec/SkJpegMultiPicture.cpp",
           "src/codec/SkJpegSegmentScan.cpp",
@@ -2121,6 +2122,10 @@ cc_defaults {
       android: {
         shared_libs: [
             "libheif",
+            "libmediandk", // Needed to link libcrabbyavif_ffi in some configurations.
+        ],
+        whole_static_libs: [
+            "libcrabbyavif_ffi",
         ],
       },
       darwin: {
@@ -5220,7 +5225,6 @@ cc_library_shared {
         "tests/graphite/ComputeTest.cpp",
         "tests/graphite/DeviceTest.cpp",
         "tests/graphite/DrawAtlasTest.cpp",
-        "tests/graphite/DrawPassTest.cpp",
         "tests/graphite/GraphitePromiseImageTest.cpp",
         "tests/graphite/GraphiteResourceCacheTest.cpp",
         "tests/graphite/GraphiteYUVAPromiseImageTest.cpp",
