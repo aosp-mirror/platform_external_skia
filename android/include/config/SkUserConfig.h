@@ -7,6 +7,10 @@
 #define SK_ANDROID_FRAMEWORK_USE_PERFETTO
 #endif
 
+#ifndef SK_CODEC_DECODES_AVIF
+#define SK_CODEC_DECODES_AVIF
+#endif
+
 #ifndef SK_CODEC_DECODES_BMP
 #define SK_CODEC_DECODES_BMP
 #endif

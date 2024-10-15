@@ -1097,6 +1097,18 @@ optional("avif") {
   sources = [ "src/codec/SkAvifCodec.cpp" ]
 }
 
+optional("crabbyavif") {
+  enabled = skia_use_crabbyavif
+  public_defines = [ "SK_CODEC_DECODES_AVIF" ]
+
+  # AVIF decoding is provided by CrabbyAvif (a Rust library). Since skia's
+  # standalone builds do not support Rust, it is only being enabled when
+  # building for the Android framework.
+  # The dependency for Android is set in gn_to_bp.py
+  deps = []
+  sources = [ "src/codec/SkCrabbyAvifCodec.cpp" ]
+}
+
 optional("jpeg_mpf") {
   enabled = skia_use_jpeg_gainmaps &&
             (skia_use_libjpeg_turbo_encode || skia_use_libjpeg_turbo_decode)
@@ -1363,7 +1375,11 @@ optional("typeface_fontations") {
     "$root_out_dir/libfontations_ffi.a",
     "$root_out_dir/libbridge_rust_side.a",
   ]
-  sources = skia_ports_typeface_fontations_sources
+  sources = skia_ports_typeface_fontations_sources + [
+              "src/ports/SkFontScanner_fontations.cpp",
+              "src/ports/SkFontScanner_fontations.h",
+            ]
+
   sources_for_tests = [
     "tests/FontationsTest.cpp",
     "tests/FontationsFtCompTest.cpp",
@@ -1463,6 +1479,7 @@ skia_component("skia") {
   deps = [
     ":android_utils",
     ":avif",
+    ":crabbyavif",
     ":heif",
     ":hsw",
     ":jpeg_decode",
