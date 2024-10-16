@@ -29,7 +29,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/angle/angle": {
 		Id:      "chromium.googlesource.com/angle/angle",
-		Version: "78a694a1b82a01623226a418cf2f765c75e45c70",
+		Version: "576b5ef40a9bfee5b49dda665ff6a3536fe8f91d",
 		Path:    "third_party/externals/angle2",
 	},
 	"chromium.googlesource.com/chromium/deps/icu": {
@@ -94,7 +94,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools": {
 		Id:      "chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
-		Version: "eb9b6043be165f06c7ec78fadbb1ff773c5fc19c",
+		Version: "7e628b0f6f375cfc507909c1d3bd988f60ac6fbc",
 		Path:    "third_party/externals/vulkan-tools",
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries": {
@@ -144,7 +144,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/vulkan-deps": {
 		Id:      "chromium.googlesource.com/vulkan-deps",
-		Version: "8f346c5caf5a624f42324ffb88167fc90992cab5",
+		Version: "d04c1f676c96bf5499d61bfed3f064e8a5c3a470",
 		Path:    "third_party/externals/vulkan-deps",
 	},
 	"chromium.googlesource.com/webm/libwebp": {
@@ -164,7 +164,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/buildbot": {
 		Id:      "skia.googlesource.com/buildbot",
-		Version: "2a35388fb5f09afb4a184e9db12f38ef63c9d4c1",
+		Version: "5a6102d3459e75933c7cda552919c8c04ed4d253",
 		Path:    "infra/skia-infra",
 	},
 	"skia.googlesource.com/external/github.com/AOMediaCodec/libavif": {
@@ -199,7 +199,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools": {
 		Id:      "skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools",
-		Version: "42b315c15b1ff941b46bb3949c105e5386be8717",
+		Version: "5b98dea6f1ce1a6b84d733d6093cdb208f4a0752",
 		Path:    "third_party/externals/spirv-tools",
 	},
 	"skia.googlesource.com/external/github.com/abseil/abseil-cpp": {
@@ -244,7 +244,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia/tools/sk": {
 		Id:      "skia/tools/sk",
-		Version: "git_revision:2a35388fb5f09afb4a184e9db12f38ef63c9d4c1",
+		Version: "git_revision:5a6102d3459e75933c7cda552919c8c04ed4d253",
 		Path:    "bin",
 	},
 	"swiftshader.googlesource.com/SwiftShader": {
