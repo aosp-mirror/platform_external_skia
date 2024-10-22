@@ -503,6 +503,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					skip(ALL, "gm", ALL, "wacky_yuv_formats_domain")
 				}
 
+				// b/373845830 - Precompile isn't thread-safe on either Dawn Metal
+				// or Dawn Vulkan
+				skip(ALL, "test", ALL, "ThreadedPrecompileTest")
+
 				if b.extraConfig("Vulkan") {
 					if b.extraConfig("TSAN") {
 						// The TSAN_Graphite_Dawn_Vulkan job goes off into space on this test
