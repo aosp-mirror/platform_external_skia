@@ -3305,6 +3305,7 @@ cc_defaults {
         "tests/graphite/precompile/ChromePrecompileTest.cpp",
         "tests/graphite/precompile/CombinationBuilderTest.cpp",
         "tests/graphite/precompile/PaintParamsKeyTest.cpp",
+        "tests/graphite/precompile/ThreadedPrecompileTest.cpp",
     ],
 }
 
@@ -5255,6 +5256,7 @@ cc_library_shared {
         "tests/graphite/precompile/ChromePrecompileTest.cpp",
         "tests/graphite/precompile/CombinationBuilderTest.cpp",
         "tests/graphite/precompile/PaintParamsKeyTest.cpp",
+        "tests/graphite/precompile/ThreadedPrecompileTest.cpp",
         "third_party/etc1/etc1.cpp",
         "tools/AndroidSkDebugToStdOut.cpp",
         "tools/CrashHandler.cpp",
