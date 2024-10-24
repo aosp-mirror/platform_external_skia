@@ -420,10 +420,15 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					baseConfig = "grdawn_gles"
 				}
 
+				configs = []string{baseConfig}
+
 				if b.extraConfig("FakeWGPU") {
-					configs = []string{baseConfig + "_fakeWGPU"}
-				} else {
-					configs = []string{baseConfig}
+					args = append(args, "--neverYieldToWebGPU")
+					args = append(args, "--useWGPUTextureView")
+				}
+
+				if b.extraConfig("TintIR") {
+					args = append(args, "--useTintIR")
 				}
 
 				// Shader doesn't compile
@@ -432,9 +437,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				// Crashes and failures
 				// https://skbug.com/14105
 				skip(ALL, "test", ALL, "BackendTextureTest")
-				skip(ALL, "test", ALL, "PaintParamsKeyTest")
 
-				if b.matchOs("Win10") || b.matchGpu("MaliG78", "Adreno620", "QuadroP400") {
+				if b.matchOs("Win10") || b.matchGpu("Adreno620", "MaliG78", "QuadroP400") {
 					// The Dawn Win10 and some Android/Linux device jobs OOMs (skbug.com/14410, b/318725123)
 					skip(ALL, "test", ALL, "BigImageTest_Graphite")
 				}
@@ -499,6 +503,16 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					skip(ALL, "gm", ALL, "wacky_yuv_formats_domain")
 				}
 
+				// b/373845830 - Precompile isn't thread-safe on either Dawn Metal
+				// or Dawn Vulkan
+				skip(ALL, "test", ALL, "ThreadedPrecompileTest")
+
+				if b.extraConfig("Vulkan") {
+					if b.extraConfig("TSAN") {
+						// The TSAN_Graphite_Dawn_Vulkan job goes off into space on this test
+						skip(ALL, "test", ALL, "BigImageTest_Graphite")
+					}
+				}
 			} else if b.extraConfig("Native") {
 				if b.extraConfig("Metal") {
 					configs = []string{"grmtl"}
@@ -1531,13 +1545,14 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	} else {
 		args = append(args, "--nonativeFonts")
 	}
-
 	if b.extraConfig("GDI") {
 		args = append(args, "--gdi")
 	}
-
 	if b.extraConfig("Fontations") {
 		args = append(args, "--fontations")
+	}
+	if b.extraConfig("AndroidNDKFonts") {
+		args = append(args, "--androidndkfonts")
 	}
 
 	// Let's make all tasks produce verbose output by default.

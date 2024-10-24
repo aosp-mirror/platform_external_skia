@@ -55,7 +55,6 @@ public:
     }
 
     UploadList* rootUploadList() { return fRecorder->fRootUploads.get(); }
-    UniformDataCache* uniformDataCache() { return fRecorder->fUniformDataCache.get(); }
     TextureDataCache* textureDataCache() { return fRecorder->fTextureDataCache.get(); }
     DrawBufferManager* drawBufferManager() { return fRecorder->fDrawBufferManager.get(); }
     UploadBufferManager* uploadBufferManager() { return fRecorder->fUploadBufferManager.get(); }
@@ -90,6 +89,7 @@ public:
     // used by the Context that created this Recorder to set a back pointer
     void setContext(Context*);
     Context* context() { return fRecorder->fContext; }
+    void issueFlushToken();
 #endif
 
 private:

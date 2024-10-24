@@ -28,7 +28,12 @@ namespace skwindow::internal {
 
 GraphiteMetalWindowContext::GraphiteMetalWindowContext(const DisplayParams& params)
         : WindowContext(params), fValid(false), fDrawableHandle(nil) {
-    fDisplayParams.fMSAASampleCount = GrNextPow2(fDisplayParams.fMSAASampleCount);
+    // SkNextPow2 is undefined for 0, so handle that ourselves.
+    if (fDisplayParams.fMSAASampleCount <= 1) {
+        fDisplayParams.fMSAASampleCount = 1;
+    } else {
+        fDisplayParams.fMSAASampleCount = SkNextPow2(fDisplayParams.fMSAASampleCount);
+    }
 }
 
 void GraphiteMetalWindowContext::initializeContext() {
@@ -56,11 +61,12 @@ void GraphiteMetalWindowContext::initializeContext() {
     backendContext.fDevice.retain((CFTypeRef)fDevice.get());
     backendContext.fQueue.retain((CFTypeRef)fQueue.get());
 
-    fDisplayParams.fGraphiteContextOptions.fOptions.fDisableCachedGlyphUploads = true;
+    fDisplayParams.fGraphiteTestOptions.fTestOptions.fContextOptions.fDisableCachedGlyphUploads =
+            true;
     // Needed to make synchronous readPixels work:
-    fDisplayParams.fGraphiteContextOptions.fPriv.fStoreContextRefInRecorder = true;
+    fDisplayParams.fGraphiteTestOptions.fPriv.fStoreContextRefInRecorder = true;
     fGraphiteContext = skgpu::graphite::ContextFactory::MakeMetal(
-            backendContext, fDisplayParams.fGraphiteContextOptions.fOptions);
+            backendContext, fDisplayParams.fGraphiteTestOptions.fTestOptions.fContextOptions);
     fGraphiteRecorder = fGraphiteContext->makeRecorder(ToolUtils::CreateTestingRecorderOptions());
     // TODO
     //    if (!fGraphiteContext && fDisplayParams.fMSAASampleCount > 1) {

@@ -761,7 +761,6 @@ cc_library_static {
         "src/gpu/graphite/PaintParams.cpp",
         "src/gpu/graphite/PaintParamsKey.cpp",
         "src/gpu/graphite/PathAtlas.cpp",
-        "src/gpu/graphite/PipelineData.cpp",
         "src/gpu/graphite/ProxyCache.cpp",
         "src/gpu/graphite/PublicPrecompile.cpp",
         "src/gpu/graphite/QueueManager.cpp",
@@ -1679,6 +1678,7 @@ cc_library_static {
       android: {
         srcs: [
           "src/android/SkAndroidFrameworkPerfettoStaticStorage.cpp",
+          "src/codec/SkCrabbyAvifCodec.cpp",
           "src/codec/SkHeifCodec.cpp",
           "src/codec/SkJpegMultiPicture.cpp",
           "src/codec/SkJpegSegmentScan.cpp",
@@ -1986,6 +1986,7 @@ cc_library_static {
           "src/gpu/vk/vulkanmemoryallocator/VulkanAMDMemoryAllocator.cpp",
           "src/image/SkImage_AndroidFactories.cpp",
           "src/ports/SkDebug_android.cpp",
+          "src/ports/SkFontMgr_android_ndk.cpp",
           "src/ports/SkOSFile_posix.cpp",
           "src/sksl/codegen/SkSLGLSLCodeGenerator.cpp",
           "src/sksl/codegen/SkSLMetalCodeGenerator.cpp",
@@ -2121,6 +2122,10 @@ cc_defaults {
       android: {
         shared_libs: [
             "libheif",
+            "libmediandk", // Needed to link libcrabbyavif_ffi in some configurations.
+        ],
+        whole_static_libs: [
+            "libcrabbyavif_ffi",
         ],
       },
       darwin: {
@@ -2808,6 +2813,7 @@ cc_defaults {
         "tools/SvgPathExtractor.cpp",
         "tools/TestFontDataProvider.cpp",
         "tools/ToolUtils.cpp",
+        "tools/TsanSuppressions.cpp",
         "tools/UrlDataManager.cpp",
         "tools/debugger/DebugCanvas.cpp",
         "tools/debugger/DebugLayerManager.cpp",
@@ -3026,6 +3032,7 @@ cc_defaults {
         "tests/ImageFilterCacheTest.cpp",
         "tests/ImageFilterTest.cpp",
         "tests/ImageFrom565Bitmap.cpp",
+        "tests/ImageGeneratorOrientationTest.cpp",
         "tests/ImageGeneratorTest.cpp",
         "tests/ImageIsOpaqueTest.cpp",
         "tests/ImageNewShaderTest.cpp",
@@ -3073,7 +3080,6 @@ cc_defaults {
         "tests/PDFOpaqueSrcModeToSrcOverTest.cpp",
         "tests/PDFPrimitivesTest.cpp",
         "tests/PDFTaggedLinkTest.cpp",
-        "tests/PDFTaggedPruningTest.cpp",
         "tests/PDFTaggedTableTest.cpp",
         "tests/PDFTaggedTest.cpp",
         "tests/PaintTest.cpp",
@@ -3300,6 +3306,7 @@ cc_defaults {
         "tests/graphite/precompile/ChromePrecompileTest.cpp",
         "tests/graphite/precompile/CombinationBuilderTest.cpp",
         "tests/graphite/precompile/PaintParamsKeyTest.cpp",
+        "tests/graphite/precompile/ThreadedPrecompileTest.cpp",
     ],
 }
 
@@ -4467,7 +4474,6 @@ cc_library_shared {
         "src/gpu/graphite/PaintParams.cpp",
         "src/gpu/graphite/PaintParamsKey.cpp",
         "src/gpu/graphite/PathAtlas.cpp",
-        "src/gpu/graphite/PipelineData.cpp",
         "src/gpu/graphite/ProxyCache.cpp",
         "src/gpu/graphite/PublicPrecompile.cpp",
         "src/gpu/graphite/QueueManager.cpp",
@@ -4943,6 +4949,7 @@ cc_library_shared {
         "tests/ImageFilterCacheTest.cpp",
         "tests/ImageFilterTest.cpp",
         "tests/ImageFrom565Bitmap.cpp",
+        "tests/ImageGeneratorOrientationTest.cpp",
         "tests/ImageGeneratorTest.cpp",
         "tests/ImageIsOpaqueTest.cpp",
         "tests/ImageNewShaderTest.cpp",
@@ -4989,7 +4996,6 @@ cc_library_shared {
         "tests/PDFOpaqueSrcModeToSrcOverTest.cpp",
         "tests/PDFPrimitivesTest.cpp",
         "tests/PDFTaggedLinkTest.cpp",
-        "tests/PDFTaggedPruningTest.cpp",
         "tests/PDFTaggedTableTest.cpp",
         "tests/PDFTaggedTest.cpp",
         "tests/PaintTest.cpp",
@@ -5220,7 +5226,7 @@ cc_library_shared {
         "tests/graphite/CacheKeyTest.cpp",
         "tests/graphite/ComputeTest.cpp",
         "tests/graphite/DeviceTest.cpp",
-        "tests/graphite/DrawPassTest.cpp",
+        "tests/graphite/DrawAtlasTest.cpp",
         "tests/graphite/GraphitePromiseImageTest.cpp",
         "tests/graphite/GraphiteResourceCacheTest.cpp",
         "tests/graphite/GraphiteYUVAPromiseImageTest.cpp",
@@ -5251,6 +5257,7 @@ cc_library_shared {
         "tests/graphite/precompile/ChromePrecompileTest.cpp",
         "tests/graphite/precompile/CombinationBuilderTest.cpp",
         "tests/graphite/precompile/PaintParamsKeyTest.cpp",
+        "tests/graphite/precompile/ThreadedPrecompileTest.cpp",
         "third_party/etc1/etc1.cpp",
         "tools/AndroidSkDebugToStdOut.cpp",
         "tools/CrashHandler.cpp",
@@ -5268,6 +5275,7 @@ cc_library_shared {
         "tools/SkSharingProc.cpp",
         "tools/TestFontDataProvider.cpp",
         "tools/ToolUtils.cpp",
+        "tools/TsanSuppressions.cpp",
         "tools/UrlDataManager.cpp",
         "tools/debugger/DebugCanvas.cpp",
         "tools/debugger/DebugLayerManager.cpp",

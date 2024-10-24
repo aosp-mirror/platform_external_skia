@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "experimental/rust_png/ffi/FFI.rs.h"
+#include "src/codec/SkFrameHolder.h"
 #include "src/codec/SkPngCodecBase.h"
 #include "third_party/rust/cxx/v1/cxx.h"
 
@@ -24,7 +25,7 @@ template <typename T> class SkSpan;
 //   Rust)
 // * Skia's `SkSwizzler` and `skcms_Transform` (pixel format and color space
 //   transformations implemented in C++).
-class SkPngRustCodec : public SkPngCodecBase {
+class SkPngRustCodec final : public SkPngCodecBase {
 public:
     static std::unique_ptr<SkPngRustCodec> MakeFromStream(std::unique_ptr<SkStream>, Result*);
 
@@ -35,8 +36,24 @@ public:
 
 private:
     struct DecodingState {
-        SkSpan<uint8_t> dst;
-        size_t dstRowSize;  // in bytes.
+        // `fDst` is based on `pixels` passed to `onGetPixels` or
+        // `onStartIncrementalDecode`.  For interlaced and non-interlaced
+        // images, `startDecoding` initializes `fDst` to start at the (0,0)
+        // (top-left) pixel of the current frame (which may be offset from
+        // `pixels` if the current frame is a sub-rect of the full image).
+        // After decoding a non-interlaced row this moves (by `fDstRowSize`) to
+        // the next row.
+        SkSpan<uint8_t> fDst;
+
+        // Size of a row (in bytes) in the full image.  Based on `rowBytes`
+        // passed to `onGetPixels` or `onStartIncrementalDecode`.
+        size_t fDstRowSize = 0;
+
+        // Index (in `fFrameHolder`) of the frame being currently decoded.
+        size_t fFrameIndex = 0;
+
+        // Stashed `dstInfo.bytesPerPixel()`
+        uint8_t fBytesPerPixel = 0;
     };
 
     // Helper for validating parameters of `onGetPixels` and/or
@@ -52,12 +69,23 @@ private:
     // `onIncrementalDecode`.
     Result incrementalDecode(DecodingState& decodingState, int* rowsDecoded);
 
-    // Temporary helper for *non*-row-by-row decoding of interlaced images.
-    //
-    // TODO(https://crbug.com/356923435): Remove this method after implementing
-    // row-by-row decoding of interlaced images (see WIP CL at
-    // http://review.skia.org/894576).
-    Result decodeInterlacedImage(DecodingState& decodingState);
+    // Helper for reading until the start of the next `fdAT` sequence.
+    Result readToStartOfNextFrame();
+
+    // Helper for seeking to the start of image data for the given frame.
+    Result seekToStartOfFrame(int index);
+
+    // The number of frames calculated based on 1) the presence, and 2) the
+    // contents of an `acTL` chunk.  "raw" in the sense that it reports all the
+    // frames, while `SkCodec::getFrameCount` and
+    // `SkPngRustCodec::onGetFrameCount` only report frames for which we have
+    // successfully populated `fFrameHolder` with frame info parsed from `IHDR`
+    // and/or `fcTL` chunks.
+    int getRawFrameCount() const;
+
+    // Attempts to read through the input stream to parse the additional `fcTL`
+    // chunks.
+    Result parseAdditionalFrameInfos();
 
     // SkCodec overrides:
     Result onGetPixels(const SkImageInfo& dstInfo,
@@ -70,7 +98,11 @@ private:
                                     size_t rowBytes,
                                     const Options&) override;
     Result onIncrementalDecode(int* rowsDecoded) override;
+    int onGetFrameCount() override;
     bool onGetFrameInfo(int, FrameInfo*) const override;
+    int onGetRepetitionCount() override;
+    const SkFrameHolder* getFrameHolder() const override;
+    std::unique_ptr<SkStream> getEncodedData() const override;
 
     // SkPngCodecBase overrides:
     std::optional<SkSpan<const PaletteColorEntry>> onTryGetPlteChunk() override;
@@ -78,12 +110,48 @@ private:
 
     rust::Box<rust_png::Reader> fReader;
 
+    // `-1` means that `IDAT` is not part of animation and wasn't skipped yet.
+    int fFrameAtCurrentStreamPosition = -1;
+    const std::unique_ptr<SkStream> fPrivStream;
+
     std::optional<DecodingState> fIncrementalDecodingState;
 
-    class PngFrame;
-    std::vector<PngFrame> fFrames;
+    class FrameHolder final : public SkFrameHolder {
+    public:
+        FrameHolder(int width, int height);
+        ~FrameHolder() override;
 
-    size_t fNumOfFullyReceivedFrames = 0;
+        FrameHolder(const FrameHolder&) = delete;
+        FrameHolder(FrameHolder&&) = delete;
+        FrameHolder& operator=(const FrameHolder&) = delete;
+        FrameHolder& operator=(FrameHolder&&) = delete;
+
+        // Returning an `int` (rather than `size_t`) for easier interop with
+        // other parts of the SkCodec API.
+        int size() const;
+
+        Result appendNewFrame(const rust_png::Reader& reader, const SkEncodedInfo& info);
+        void markFrameAsFullyReceived(size_t index);
+        bool getFrameInfo(int index, FrameInfo* info) const;
+
+    private:
+        class PngFrame;
+
+        const SkFrame* onGetFrame(int unverifiedIndex) const override;
+        Result setFrameInfoFromCurrentFctlChunk(const rust_png::Reader& reader,
+                                                PngFrame* out_frame);
+
+        std::vector<PngFrame> fFrames;
+    };
+    FrameHolder fFrameHolder;
+
+    // Whether there may still be additional `fcTL` chunks to discover and parse.
+    //
+    // `true` if the stream hasn't been fully received (i.e. only
+    // `kIncompleteInput` errors so far, no hard errors) and `fFrameHolder`
+    // doesn't yet contain frame info for all `num_frames` declared in an `acTL`
+    // chunk.
+    bool fCanParseAdditionalFrameInfos = true;
 };
 
 #endif  // SkPngRustCodec_DEFINED

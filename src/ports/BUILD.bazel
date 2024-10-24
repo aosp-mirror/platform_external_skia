@@ -118,11 +118,11 @@ skia_cc_library(
         "SkFontHost_FreeType_common.h",
         "SkTypeface_FreeType.h",
     ],
-    deps = [
-        "//:core",
+    implementation_deps = [
         "//:pathops",
         "@freetype",
     ],
+    deps = ["//:core"],
 )
 
 skia_cc_library(
@@ -143,6 +143,24 @@ skia_cc_library(
         "//src/base",
         "//src/core:core_priv",
         "@expat",
+    ],
+)
+
+skia_cc_library(
+    name = "fontmgr_android_ndk_freetype",
+    srcs = [
+        "SkFontMgr_android_ndk.cpp",
+    ],
+    hdrs = [
+        "//include/ports:android_ndk_fontmgr_hdrs",
+    ],
+    defines = ["SK_FONTMGR_ANDROID_NDK_AVAILABLE"],
+    visibility = ["//:__pkg__"],
+    deps = [
+        ":freetype_support",
+        "//:core",
+        "//src/base",
+        "//src/core:core_priv",
     ],
 )
 
@@ -358,6 +376,46 @@ skia_objc_library(
         "//src/core:core_priv",
         "//src/utils/mac:mac_utils_priv",
     ],
+)
+
+skia_cc_library(
+    name = "imagegenerator_ndk",
+    srcs = ["SkImageGeneratorNDK.cpp"],
+    hdrs = ["//include/ports:imagegenerator_ndk_hdrs"],
+    features = ["layering_check"],
+    visibility = ["//:__pkg__"],
+    deps = [
+        "//:core",
+        "//src/base",
+        "//src/codec:any_decoder",
+        "//src/core:core_priv",
+    ],
+)
+
+skia_cc_library(
+    name = "imagegenerator_wic",
+    srcs = ["SkImageGeneratorWIC.cpp"],
+    hdrs = ["//include/ports:imagegenerator_wic_hdrs"],
+    features = ["layering_check"],
+    visibility = ["//:__pkg__"],
+    deps = [
+        "//:core",
+        "//src/base",
+        "//src/codec:any_decoder",
+        "//src/core:core_priv",
+    ],
+)
+
+skia_cc_library(
+    name = "imagegenerator",
+    visibility = ["//dm:__pkg__"],
+    deps = select({
+        "@platforms//os:android": [":imagegenerator_ndk"],
+        "@platforms//os:macos": [":imagegenerator_coregraphics"],
+        "@platforms//os:ios": [":imagegenerator_coregraphics"],
+        "@platforms//os:windows": [":imagegenerator_wic"],
+        "//conditions:default": [],
+    }),
 )
 
 skia_filegroup(
