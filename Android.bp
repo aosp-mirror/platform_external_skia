@@ -2813,6 +2813,7 @@ cc_defaults {
         "tools/SvgPathExtractor.cpp",
         "tools/TestFontDataProvider.cpp",
         "tools/ToolUtils.cpp",
+        "tools/TsanSuppressions.cpp",
         "tools/UrlDataManager.cpp",
         "tools/debugger/DebugCanvas.cpp",
         "tools/debugger/DebugLayerManager.cpp",
@@ -3305,6 +3306,7 @@ cc_defaults {
         "tests/graphite/precompile/ChromePrecompileTest.cpp",
         "tests/graphite/precompile/CombinationBuilderTest.cpp",
         "tests/graphite/precompile/PaintParamsKeyTest.cpp",
+        "tests/graphite/precompile/ThreadedPrecompileTest.cpp",
     ],
 }
 
@@ -5255,6 +5257,7 @@ cc_library_shared {
         "tests/graphite/precompile/ChromePrecompileTest.cpp",
         "tests/graphite/precompile/CombinationBuilderTest.cpp",
         "tests/graphite/precompile/PaintParamsKeyTest.cpp",
+        "tests/graphite/precompile/ThreadedPrecompileTest.cpp",
         "third_party/etc1/etc1.cpp",
         "tools/AndroidSkDebugToStdOut.cpp",
         "tools/CrashHandler.cpp",
@@ -5272,6 +5275,7 @@ cc_library_shared {
         "tools/SkSharingProc.cpp",
         "tools/TestFontDataProvider.cpp",
         "tools/ToolUtils.cpp",
+        "tools/TsanSuppressions.cpp",
         "tools/UrlDataManager.cpp",
         "tools/debugger/DebugCanvas.cpp",
         "tools/debugger/DebugLayerManager.cpp",
