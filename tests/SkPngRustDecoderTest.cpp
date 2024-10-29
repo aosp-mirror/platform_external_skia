@@ -8,6 +8,7 @@
 #include "experimental/rust_png/SkPngRustDecoder.h"
 #include "include/codec/SkCodec.h"
 #include "include/codec/SkCodecAnimation.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
@@ -15,6 +16,7 @@
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkStream.h"
+#include "tests/FakeStreams.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 
@@ -29,7 +31,7 @@
 
 // Helper wrapping a call to `SkPngRustDecoder::Decode`.
 std::unique_ptr<SkCodec> SkPngRustDecoderDecode(skiatest::Reporter* r, const char* path) {
-    sk_sp<SkData> data(GetResourceAsData(path));
+    sk_sp<SkData> data = GetResourceAsData(path);
     if (!data) {
         ERRORF(r, "Missing resource: %s", path);
         return nullptr;
@@ -44,7 +46,7 @@ std::unique_ptr<SkCodec> SkPngRustDecoderDecode(skiatest::Reporter* r, const cha
 }
 
 void AssertPixelColor(skiatest::Reporter* r,
-                      const SkImage& image,
+                      const SkPixmap& pixmap,
                       int x,
                       int y,
                       SkColor expectedColor,
@@ -54,39 +56,46 @@ void AssertPixelColor(skiatest::Reporter* r,
     SkASSERT(y >= 0);
     SkASSERT(description);
 
-    REPORTER_ASSERT(r, x < image.width(), "x=%d >= width=%d", x, image.width());
-    REPORTER_ASSERT(r, y < image.height(), "y=%d >= height=%d", y, image.height());
+    REPORTER_ASSERT(r, x < pixmap.width(), "x=%d >= width=%d", x, pixmap.width());
+    REPORTER_ASSERT(r, y < pixmap.height(), "y=%d >= height=%d", y, pixmap.height());
     REPORTER_ASSERT(r,
-                    kN32_SkColorType == image.colorType(),
-                    "kN32_SkColorType != image.ColorType()=%d",
-                    image.colorType());
-
-    SkPixmap pixmap;
-    REPORTER_ASSERT(r, image.peekPixels(&pixmap));
+                    kN32_SkColorType == pixmap.colorType(),
+                    "kN32_SkColorType != pixmap.ColorType()=%d",
+                    pixmap.colorType());
 
     SkColor actualColor = pixmap.getColor(x, y);
     REPORTER_ASSERT(r,
                     actualColor == expectedColor,
-                    "actualColor=0x%08X != expectedColor==0x%08X (%s)",
+                    "actualColor=0x%08X != expectedColor==0x%08X at (%d,%d) (%s)",
                     actualColor,
                     expectedColor,
+                    x,
+                    y,
                     description);
 }
 
 void AssertGreenPixel(skiatest::Reporter* r,
-                      const SkImage& image,
+                      const SkPixmap& pixmap,
                       int x,
                       int y,
                       const char* description = "Expecting a green pixel") {
-    AssertPixelColor(r, image, x, y, SkColorSetRGB(0x00, 0xFF, 0x00), description);
+    AssertPixelColor(r, pixmap, x, y, SkColorSetRGB(0x00, 0xFF, 0x00), description);
 }
 
 void AssertRedPixel(skiatest::Reporter* r,
-                    const SkImage& image,
+                    const SkPixmap& pixmap,
                     int x,
                     int y,
                     const char* description = "Expecting a red pixel") {
-    AssertPixelColor(r, image, x, y, SkColorSetRGB(0xFF, 0x00, 0x00), description);
+    AssertPixelColor(r, pixmap, x, y, SkColorSetRGB(0xFF, 0x00, 0x00), description);
+}
+
+void AssertBluePixel(skiatest::Reporter* r,
+                     const SkPixmap& pixmap,
+                     int x,
+                     int y,
+                     const char* description = "Expecting a blue pixel") {
+    AssertPixelColor(r, pixmap, x, y, SkColorSetRGB(0x00, 0x00, 0xFF), description);
 }
 
 void AssertSingleGreenFrame(skiatest::Reporter* r,
@@ -123,8 +132,70 @@ void AssertSingleGreenFrame(skiatest::Reporter* r,
                     image->height(),
                     expectedHeight);
 
-    AssertGreenPixel(r, *image, 0, 0);
-    AssertGreenPixel(r, *image, expectedWidth / 2, expectedHeight / 2);
+    SkPixmap pixmap;
+    REPORTER_ASSERT(r, image->peekPixels(&pixmap));
+
+    AssertGreenPixel(r, pixmap, 0, 0);
+    AssertGreenPixel(r, pixmap, expectedWidth / 2, expectedHeight / 2);
+}
+
+sk_sp<SkImage> DecodeLastFrame(skiatest::Reporter* r, const char* resourcePath) {
+    std::unique_ptr<SkCodec> codec = SkPngRustDecoderDecode(r, resourcePath);
+    if (!codec) {
+        return nullptr;
+    }
+
+    int frameCount = codec->getFrameCount();
+    sk_sp<SkImage> image;
+    SkCodec::Result result = SkCodec::kSuccess;
+    for (int i = 0; i < frameCount; i++) {
+        SkCodec::FrameInfo info;
+        REPORTER_ASSERT(r, codec->getFrameInfo(i, &info));
+
+        // This test method only supports `kKeep` disposal method.
+        SkASSERT(info.fDisposalMethod == SkCodecAnimation::DisposalMethod::kKeep);
+
+        if (!image) {
+            std::tie(image, result) = codec->getImage();
+            REPORTER_ASSERT_SUCCESSFUL_CODEC_RESULT(r, result);
+            if (result != SkCodec::kSuccess) {
+                return nullptr;
+            }
+        } else {
+            SkPixmap pixmap;
+            REPORTER_ASSERT(r, image->peekPixels(&pixmap));
+
+            SkCodec::Options options;
+            options.fZeroInitialized = SkCodec::kNo_ZeroInitialized;
+            options.fSubset = nullptr;
+            options.fFrameIndex = i;
+            options.fPriorFrame = i - 1;
+
+            result = codec->getPixels(pixmap, &options);
+            REPORTER_ASSERT_SUCCESSFUL_CODEC_RESULT(r, result);
+            if (result != SkCodec::kSuccess) {
+                return nullptr;
+            }
+        }
+    }
+
+    return image;
+}
+
+void AssertAnimationRepetitionCount(skiatest::Reporter* r,
+                                    int expectedRepetitionCount,
+                                    const char* resourcePath) {
+    std::unique_ptr<SkCodec> codec = SkPngRustDecoderDecode(r, resourcePath);
+    if (!codec) {
+        return;
+    }
+
+    int actualRepetitionCount = codec->getRepetitionCount();
+    REPORTER_ASSERT(r,
+                    actualRepetitionCount == expectedRepetitionCount,
+                    "actualRepetitionCount=%d != expectedRepetitionCount=%d",
+                    actualRepetitionCount,
+                    expectedRepetitionCount);
 }
 
 // Test based on
@@ -207,24 +278,273 @@ DEF_TEST(Codec_apng_dispose_op_none_basic, r) {
     REPORTER_ASSERT(r, image);
     REPORTER_ASSERT(r, image->width() == 128, "width %d != 128", image->width());
     REPORTER_ASSERT(r, image->height() == 64, "height %d != 64", image->height());
-    AssertRedPixel(r, *image, 0, 0, "Frame #0 should be red");
-
-    // Validate contents of the second frame.
     SkPixmap pixmap;
     REPORTER_ASSERT(r, image->peekPixels(&pixmap));
+    AssertRedPixel(r, pixmap, 0, 0, "Frame #0 should be red");
+
+    // Validate contents of the second frame.
     SkCodec::Options options;
     options.fZeroInitialized = SkCodec::kNo_ZeroInitialized;
     options.fSubset = nullptr;
     options.fFrameIndex = 1;  // We want to decode the second frame.
     options.fPriorFrame = 0;  // `pixmap` contains the first frame before `getPixels` call.
     REPORTER_ASSERT_SUCCESSFUL_CODEC_RESULT(r, codec->getPixels(pixmap, &options));
-    AssertGreenPixel(r, *image, 0, 0, "Frame #1 should be green");
+    AssertGreenPixel(r, pixmap, 0, 0, "Frame #1 should be green");
 
     // Validate contents of the third frame.
     options.fFrameIndex = 2;  // We want to decode the second frame.
     options.fPriorFrame = 1;  // `pixmap` contains the second frame before `getPixels` call.
     REPORTER_ASSERT_SUCCESSFUL_CODEC_RESULT(r, codec->getPixels(pixmap, &options));
-    AssertGreenPixel(r, *image, 0, 0, "Frame #2 should be green");
+    AssertGreenPixel(r, pixmap, 0, 0, "Frame #2 should be green");
+}
+
+// This test covers an incomplete input scenario:
+//
+// * Only half of 1st frame is available during `onGetFrameCount`.
+//   In this situation `onGetFrameCount` may consume the whole input in a
+//   (futile in this case) attempt to discover `fcTL` chunks for 2nd and 3rd
+//   frame.  This will mean that the input stream is in the middle of the 1st
+//   frame - no longer positioned correctly for decoding the 1st frame.
+// * Full input is available when subsequently decoding 1st frame.
+DEF_TEST(Codec_apng_dispose_op_none_basic_incomplete_input1, r) {
+    const char* path = "images/apng-test-suite--dispose-ops--none-basic.png";
+    sk_sp<SkData> data = GetResourceAsData(path);
+    if (!data) {
+        ERRORF(r, "Missing resource: %s", path);
+        return;
+    }
+    size_t fullLength = data->size();
+
+    // Initially expose roughly middle of `IDAT` chunk (in this image `fcTL` is
+    // present before the `IDAT` chunk and therefore the `IDAT` chunk is part of
+    // the animated image).
+    constexpr size_t kInitialBytes = 0xAD;
+    auto streamForCodec = std::make_unique<HaltingStream>(std::move(data), kInitialBytes);
+    HaltingStream* retainedStream = streamForCodec.get();
+
+    SkCodec::Result result;
+    std::unique_ptr<SkCodec> codec = SkPngRustDecoder::Decode(std::move(streamForCodec), &result);
+    REPORTER_ASSERT_SUCCESSFUL_CODEC_RESULT(r, result);
+    if (!codec) {
+        return;
+    }
+
+    SkBitmap bitmap;
+    if (!bitmap.tryAllocN32Pixels(codec->dimensions().width(), codec->dimensions().height())) {
+        ERRORF(r, "Failed to allocate SkBitmap");
+        return;
+    }
+
+    // Try to provoke the codec to consume the currently-available part of the
+    // input stream.
+    //
+    // At this point only the metadata for the first frame is available.
+    int frameCount = codec->getFrameCount();
+    REPORTER_ASSERT(r, frameCount == 1);
+
+    // Make the rest of the input available to the codec.
+    retainedStream->addNewData(fullLength);
+
+    // Try to decode the first frame and check its contents.
+    sk_sp<SkImage> image;
+    std::tie(image, result) = codec->getImage();
+    REPORTER_ASSERT_SUCCESSFUL_CODEC_RESULT(r, result);
+    REPORTER_ASSERT(r, image);
+    REPORTER_ASSERT(r, image->width() == 128, "width %d != 128", image->width());
+    REPORTER_ASSERT(r, image->height() == 64, "height %d != 64", image->height());
+    SkPixmap pixmap;
+    REPORTER_ASSERT(r, image->peekPixels(&pixmap));
+    AssertRedPixel(r, pixmap, 0, 0, "Frame #0 should be red");
+}
+
+// This test covers an incomplete input scenario:
+//
+// * Only half of 1st frame is available during the initial `incrementalDecode`.
+// * Before retrying, `getFrameCount` is called.  This should *not* reposition
+//   the stream while in the middle of an active incremental decode.
+// * Then we retry `incrementalDecode`.
+DEF_TEST(Codec_apng_dispose_op_none_basic_incomplete_input2, r) {
+    const char* path = "images/apng-test-suite--dispose-ops--none-basic.png";
+    sk_sp<SkData> data = GetResourceAsData(path);
+    if (!data) {
+        ERRORF(r, "Missing resource: %s", path);
+        return;
+    }
+    size_t fullLength = data->size();
+
+    constexpr size_t kInitialBytes = 0x8D;  // Roughly middle of IDAT chunk.
+    auto streamForCodec = std::make_unique<HaltingStream>(std::move(data), kInitialBytes);
+    HaltingStream* retainedStream = streamForCodec.get();
+
+    SkCodec::Result result;
+    std::unique_ptr<SkCodec> codec = SkPngRustDecoder::Decode(std::move(streamForCodec), &result);
+    REPORTER_ASSERT_SUCCESSFUL_CODEC_RESULT(r, result);
+    if (!codec) {
+        return;
+    }
+
+    SkBitmap bitmap;
+    if (!bitmap.tryAllocN32Pixels(codec->dimensions().width(), codec->dimensions().height())) {
+        ERRORF(r, "Failed to allocate SkBitmap");
+        return;
+    }
+    const SkPixmap& pixmap = bitmap.pixmap();
+
+    // Fill the `bitmap` with blue pixels to detect which pixels have been filled
+    // by the codec during a partially-successful `incrementalDecode`.
+    //
+    // (The first frame has all red pixels.)
+    bitmap.erase(SkColorSetRGB(0, 0, 0xFF), bitmap.bounds());
+    AssertBluePixel(r, pixmap, 0, 0);
+    AssertBluePixel(r, pixmap, 40, 29);
+    AssertBluePixel(r, pixmap, 80, 35);
+    AssertBluePixel(r, pixmap, 127, 63);
+
+    // Decode partially-available, incomplete image.
+    SkCodec::Options options;
+    options.fZeroInitialized = SkCodec::kNo_ZeroInitialized;
+    options.fSubset = nullptr;
+    options.fFrameIndex = 0;
+    options.fPriorFrame = SkCodec::kNoFrame;
+    result = codec->startIncrementalDecode(bitmap.pixmap().info(),
+                                           bitmap.pixmap().writable_addr(),
+                                           bitmap.pixmap().rowBytes(),
+                                           &options);
+    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
+    int rowsDecoded = -1;
+    result = codec->incrementalDecode(&rowsDecoded);
+    REPORTER_ASSERT(r, result == SkCodec::kIncompleteInput);
+    REPORTER_ASSERT(r, rowsDecoded == 10, "actual rowsDecoded = %d", rowsDecoded);
+    AssertRedPixel(r, pixmap, 0, 0);
+    AssertBluePixel(r, pixmap, 40, 29);
+    AssertBluePixel(r, pixmap, 80, 35);
+    AssertBluePixel(r, pixmap, 127, 63);
+
+    // Make the rest of the input available to the codec.
+    retainedStream->addNewData(fullLength);
+
+    // Try to provoke the codec to consume further into the input stream (doing
+    // this would loose the position inside the currently active incremental
+    // decode).
+    //
+    // At this point metadata of all the frames is available, but the codec
+    // shouldn't read the other two `fcTL` chunks during an active incremental
+    // decode.
+    int frameCount = codec->getFrameCount();
+    REPORTER_ASSERT(r, frameCount == 1);
+
+    // Check that all the pixels of the first frame got decoded.
+    rowsDecoded = -1;
+    result = codec->incrementalDecode(&rowsDecoded);
+    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
+    REPORTER_ASSERT(r, rowsDecoded == -1);  // Not set when `kSuccess`.
+    AssertRedPixel(r, pixmap, 0, 0);
+    AssertRedPixel(r, pixmap, 40, 29);
+    AssertRedPixel(r, pixmap, 80, 35);
+    AssertRedPixel(r, pixmap, 127, 63);
+}
+
+// Test based on
+// https://philip.html5.org/tests/apng/tests.html#apng-blend-op-source-on-solid-colour
+DEF_TEST(Codec_apng_blend_ops_source_on_solid, r) {
+    sk_sp<SkImage> image =
+            DecodeLastFrame(r, "images/apng-test-suite--blend-ops--source-on-solid.png");
+    if (!image) {
+        return;
+    }
+
+    SkPixmap pixmap;
+    REPORTER_ASSERT(r, image->peekPixels(&pixmap));
+    AssertGreenPixel(r, pixmap, 0, 0);
+}
+
+// Test based on
+// https://philip.html5.org/tests/apng/tests.html#apng-blend-op-source-on-nearly-transparent-colour
+DEF_TEST(Codec_apng_blend_ops_source_on_nearly_transparent, r) {
+    sk_sp<SkImage> image = DecodeLastFrame(
+            r, "images/apng-test-suite--blend-ops--source-on-nearly-transparent.png");
+    if (!image) {
+        return;
+    }
+
+    SkPixmap pixmap;
+    REPORTER_ASSERT(r, image->peekPixels(&pixmap));
+    AssertPixelColor(r,
+                     pixmap,
+                     0,
+                     0,
+                     SkColorSetARGB(0x02, 0x00, 0xFF, 0x00),
+                     "Expecting a nearly transparent pixel");
+}
+
+// Test based on
+// https://philip.html5.org/tests/apng/tests.html#apng-blend-op-over-on-solid-and-transparent-colours
+DEF_TEST(Codec_apng_blend_ops_over_on_solid_and_transparent, r) {
+    sk_sp<SkImage> image = DecodeLastFrame(
+            r, "images/apng-test-suite--blend-ops--over-on-solid-and-transparent.png");
+    if (!image) {
+        return;
+    }
+
+    SkPixmap pixmap;
+    REPORTER_ASSERT(r, image->peekPixels(&pixmap));
+    AssertGreenPixel(r, pixmap, 0, 0);
+}
+
+// Test based on
+// https://philip.html5.org/tests/apng/tests.html#apng-blend-op-over-repeatedly-with-nearly-transparent-colours
+DEF_TEST(Codec_apng_blend_ops_over_repeatedly, r) {
+    sk_sp<SkImage> image =
+            DecodeLastFrame(r, "images/apng-test-suite--blend-ops--over-repeatedly.png");
+    if (!image) {
+        return;
+    }
+
+    SkPixmap pixmap;
+    REPORTER_ASSERT(r, image->peekPixels(&pixmap));
+    AssertGreenPixel(r, pixmap, 0, 0);
+}
+
+// Test based on
+// https://philip.html5.org/tests/apng/tests.html#apng-dispose-op-none-in-region
+DEF_TEST(Codec_apng_regions_dispose_op_none, r) {
+    sk_sp<SkImage> image =
+            DecodeLastFrame(r, "images/apng-test-suite--regions--dispose-op-none.png");
+    if (!image) {
+        return;
+    }
+
+    // Check all pixels.
+    //
+    // * The image (and the first frame) is 128x64
+    // * The 2nd frame is 64x32 at offset (32,16)
+    // * The 3rd frame is 1x1 at offset (0,0)
+    SkPixmap pixmap;
+    REPORTER_ASSERT(r, image->peekPixels(&pixmap));
+    for (int y = 0; y < pixmap.height(); y++) {
+        for (int x = 0; x < pixmap.width(); x++) {
+            AssertGreenPixel(r, pixmap, x, y);
+        }
+    }
+}
+
+// Test based on
+// https://philip.html5.org/tests/apng/tests.html#num-plays-0
+DEF_TEST(Codec_apng_num_plays_0, r) {
+    AssertAnimationRepetitionCount(
+            r, SkCodec::kRepetitionCountInfinite, "images/apng-test-suite--num-plays--0.png");
+}
+
+// Test based on
+// https://philip.html5.org/tests/apng/tests.html#num-plays-1
+DEF_TEST(Codec_apng_num_plays_1, r) {
+    AssertAnimationRepetitionCount(r, 0, "images/apng-test-suite--num-plays--1.png");
+}
+
+// Test based on
+// https://philip.html5.org/tests/apng/tests.html#num-plays-2
+DEF_TEST(Codec_apng_num_plays_2, r) {
+    AssertAnimationRepetitionCount(r, 1, "images/apng-test-suite--num-plays--2.png");
 }
 
 // Test based on
