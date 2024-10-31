@@ -1039,6 +1039,7 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
             sampling,
             &paint,
             constraint,
+            rCtx->priv().options().fSharpenMipmappedTextures,
             cacheSize,
             maxTextureSize);
 #if defined(GPU_TEST_UTILS)
@@ -1359,7 +1360,7 @@ bool Device::replaceBackingProxy(SkSurface::ContentChangeMode mode) {
                                        oldView.mipmapped(),
                                        SkBackingFit::kExact,
                                        oldRTP->isBudgeted(),
-                                       GrProtected::kNo,
+                                       oldRTP->isProtected(),
                                        /*label=*/"BaseDevice_ReplaceBackingProxy");
     if (!proxy) {
         return false;
