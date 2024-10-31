@@ -61,6 +61,20 @@ skia_cc_library(
     ],
 )
 
+# This is a filegroup because CommonFlagsConfig.cpp mixes functionality from all backends,
+# and is difficult to untangle in a reasonable manner.
+skia_filegroup(
+    name = "common_flags_config",
+    testonly = True,
+    srcs = [
+        "CommonFlagsConfig.cpp",
+        "CommonFlagsConfig.h",
+    ],
+    visibility = [
+        "//dm:__pkg__",
+    ],
+)
+
 skia_cc_library(
     name = "cmd_flags",
     testonly = True,
@@ -116,10 +130,12 @@ skia_cc_library(
     visibility = [
         "//bench:__pkg__",
         "//dm:__pkg__",
+        "//tools/viewer:__pkg__",
     ],
     deps = [
         ":cmd_flags",
         "//:core",
         "//src/gpu/graphite:graphite_TEST_UTIL",
+        "//tools/graphite:graphite_utils",
     ],
 )

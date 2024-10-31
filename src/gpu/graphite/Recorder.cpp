@@ -33,7 +33,6 @@
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/PathAtlas.h"
 #include "src/gpu/graphite/PipelineData.h"
-#include "src/gpu/graphite/PipelineDataCache.h"
 #include "src/gpu/graphite/ProxyCache.h"
 #include "src/gpu/graphite/RasterPathAtlas.h"
 #include "src/gpu/graphite/RecorderPriv.h"
@@ -101,7 +100,6 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext,
         , fRuntimeEffectDict(std::make_unique<RuntimeEffectDictionary>())
         , fRootTaskList(new TaskList)
         , fRootUploads(new UploadList)
-        , fUniformDataCache(new UniformDataCache)
         , fTextureDataCache(new TextureDataCache)
         , fProxyReadCounts(new ProxyReadCountMap)
         , fUniqueID(next_id())
@@ -118,9 +116,11 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext,
         fOwnedResourceProvider = nullptr;
         fResourceProvider = context->priv().resourceProvider();
     } else {
-        fOwnedResourceProvider = fSharedContext->makeResourceProvider(this->singleOwner(),
-                                                                    fUniqueID,
-                                                                    options.fGpuBudgetInBytes);
+        fOwnedResourceProvider = fSharedContext->makeResourceProvider(
+                this->singleOwner(),
+                fUniqueID,
+                options.fGpuBudgetInBytes,
+                /* avoidBufferAlloc= */ false);
         fResourceProvider = fOwnedResourceProvider.get();
     }
     fUploadBufferManager = std::make_unique<UploadBufferManager>(fResourceProvider,
@@ -173,9 +173,9 @@ std::unique_ptr<Recording> Recorder::snap() {
     // data cache so that they can be instantiated easily when the Recording is inserted.
     std::unordered_set<sk_sp<TextureProxy>, Recording::ProxyHash> nonVolatileLazyProxies;
     std::unordered_set<sk_sp<TextureProxy>, Recording::ProxyHash> volatileLazyProxies;
-    fTextureDataCache->foreach([&](const TextureDataBlock* block) {
-        for (int j = 0; j < block->numTextures(); ++j) {
-            const TextureDataBlock::SampledTexture& tex = block->texture(j);
+    fTextureDataCache->foreach([&](TextureDataBlock block) {
+        for (int j = 0; j < block.numTextures(); ++j) {
+            const TextureDataBlock::SampledTexture& tex = block.texture(j);
 
             if (tex.first->isLazy()) {
                 if (tex.first->isVolatile()) {
@@ -225,7 +225,6 @@ std::unique_ptr<Recording> Recorder::snap() {
     fRuntimeEffectDict->reset();
     fProxyReadCounts = std::make_unique<ProxyReadCountMap>();
     fTextureDataCache = std::make_unique<TextureDataCache>();
-    fUniformDataCache = std::make_unique<UniformDataCache>();
     if (!this->priv().caps()->requireOrderedRecordings()) {
         fAtlasProvider->textAtlasManager()->evictAtlases();
     }
@@ -596,6 +595,11 @@ bool RecorderPriv::deviceIsRegistered(Device* device) const {
 void RecorderPriv::setContext(Context* context) {
     fRecorder->fContext = context;
 }
+
+void RecorderPriv::issueFlushToken() {
+    fRecorder->fTokenTracker->issueFlushToken();
+}
+
 #endif
 
 

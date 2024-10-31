@@ -75,7 +75,6 @@ skia_filegroup(
         "SkFontDescriptor.h",
         "SkFontMetricsPriv.h",
         "SkFontPriv.h",
-        "SkFontScanner.h",
         "SkFontStream.h",
         "SkGeometry.h",
         "SkGlyph.h",
@@ -507,6 +506,7 @@ skia_cc_library(
         "//gm:__subpackages__",
         "//modules:__subpackages__",
         "//src:__subpackages__",
+        "//tests:__subpackages__",
         "//tools:__subpackages__",
     ],
     deps = [
@@ -528,6 +528,7 @@ generate_cpp_files_for_headers(
         "SkDrawProcs.h",
         "SkMatrixPriv.h",
         "SkPathPriv.h",
+        "SkPicturePriv.h",
         "SkRuntimeEffectPriv.h",
     ],
 )

@@ -203,7 +203,7 @@ var (
 			Path: "mac_toolchain",
 			// When this is updated, also update
 			// https://skia.googlesource.com/skcms.git/+/f1e2b45d18facbae2dece3aca673fe1603077846/infra/bots/gen_tasks.go#56
-			Version: "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9",
+			Version: "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd",
 		},
 	}
 
@@ -438,6 +438,7 @@ func GenTasks(cfg *Config) {
 		Paths: []string{
 			// Source code.
 			"skia/example",
+			"skia/experimental/rust_png",
 			"skia/include",
 			"skia/modules",
 			"skia/src",
@@ -569,6 +570,9 @@ func GenTasks(cfg *Config) {
 			"skia/include/config", // There's a WORKSPACE.bazel in here
 			"skia/requirements.txt",
 			"skia/toolchain",
+			// TODO(kjlubick, lukasza) remove after rust's png crate is updated
+			// and we don't need the patches anymore
+			"skia/experimental/rust_png",
 			// Actually needed to build the task drivers
 			"skia/infra/bots/BUILD.bazel",
 			"skia/infra/bots/build_task_drivers.sh",
@@ -731,7 +735,8 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 				"DDLRecord", "BonusConfigs", "ColorSpaces", "GL",
 				"SkottieTracing", "SkottieWASM", "GpuTess", "DMSAAStats", "Docker", "PDF",
 				"Puppeteer", "SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile",
-				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "Protected"}
+				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "TintIR", "Protected",
+				"AndroidNDKFonts"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -842,6 +847,7 @@ var androidDeviceInfos = map[string][]string{
 	"Pixel5":          {"redfin", "RD1A.200810.022.A4"},
 	"Pixel6":          {"oriole", "SD1A.210817.037"},
 	"Pixel7":          {"cheetah", "TD1A.221105.002"},
+	"Pixel9":          {"tokay", "AD1A.240905.004"},
 	"TecnoSpark3Pro":  {"TECNO-KB8", "PPR1.180610.011"},
 	"Wembley":         {"wembley", "SP2A.220505.008"},
 }
@@ -993,12 +999,12 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"IntelIris540":  "8086:1926-31.0.101.2115",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
 					"IntelIris655":  "8086:3ea5-26.20.100.7463",
-					"IntelIrisXe":   "8086:9a49-31.0.101.5537",
+					"IntelIrisXe":   "8086:9a49-32.0.101.5972",
 					"RadeonHD7770":  "1002:683d-26.20.13031.18002",
 					"RadeonR9M470X": "1002:6646-26.20.13031.18002",
 					"QuadroP400":    "10de:1cb3-31.0.15.5222",
 					"RadeonVega6":   "1002:1636-31.0.14057.5006",
-					"RTX3060":       "10de:2489-31.0.15.3699",
+					"RTX3060":       "10de:2489-32.0.15.6094",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in Win GPU mapping.", b.parts["cpu_or_gpu_value"])
@@ -1083,9 +1089,9 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 
 			// Dodge Raspberry Pis.
 			d["cpu"] = "x86-64"
-			// Target the RTX3060 Intel machines, as they are beefy and we have
-			// 20 of them, and they are setup to compile.
-			d["gpu"] = "10de:2489"
+			// Target the AMDRyzen 5 4500U machines, as they are beefy and we have
+			// 19 of them, and they are setup to compile.
+			d["gpu"] = "1002:1636"
 		} else {
 			d["gpu"] = "none"
 		}
@@ -2139,6 +2145,7 @@ type labelAndSavedOutputDir struct {
 // Maps a shorthand version of a label (which can be an arbitrary string) to an absolute Bazel
 // label or "target pattern" https://bazel.build/docs/build#specifying-build-targets
 // The reason we need this mapping is because Buildbucket build names cannot have / or : in them.
+// TODO(borenet/kjlubick): Is there a way to generate a mapping using `bazel query`?
 var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"all_tests":                  {"//tests:linux_rbe_tests", ""},
 	"core":                       {"//:core", ""},
@@ -2151,20 +2158,18 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"modules_canvaskit_js_tests": {"//modules/canvaskit:canvaskit_js_tests", ""},
 	"skottie_tool_gpu":           {"//modules/skottie:skottie_tool_gpu", ""},
 	"viewer":                     {"//tools/viewer:viewer", ""},
-
-	// Note: these paths are relative to the WORKSPACE in //example/external_client
-	"decode_everything":          {"//:decode_everything", ""},
-	"path_combiner":              {"//:path_combiner", ""},
-	"png_decoder":                {"//:png_decoder", ""},
-	"shape_text":                 {"//:shape_text", ""},
-	"svg_with_harfbuzz":          {"//:svg_with_harfbuzz", ""},
-	"svg_with_primitive":         {"//:svg_with_primitive", ""},
-	"use_ganesh_gl":              {"//:use_ganesh_gl", ""},
-	"use_ganesh_vulkan":          {"//:use_ganesh_vulkan", ""},
-	"use_graphite_native_vulkan": {"//:use_graphite_native_vulkan", ""},
-	"use_skresources":            {"//:use_skresources", ""},
-	"write_text_to_png":          {"//:write_text_to_png", ""},
-	"write_to_pdf":               {"//:write_to_pdf", ""},
+	"decode_everything":          {"//example/external_client:decode_everything", ""},
+	"path_combiner":              {"//example/external_client:path_combiner", ""},
+	"png_decoder":                {"//example/external_client:png_decoder", ""},
+	"shape_text":                 {"//example/external_client:shape_text", ""},
+	"svg_with_harfbuzz":          {"//example/external_client:svg_with_harfbuzz", ""},
+	"svg_with_primitive":         {"//example/external_client:svg_with_primitive", ""},
+	"use_ganesh_gl":              {"//example/external_client:use_ganesh_gl", ""},
+	"use_ganesh_vulkan":          {"//example/external_client:use_ganesh_vulkan", ""},
+	"use_graphite_native_vulkan": {"//example/external_client:use_graphite_native_vulkan", ""},
+	"use_skresources":            {"//example/external_client:use_skresources", ""},
+	"write_text_to_png":          {"//example/external_client:write_text_to_png", ""},
+	"write_to_pdf":               {"//example/external_client:write_to_pdf", ""},
 
 	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
 	// under a test_suite.
@@ -2442,9 +2447,14 @@ func (b *jobBuilder) bazelTest() {
 				"--patchset_order="+specs.PLACEHOLDER_PATCHSET)
 
 		case "external_client":
+			// For external_client, we want to test how an external user would
+			// build using Skia. Therefore, we change to the workspace in that
+			// directory and use labels relative to it.
+			pathInSkia := "example/external_client"
+			label := strings.Replace(labelAndSavedOutputDir.label, pathInSkia, "", -1)
 			cmd = append(cmd,
-				"--bazel_label="+labelAndSavedOutputDir.label,
-				"--path_in_skia=example/external_client",
+				"--bazel_label="+label,
+				"--path_in_skia="+pathInSkia,
 				"--bazel_cache_dir="+bazelCacheDir)
 			b.usesDocker()
 

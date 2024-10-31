@@ -868,6 +868,7 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
                                                            sampling,
                                                            &paint,
                                                            constraint,
+                                                           /* sharpenMM= */ true,
                                                            cacheSize,
                                                            maxTextureSize);
 #if defined(GPU_TEST_UTILS)
@@ -887,6 +888,28 @@ void Device::drawOval(const SkRect& oval, const SkPaint& paint) {
         // that happen to be ovals into this, only for us to go right back to rrect.
         this->drawRRect(SkRRect::MakeOval(oval), paint);
     }
+}
+
+void Device::drawArc(const SkArc& arc, const SkPaint& paint) {
+#if defined(SK_USE_LEGACY_ARCS_GRAPHITE)
+    SkDevice::drawArc(arc, paint);
+#else
+    // For sweeps >= 360°, simple fills and simple strokes without the center point or square caps
+    // are ovals. Culling these here simplifies the path processing in Shape.
+    if (!paint.getPathEffect() &&
+        SkScalarAbs(arc.sweepAngle()) >= 360.f &&
+        (paint.getStyle() == SkPaint::kFill_Style ||
+         (paint.getStyle() == SkPaint::kStroke_Style &&
+          // square caps can stick out from the shape so we can't do this with an rrect draw
+          paint.getStrokeCap() != SkPaint::kSquare_Cap &&
+          // non-wedge cases with strokes will draw lines to the center
+          !arc.isWedge()))) {
+        this->drawRRect(SkRRect::MakeOval(arc.oval()), paint);
+    } else {
+        this->drawGeometry(this->localToDeviceTransform(), Geometry(Shape(arc)),
+                           paint, SkStrokeRec(paint));
+    }
+#endif
 }
 
 void Device::drawRRect(const SkRRect& rr, const SkPaint& paint) {
@@ -1267,9 +1290,9 @@ void Device::drawGeometry(const Transform& localToDevice,
                                                          : SkBlendMode::kSrcOver;
     Coverage rendererCoverage = renderer ? renderer->coverage()
                                          : Coverage::kSingleChannel;
-    if (clip.shader() && rendererCoverage == Coverage::kNone) {
-        // Must upgrade to single channel coverage if there is a clip shader; but preserve LCD
-        // coverage if the Renderer uses that.
+    if ((clip.shader() || !clip.analyticClip().isEmpty()) && rendererCoverage == Coverage::kNone) {
+        // Must upgrade to single channel coverage if there is a clip shader or analytic clip;
+        // but preserve LCD coverage if the Renderer uses that.
         rendererCoverage = Coverage::kSingleChannel;
     }
     dstReadReq = GetDstReadRequirement(fRecorder->priv().caps(), blendMode, rendererCoverage);
@@ -1285,10 +1308,12 @@ void Device::drawGeometry(const Transform& localToDevice,
 
     PaintParams shading{paint,
                         std::move(primitiveBlender),
+                        clip.analyticClip(),
                         sk_ref_sp(clip.shader()),
                         dstReadReq,
                         skipColorXform};
-    const bool dependsOnDst = paint_depends_on_dst(shading);
+    const bool dependsOnDst = paint_depends_on_dst(shading) ||
+                              clip.shader() || !clip.analyticClip().isEmpty();
 
     // Some shapes and styles combine multiple draws so the total render step count is split between
     // the main renderer and possibly a secondaryRenderer.
@@ -1462,11 +1487,7 @@ void Device::drawClipShape(const Transform& localToDevice,
                            DrawOrder order) {
     // A clip draw's state is almost fully defined by the ClipStack. The only thing we need
     // to account for is selecting a Renderer and tracking the stencil buffer usage.
-    Shape drawShape(shape);
-    // For the depth-only clip we need to invert the shape before drawing because
-    // we need to touch every pixel not in the clip.
-    drawShape.setInverted(!shape.inverted());
-    Geometry geometry{drawShape};
+    Geometry geometry{shape};
     auto [renderer, pathAtlas] = this->chooseRenderer(localToDevice,
                                                       geometry,
                                                       DefaultFillStyle(),
@@ -1571,6 +1592,34 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
             return {renderers->nonAABounds(), nullptr};
         } else {
             return {renderers->analyticRRect(), nullptr};
+        }
+    }
+
+    if (!requireMSAA && shape.isArc() &&
+        SkScalarNearlyEqual(shape.arc().oval().width(), shape.arc().oval().height()) &&
+        SkScalarAbs(shape.arc().sweepAngle()) < 360.f &&
+        localToDevice.type() <= Transform::Type::kAffine) {
+        float maxScale, minScale;
+        std::tie(maxScale, minScale) = localToDevice.scaleFactors({0, 0});
+        if (SkScalarNearlyEqual(maxScale, minScale)) {
+            // Arc support depends on the style.
+            SkStrokeRec::Style recStyle = style.getStyle();
+            switch (recStyle) {
+                case SkStrokeRec::kStrokeAndFill_Style:
+                    // This produces a strange result that this op doesn't implement.
+                    break;
+                case SkStrokeRec::kFill_Style:
+                    return {renderers->circularArc(), nullptr};
+                case SkStrokeRec::kStroke_Style:
+                case SkStrokeRec::kHairline_Style:
+                    // Strokes that don't use the center point are supported with butt & round caps.
+                    bool isWedge = shape.arc().isWedge();
+                    bool isSquareCap = style.getCap() == SkPaint::kSquare_Cap;
+                    if (!isWedge && !isSquareCap) {
+                        return {renderers->circularArc(), nullptr};
+                    }
+                    break;
+            }
         }
     }
 
@@ -1765,7 +1814,7 @@ void Device::internalFlush() {
     fCurrentDepth = DrawOrder::kClearDepth;
 
      // Any cleanup in the AtlasProvider
-    fRecorder->priv().atlasProvider()->compact();
+    fRecorder->priv().atlasProvider()->compact(/*forceCompact=*/false);
 }
 
 bool Device::needsFlushBeforeDraw(int numNewRenderSteps, DstReadRequirement dstReadReq) const {
@@ -1839,16 +1888,13 @@ void Device::drawCoverageMask(const SkSpecialImage* mask,
     // 'mask' logically has 0 coverage outside of its pixels, which is equivalent to kDecal tiling.
     // However, since we draw geometry tightly fitting 'mask', we can use the better-supported
     // kClamp tiling and behave effectively the same way.
-    const SkTileMode kClamp[2] = {SkTileMode::kClamp, SkTileMode::kClamp};
-
+    TextureDataBlock::SampledTexture sampledMask{maskProxyView.refProxy(),
+                                                 {SkFilterMode::kLinear, SkTileMode::kClamp}};
     // Ensure this is kept alive; normally textures are kept alive by the PipelineDataGatherer for
     // image shaders, or by the PathAtlas. This is a unique circumstance.
-    // TODO: Find a cleaner way to ensure 'maskProxyView' is transferred to the final Recording.
-    TextureDataBlock tdb;
     // NOTE: CoverageMaskRenderStep controls the final sampling options; this texture data block
     // serves only to keep the mask alive so the sampling passed to add() doesn't matter.
-    tdb.add(maskProxyView.refProxy(), {SkFilterMode::kLinear, kClamp});
-    fRecorder->priv().textureDataCache()->insert(tdb);
+    fRecorder->priv().textureDataCache()->insert(TextureDataBlock(sampledMask));
 
     // CoverageMaskShape() wraps a Shape when it's used as a PathAtlas, but in this case the
     // original shape has been long lost, so just use a Rect that bounds the image.

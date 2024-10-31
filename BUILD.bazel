@@ -72,6 +72,12 @@ alias(
 )
 
 alias(
+    name = "ganesh_gl_win_factory",
+    actual = "//src/gpu/ganesh/gl/win:win_factory",
+    visibility = ["//visibility:public"],
+)
+
+alias(
     name = "ganesh_metal",
     actual = "//src/gpu/ganesh/mtl:ganesh_metal",
     visibility = ["//visibility:public"],
@@ -192,8 +198,20 @@ alias(
 )
 
 alias(
+    name = "freetype_support",
+    actual = "//src/ports:freetype_support",
+    visibility = ["//visibility:public"],
+)
+
+alias(
     name = "fontmgr_fontconfig_freetype",
     actual = "//src/ports:fontmgr_fontconfig_freetype",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "fontmgr_fontconfig_fontations",
+    actual = "//src/ports:fontmgr_fontconfig_fontations",
     visibility = ["//visibility:public"],
 )
 
