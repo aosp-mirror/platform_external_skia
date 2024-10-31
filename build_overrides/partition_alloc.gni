@@ -22,10 +22,12 @@ assert_cpp20_default = false
 
 # partition_alloc is performance critical and it should generally be optimized
 # for speed, even in debug mode.
-partition_alloc_add_configs = [
-  "//gn/skia:optimize",
-  "//gn/skia:NDEBUG",
-]
+if (is_debug) {
+  partition_alloc_add_configs = [
+    "//gn/skia:optimize",
+    "//gn/skia:NDEBUG",
+  ]
+}
 
 # MSVC's cl.exe compiler is not supported.
 _supported_compiler = is_clang || !is_win
@@ -41,7 +43,7 @@ _supported_platform =
 
 # Sanitizers replace the allocator, don't replace it ourselves with
 # partition_alloc.
-_is_using_sanitizers = sanitize == ""
+_is_using_sanitizers = sanitize != ""
 
 _supported = _supported_compiler && _supported_build_type &&
              _supported_platform && !_is_using_sanitizers
@@ -59,6 +61,8 @@ raw_ptr_zero_on_move_default = true
 raw_ptr_zero_on_destruct_default = false
 
 # For now, don't check for additional costly memory safety errors in Skia.
-enable_expensive_dchecks = false
-dcheck_is_configurable = false
+# Some will be enforced in the future.
 can_unwind_with_frame_pointers = false
+dcheck_always_on = false
+dcheck_is_configurable = false
+enable_expensive_dchecks = false

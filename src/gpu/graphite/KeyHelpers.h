@@ -57,14 +57,6 @@ enum class DstColorType {
  * as parent-child relationships.
  */
 
-struct DstReadSampleBlock {
-    static void AddBlock(const KeyContext&,
-                         PaintParamsKeyBuilder*,
-                         PipelineDataGatherer*,
-                         sk_sp<TextureProxy> dst,
-                         SkIPoint dstOffset);
-};
-
 struct SolidColorShaderBlock {
     static void AddBlock(const KeyContext&,
                          PaintParamsKeyBuilder*,
@@ -171,9 +163,8 @@ struct ImageShaderBlock {
                   SkTileMode tileModeY,
                   SkISize imgSize,
                   SkRect subset);
-
         SkSamplingOptions fSampling;
-        SkTileMode fTileModes[2];
+        std::pair<SkTileMode, SkTileMode> fTileModes;
         SkISize fImgSize;
         SkRect fSubset;
 
@@ -199,7 +190,7 @@ struct YUVImageShaderBlock {
 
         SkSamplingOptions fSampling;
         SkSamplingOptions fSamplingUV;
-        SkTileMode fTileModes[2];
+        std::pair<SkTileMode, SkTileMode> fTileModes;
         SkISize fImgSize;
         SkISize fImgSizeUV;  // Size of UV planes relative to Y's texel space
         SkRect fSubset;
@@ -302,12 +293,6 @@ struct HSLCBlenderBlock {
                          PaintParamsKeyBuilder*,
                          PipelineDataGatherer*,
                          SkSpan<const float> coeffs);
-};
-
-struct ClipBlock {
-    static void BeginBlock(const KeyContext&,
-                           PaintParamsKeyBuilder*,
-                           PipelineDataGatherer*);
 };
 
 struct ComposeBlock {

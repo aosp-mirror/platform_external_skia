@@ -135,6 +135,9 @@ build:for_android_arm64 --config=for_android_arm64_fastbuild
 build:for_android_arm64_with_rbe --config=for_android_arm64_fastbuild_with_rbe
 build:android_rbe --config=for_android_arm64_fastbuild_with_rbe
 
+#IOS configs
+build:for_ios --platforms=//bazel/platform:ios --compilation_mode=dbg --cc_output_directory_tag=ios_arm64_fastbuild
+
 # =============================================================================
 # Configurations (what features we want on)
 # =============================================================================
@@ -165,22 +168,26 @@ build:ck_full_cpu_release_chrome --config=ck_full_cpu_release
 # config when building //infra/debugger-app:debugger_container.
 # This is invoked in a Louhi flow.
 build:debugger_app_container --config=ck_full_webgl2_release_debugger \
-                             --workspace_status_command=bazel/get_workspace_status.sh
+                             --workspace_status_command=bazel/get_workspace_status.sh \
+                             --@io_bazel_rules_docker//transitions:enable=false
 
 # config when building //infra/jsfiddle:jsfiddle_container.
 # This is invoked in a Louhi flow.
 build:jsfiddle_container --config=ck_full_webgl2_release \
-                         --workspace_status_command=bazel/get_workspace_status.sh
+                         --workspace_status_command=bazel/get_workspace_status.sh \
+                         --@io_bazel_rules_docker//transitions:enable=false
 
 # config when building //infra/shaders:shaders_container.
 # This is invoked in a Louhi flow.
 build:shaders_container --config=ck_full_webgl2_release \
-                        --workspace_status_command=bazel/get_workspace_status.sh
+                        --workspace_status_command=bazel/get_workspace_status.sh \
+                        --@io_bazel_rules_docker//transitions:enable=false
 
 # config when building //infra/skottie:skottie_container.
 # This is invoked in a Louhi flow.
 build:skottie_container --config=ck_full_webgl2_release \
-                        --workspace_status_command=bazel/get_workspace_status.sh
+                        --workspace_status_command=bazel/get_workspace_status.sh \
+                        --@io_bazel_rules_docker//transitions:enable=false
 
 # We only want to enforce IWYU on debug builds because we have some things that are only
 # necessary to include in debug mode (e.g. SkDEBUGCODE), but very rarely something that is
