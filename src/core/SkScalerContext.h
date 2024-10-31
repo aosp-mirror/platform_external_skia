@@ -9,6 +9,7 @@
 #define SkScalerContext_DEFINED
 
 #include "include/core/SkColor.h"
+#include "include/core/SkFourByteTag.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
@@ -449,6 +450,7 @@ private:
     friend class PathText;  // For debug purposes
     friend class PathTextBench;  // For debug purposes
     friend class RandomScalerContext;  // For debug purposes
+    friend class SkScalerContext_fontconfig;
 
     static SkScalerContextRec PreprocessRec(const SkTypeface&,
                                             const SkScalerContextEffects&,

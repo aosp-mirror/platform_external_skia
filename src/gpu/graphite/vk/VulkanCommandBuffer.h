@@ -13,12 +13,12 @@
 #include "include/gpu/vk/VulkanTypes.h"
 #include "src/gpu/graphite/DrawPass.h"
 #include "src/gpu/graphite/vk/VulkanGraphicsPipeline.h"
+#include "src/gpu/graphite/vk/VulkanResourceProvider.h"
 
 namespace skgpu::graphite {
 
 class VulkanBuffer;
 class VulkanDescriptorSet;
-class VulkanResourceProvider;
 class VulkanSharedContext;
 class VulkanTexture;
 class Buffer;
@@ -26,7 +26,8 @@ class Buffer;
 class VulkanCommandBuffer final : public CommandBuffer {
 public:
     static std::unique_ptr<VulkanCommandBuffer> Make(const VulkanSharedContext*,
-                                                     VulkanResourceProvider*);
+                                                     VulkanResourceProvider*,
+                                                     Protected);
     ~VulkanCommandBuffer() override;
 
     bool setNewCommandBufferResources() override;
@@ -54,7 +55,10 @@ private:
     VulkanCommandBuffer(VkCommandPool pool,
                         VkCommandBuffer primaryCommandBuffer,
                         const VulkanSharedContext* sharedContext,
-                        VulkanResourceProvider* resourceProvider);
+                        VulkanResourceProvider* resourceProvider,
+                        Protected);
+
+    ResourceProvider* resourceProvider() const override { return fResourceProvider; }
 
     void onResetCommandBuffer() override;
 
@@ -87,8 +91,10 @@ private:
 
     // Track descriptor changes for binding prior to draw calls
     void recordBufferBindingInfo(const BindBufferInfo& info, UniformSlot);
+    // Either both arguments are non-null, or both must be null (to reset or handle just the
+    // dstCopy intrinsic w/o requiring a DrawPass command).
     void recordTextureAndSamplerDescSet(
-            const DrawPass&, const DrawPassCommands::BindTexturesAndSamplers&);
+            const DrawPass*, const DrawPassCommands::BindTexturesAndSamplers*);
 
     void bindTextureSamplers();
     void bindUniformBuffers();
@@ -161,7 +167,7 @@ private:
 
     // Update the intrinsic constant uniform buffer and binding to reflect the updated viewport.
     // The resource provider is responsible for finding a suitable buffer and managing its lifetime.
-    void updateIntrinsicUniforms(SkIRect viewport);
+    bool updateIntrinsicUniforms(SkIRect viewport);
 
     bool updateLoadMSAAVertexBuffer();
     bool loadMSAAFromResolve(const RenderPassDesc&,
@@ -219,6 +225,9 @@ private:
     size_t fBoundIndirectBufferOffset = 0;
 
     float fCachedBlendConstant[4];
+
+    class IntrinsicConstantsManager;
+    std::unique_ptr<IntrinsicConstantsManager> fIntrinsicConstants;
 };
 
 } // namespace skgpu::graphite

@@ -15,16 +15,17 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/ports/SkFontMgr_android.h"
+#include "include/ports/SkFontScanner_FreeType.h"
 #include "include/private/base/SkFixed.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkTSearch.h"
 #include "src/core/SkFontDescriptor.h"
-#include "src/core/SkFontScanner.h"
 #include "src/core/SkOSFile.h"
 #include "src/core/SkTypefaceCache.h"
 #include "src/ports/SkFontMgr_android_parser.h"
+#include "src/ports/SkFontScanner_FreeType_priv.h"
 #include "src/ports/SkTypeface_FreeType.h"
 
 #include <algorithm>
@@ -434,7 +435,10 @@ protected:
             // default family instead.
             return sk_sp<SkTypeface>(this->onMatchFamilyStyle(familyName, style));
         }
-        return sk_sp<SkTypeface>(fDefaultStyleSet->matchStyle(style));
+        if (fDefaultStyleSet) {
+            return sk_sp<SkTypeface>(fDefaultStyleSet->matchStyle(style));
+        }
+        return SkTypeface::MakeEmpty();
     }
 
 
@@ -481,8 +485,6 @@ private:
     }
 
     void findDefaultStyleSet() {
-        SkASSERT(!fStyleSets.empty());
-
         static const char* defaultNames[] = { "sans-serif" };
         for (const char* defaultName : defaultNames) {
             fDefaultStyleSet = this->onMatchFamily(defaultName);
@@ -490,10 +492,9 @@ private:
                 break;
             }
         }
-        if (nullptr == fDefaultStyleSet) {
+        if (!fDefaultStyleSet && !fStyleSets.empty()) {
             fDefaultStyleSet = fStyleSets[0];
         }
-        SkASSERT(fDefaultStyleSet);
     }
 
     using INHERITED = SkFontMgr;
@@ -508,9 +509,8 @@ static char const * const gSystemFontUseStrings[] = {
 }  // namespace
 
 sk_sp<SkFontMgr> SkFontMgr_New_Android(const SkFontMgr_Android_CustomFonts* custom) {
-    return SkFontMgr_New_Android(custom, std::make_unique<SkFontScanner_FreeType>());
+    return SkFontMgr_New_Android(custom, SkFontScanner_Make_FreeType());
 }
-
 
 sk_sp<SkFontMgr> SkFontMgr_New_Android(const SkFontMgr_Android_CustomFonts* custom, std::unique_ptr<SkFontScanner> scanner) {
     if (custom) {
