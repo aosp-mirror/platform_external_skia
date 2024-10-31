@@ -129,7 +129,11 @@ private:
 
     // `-1` means that `IDAT` is not part of animation and wasn't skipped yet.
     int fFrameAtCurrentStreamPosition = -1;
+    bool fStreamIsPositionedAtStartOfFrameData = false;
     const std::unique_ptr<SkStream> fPrivStream;
+    // TODO(https://crbug.com/371060427): Once fast seeking is available, we can
+    // remove the field that tracks the stream length.
+    std::optional<size_t> fStreamLengthDuringLastCallToParseAdditionalFrameInfos;
 
     std::optional<DecodingState> fIncrementalDecodingState;
 
