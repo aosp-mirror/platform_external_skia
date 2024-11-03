@@ -137,7 +137,7 @@ public:
     // Create a new marked-content identifier (MCID) to be used with a marked-content sequence
     // parented by the structure element (StructElem) with the given element identifier (elemId).
     // Returns a false Mark if if elemId does not refer to a StructElem.
-    SkPDFStructTree::Mark createMarkForElemId(int elemId, SkPoint);
+    SkPDFStructTree::Mark createMarkForElemId(int elemId);
 
     // Create a key to use with /StructParent in a content item (usually an annotation) which refers
     // to the structure element (StructElem) with the given element identifier (elemId).
@@ -175,6 +175,7 @@ public:
     skia_private::THashMap<uint32_t, std::unique_ptr<SkAdvancedTypefaceMetrics>> fTypefaceMetrics;
     skia_private::THashMap<uint32_t, std::vector<SkString>> fType1GlyphNames;
     skia_private::THashMap<uint32_t, std::vector<SkUnichar>> fToUnicodeMap;
+    skia_private::THashMap<uint32_t, skia_private::THashMap<SkGlyphID, SkString>> fToUnicodeMapEx;
     skia_private::THashMap<uint32_t, SkPDFIndirectReference> fFontDescriptors;
     skia_private::THashMap<uint32_t, SkPDFIndirectReference> fType3FontDescriptors;
     skia_private::THashTable<sk_sp<SkPDFStrike>, const SkDescriptor&, SkPDFStrike::Traits> fStrikes;
