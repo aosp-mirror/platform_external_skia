@@ -380,6 +380,11 @@
         "Build-Debian10-Clang-x86_64-Debug-Graphite_Native_Vulkan"
       ]
     },
+    "Build-Debian10-Clang-x86_64-Debug-RustPNG": {
+      "tasks": [
+        "Build-Debian10-Clang-x86_64-Debug-RustPNG"
+      ]
+    },
     "Build-Debian10-Clang-x86_64-Debug-SK_USE_DISCARDABLE_SCALEDIMAGECACHE": {
       "tasks": [
         "Build-Debian10-Clang-x86_64-Debug-SK_USE_DISCARDABLE_SCALEDIMAGECACHE"
@@ -2542,6 +2547,11 @@
     "Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-OldestSupportedSkpVersion": {
       "tasks": [
         "Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-OldestSupportedSkpVersion"
+      ]
+    },
+    "Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-RustPNG": {
+      "tasks": [
+        "Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-RustPNG"
       ]
     },
     "Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-SK_USE_DISCARDABLE_SCALEDIMAGECACHE": {
@@ -9852,6 +9862,131 @@
       "idempotent": true,
       "io_timeout_ns": 3600000000000,
       "max_attempts": 2,
+      "outputs": [
+        "build"
+      ],
+      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+    },
+    "Build-Debian10-Clang-x86_64-Debug-RustPNG": {
+      "caches": [
+        {
+          "name": "ccache",
+          "path": "cache/ccache"
+        },
+        {
+          "name": "git",
+          "path": "cache/git"
+        },
+        {
+          "name": "git_cache",
+          "path": "cache/git_cache"
+        },
+        {
+          "name": "vpython3",
+          "path": "cache/vpython3"
+        },
+        {
+          "name": "work",
+          "path": "cache/work"
+        }
+      ],
+      "casSpec": "run-recipe",
+      "cipd_packages": [
+        {
+          "name": "infra/3pp/tools/cpython3/linux-amd64",
+          "path": "cipd_bin_packages/cpython3",
+          "version": "version:3@3.11.9.chromium.35"
+        },
+        {
+          "name": "infra/3pp/tools/git/linux-amd64",
+          "path": "cipd_bin_packages",
+          "version": "version:3@2.47.0.chromium.11"
+        },
+        {
+          "name": "infra/tools/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:9e987768ed42599aa80ce2c130ee8e912b417a18"
+        },
+        {
+          "name": "infra/tools/luci-auth/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:9e987768ed42599aa80ce2c130ee8e912b417a18"
+        },
+        {
+          "name": "infra/tools/luci/git-credential-luci/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:9e987768ed42599aa80ce2c130ee8e912b417a18"
+        },
+        {
+          "name": "infra/tools/luci/kitchen/${platform}",
+          "path": ".",
+          "version": "git_revision:9e987768ed42599aa80ce2c130ee8e912b417a18"
+        },
+        {
+          "name": "infra/tools/luci/vpython3/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:9e987768ed42599aa80ce2c130ee8e912b417a18"
+        },
+        {
+          "name": "skia/bots/bazelisk_linux_amd64",
+          "path": "bazelisk_linux_amd64",
+          "version": "version:0"
+        },
+        {
+          "name": "skia/bots/ccache_linux",
+          "path": "ccache_linux",
+          "version": "version:1"
+        },
+        {
+          "name": "skia/bots/clang_linux",
+          "path": "clang_linux",
+          "version": "version:30"
+        }
+      ],
+      "command": [
+        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
+        "-u",
+        "skia/infra/bots/run_recipe.py",
+        "${ISOLATED_OUTDIR}",
+        "sync_and_compile",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Build-Debian10-Clang-x86_64-Debug-RustPNG\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"build\",\"task_id\":\"<(TASK_ID)\"}",
+        "skia"
+      ],
+      "dependencies": [
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "machine_type:n1-highcpu-64",
+        "os:Debian-10.3",
+        "pool:Skia"
+      ],
+      "environment": {
+        "RECIPES_USE_PY3": "true",
+        "VPYTHON_LOG_TRACE": "1"
+      },
+      "env_prefixes": {
+        "PATH": [
+          "cipd_bin_packages",
+          "cipd_bin_packages/bin",
+          "cipd_bin_packages/cpython3",
+          "cipd_bin_packages/cpython3/bin",
+          "bazelisk_linux_amd64"
+        ],
+        "VPYTHON_DEFAULT_SPEC": [
+          "skia/.vpython3"
+        ],
+        "VPYTHON_VIRTUALENV_ROOT": [
+          "cache/vpython3"
+        ]
+      },
+      "execution_timeout_ns": 3600000000000,
+      "extra_tags": {
+        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
+      },
+      "io_timeout_ns": 3600000000000,
+      "max_attempts": 1,
       "outputs": [
         "build"
       ],
@@ -45674,7 +45809,7 @@
         "skia/infra/bots/run_recipe.py",
         "${ISOLATED_OUTDIR}",
         "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Dawn_GLES\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"MaliG78\\\",\\\"extra_config\\\",\\\"Android_Graphite_Dawn_GLES\\\",\\\"model\\\",\\\"Pixel6\\\",\\\"os\\\",\\\"Android\\\",\\\"style\\\",\\\"default\\\",\\\"--nocpu\\\",\\\"--nogpu\\\",\\\"--config\\\",\\\"grdawn_gles\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"--skip\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"PaintParamsKeyTestReduced\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"runtime_intrinsics_matrix\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BackendTextureTest\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BigImageTest_Graphite\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"aaclip\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"backdrop_imagefilter_croprect_persp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"bigblurs\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"blur2rectsnonninepatch\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"blurredclippedcircle\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"bug9331\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"circular-clips\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"clip_shader_persp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"clipcubic\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"clippedcubic\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"clippedcubic2\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_aa_invert\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_aa_layer\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_aa_layer_invert\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_blur_tiled\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_bw_invert\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_bw_layer\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_bw_layer_invert\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_path_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_path_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_rect_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_rrect_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_rrect_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip3_complex\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip3_simple\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip4_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip4_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"croppedrects\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"filltypes\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"filltypespersp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"glyph_pos_n_s\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"mixedtextblobs\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"parsedpaths\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"pathinvfill\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"persptext\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"persptext_minimal\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"pictureshader_persp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"rrect_clip_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"rrect_clip_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"simpleaaclip_path\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"simpleaaclip_rect\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"skbug_9319\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"strokes_poly\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"tall_stretched_bitmaps\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv_formats_frompixmaps\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"windowrectangles\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv_formats_domain\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"ThreadedPrecompileTest\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BigImageTest_Ganesh\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--match\\\",\\\"~^verylarge_picture_image$\\\",\\\"~^verylargebitmap$\\\",\\\"~^path_huge_aa$\\\",\\\"~^fast_constraint_red_is_allowed$\\\",\\\"~^strict_constraint_batch_no_red_allowed$\\\",\\\"~^strict_constraint_no_red_allowed$\\\",\\\"~async_rescale_and_read\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Dawn_GLES\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Dawn_GLES\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"MaliG78\\\",\\\"extra_config\\\",\\\"Android_Graphite_Dawn_GLES\\\",\\\"model\\\",\\\"Pixel6\\\",\\\"os\\\",\\\"Android\\\",\\\"style\\\",\\\"default\\\",\\\"--nocpu\\\",\\\"--nogpu\\\",\\\"--config\\\",\\\"grdawn_gles\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"--skip\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"PaintParamsKeyTestReduced\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"runtime_intrinsics_matrix\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BackendTextureTest\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BigImageTest_Graphite\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"glyph_pos_n_s\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"persptext\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"persptext_minimal\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"pictureshader_persp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"tall_stretched_bitmaps\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv_formats_frompixmaps\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv_formats_domain\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"ThreadedPrecompileTest\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BigImageTest_Ganesh\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--match\\\",\\\"~^verylarge_picture_image$\\\",\\\"~^verylargebitmap$\\\",\\\"~^path_huge_aa$\\\",\\\"~^fast_constraint_red_is_allowed$\\\",\\\"~^strict_constraint_batch_no_red_allowed$\\\",\\\"~^strict_constraint_no_red_allowed$\\\",\\\"~async_rescale_and_read\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-Android-Clang-Pixel6-GPU-MaliG78-arm64-Release-All-Android_Graphite_Dawn_GLES\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
         "skia"
       ],
       "dependencies": [
@@ -46290,7 +46425,7 @@
         "skia/infra/bots/run_recipe.py",
         "${ISOLATED_OUTDIR}",
         "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Android-Clang-Pixel9-GPU-MaliG715-arm64-Release-All-Android_Graphite_Dawn_GLES\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"MaliG715\\\",\\\"extra_config\\\",\\\"Android_Graphite_Dawn_GLES\\\",\\\"model\\\",\\\"Pixel9\\\",\\\"os\\\",\\\"Android\\\",\\\"style\\\",\\\"default\\\",\\\"--nocpu\\\",\\\"--nogpu\\\",\\\"--config\\\",\\\"grdawn_gles\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"--skip\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"PaintParamsKeyTestReduced\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"runtime_intrinsics_matrix\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BackendTextureTest\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"aaclip\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"backdrop_imagefilter_croprect_persp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"bigblurs\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"blur2rectsnonninepatch\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"blurredclippedcircle\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"bug9331\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"circular-clips\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"clip_shader_persp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"clipcubic\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"clippedcubic\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"clippedcubic2\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_aa_invert\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_aa_layer\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_aa_layer_invert\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_blur_tiled\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_bw_invert\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_bw_layer\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip_bw_layer_invert\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_path_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_path_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_rect_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_rrect_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip2_rrect_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip3_complex\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip3_simple\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip4_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"complexclip4_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"croppedrects\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"filltypes\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"filltypespersp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"glyph_pos_n_s\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"mixedtextblobs\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"parsedpaths\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"pathinvfill\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"persptext\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"persptext_minimal\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"pictureshader_persp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"rrect_clip_aa\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"rrect_clip_bw\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"simpleaaclip_path\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"simpleaaclip_rect\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"skbug_9319\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"strokes_poly\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"tall_stretched_bitmaps\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv_formats_frompixmaps\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"windowrectangles\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv_formats_domain\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"ThreadedPrecompileTest\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BigImageTest_Ganesh\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--match\\\",\\\"~^verylarge_picture_image$\\\",\\\"~^verylargebitmap$\\\",\\\"~^path_huge_aa$\\\",\\\"~^fast_constraint_red_is_allowed$\\\",\\\"~^strict_constraint_batch_no_red_allowed$\\\",\\\"~^strict_constraint_no_red_allowed$\\\",\\\"~async_rescale_and_read\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-Android-Clang-Pixel9-GPU-MaliG715-arm64-Release-All-Android_Graphite_Dawn_GLES\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Android-Clang-Pixel9-GPU-MaliG715-arm64-Release-All-Android_Graphite_Dawn_GLES\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"MaliG715\\\",\\\"extra_config\\\",\\\"Android_Graphite_Dawn_GLES\\\",\\\"model\\\",\\\"Pixel9\\\",\\\"os\\\",\\\"Android\\\",\\\"style\\\",\\\"default\\\",\\\"--nocpu\\\",\\\"--nogpu\\\",\\\"--config\\\",\\\"grdawn_gles\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"--skip\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"PaintParamsKeyTestReduced\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"runtime_intrinsics_matrix\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BackendTextureTest\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"glyph_pos_n_s\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"persptext\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"persptext_minimal\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"pictureshader_persp\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"tall_stretched_bitmaps\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv_formats_frompixmaps\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv_formats_domain\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"ThreadedPrecompileTest\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BigImageTest_Ganesh\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--match\\\",\\\"~^verylarge_picture_image$\\\",\\\"~^verylargebitmap$\\\",\\\"~^path_huge_aa$\\\",\\\"~^fast_constraint_red_is_allowed$\\\",\\\"~^strict_constraint_batch_no_red_allowed$\\\",\\\"~^strict_constraint_no_red_allowed$\\\",\\\"~async_rescale_and_read\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-Android-Clang-Pixel9-GPU-MaliG715-arm64-Release-All-Android_Graphite_Dawn_GLES\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
         "skia"
       ],
       "dependencies": [
@@ -49074,6 +49209,106 @@
       ],
       "dependencies": [
         "Build-Debian10-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "machine_type:n1-standard-16",
+        "os:Debian-10.3",
+        "pool:Skia"
+      ],
+      "environment": {
+        "RECIPES_USE_PY3": "true",
+        "VPYTHON_LOG_TRACE": "1"
+      },
+      "env_prefixes": {
+        "PATH": [
+          "gsutil/gsutil",
+          "cipd_bin_packages",
+          "cipd_bin_packages/bin",
+          "cipd_bin_packages/cpython3",
+          "cipd_bin_packages/cpython3/bin"
+        ],
+        "VPYTHON_DEFAULT_SPEC": [
+          "skia/.vpython3"
+        ],
+        "VPYTHON_VIRTUALENV_ROOT": [
+          "cache/vpython3"
+        ]
+      },
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_tags": {
+        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
+      },
+      "io_timeout_ns": 14400000000000,
+      "max_attempts": 2,
+      "outputs": [
+        "test"
+      ],
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+    },
+    "Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-RustPNG": {
+      "caches": [
+        {
+          "name": "vpython3",
+          "path": "cache/vpython3"
+        }
+      ],
+      "casSpec": "test",
+      "cipd_packages": [
+        {
+          "name": "infra/3pp/tools/cpython3/linux-amd64",
+          "path": "cipd_bin_packages/cpython3",
+          "version": "version:3@3.11.9.chromium.35"
+        },
+        {
+          "name": "infra/tools/luci-auth/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:9e987768ed42599aa80ce2c130ee8e912b417a18"
+        },
+        {
+          "name": "infra/tools/luci/kitchen/${platform}",
+          "path": ".",
+          "version": "git_revision:9e987768ed42599aa80ce2c130ee8e912b417a18"
+        },
+        {
+          "name": "infra/tools/luci/vpython3/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:9e987768ed42599aa80ce2c130ee8e912b417a18"
+        },
+        {
+          "name": "skia/bots/gsutil",
+          "path": "gsutil",
+          "version": "version:0"
+        },
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:47"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:463"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:14"
+        }
+      ],
+      "command": [
+        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
+        "-u",
+        "skia/infra/bots/run_recipe.py",
+        "${ISOLATED_OUTDIR}",
+        "test",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-RustPNG\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"x86_64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Debug\\\",\\\"cpu_or_gpu\\\",\\\"CPU\\\",\\\"cpu_or_gpu_value\\\",\\\"AVX2\\\",\\\"extra_config\\\",\\\"RustPNG\\\",\\\"model\\\",\\\"GCE\\\",\\\"os\\\",\\\"Debian10\\\",\\\"style\\\",\\\"default\\\",\\\"--randomProcessorTest\\\",\\\"--nogpu\\\",\\\"--config\\\",\\\"8888\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"--skip\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"BigImageTest_Ganesh\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-RustPNG\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
+        "skia"
+      ],
+      "dependencies": [
+        "Build-Debian10-Clang-x86_64-Debug-RustPNG",
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
@@ -88949,22 +89184,7 @@
         "skia/dm",
         "skia/docs/examples",
         "skia/example",
-        "skia/experimental/ffmpeg",
-        "skia/experimental/filterfuzz/filterfuzz.cpp",
-        "skia/experimental/lowp-basic",
-        "skia/experimental/minimal_ios_mtl_skia_app/BUILD.gn",
-        "skia/experimental/minimal_ios_mtl_skia_app/main.mm",
-        "skia/experimental/rust_cxx/main.cpp",
-        "skia/experimental/rust_png/SkPngRustDecoder.cpp",
-        "skia/experimental/rust_png/SkPngRustDecoder.h",
-        "skia/experimental/rust_png/ffi/FFI.h",
-        "skia/experimental/rust_png/impl/SkPngRustCodec.cpp",
-        "skia/experimental/rust_png/impl/SkPngRustCodec.h",
-        "skia/experimental/sktext/BUILD.gn",
-        "skia/experimental/tools/coreGraphicsPdf2png.cpp",
-        "skia/experimental/tskit/bindings",
-        "skia/experimental/tskit/go/gen_types/testdata/bindings1.cpp",
-        "skia/experimental/webgpu-bazel/src/bindings.cpp",
+        "skia/experimental",
         "skia/fuzz",
         "skia/gm",
         "skia/gn",
