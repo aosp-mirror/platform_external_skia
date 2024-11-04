@@ -29,7 +29,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/angle/angle": {
 		Id:      "chromium.googlesource.com/angle/angle",
-		Version: "7c99c225401d5ec9355623bae691656f7921c365",
+		Version: "2f8ad9c1042cd2280151019786f2fd5b661ca650",
 		Path:    "third_party/externals/angle2",
 	},
 	"chromium.googlesource.com/chromium/deps/icu": {
@@ -144,7 +144,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/vulkan-deps": {
 		Id:      "chromium.googlesource.com/vulkan-deps",
-		Version: "91cb9c1a7ec716bf33b744761ca61848a99d2a90",
+		Version: "ae5ea7b95745533843d0629708827b30ee9e1769",
 		Path:    "third_party/externals/vulkan-deps",
 	},
 	"chromium.googlesource.com/webm/libwebp": {
@@ -154,7 +154,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "a0239e7d364cb3dcc1e504aea3ab8ceb88bf6132",
+		Version: "980a9b0e0fbab4c032fcc547f462ba510bfdff1f",
 		Path:    "third_party/externals/dawn",
 	},
 	"infra/3pp/tools/ninja": {
@@ -164,7 +164,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/buildbot": {
 		Id:      "skia.googlesource.com/buildbot",
-		Version: "2e11bb731c4a7d12a9a9a730f26ca2193fe26690",
+		Version: "064137920a75e8ac75beead23713707e2e286e8f",
 		Path:    "infra/skia-infra",
 	},
 	"skia.googlesource.com/external/github.com/AOMediaCodec/libavif": {
@@ -244,7 +244,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia/tools/sk": {
 		Id:      "skia/tools/sk",
-		Version: "git_revision:2e11bb731c4a7d12a9a9a730f26ca2193fe26690",
+		Version: "git_revision:064137920a75e8ac75beead23713707e2e286e8f",
 		Path:    "bin",
 	},
 	"swiftshader.googlesource.com/SwiftShader": {
