@@ -420,36 +420,6 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush, bool forceCompact) {
     fPrevFlushToken = startTokenForNextFlush;
 }
 
-void DrawAtlas::purge(AtlasToken startTokenForNextFlush) {
-    // Try to compact first
-    this->compact(startTokenForNextFlush, /*forceCompact=*/true);
-
-    // Go through each page from last to first. We evict any plots that are not in
-    // use this flush. If a page has no plots used this flush, we can deactivate it and
-    // remove its texture. However, once we hit a page that is in use, we can't deactivate
-    // any further due to the first-to-last nature of the DrawAtlas page management.
-    PlotList::Iter plotIter;
-    bool atlasUsedThisFlush = false;
-    for (int pageIndex = (int)(fNumActivePages)-1; pageIndex >= 0; --pageIndex) {
-        plotIter.init(fPages[pageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
-        while (Plot* plot = plotIter.get()) {
-            if (!plot->isEmpty()) {
-                if (plot->lastUseToken() < startTokenForNextFlush) {
-                    // Not in use, we can evict this plot
-                    this->processEvictionAndResetRects(plot);
-                } else {
-                    atlasUsedThisFlush = true;
-                }
-            }
-            plotIter.next();
-        }
-        // Can only remove Pages in last-to-first order at the moment
-        if (!atlasUsedThisFlush) {
-            this->deactivateLastPage();
-        }
-    }
-}
-
 bool DrawAtlas::createPages(AtlasGenerationCounter* generationCounter) {
     SkASSERT(SkIsPow2(fTextureWidth) && SkIsPow2(fTextureHeight));
 

@@ -52,6 +52,7 @@ bool should_dither(const PaintParams& p, SkColorType dstCT) {
 
 PaintParams::PaintParams(const SkPaint& paint,
                          sk_sp<SkBlender> primitiveBlender,
+                         const CircularRRectClip& analyticClip,
                          sk_sp<SkShader> clipShader,
                          DstReadRequirement dstReadReq,
                          bool skipColorXform)
@@ -60,6 +61,7 @@ PaintParams::PaintParams(const SkPaint& paint,
         , fShader(paint.refShader())
         , fColorFilter(paint.refColorFilter())
         , fPrimitiveBlender(std::move(primitiveBlender))
+        , fAnalyticClip(analyticClip)
         , fClipShader(std::move(clipShader))
         , fDstReadReq(dstReadReq)
         , fSkipColorXform(skipColorXform)
@@ -149,26 +151,6 @@ void AddBlendMode(const KeyContext& keyContext,
         HSLCBlenderBlock::AddBlock(keyContext, builder, gatherer, blendInfo.fUniformData);
     } else {
         AddFixedBlendMode(keyContext, builder, gatherer, bm);
-    }
-}
-
-void AddDstReadBlock(const KeyContext& keyContext,
-                     PaintParamsKeyBuilder* builder,
-                     PipelineDataGatherer* gatherer,
-                     DstReadRequirement dstReadReq) {
-    switch(dstReadReq) {
-        case DstReadRequirement::kNone:
-            SkASSERT(false);            // This should never be reached
-            return;
-        case DstReadRequirement::kTextureCopy:
-            [[fallthrough]];
-        case DstReadRequirement::kTextureSample:
-            DstReadSampleBlock::AddBlock(keyContext, builder, gatherer, keyContext.dstTexture(),
-                                         keyContext.dstOffset());
-            break;
-        case DstReadRequirement::kFramebufferFetch:
-            builder->addBlock(BuiltInCodeSnippetID::kDstReadFetch);
-            break;
     }
 }
 
@@ -292,51 +274,68 @@ void PaintParams::handleDithering(const KeyContext& keyContext,
     }
 }
 
-void PaintParams::handleDstRead(const KeyContext& keyContext,
-                                PaintParamsKeyBuilder* builder,
-                                PipelineDataGatherer* gatherer) const {
-    if (fDstReadReq != DstReadRequirement::kNone) {
-        Blend(keyContext, builder, gatherer,
-              /* addBlendToKey= */ [&] () -> void {
-                  if (fFinalBlender) {
-                      AddToKey(keyContext, builder, gatherer, fFinalBlender.get());
-                  } else {
-                      AddFixedBlendMode(keyContext, builder, gatherer, SkBlendMode::kSrcOver);
-                  }
-              },
-              /* addSrcToKey= */ [&]() -> void {
-                  this->handleDithering(keyContext, builder, gatherer);
-              },
-              /* addDstToKey= */ [&]() -> void {
-                  AddDstReadBlock(keyContext, builder, gatherer, fDstReadReq);
-              });
-    } else {
-        this->handleDithering(keyContext, builder, gatherer);
+void PaintParams::handleClipping(const KeyContext& keyContext,
+                                 PaintParamsKeyBuilder* builder,
+                                 PipelineDataGatherer* gatherer) const {
+    if (!fAnalyticClip.isEmpty()) {
+        float radius = fAnalyticClip.fRadius + 0.5f;
+        // N.B.: Because the clip data is normally used with depth-based clipping,
+        // the shape is inverted from its usual state. We re-invert here to
+        // match what the shader snippet expects.
+        SkPoint radiusPair = {(fAnalyticClip.fInverted) ? radius : -radius, 1.0f/radius};
+        CircularRRectClipBlock::CircularRRectClipData data(
+                fAnalyticClip.fBounds.makeOutset(0.5f).asSkRect(),
+                radiusPair,
+                fAnalyticClip.edgeSelectRect());
+        if (fClipShader) {
+            // For both an analytic clip and clip shader, we need to compose them together into
+            // a single clipping root node.
+            Blend(keyContext, builder, gatherer,
+                  /* addBlendToKey= */ [&]() -> void {
+                      AddFixedBlendMode(keyContext, builder, gatherer, SkBlendMode::kModulate);
+                  },
+                  /* addSrcToKey= */ [&]() -> void {
+                      CircularRRectClipBlock::AddBlock(keyContext, builder, gatherer, data);
+                  },
+                  /* addDstToKey= */ [&]() -> void {
+                      AddToKey(keyContext, builder, gatherer, fClipShader.get());
+                  });
+        } else {
+            // Without a clip shader, the analytic clip can be the clipping root node.
+            CircularRRectClipBlock::AddBlock(keyContext, builder, gatherer, data);
+        }
+    } else if (fClipShader) {
+        // Since there's no analytic clip, the clipping root node can be fClipShader directly.
+        AddToKey(keyContext, builder, gatherer, fClipShader.get());
     }
 }
 
 void PaintParams::toKey(const KeyContext& keyContext,
                         PaintParamsKeyBuilder* builder,
                         PipelineDataGatherer* gatherer) const {
-    this->handleDstRead(keyContext, builder, gatherer);
+    // Root Node 0 is the source color, which is the output of all effects post dithering
+    this->handleDithering(keyContext, builder, gatherer);
 
+    // Root Node 1 is the final blender
     std::optional<SkBlendMode> finalBlendMode = this->asFinalBlendMode();
-    if (fDstReadReq != DstReadRequirement::kNone) {
-        // In this case the blend will have been handled by shader-based blending with the dstRead.
-        finalBlendMode = SkBlendMode::kSrc;
+    if (finalBlendMode) {
+        if (fDstReadReq == DstReadRequirement::kNone) {
+            // With no shader blending, be as explicit as possible about the final blend
+            AddFixedBlendMode(keyContext, builder, gatherer, *finalBlendMode);
+        } else {
+            // With shader blending, use AddBlendMode() to select the more universal blend functions
+            // when possible. Technically we could always use a fixed blend mode but would then
+            // over-generate when encountering certain classes of blends. This is most problematic
+            // on devices that wouldn't support dual-source blending, so help them out by at least
+            // not requiring lots of pipelines.
+            AddBlendMode(keyContext, builder, gatherer, *finalBlendMode);
+        }
+    } else {
+        AddToKey(keyContext, builder, gatherer, fFinalBlender.get());
     }
 
-    if (fClipShader) {
-        ClipBlock::BeginBlock(keyContext, builder, gatherer);
-
-            AddToKey(keyContext, builder, gatherer, fClipShader.get());
-
-        builder->endBlock();
-    }
-
-    // Set the hardware blend mode.
-    SkASSERT(finalBlendMode);
-    AddFixedBlendMode(keyContext, builder, gatherer, *finalBlendMode);
+    // Optional Root Node 2 is the clip
+    this->handleClipping(keyContext, builder, gatherer);
 }
 
 // TODO(b/330864257): Can be deleted once keys are determined by the Device draw.
