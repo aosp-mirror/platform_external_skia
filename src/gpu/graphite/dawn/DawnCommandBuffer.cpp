@@ -27,81 +27,6 @@
 
 namespace skgpu::graphite {
 
-// DawnCommandBuffer::IntrinsicConstantsManager
-// ----------------------------------------------------------------------------
-
-/**
- * Since Dawn does not currently provide push constants, this helper class manages rotating through
- * buffers and writing each new occurrence of a set of intrinsic uniforms into the current buffer.
- */
-class DawnCommandBuffer::IntrinsicConstantsManager {
-public:
-
-    BindBufferInfo add(DawnCommandBuffer* cb, UniformDataBlock intrinsicValues) {
-        static constexpr int kNumSlots = 8;
-
-        BindBufferInfo* existing = fCachedIntrinsicValues.find(intrinsicValues);
-        if (existing) {
-            return *existing;
-        }
-
-        // TODO: https://b.corp.google.com/issues/259267703
-        // Make updating intrinsic constants faster. Metal has setVertexBytes method
-        // to quickly send intrinsic constants to vertex shader without any buffer. But Dawn
-        // doesn't have similar capability. So we have to use WriteBuffer(), and this method is not
-        // allowed to be called when there is an active render pass.
-        SkASSERT(!cb->fActiveRenderPassEncoder);
-        SkASSERT(!cb->fActiveComputePassEncoder);
-
-        const Caps* caps = cb->fSharedContext->caps();
-        const uint32_t stride = SkAlignTo(intrinsicValues.size(),
-                                          caps->requiredUniformBufferAlignment());
-        if (!fCurrentBuffer || fSlotsUsed == kNumSlots) {
-            // We can just replace the current buffer; any prior buffer was already tracked on the
-            // CommandBuffer and the intrinsic constants were written directly to the Dawn queue.
-            DawnResourceProvider* resourceProvider = cb->fResourceProvider;
-            fCurrentBuffer = resourceProvider->findOrCreateDawnBuffer(stride * kNumSlots,
-                                                                      BufferType::kUniform,
-                                                                      AccessPattern::kGpuOnly,
-                                                                      "IntrinsicConstantBuffer");
-            fSlotsUsed = 0;
-
-            if (!fCurrentBuffer) {
-                // If we failed to create a GPU buffer to hold the intrinsic uniforms, we will fail
-                // the Recording being inserted, so return an empty bind info.
-                return {};
-            }
-            cb->trackResource(fCurrentBuffer);
-        }
-
-        SkASSERT(fCurrentBuffer && fSlotsUsed < kNumSlots);
-        uint32_t offset = (fSlotsUsed++) * stride;
-        cb->fSharedContext->queue().WriteBuffer(fCurrentBuffer->dawnBuffer(),
-                                                offset,
-                                                intrinsicValues.data(),
-                                                intrinsicValues.size());
-
-        BindBufferInfo binding{fCurrentBuffer.get(),
-                               offset,
-                               SkTo<uint32_t>(intrinsicValues.size())};
-        fCachedIntrinsicValues.set(UniformDataBlock::Make(intrinsicValues, &fUniformData), binding);
-        return binding;
-    }
-
-private:
-    // The current buffer being filled up, as well as the how much of it has been written to.
-    sk_sp<DawnBuffer> fCurrentBuffer;
-    int fSlotsUsed = 0; // in multiples of the intrinsic uniform size and UBO binding requirement
-
-    // All uploaded intrinsic uniform sets and where they are on the GPU. All uniform sets are
-    // cached for the duration of a CommandBuffer since the maximum number of elements in this
-    // collection will equal the number of render passes and the intrinsic constants aren't that
-    // large. This maximizes the chance for reuse between passes.
-    skia_private::THashMap<UniformDataBlock, BindBufferInfo, UniformDataBlock::Hash>
-            fCachedIntrinsicValues;
-    SkArenaAlloc fUniformData{0};
-};
-
 // DawnCommandBuffer
 // ----------------------------------------------------------------------------
 std::unique_ptr<DawnCommandBuffer> DawnCommandBuffer::Make(const DawnSharedContext* sharedContext,
@@ -116,7 +41,8 @@ std::unique_ptr<DawnCommandBuffer> DawnCommandBuffer::Make(const DawnSharedConte
 
 DawnCommandBuffer::DawnCommandBuffer(const DawnSharedContext* sharedContext,
                                      DawnResourceProvider* resourceProvider)
-        : fSharedContext(sharedContext)
+        : CommandBuffer(Protected::kNo)  // Dawn doesn't support protected memory
+        , fSharedContext(sharedContext)
         , fResourceProvider(resourceProvider) {}
 
 DawnCommandBuffer::~DawnCommandBuffer() {}
@@ -131,8 +57,6 @@ wgpu::CommandBuffer DawnCommandBuffer::finishEncoding() {
 }
 
 void DawnCommandBuffer::onResetCommandBuffer() {
-    fIntrinsicConstants = nullptr;
-
     fActiveGraphicsPipeline = nullptr;
     fActiveRenderPassEncoder = nullptr;
     fActiveComputePassEncoder = nullptr;
@@ -149,7 +73,6 @@ bool DawnCommandBuffer::setNewCommandBufferResources() {
     fCommandEncoder = fSharedContext->device().CreateCommandEncoder();
     SkASSERT(fCommandEncoder);
 
-    fIntrinsicConstants = std::make_unique<IntrinsicConstantsManager>();
     return true;
 }
 
@@ -524,7 +447,7 @@ bool DawnCommandBuffer::addDrawPass(const DrawPass* drawPass) {
             }
             case DrawPassCommands::Type::kBindTexturesAndSamplers: {
                 auto bts = static_cast<DrawPassCommands::BindTexturesAndSamplers*>(cmdPtr);
-                bindTextureAndSamplers(*drawPass, *bts);
+                this->bindTextureAndSamplers(*drawPass, *bts);
                 break;
             }
             case DrawPassCommands::Type::kSetScissor: {
@@ -591,6 +514,25 @@ bool DawnCommandBuffer::bindGraphicsPipeline(const GraphicsPipeline* graphicsPip
     fActiveRenderPassEncoder.SetPipeline(wgpuPipeline);
     fBoundUniformBuffersDirty = true;
 
+    if (fActiveGraphicsPipeline->dstReadRequirement() == DstReadRequirement::kTextureCopy &&
+        fActiveGraphicsPipeline->numFragTexturesAndSamplers() == 2) {
+        // The pipeline has a single paired texture+sampler and uses texture copies for dst reads.
+        // This situation comes about when the program requires complex blending but otherwise
+        // is not referencing any images. Since there are no other images in play, the DrawPass
+        // will not have a BindTexturesAndSamplers command that we can tack the dstCopy on to.
+        // Instead we need to set the texture BindGroup ASAP to just the dstCopy.
+        // TODO(b/366254117): Once we standardize on a pipeline layout across all backends, the dst
+        // copy texture may not go in a group with the regular textures, in which case this binding
+        // can hopefully happen in a single place (e.g. here or at the start of the renderpass and
+        // not also every other time the textures are changed).
+        const auto* texture = static_cast<const DawnTexture*>(fDstCopy.first);
+        const auto* sampler = static_cast<const DawnSampler*>(fDstCopy.second);
+        wgpu::BindGroup bindGroup =
+                fResourceProvider->findOrCreateSingleTextureSamplerBindGroup(sampler, texture);
+        fActiveRenderPassEncoder.SetBindGroup(
+                DawnGraphicsPipeline::kTextureBindGroupIndex, bindGroup);
+    }
+
     return true;
 }
 
@@ -649,6 +591,16 @@ void DawnCommandBuffer::bindTextureAndSamplers(
     SkASSERT(fActiveRenderPassEncoder);
     SkASSERT(fActiveGraphicsPipeline);
 
+    // When there's an active graphics pipeline with a texture-copy dstread requirement, add one
+    // to account for the intrinsic dstCopy texture we bind here.
+    // NOTE: This is in units of pairs of textures and samplers, whereas the value reported by
+    // the current pipeline is in net bindings (textures + samplers).
+    int numTexturesAndSamplers = command.fNumTexSamplers;
+    if (fActiveGraphicsPipeline->dstReadRequirement() == DstReadRequirement::kTextureCopy) {
+        numTexturesAndSamplers++;
+    }
+    SkASSERT(fActiveGraphicsPipeline->numFragTexturesAndSamplers() == 2*numTexturesAndSamplers);
+
     // If possible, it's ideal to optimize for the common case of using a single texture with one
     // dynamic sampler. When using only one sampler, determine whether it is static or dynamic.
     bool usingSingleStaticSampler = false;
@@ -664,8 +616,9 @@ void DawnCommandBuffer::bindTextureAndSamplers(
 
     wgpu::BindGroup bindGroup;
     // Optimize for single texture with dynamic sampling.
-    if (command.fNumTexSamplers == 1 && !usingSingleStaticSampler) {
+    if (numTexturesAndSamplers == 1 && !usingSingleStaticSampler) {
         SkASSERT(fActiveGraphicsPipeline->numFragTexturesAndSamplers() == 2);
+        SkASSERT(fActiveGraphicsPipeline->dstReadRequirement() != DstReadRequirement::kTextureCopy);
 
         const auto* texture =
                 static_cast<const DawnTexture*>(drawPass.getTexture(command.fTextureIndices[0]));
@@ -709,6 +662,20 @@ void DawnCommandBuffer::bindTextureAndSamplers(
             wgpu::BindGroupEntry textureEntry;
             textureEntry.binding = 2 * i + 1;
             textureEntry.textureView = wgpuTextureView;
+            entries.push_back(textureEntry);
+        }
+
+        if (fActiveGraphicsPipeline->dstReadRequirement() == DstReadRequirement::kTextureCopy) {
+            // Append the dstCopy sampler and texture as the very last two bind group entries
+            wgpu::BindGroupEntry samplerEntry;
+            samplerEntry.binding = 2*numTexturesAndSamplers - 2;
+            samplerEntry.sampler = static_cast<const DawnSampler*>(fDstCopy.second)->dawnSampler();
+            entries.push_back(samplerEntry);
+
+            wgpu::BindGroupEntry textureEntry;
+            textureEntry.binding = 2*numTexturesAndSamplers - 1;
+            textureEntry.textureView =
+                    static_cast<const DawnTexture*>(fDstCopy.first)->sampleTextureView();
             entries.push_back(textureEntry);
         }
 
@@ -779,11 +746,10 @@ void DawnCommandBuffer::setScissor(unsigned int left,
 
 bool DawnCommandBuffer::updateIntrinsicUniforms(SkIRect viewport) {
     UniformManager intrinsicValues{Layout::kStd140};
-    CollectIntrinsicUniforms(fSharedContext->caps(), viewport, fReplayTranslation, fDstCopyOffset,
-                             &intrinsicValues);
+    CollectIntrinsicUniforms(fSharedContext->caps(), viewport, fDstCopyBounds, &intrinsicValues);
 
-    BindBufferInfo binding =
-            fIntrinsicConstants->add(this, UniformDataBlock::Wrap(&intrinsicValues));
+    BindBufferInfo binding = fResourceProvider->findOrCreateIntrinsicBindBufferInfo(
+            this, UniformDataBlock::Wrap(&intrinsicValues));
     if (!binding) {
         return false;
     } else if (binding == fBoundUniforms[DawnGraphicsPipeline::kIntrinsicUniformBufferIndex]) {

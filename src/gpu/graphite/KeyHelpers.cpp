@@ -181,37 +181,6 @@ void AlphaOnlyPaintColorBlock::AddBlock(const KeyContext& keyContext,
 
 namespace {
 
-void add_dst_read_sample_uniform_data(const ShaderCodeDictionary* dict,
-                                      PipelineDataGatherer* gatherer,
-                                      sk_sp<TextureProxy> dstTexture,
-                                      SkIPoint dstOffset) {
-    gatherer->add(dstTexture, SamplerDesc{SkFilterMode::kNearest, SkTileMode::kClamp});
-
-    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kDstReadSample)
-
-    SkV4 coords{static_cast<float>(dstOffset.x()),
-                static_cast<float>(dstOffset.y()),
-                dstTexture ? 1.0f / dstTexture->dimensions().width()  : 1.0f,
-                dstTexture ? 1.0f / dstTexture->dimensions().height() : 1.0f };
-    gatherer->write(coords);
-}
-
-} // anonymous namespace
-
-void DstReadSampleBlock::AddBlock(const KeyContext& keyContext,
-                                  PaintParamsKeyBuilder* builder,
-                                  PipelineDataGatherer* gatherer,
-                                  sk_sp<TextureProxy> dstTexture,
-                                  SkIPoint dstOffset) {
-    add_dst_read_sample_uniform_data(keyContext.dict(), gatherer, std::move(dstTexture), dstOffset);
-
-    builder->addBlock(BuiltInCodeSnippetID::kDstReadSample);
-}
-
-//--------------------------------------------------------------------------------------------------
-
-namespace {
-
 void add_gradient_preamble(const GradientShaderBlocks::GradientData& gradData,
                            PipelineDataGatherer* gatherer) {
     constexpr int kInternalStopLimit = GradientShaderBlocks::GradientData::kNumInternalStorageStops;
@@ -671,9 +640,9 @@ void add_sampler_data_to_key(PaintParamsKeyBuilder* builder, const SamplerDesc& 
     if (samplerDesc.isImmutable()) {
         builder->addData({samplerDesc.asSpan()});
     } else {
-        // Means we have a regular dynamic sampler for which no data needs to be appended. Call
-        // addData() regardless w/ an empty span such that a data legnth of '0' is added.
-        builder->addData({});
+        // Means we have a regular dynamic sampler. Append a default SamplerDesc to convey this,
+        // allowing the key to maintain and convey sampler binding order.
+        builder->addData({{}});
     }
 }
 
@@ -1007,16 +976,6 @@ void HSLCBlenderBlock::AddBlock(const KeyContext& keyContext,
     gatherer->writeHalf(SkV2{coeffs[0], coeffs[1]});
 
     builder->addBlock(BuiltInCodeSnippetID::kHSLCBlender);
-}
-
-//--------------------------------------------------------------------------------------------------
-
-void ClipBlock::BeginBlock(const KeyContext& keyContext,
-                           PaintParamsKeyBuilder* builder,
-                           PipelineDataGatherer* gatherer) {
-    BEGIN_WRITE_UNIFORMS(gatherer, keyContext.dict(), BuiltInCodeSnippetID::kClip)
-
-    builder->beginBlock(BuiltInCodeSnippetID::kClip);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1374,6 +1333,11 @@ void AddToKey(const KeyContext& keyContext,
               PipelineDataGatherer* gatherer,
               const SkBlender* blender) {
     if (!blender) {
+        // Calling code assumes a block will be appended. Add a fixed block to preserve shader
+        // and PaintParamsKey structure in release builds but assert since this should either not
+        // happen or should be changing high-level logic within PaintParams::toKey().
+        SkASSERT(false);
+        AddFixedBlendMode(keyContext, builder, gatherer, SkBlendMode::kSrcOver);
         return;
     }
     switch (as_BB(blender)->type()) {
@@ -1556,6 +1520,11 @@ void AddToKey(const KeyContext& keyContext,
               PipelineDataGatherer* gatherer,
               const SkColorFilter* filter) {
     if (!filter) {
+        // Calling code assumes a block will be appended. Add a fixed block to preserve shader
+        // and PaintParamsKey structure in release builds but assert since this should either not
+        // happen or should be changing high-level logic within PaintParams::toKey().
+        SkASSERT(false);
+        builder->addBlock(BuiltInCodeSnippetID::kPriorOutput);
         return;
     }
     switch (as_CFB(filter)->type()) {
@@ -1855,18 +1824,31 @@ static void add_yuv_image_to_key(const KeyContext& keyContext,
 
     SkColorSpaceXformSteps steps;
     SkASSERT(steps.flags.mask() == 0);   // By default, the colorspace should have no effect
-    // Output color from the YUV image shaders is always unpremul, so we ignore the image alphaType
+
+    // The actual output from the YUV image shader for non-opaque images is unpremul so
+    // we need to correct for the fact that the Image_YUVA_Graphite's alpha type is premul.
+    SkAlphaType srcAT = imageToDraw->alphaType() == kPremul_SkAlphaType
+                                ? kUnpremul_SkAlphaType
+                                : imageToDraw->alphaType();
     if (origShader->isRaw()) {
-        // We need to at least do premul alpha conversion
+        // Because we've avoided the premul alpha step in the YUV shader, we need to make sure
+        // it happens when drawing unpremul (i.e., non-opaque) images.
         steps = SkColorSpaceXformSteps(imageToDraw->colorSpace(),
-                                       kUnpremul_SkAlphaType,
+                                       srcAT,
                                        imageToDraw->colorSpace(),
-                                       kPremul_SkAlphaType);
+                                       imageToDraw->alphaType());
     } else {
+        SkAlphaType dstAT = keyContext.dstColorInfo().alphaType();
+        // Setting the dst alphaType up this way is necessary because otherwise the constructor
+        // for SkColorSpaceXformSteps will set dstAT = srcAT when dstAT == kOpaque, and the
+        // premul step needed for non-opaque images won't occur.
+        if (dstAT == kOpaque_SkAlphaType && srcAT == kUnpremul_SkAlphaType) {
+            dstAT = kPremul_SkAlphaType;
+        }
         steps = SkColorSpaceXformSteps(imageToDraw->colorSpace(),
-                                       kUnpremul_SkAlphaType,
+                                       srcAT,
                                        keyContext.dstColorInfo().colorSpace(),
-                                       keyContext.dstColorInfo().alphaType());
+                                       dstAT);
     }
     ColorSpaceTransformBlock::ColorSpaceTransformData data(steps);
 
@@ -2588,6 +2570,11 @@ void AddToKey(const KeyContext& keyContext,
               PipelineDataGatherer* gatherer,
               const SkShader* shader) {
     if (!shader) {
+        // Calling code assumes a block will be appended. Add a fixed block to preserve shader
+        // and PaintParamsKey structure in release builds but assert since this should either not
+        // happen or should be changing high-level logic within PaintParams::toKey().
+        SkASSERT(false);
+        SolidColorShaderBlock::AddBlock(keyContext, builder, gatherer, SK_PMColor4fTRANSPARENT);
         return;
     }
     switch (as_SB(shader)->type()) {
