@@ -29,7 +29,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/angle/angle": {
 		Id:      "chromium.googlesource.com/angle/angle",
-		Version: "aacbf041f6cd1f650a9e4b5007ff4d6a5e7093a8",
+		Version: "7ce8b268f584950875c8b14a3ac6c0ec8438753d",
 		Path:    "third_party/externals/angle2",
 	},
 	"chromium.googlesource.com/chromium/deps/icu": {
@@ -44,7 +44,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/chromium/src/base/allocator/partition_allocator": {
 		Id:      "chromium.googlesource.com/chromium/src/base/allocator/partition_allocator",
-		Version: "ca4487e127c2e071da5d4a36a9f71fd7b65b1434",
+		Version: "ce13777cb731e0a60c606d1741091fd11a0574d7",
 		Path:    "third_party/externals/partition_alloc",
 	},
 	"chromium.googlesource.com/chromium/src/buildtools": {
@@ -89,17 +89,17 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers": {
 		Id:      "chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers",
-		Version: "14345dab231912ee9601136e96ca67a6e1f632e7",
+		Version: "cbcad3c0587dddc768d76641ea00f5c45ab5a278",
 		Path:    "third_party/externals/vulkan-headers",
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools": {
 		Id:      "chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
-		Version: "6991ccb68890681b1a3e0f56acd8f53b20ad1e79",
+		Version: "e94085e2167e33b6b18474da24ff18f46bc56976",
 		Path:    "third_party/externals/vulkan-tools",
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries": {
 		Id:      "chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries",
-		Version: "8c907ea21fe0147f791d79051b18e21bc8c4ede0",
+		Version: "b78b8d9be17df0210de4351acac7702014e6f171",
 		Path:    "third_party/externals/vulkan-utility-libraries",
 	},
 	"chromium.googlesource.com/external/github.com/google/highway": {
@@ -144,7 +144,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/vulkan-deps": {
 		Id:      "chromium.googlesource.com/vulkan-deps",
-		Version: "dd729cf1f807e2b317a527900734dc528e6c4c19",
+		Version: "f4673df701a0870deff85c9e4b872e7ef3e80924",
 		Path:    "third_party/externals/vulkan-deps",
 	},
 	"chromium.googlesource.com/webm/libwebp": {
@@ -154,7 +154,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "90b955a8bf93ed8cd3bb968fded69565fb5a75fb",
+		Version: "2c4f822f9e78d491e3fa32dfee1add5b93c8be65",
 		Path:    "third_party/externals/dawn",
 	},
 	"infra/3pp/tools/ninja": {
@@ -164,7 +164,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/buildbot": {
 		Id:      "skia.googlesource.com/buildbot",
-		Version: "73d05ecd42e4ec3e7c4e02f1f400c8a1142bbb48",
+		Version: "064137920a75e8ac75beead23713707e2e286e8f",
 		Path:    "infra/skia-infra",
 	},
 	"skia.googlesource.com/external/github.com/AOMediaCodec/libavif": {
@@ -194,12 +194,12 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers": {
 		Id:      "skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers",
-		Version: "a62b032007b2e7a69f24a195cbfbd0cf22d31bb0",
+		Version: "cb6b2c32dbfc3257c1e9142a116fe9ee3d9b80a2",
 		Path:    "third_party/externals/spirv-headers",
 	},
 	"skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools": {
 		Id:      "skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools",
-		Version: "ada92f84927350c8f3567a06e23e4ff2b04f6810",
+		Version: "02433568af277324e6d7fe4582b663f14165c563",
 		Path:    "third_party/externals/spirv-tools",
 	},
 	"skia.googlesource.com/external/github.com/abseil/abseil-cpp": {
@@ -244,12 +244,12 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia/tools/sk": {
 		Id:      "skia/tools/sk",
-		Version: "git_revision:73d05ecd42e4ec3e7c4e02f1f400c8a1142bbb48",
+		Version: "git_revision:064137920a75e8ac75beead23713707e2e286e8f",
 		Path:    "bin",
 	},
 	"swiftshader.googlesource.com/SwiftShader": {
 		Id:      "swiftshader.googlesource.com/SwiftShader",
-		Version: "7a9a492a38b7c701f7c96a15a76046aed8f8c0c3",
+		Version: "1495532f997f0256b655ca83ab15b6122a3e8847",
 		Path:    "third_party/externals/swiftshader",
 	},
 }

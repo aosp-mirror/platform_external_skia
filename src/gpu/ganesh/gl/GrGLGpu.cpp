@@ -1764,6 +1764,10 @@ bool GrGLGpu::onUpdateCompressedBackendTexture(const GrBackendTexture& backendTe
 }
 
 int GrGLGpu::getCompatibleStencilIndex(GrGLFormat format) {
+    if (this->glCaps().avoidStencilBuffers()) {
+        return -1;
+    }
+
     static const int kSize = 16;
     SkASSERT(this->glCaps().canFormatBeFBOColorAttachment(format));
 
@@ -4096,9 +4100,14 @@ GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(SkISize dime
         }
         useTexture = true;
     }
-    int sFormatIdx = this->getCompatibleStencilIndex(format);
-    if (sFormatIdx < 0) {
-        return {};
+
+    bool avoidStencil = this->glCaps().avoidStencilBuffers();
+    int sFormatIdx = -1;
+    if (!avoidStencil) {
+        sFormatIdx = this->getCompatibleStencilIndex(format);
+        if (sFormatIdx < 0) {
+            return {};
+        }
     }
     GrGLuint colorID = 0;
     GrGLuint stencilID = 0;
@@ -4129,10 +4138,17 @@ GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(SkISize dime
     } else {
         GL_CALL(GenRenderbuffers(1, &colorID));
     }
-    GL_CALL(GenRenderbuffers(1, &stencilID));
-    if (!stencilID || !colorID) {
+    if (!colorID) {
         deleteIDs();
         return {};
+    }
+
+    if (!avoidStencil) {
+        GL_CALL(GenRenderbuffers(1, &stencilID));
+        if (!stencilID) {
+            deleteIDs();
+            return {};
+        }
     }
 
     GL_CALL(GenFramebuffers(1, &info.fFBOID));
@@ -4178,24 +4194,28 @@ GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(SkISize dime
         GL_CALL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER, GR_GL_COLOR_ATTACHMENT0,
                                         GR_GL_RENDERBUFFER, colorID));
     }
-    GL_CALL(BindRenderbuffer(GR_GL_RENDERBUFFER, stencilID));
-    auto stencilBufferFormat = this->glCaps().stencilFormats()[sFormatIdx];
-    if (sampleCnt == 1) {
-        GL_CALL(RenderbufferStorage(GR_GL_RENDERBUFFER, GrGLFormatToEnum(stencilBufferFormat),
-                                    dimensions.width(), dimensions.height()));
-    } else {
-        if (!this->renderbufferStorageMSAA(this->glContext(), sampleCnt,
-                                           GrGLFormatToEnum(stencilBufferFormat),
-                                           dimensions.width(), dimensions.height())) {
-            deleteIDs();
-            return {};
+    if (!avoidStencil) {
+        GL_CALL(BindRenderbuffer(GR_GL_RENDERBUFFER, stencilID));
+        auto stencilBufferFormat = this->glCaps().stencilFormats()[sFormatIdx];
+        if (sampleCnt == 1) {
+            GL_CALL(RenderbufferStorage(GR_GL_RENDERBUFFER, GrGLFormatToEnum(stencilBufferFormat),
+                                        dimensions.width(), dimensions.height()));
+        } else {
+            if (!this->renderbufferStorageMSAA(this->glContext(), sampleCnt,
+                                               GrGLFormatToEnum(stencilBufferFormat),
+                                               dimensions.width(), dimensions.height())) {
+                deleteIDs();
+                return {};
+                                               }
         }
-    }
-    GL_CALL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER, GR_GL_STENCIL_ATTACHMENT, GR_GL_RENDERBUFFER,
-                                    stencilID));
-    if (GrGLFormatIsPackedDepthStencil(this->glCaps().stencilFormats()[sFormatIdx])) {
-        GL_CALL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER, GR_GL_DEPTH_ATTACHMENT,
-                                        GR_GL_RENDERBUFFER, stencilID));
+        GL_CALL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
+                                        GR_GL_STENCIL_ATTACHMENT,
+                                        GR_GL_RENDERBUFFER,
+                                        stencilID));
+        if (GrGLFormatIsPackedDepthStencil(this->glCaps().stencilFormats()[sFormatIdx])) {
+            GL_CALL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER, GR_GL_DEPTH_ATTACHMENT,
+                                            GR_GL_RENDERBUFFER, stencilID));
+        }
     }
 
     // We don't want to have to recover the renderbuffer/texture IDs later to delete them. OpenGL
@@ -4213,7 +4233,10 @@ GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(SkISize dime
         return {};
     }
 
-    auto stencilBits = SkToInt(GrGLFormatStencilBits(this->glCaps().stencilFormats()[sFormatIdx]));
+    int stencilBits = 0;
+    if (!avoidStencil) {
+        stencilBits = SkToInt(GrGLFormatStencilBits(this->glCaps().stencilFormats()[sFormatIdx]));
+    }
 
     GrBackendRenderTarget beRT = GrBackendRenderTargets::MakeGL(
             dimensions.width(), dimensions.height(), sampleCnt, stencilBits, info);
@@ -4279,8 +4302,8 @@ void GrGLGpu::flush(FlushType flushType) {
     }
 }
 
-bool GrGLGpu::onSubmitToGpu(GrSyncCpu sync) {
-    if (sync == GrSyncCpu::kYes ||
+bool GrGLGpu::onSubmitToGpu(const GrSubmitInfo& info) {
+    if (info.fSync == GrSyncCpu::kYes ||
         (!fFinishCallbacks.empty() && !this->glCaps().fenceSyncSupport())) {
         this->finishOutstandingGpuWork();
         fFinishCallbacks.callAll(true);
@@ -4309,58 +4332,66 @@ void GrGLGpu::submit(GrOpsRenderPass* renderPass) {
     fCachedOpsRenderPass->reset();
 }
 
-[[nodiscard]] GrGLsync GrGLGpu::insertFence() {
-    if (!this->glCaps().fenceSyncSupport()) {
-        return nullptr;
-    }
-    GrGLsync sync;
-    if (this->glCaps().fenceType() == GrGLCaps::FenceType::kNVFence) {
-        static_assert(sizeof(GrGLsync) >= sizeof(GrGLuint));
-        GrGLuint fence = 0;
-        GL_CALL(GenFences(1, &fence));
-        GL_CALL(SetFence(fence, GR_GL_ALL_COMPLETED));
-        sync = reinterpret_cast<GrGLsync>(static_cast<intptr_t>(fence));
-    } else {
-        GL_CALL_RET(sync, FenceSync(GR_GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
+[[nodiscard]] GrGLsync GrGLGpu::insertSync() {
+    GrGLsync sync = nullptr;
+    switch (this->glCaps().fenceType()) {
+        case GrGLCaps::FenceType::kNone:
+            return nullptr;
+        case GrGLCaps::FenceType::kNVFence: {
+            static_assert(sizeof(GrGLsync) >= sizeof(GrGLuint));
+            GrGLuint fence = 0;
+            GL_CALL(GenFences(1, &fence));
+            GL_CALL(SetFence(fence, GR_GL_ALL_COMPLETED));
+            sync = reinterpret_cast<GrGLsync>(static_cast<intptr_t>(fence));
+            break;
+        }
+        case GrGLCaps::FenceType::kSyncObject: {
+            GL_CALL_RET(sync, FenceSync(GR_GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
+            break;
+        }
     }
     this->setNeedsFlush();
     return sync;
 }
 
-bool GrGLGpu::waitSync(GrGLsync sync, uint64_t timeout, bool flush) {
-    if (this->glCaps().fenceType() == GrGLCaps::FenceType::kNVFence) {
-        GrGLuint nvFence = static_cast<GrGLuint>(reinterpret_cast<intptr_t>(sync));
-        if (!timeout) {
-            if (flush) {
-                this->flush(FlushType::kForce);
-            }
+bool GrGLGpu::testSync(GrGLsync sync) {
+    switch (this->glCaps().fenceType()) {
+        case GrGLCaps::FenceType::kNone:
+            SK_ABORT("Testing sync without sync support.");
+            return false;
+        case GrGLCaps::FenceType::kNVFence: {
+            GrGLuint nvFence = static_cast<GrGLuint>(reinterpret_cast<intptr_t>(sync));
             GrGLboolean result;
             GL_CALL_RET(result, TestFence(nvFence));
             return result == GR_GL_TRUE;
         }
-        // Ignore non-zero timeouts. GL_NV_fence has no timeout functionality.
-        // If this really becomes necessary we could poll TestFence().
-        // FinishFence always flushes so no need to check flush param.
-        GL_CALL(FinishFence(nvFence));
-        return true;
-    } else {
-        GrGLbitfield flags = flush ? GR_GL_SYNC_FLUSH_COMMANDS_BIT : 0;
-        GrGLenum result;
-        GL_CALL_RET(result, ClientWaitSync(sync, flags, timeout));
-        return (GR_GL_CONDITION_SATISFIED == result || GR_GL_ALREADY_SIGNALED == result);
+        case GrGLCaps::FenceType::kSyncObject: {
+            constexpr GrGLbitfield kFlags = 0;
+            GrGLenum result;
+#if defined(__EMSCRIPTEN__)
+            GL_CALL_RET(result, ClientWaitSync(sync, kFlags, 0, 0));
+#else
+            GL_CALL_RET(result, ClientWaitSync(sync, kFlags, 0));
+#endif
+            return (GR_GL_CONDITION_SATISFIED == result || GR_GL_ALREADY_SIGNALED == result);
+        }
     }
+    SkUNREACHABLE;
 }
 
-bool GrGLGpu::waitFence(GrGLsync fence) {
-    if (!this->glCaps().fenceSyncSupport()) {
-        return true;
-    }
-    return this->waitSync(fence, 0, false);
-}
-
-void GrGLGpu::deleteFence(GrGLsync fence) {
-    if (this->glCaps().fenceSyncSupport()) {
-        this->deleteSync(fence);
+void GrGLGpu::deleteSync(GrGLsync sync) {
+    switch (this->glCaps().fenceType()) {
+        case GrGLCaps::FenceType::kNone:
+            SK_ABORT("Deleting sync without sync support.");
+            break;
+        case GrGLCaps::FenceType::kNVFence: {
+            GrGLuint nvFence = SkToUInt(reinterpret_cast<intptr_t>(sync));
+            GL_CALL(DeleteFences(1, &nvFence));
+            break;
+        }
+        case GrGLCaps::FenceType::kSyncObject:
+            GL_CALL(DeleteSync(sync));
+            break;
     }
 }
 
@@ -4389,7 +4420,13 @@ void GrGLGpu::waitSemaphore(GrSemaphore* semaphore) {
     SkASSERT(semaphore);
     GrGLSemaphore* glSem = static_cast<GrGLSemaphore*>(semaphore);
 
+#if defined(__EMSCRIPTEN__)
+    constexpr auto kLo = SkTo<GrGLuint>(GR_GL_TIMEOUT_IGNORED & 0xFFFFFFFFull);
+    constexpr auto kHi = SkTo<GrGLuint>(GR_GL_TIMEOUT_IGNORED >> 32);
+    GL_CALL(WaitSync(glSem->sync(), 0, kLo, kHi));
+#else
     GL_CALL(WaitSync(glSem->sync(), 0, GR_GL_TIMEOUT_IGNORED));
+#endif
 }
 
 void GrGLGpu::checkFinishProcs() {
@@ -4415,15 +4452,6 @@ GrGLenum GrGLGpu::getErrorAndCheckForOOM() {
         this->setOOMed();
     }
     return error;
-}
-
-void GrGLGpu::deleteSync(GrGLsync sync) {
-    if (this->glCaps().fenceType() == GrGLCaps::FenceType::kNVFence) {
-        GrGLuint nvFence = SkToUInt(reinterpret_cast<intptr_t>(sync));
-        GL_CALL(DeleteFences(1, &nvFence));
-    } else {
-        GL_CALL(DeleteSync(sync));
-    }
 }
 
 std::unique_ptr<GrSemaphore> GrGLGpu::prepareTextureForCrossContextUsage(GrTexture* texture) {
