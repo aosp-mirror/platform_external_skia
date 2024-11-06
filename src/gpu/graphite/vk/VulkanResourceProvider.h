@@ -9,6 +9,7 @@
 #define skgpu_graphite_VulkanResourceProvider_DEFINED
 
 #include "src/gpu/graphite/ResourceProvider.h"
+#include "src/gpu/graphite/vk/VulkanGraphicsPipeline.h"
 
 #include "include/gpu/vk/VulkanTypes.h"
 #include "src/core/SkLRUCache.h"
@@ -33,8 +34,10 @@ class VulkanYcbcrConversion;
 
 class VulkanResourceProvider final : public ResourceProvider {
 public:
-    static constexpr size_t kIntrinsicConstantSize = sizeof(float) * 4;
+    static constexpr size_t kIntrinsicConstantSize = sizeof(float) * 8; // float4 + 2xfloat2
     static constexpr size_t kLoadMSAAVertexBufferSize = sizeof(float) * 8; // 4 points of 2 floats
+
+    using UniformBindGroupKey = FixedSizeKey<2 * VulkanGraphicsPipeline::kNumUniformBuffers>;
 
     VulkanResourceProvider(SharedContext* sharedContext,
                            SingleOwner*,
@@ -88,7 +91,7 @@ private:
 
     sk_sp<VulkanDescriptorSet> findOrCreateUniformBuffersDescriptorSet(
             SkSpan<DescriptorData> requestedDescriptors,
-            SkSpan<BindUniformBufferInfo> bindUniformBufferInfo);
+            SkSpan<BindBufferInfo> bindUniformBufferInfo);
 
     sk_sp<VulkanGraphicsPipeline> findOrCreateLoadMSAAPipeline(const RenderPassDesc&);
 
@@ -103,6 +106,7 @@ private:
     VkPipelineCache pipelineCache();
 
     friend class VulkanCommandBuffer;
+    friend class VulkanGraphicsPipeline;
     VkPipelineCache fPipelineCache = VK_NULL_HANDLE;
 
     // Each render pass will need buffer space to record rtAdjust information. To minimize costly
@@ -125,11 +129,8 @@ private:
     VkPipelineShaderStageCreateInfo fMSAALoadShaderStageInfo[2];
     VkPipelineLayout fMSAALoadPipelineLayout = VK_NULL_HANDLE;
 
-    struct UniqueKeyHash {
-        uint32_t operator()(const skgpu::UniqueKey& key) const { return key.hash(); }
-    };
-    using DescriptorSetCache = SkLRUCache<UniqueKey, sk_sp<VulkanDescriptorSet>, UniqueKeyHash>;
-    DescriptorSetCache fUniformBufferDescSetCache;
+    SkLRUCache<UniformBindGroupKey, sk_sp<VulkanDescriptorSet>,
+               UniformBindGroupKey::Hash> fUniformBufferDescSetCache;
 };
 
 } // namespace skgpu::graphite
