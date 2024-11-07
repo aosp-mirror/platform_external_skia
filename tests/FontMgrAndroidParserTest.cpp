@@ -33,9 +33,11 @@
 #include "tools/flags/CommandLineFlags.h"
 
 #ifdef SK_TYPEFACE_FACTORY_FONTATIONS
-#include "src/ports/SkFontScanner_fontations.h"
+#include "include/ports/SkFontScanner_Fontations.h"
 #endif
-#include "src/ports/SkTypeface_FreeType.h"
+#ifdef SK_TYPEFACE_FACTORY_FREETYPE
+#include "include/ports/SkFontScanner_FreeType.h"
+#endif
 
 #include <algorithm>
 #include <climits>
@@ -106,11 +108,11 @@ static void DumpFiles(const FontFamily& fontFamily) {
         SkDebugf("  file (%d) %s#%d", ffi.fWeight, ffi.fFileName.c_str(), ffi.fIndex);
         for (const auto& coordinate : ffi.fVariationDesignPosition) {
             SkDebugf(" @'%c%c%c%c'=%f",
-                        (coordinate.axis >> 24) & 0xFF,
-                        (coordinate.axis >> 16) & 0xFF,
-                        (coordinate.axis >>  8) & 0xFF,
-                        (coordinate.axis      ) & 0xFF,
-                        coordinate.value);
+                     (char)((coordinate.axis >> 24) & 0xFF),
+                     (char)((coordinate.axis >> 16) & 0xFF),
+                     (char)((coordinate.axis >> 8) & 0xFF),
+                     (char)((coordinate.axis) & 0xFF),
+                     coordinate.value);
         }
         SkDebugf("\n");
     }
@@ -198,14 +200,14 @@ static void test_parse_fixed(skiatest::Reporter* reporter) {
 
 #ifdef SK_TYPEFACE_FACTORY_FONTATIONS
 #define DEF_TEST_FONTATIONS(name, reporter) \
-    DEF_TEST(name##Fontations, reporter) { name(reporter, std::make_unique<SkFontScanner_Fontations>()); }
+    DEF_TEST(name##Fontations, reporter) { name(reporter, SkFontScanner_Make_Fontations()); }
 #else
 #define DEF_TEST_FONTATIONS(name, reporter)
 #endif
 
 #define DEF_TEST_SCANNERS(name, reporter) \
     static void name(skiatest::Reporter*, std::unique_ptr<SkFontScanner>);                     \
-    DEF_TEST(name, reporter) { name(reporter, std::make_unique<SkFontScanner_FreeType>()); }   \
+    DEF_TEST(name, reporter) { name(reporter, SkFontScanner_Make_FreeType()); }                \
     DEF_TEST_FONTATIONS(name, reporter)                                                        \
     void name(skiatest::Reporter* reporter, std::unique_ptr<SkFontScanner> fs)
 

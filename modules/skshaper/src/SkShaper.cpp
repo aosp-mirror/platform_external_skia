@@ -13,7 +13,6 @@
 #include "include/private/base/SkTFitsIn.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "src/base/SkUTF.h"
-
 #include <limits.h>
 #include <algorithm>
 #include <cstring>
@@ -21,62 +20,62 @@
 #include <string>
 #include <utility>
 
-#ifdef SK_SHAPER_UNICODE_AVAILABLE
-#include "modules/skunicode/include/SkUnicode.h"
+#if !defined(SK_DISABLE_LEGACY_SKSHAPER_FUNCTIONS)
+
+#if defined(SK_SHAPER_HARFBUZZ_AVAILABLE)
+#include "modules/skshaper/include/SkShaper_harfbuzz.h"
 #endif
 
+#if defined(SK_SHAPER_CORETEXT_AVAILABLE)
+#include "modules/skshaper/include/SkShaper_coretext.h"
+#endif
+
+#endif  // !defined(SK_DISABLE_LEGACY_SKSHAPER_FUNCTIONS)
+
+#if !defined(SK_DISABLE_LEGACY_SKSHAPER_FUNCTIONS)
 std::unique_ptr<SkShaper> SkShaper::Make(sk_sp<SkFontMgr> fallback) {
-#ifdef SK_SHAPER_HARFBUZZ_AVAILABLE
-    std::unique_ptr<SkShaper> shaper = SkShaper::MakeShaperDrivenWrapper(std::move(fallback));
+#if defined(SK_SHAPER_HARFBUZZ_AVAILABLE) && defined(SK_SHAPER_UNICODE_AVAILABLE)
+    std::unique_ptr<SkShaper> shaper = MakeShapeThenWrap(std::move(fallback));
     if (shaper) {
         return shaper;
     }
 #elif defined(SK_SHAPER_CORETEXT_AVAILABLE)
-    if (auto shaper = SkShaper::MakeCoreText()) {
+    if (auto shaper = SkShapers::CT::CoreText()) {
         return shaper;
     }
 #endif
-#if defined(SK_SHAPER_PRIMITIVE_AVAILABLE)
-    return SkShaper::MakePrimitive();
-#else
-    return nullptr;
-#endif
+    return SkShapers::Primitive::PrimitiveText();
 }
 
 void SkShaper::PurgeCaches() {
-#ifdef SK_SHAPER_HARFBUZZ_AVAILABLE
-    PurgeHarfBuzzCache();
+#if defined(SK_SHAPER_HARFBUZZ_AVAILABLE) && defined(SK_SHAPER_UNICODE_AVAILABLE)
+    SkShapers::HB::PurgeCaches();
 #endif
 }
 
 std::unique_ptr<SkShaper::BiDiRunIterator>
 SkShaper::MakeBiDiRunIterator(const char* utf8, size_t utf8Bytes, uint8_t bidiLevel) {
-#ifdef SK_SHAPER_UNICODE_AVAILABLE
-    if (const auto unicode = SkUnicode::Make()) {
-        std::unique_ptr<SkShaper::BiDiRunIterator> bidi =
-            SkShaper::MakeSkUnicodeBidiRunIterator(unicode.get(),
-                                                   utf8,
-                                                   utf8Bytes,
-                                                   bidiLevel);
-        if (bidi) {
-            return bidi;
-        }
-    }
+#if defined(SK_SHAPER_UNICODE_AVAILABLE)
+      std::unique_ptr<SkShaper::BiDiRunIterator> bidi = MakeIcuBiDiRunIterator(utf8, utf8Bytes, bidiLevel);
+      if (bidi) {
+          return bidi;
+      }
 #endif
     return std::make_unique<SkShaper::TrivialBiDiRunIterator>(bidiLevel, utf8Bytes);
 }
 
 std::unique_ptr<SkShaper::ScriptRunIterator>
 SkShaper::MakeScriptRunIterator(const char* utf8, size_t utf8Bytes, SkFourByteTag scriptTag) {
-#if defined(SK_SHAPER_HARFBUZZ_AVAILABLE)
+#if defined(SK_SHAPER_HARFBUZZ_AVAILABLE) && defined(SK_SHAPER_UNICODE_AVAILABLE)
     std::unique_ptr<SkShaper::ScriptRunIterator> script =
-        SkShaper::MakeSkUnicodeHbScriptRunIterator(utf8, utf8Bytes, scriptTag);
+            SkShapers::HB::ScriptRunIterator(utf8, utf8Bytes, scriptTag);
     if (script) {
         return script;
     }
 #endif
     return std::make_unique<SkShaper::TrivialScriptRunIterator>(scriptTag, utf8Bytes);
 }
+#endif  // !defined(SK_DISABLE_LEGACY_SKSHAPER_FUNCTIONS)
 
 SkShaper::SkShaper() {}
 SkShaper::~SkShaper() {}

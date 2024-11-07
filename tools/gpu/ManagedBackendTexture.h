@@ -11,8 +11,8 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkYUVAInfo.h"
 #ifdef SK_GANESH
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #endif
 #ifdef SK_GRAPHITE
 #include "include/gpu/graphite/BackendTexture.h"
@@ -162,6 +162,20 @@ public:
                                                         skgpu::Mipmapped,
                                                         skgpu::Renderable,
                                                         skgpu::Protected = skgpu::Protected::kNo);
+
+    static sk_sp<ManagedGraphiteTexture> MakeMipmappedFromPixmaps(
+            Recorder*,
+            SkSpan<const SkPixmap> levels,
+            skgpu::Renderable,
+            skgpu::Protected = skgpu::Protected::kNo);
+
+    static sk_sp<ManagedGraphiteTexture> MakeFromCompressedData(
+            Recorder*,
+            SkISize dimmensions,
+            SkTextureCompressionType,
+            sk_sp<SkData>,
+            skgpu::Mipmapped,
+            skgpu::Protected = skgpu::Protected::kNo);
 
     /** finished and image/surface release procs */
     static void FinishedProc(void* context, skgpu::CallbackResult);

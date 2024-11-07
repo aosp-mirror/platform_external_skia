@@ -53,13 +53,13 @@
 #include "tools/fonts/FontToolUtils.h"
 
 #if defined(SK_GANESH)
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "tools/gpu/GrContextFactory.h"
 #endif
 
 #ifdef SK_GL
-#include "include/gpu/gl/GrGLFunctions.h"
+#include "include/gpu/ganesh/gl/GrGLFunctions.h"
 #include "src/gpu/ganesh/gl/GrGLGpu.h"
 #include "src/gpu/ganesh/gl/GrGLUtil.h"
 #endif
@@ -1542,11 +1542,16 @@ DEF_FUZZ(RasterN32CanvasViaSerialization, fuzz) {
 }
 
 DEF_FUZZ(ImageFilter, fuzz) {
+    SkBitmap bitmap;
+    if (!bitmap.tryAllocN32Pixels(256, 256)) {
+        SkDEBUGF("Could not allocate 256x256 bitmap in ImageFilter");
+        return;
+    }
+
     auto fil = make_fuzz_imageFilter(fuzz, 20);
 
     SkPaint paint;
     paint.setImageFilter(fil);
-    SkBitmap bitmap;
     SkCanvas canvas(bitmap);
     canvas.saveLayer(SkRect::MakeWH(500, 500), &paint);
 }

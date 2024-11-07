@@ -14,8 +14,8 @@
 #include "include/core/SkYUVAInfo.h"
 #include "include/core/SkYUVAPixmaps.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
 #include "include/gpu/ganesh/SkImageGanesh.h"
 #include "src/base/SkScopeExit.h"
 #include "src/core/SkAutoPixmapStorage.h"
@@ -166,7 +166,9 @@ protected:
             graphiteContext->submit();
             while (!asyncContext->fCalled) {
                 graphiteContext->checkAsyncWorkCompletion();
-                this->graphiteTestContext()->tick();
+                if (this->graphiteTestContext()) {
+                    this->graphiteTestContext()->tick();
+                }
             }
 #endif
         } else {
@@ -254,7 +256,9 @@ protected:
             graphiteContext->submit();
             while (!asyncContext.fCalled) {
                 graphiteContext->checkAsyncWorkCompletion();
-                graphiteTestContext()->tick();
+                if (this->graphiteTestContext()) {
+                    this->graphiteTestContext()->tick();
+                }
             }
 #endif
         } else {

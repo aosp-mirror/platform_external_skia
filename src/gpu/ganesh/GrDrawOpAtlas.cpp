@@ -7,19 +7,29 @@
 
 #include "src/gpu/ganesh/GrDrawOpAtlas.h"
 
-#include <memory>
-
+#include "include/core/SkRect.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/ganesh/GrTypes.h"
+#include "include/private/base/SkMath.h"
+#include "include/private/base/SkPoint_impl.h"
+#include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTPin.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/base/SkMathPriv.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/Swizzle.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
 #include "src/gpu/ganesh/GrCaps.h"
-#include "src/gpu/ganesh/GrOnFlushResourceProvider.h"
-#include "src/gpu/ganesh/GrOpFlushState.h"
 #include "src/gpu/ganesh/GrProxyProvider.h"
-#include "src/gpu/ganesh/GrResourceProvider.h"
-#include "src/gpu/ganesh/GrResourceProviderPriv.h"
-#include "src/gpu/ganesh/GrSurfaceProxyPriv.h"
-#include "src/gpu/ganesh/GrTexture.h"
-#include "src/gpu/ganesh/GrTracing.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+
+#include <algorithm>
+#include <functional>
+#include <memory>
+#include <tuple>
+#include <utility>
 
 using namespace skia_private;
 
@@ -355,7 +365,7 @@ void GrDrawOpAtlas::compact(AtlasToken startTokenForNextFlush) {
         // if there are any in the first pages that the last page can safely upload to.
         for (uint32_t pageIndex = 0; pageIndex < lastPageIndex; ++pageIndex) {
             if constexpr (kDumpAtlasData) {
-                SkDebugf("page %d: ", pageIndex);
+                SkDebugf("page %u: ", pageIndex);
             }
 
             plotIter.init(fPages[pageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
@@ -392,7 +402,7 @@ void GrDrawOpAtlas::compact(AtlasToken startTokenForNextFlush) {
         plotIter.init(fPages[lastPageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
         unsigned int usedPlots = 0;
         if constexpr (kDumpAtlasData) {
-            SkDebugf("page %d: ", lastPageIndex);
+            SkDebugf("page %u: ", lastPageIndex);
         }
 
         while (Plot* plot = plotIter.get()) {
@@ -448,7 +458,7 @@ void GrDrawOpAtlas::compact(AtlasToken startTokenForNextFlush) {
         // If none of the plots in the last page have been used recently, delete it.
         if (!usedPlots) {
             if constexpr (kDumpAtlasData) {
-                SkDebugf("delete %d\n", fNumActivePages-1);
+                SkDebugf("delete %u\n", fNumActivePages - 1);
             }
 
             this->deactivateLastPage();
@@ -521,7 +531,7 @@ bool GrDrawOpAtlas::activateNewPage(GrResourceProvider* resourceProvider) {
     }
 
     if constexpr (kDumpAtlasData) {
-        SkDebugf("activated page#: %d\n", fNumActivePages);
+        SkDebugf("activated page#: %u\n", fNumActivePages);
     }
 
     ++fNumActivePages;

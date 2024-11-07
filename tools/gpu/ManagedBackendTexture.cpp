@@ -235,6 +235,59 @@ sk_sp<ManagedGraphiteTexture> ManagedGraphiteTexture::MakeFromPixmap(Recorder* r
     return mbet;
 }
 
+sk_sp<ManagedGraphiteTexture> ManagedGraphiteTexture::MakeMipmappedFromPixmaps(
+        Recorder* recorder,
+        SkSpan<const SkPixmap> levels,
+        skgpu::Renderable renderable,
+        skgpu::Protected isProtected) {
+    if (levels.empty()) {
+        return nullptr;
+    }
+    sk_sp<ManagedGraphiteTexture> mbet = MakeUnInit(recorder,
+                                                    levels[0].info(),
+                                                    Mipmapped::kYes,
+                                                    renderable,
+                                                    isProtected);
+    if (!recorder->updateBackendTexture(mbet->fTexture,
+                                        levels.data(),
+                                        static_cast<int>(levels.size()))) {
+        return nullptr;
+    }
+
+    return mbet;
+}
+
+sk_sp<ManagedGraphiteTexture> ManagedGraphiteTexture::MakeFromCompressedData(
+        Recorder* recorder,
+        SkISize dimensions,
+        SkTextureCompressionType compression,
+        sk_sp<SkData> src,
+        skgpu::Mipmapped mipmapped,
+        skgpu::Protected isProtected) {
+    sk_sp<ManagedGraphiteTexture> mbet(new ManagedGraphiteTexture);
+    mbet->fContext = recorder->priv().context();
+    const skgpu::graphite::Caps* caps = recorder->priv().caps();
+
+    skgpu::graphite::TextureInfo info = caps->getDefaultCompressedTextureInfo(compression,
+                                                                              mipmapped,
+                                                                              isProtected);
+
+    mbet->fTexture = recorder->createBackendTexture(dimensions, info);
+    if (!mbet->fTexture.isValid()) {
+        return nullptr;
+    }
+
+    recorder->addFinishInfo({mbet->releaseContext(), FinishedProc});
+
+    if (!recorder->updateCompressedBackendTexture(mbet->fTexture,
+                                                  src->data(),
+                                                  src->size())) {
+        return nullptr;
+    }
+
+    return mbet;
+}
+
 }  // namespace sk_gpu_test
 
 #endif  // SK_GRAPHITE

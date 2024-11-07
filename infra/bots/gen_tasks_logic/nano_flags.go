@@ -170,10 +170,16 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 					configs = []string{"grdawn_gles"}
 				}
 
+				if b.extraConfig("TintIR") {
+					args = append(args, "--useTintIR")
+				}
 			}
 			if b.extraConfig("Native") {
 				if b.extraConfig("Metal") {
 					configs = []string{"grmtl"}
+				}
+				if b.extraConfig("Vulkan") {
+					configs = []string{"grvk"}
 				}
 			}
 		}
@@ -259,6 +265,11 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 		match = append(match, "~top25desk_ebay_com.skp_1.1")
 		match = append(match, "~top25desk_ebay.skp_1.1")
 	}
+	if b.gpu("Tegra3") {
+		// skbug.com/338376730
+		match = append(match, "~GM_matrixconvolution_bigger")
+		match = append(match, "~GM_matrixconvolution_biggest")
+	}
 	if b.extraConfig("Vulkan") && b.gpu("GTX660") {
 		// skia:8523 skia:9271
 		match = append(match, "~compositing_images")
@@ -272,8 +283,8 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 		match = append(match, "~^path_text$")
 		match = append(match, "~^path_text_clipped_uncached$")
 	}
-	if b.model("Pixel3") && b.extraConfig("Vulkan") {
-		// skia:9972
+	if b.model("Pixel4XL") && b.extraConfig("Vulkan") {
+		// skia:9413?
 		match = append(match, "~^path_text_clipped_uncached$")
 	}
 

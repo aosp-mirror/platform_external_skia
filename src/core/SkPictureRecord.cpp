@@ -18,6 +18,7 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
+#include "include/core/SkTileMode.h"
 #include "include/private/base/SkPoint_impl.h"
 #include "include/private/base/SkTo.h"
 #include "include/private/chromium/Slug.h"
@@ -138,6 +139,10 @@ void SkPictureRecord::recordSaveLayer(const SaveLayerRec& rec) {
         size += sizeof(uint32_t);  // count
         size += sizeof(uint32_t) * filterCount;  // N (paint) indices
     }
+    if (rec.fBackdropTileMode != SkTileMode::kClamp) {
+        flatFlags |= SAVELAYERREC_HAS_BACKDROP_TILEMODE;
+        size += sizeof(uint32_t); // SkTileMode
+    }
 
     const size_t initialOffset = this->addDraw(SAVE_LAYER_SAVELAYERREC, &size);
     this->addInt(flatFlags);
@@ -167,6 +172,9 @@ void SkPictureRecord::recordSaveLayer(const SaveLayerRec& rec) {
             paint.setImageFilter(rec.fFilters[i]);
             this->addPaint(paint);
         }
+    }
+    if (rec.fBackdropTileMode != SkTileMode::kClamp) {
+        this->addInt((int) rec.fBackdropTileMode);
     }
     this->validate(initialOffset, size);
 }
@@ -600,11 +608,12 @@ void SkPictureRecord::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScala
     this->validate(initialOffset, size);
 }
 
-void SkPictureRecord::onDrawSlug(const sktext::gpu::Slug* slug) {
-    // op + slug id
-    size_t size = 2 * kUInt32Size;
+void SkPictureRecord::onDrawSlug(const sktext::gpu::Slug* slug, const SkPaint& paint) {
+    // op + paint index + slug id
+    size_t size = 3 * kUInt32Size;
     size_t initialOffset = this->addDraw(DRAW_SLUG, &size);
 
+    this->addPaint(paint);
     this->addSlug(slug);
     this->validate(initialOffset, size);
 }

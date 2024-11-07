@@ -21,6 +21,7 @@
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
@@ -75,7 +76,7 @@ struct Vector {
     Vector(SkScalar x, SkScalar y) : fX(x), fY(y) {}
     explicit Vector(const SkVector& v) : fX(v.fX), fY(v.fY) {}
 
-    bool isFinite() const { return SkScalarsAreFinite(fX, fY); }
+    bool isFinite() const { return SkIsFinite(fX, fY); }
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -721,8 +722,8 @@ public:
     // on the context's desired output. 'image' must not be null.
     static FilterResult MakeFromImage(const Context& ctx,
                                       sk_sp<SkImage> image,
-                                      const SkRect& srcRect,
-                                      const ParameterSpace<SkRect>& dstRect,
+                                      SkRect srcRect,
+                                      ParameterSpace<SkRect> dstRect,
                                       const SkSamplingOptions& sampling);
 
     // Bilinear is used as the default because it can be downgraded to nearest-neighbor when the
@@ -847,6 +848,8 @@ private:
     FilterResult subset(const LayerSpace<SkIPoint>& knownOrigin,
                         const LayerSpace<SkIRect>& subsetBounds,
                         bool clampSrcIfDisjoint=false) const;
+    // Convenient version of subset() that insets a single pixel.
+    FilterResult insetByPixel() const;
 
     enum class BoundsAnalysis : int {
         // The image can be drawn directly, without needing to apply tiling, or handling how any
@@ -877,7 +880,8 @@ private:
     enum class BoundsScope : int {
         kDeferred,        // The bounds analysis won't be used for any rendering yet
         kCanDrawDirectly, // The rendering may draw the image directly if analysis allows it
-        kShaderOnly       // The rendering will always use a filling shader, e.g. drawPaint()
+        kShaderOnly,      // The rendering will always use a filling shader, e.g. drawPaint()
+        kRescale          // The rendering is controlled by rescaling logic, so ignores decal size
     };
 
     // Determine what effects are visible based on the target 'dstBounds' and extra transform that
@@ -914,7 +918,6 @@ private:
     FilterResult rescale(const Context& ctx,
                          const LayerSpace<SkSize>& scale,
                          bool enforceDecal) const;
-
     // Draw directly to the device, which draws the same image as produced by resolve() but can be
     // useful if multiple operations need to be performed on the canvas.
     //
@@ -1090,6 +1093,10 @@ public:
 
     // TODO: Once all Backends provide a blur engine, maybe just have Backend extend it.
     virtual const SkBlurEngine* getBlurEngine() const = 0;
+
+    // TODO: Can be removed once all blur engines rely on FilterResult::rescale and not their own
+    // rescale implementations.
+    virtual bool useLegacyFilterResultBlur() const { return true; }
 
     // Properties controlling the pixel data for offscreen surfaces rendered to during filtering.
     const SkSurfaceProps& surfaceProps() const { return fSurfaceProps; }

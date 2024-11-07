@@ -7,11 +7,28 @@
 
 #include "src/gpu/graphite/render/PerEdgeAAQuadRenderStep.h"
 
+#include "include/core/SkM44.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "src/base/SkEnumBitMask.h"
 #include "src/base/SkVx.h"
-#include "src/core/SkRRectPriv.h"
+#include "src/core/SkSLTypeShared.h"
+#include "src/gpu/BufferWriter.h"
+#include "src/gpu/graphite/Attribute.h"
+#include "src/gpu/graphite/BufferManager.h"
+#include "src/gpu/graphite/DrawOrder.h"
 #include "src/gpu/graphite/DrawParams.h"
+#include "src/gpu/graphite/DrawTypes.h"
 #include "src/gpu/graphite/DrawWriter.h"
+#include "src/gpu/graphite/geom/EdgeAAQuad.h"
+#include "src/gpu/graphite/geom/Geometry.h"
+#include "src/gpu/graphite/geom/Rect.h"
+#include "src/gpu/graphite/geom/Transform_graphite.h"
 #include "src/gpu/graphite/render/CommonDepthStencilSettings.h"
+
+#include <cstdint>
+#include <string_view>
 
 // This RenderStep is specialized to draw filled rectangles with per-edge AA.
 //
@@ -145,7 +162,9 @@ static void write_index_buffer(VertexWriter writer) {
         kTL+3,kTR+3,kBL+3,kBR+3
     };
 
-    writer << kIndices;
+    if (writer) {
+        writer << kIndices;
+    } // otherwise static buffer creation failed, so do nothing; Context initialization will fail.
 }
 
 static void write_vertex_buffer(VertexWriter writer) {
@@ -165,16 +184,19 @@ static void write_vertex_buffer(VertexWriter writer) {
         { {0.0f, 0.0f} },
     };
 
-    writer << kCornerTemplate  // TL
-           << kCornerTemplate  // TR
-           << kCornerTemplate  // BR
-           << kCornerTemplate; // BL
+    if (writer) {
+        writer << kCornerTemplate  // TL
+               << kCornerTemplate  // TR
+               << kCornerTemplate  // BR
+               << kCornerTemplate; // BL
+    } // otherwise static buffer creation failed, so do nothing; Context initialization will fail.
 }
 
 PerEdgeAAQuadRenderStep::PerEdgeAAQuadRenderStep(StaticBufferManager* bufferManager)
         : RenderStep("PerEdgeAAQuadRenderStep",
                      "",
-                     Flags::kPerformsShading | Flags::kEmitsCoverage | Flags::kOutsetBoundsForAA,
+                     Flags::kPerformsShading | Flags::kEmitsCoverage | Flags::kOutsetBoundsForAA |
+                     Flags::kUseNonAAInnerFill,
                      /*uniforms=*/{},
                      PrimitiveType::kTriangleStrip,
                      kDirectDepthGreaterPass,
@@ -189,7 +211,7 @@ PerEdgeAAQuadRenderStep::PerEdgeAAQuadRenderStep(StaticBufferManager* bufferMana
                              // TODO: pack depth and ssbo index into one 32-bit attribute, if we can
                              // go without needing both render step and paint ssbo index attributes.
                              {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
-                             {"ssboIndices", VertexAttribType::kUShort2, SkSLType::kUShort2},
+                             {"ssboIndices", VertexAttribType::kUInt2, SkSLType::kUInt2},
 
                              {"mat0", VertexAttribType::kFloat3, SkSLType::kFloat3},
                              {"mat1", VertexAttribType::kFloat3, SkSLType::kFloat3},
@@ -232,7 +254,7 @@ const char* PerEdgeAAQuadRenderStep::fragmentCoverageSkSL() const {
 
 void PerEdgeAAQuadRenderStep::writeVertices(DrawWriter* writer,
                                            const DrawParams& params,
-                                           skvx::ushort2 ssboIndices) const {
+                                           skvx::uint2 ssboIndices) const {
     SkASSERT(params.geometry().isEdgeAAQuad());
     const EdgeAAQuad& quad = params.geometry().edgeAAQuad();
 

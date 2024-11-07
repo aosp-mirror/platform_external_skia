@@ -7,6 +7,8 @@
 
 #include "src/gpu/graphite/vk/VulkanRenderPass.h"
 
+#include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Texture.h"
 #include "src/gpu/graphite/vk/VulkanCommandBuffer.h"
 #include "src/gpu/graphite/vk/VulkanGraphiteUtilsPriv.h"
@@ -50,7 +52,7 @@ void add_attachment_description_info_to_key(ResourceKey::Builder& builder,
                                             LoadOp loadOp,
                                             StoreOp storeOp) {
     VulkanTextureInfo vkTexInfo;
-    if (textureInfo.isValid() && textureInfo.getVulkanTextureInfo(&vkTexInfo)) {
+    if (textureInfo.isValid() && TextureInfos::GetVulkanTextureInfo(textureInfo, &vkTexInfo)) {
         builder[builderIdx++] = vkTexInfo.fFormat;
         builder[builderIdx++] = vkTexInfo.fSampleCount;
         SkASSERT(sizeof(loadOp)  < (1u << 8));
@@ -286,7 +288,8 @@ sk_sp<VulkanRenderPass> VulkanRenderPass::MakeRenderPass(const VulkanSharedConte
     bool loadMSAAFromResolve = false;
     if (hasColorAttachment) {
         VulkanTextureInfo colorAttachTexInfo;
-        colorAttachmentTextureInfo.getVulkanTextureInfo(&colorAttachTexInfo);
+        SkAssertResult(TextureInfos::GetVulkanTextureInfo(colorAttachmentTextureInfo,
+                                                          &colorAttachTexInfo));
         auto& colorAttachDesc = renderPassDesc.fColorAttachment;
 
         colorRef.attachment = attachmentDescs.size();
@@ -306,7 +309,8 @@ sk_sp<VulkanRenderPass> VulkanRenderPass::MakeRenderPass(const VulkanSharedConte
             loadMSAAFromResolve = renderPassDesc.fColorResolveAttachment.fLoadOp == LoadOp::kLoad;
             SkASSERT(renderPassDesc.fColorResolveAttachment.fStoreOp == StoreOp::kStore);
             VulkanTextureInfo resolveAttachTexInfo;
-            colorResolveAttachmentTextureInfo.getVulkanTextureInfo(&resolveAttachTexInfo);
+            SkAssertResult(TextureInfos::GetVulkanTextureInfo(colorResolveAttachmentTextureInfo,
+                                                              &resolveAttachTexInfo));
             auto& resolveAttachDesc = renderPassDesc.fColorResolveAttachment;
 
             resolveRef.attachment = attachmentDescs.size();
@@ -336,7 +340,8 @@ sk_sp<VulkanRenderPass> VulkanRenderPass::MakeRenderPass(const VulkanSharedConte
 
     if (hasDepthStencilAttachment) {
         VulkanTextureInfo depthStencilTexInfo;
-        depthStencilAttachmentTextureInfo.getVulkanTextureInfo(&depthStencilTexInfo);
+        SkAssertResult(TextureInfos::GetVulkanTextureInfo(depthStencilAttachmentTextureInfo,
+                                                          &depthStencilTexInfo));
         auto& depthStencilAttachDesc = renderPassDesc.fDepthStencilAttachment;
 
         depthStencilRef.attachment = attachmentDescs.size();
@@ -417,10 +422,9 @@ sk_sp<VulkanRenderPass> VulkanRenderPass::MakeRenderPass(const VulkanSharedConte
     renderPassInfo.pAttachments = attachmentDescs.begin();
 
     VkResult result;
-    VULKAN_CALL_RESULT(context->interface(), result, CreateRenderPass(context->device(),
-                                                                      &renderPassInfo,
-                                                                      nullptr,
-                                                                      &renderPass));
+    VULKAN_CALL_RESULT(context,
+                       result,
+                       CreateRenderPass(context->device(), &renderPassInfo, nullptr, &renderPass));
     if (result != VK_SUCCESS) {
         return nullptr;
     }
@@ -437,12 +441,10 @@ VulkanRenderPass::VulkanRenderPass(const VulkanSharedContext* context,
         : Resource(context,
                    Ownership::kOwned,
                    skgpu::Budgeted::kYes,
-                   /*gpuMemorySize=*/0,
-                   /*label=*/"VulkanRenderPass")
+                   /*gpuMemorySize=*/0)
         , fSharedContext(context)
-        , fRenderPass (renderPass)
-        , fGranularity (granularity) {
-}
+        , fRenderPass(renderPass)
+        , fGranularity(granularity) {}
 
 void VulkanRenderPass::freeGpuData() {
     VULKAN_CALL(fSharedContext->interface(),

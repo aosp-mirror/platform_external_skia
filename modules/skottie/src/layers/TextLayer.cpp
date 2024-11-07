@@ -309,7 +309,7 @@ bool AnimationBuilder::resolveEmbeddedTypefaces(const skjson::ArrayValue& jchars
     }
 
     // Final pass to commit custom typefaces.
-    auto has_unresolved = false;
+    bool has_unresolved = false;
     std::vector<std::unique_ptr<CustomFont>> custom_fonts;
     fFonts.foreach([&has_unresolved, &custom_fonts](const SkString&, FontInfo* finfo) {
         if (finfo->fTypeface) {
@@ -342,7 +342,8 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachTextLayer(const skjson::ObjectVa
                                                        this,
                                                        fFontMgr,
                                                        fCustomGlyphMapper,
-                                                       fLogger);
+                                                       fLogger,
+                                                       fShapingFactory);
 }
 
 const AnimationBuilder::FontInfo* AnimationBuilder::findFont(const SkString& font_name) const {

@@ -97,13 +97,14 @@ DRAW(Restore, restore())
 DRAW(Save, save())
 DRAW(SaveLayer,
      saveLayer(SkCanvasPriv::ScaledBackdropLayer(
-             r.bounds,
-             r.paint,
-             r.backdrop.get(),
-             r.backdropScale,
-             r.saveLayerFlags,
-             SkCanvas::FilterSpan{const_cast<sk_sp<SkImageFilter>*>(r.filters.data()),
-                                  r.filters.size()})))
+               r.bounds,
+               r.paint,
+               r.backdrop.get(),
+               r.backdropScale,
+               r.backdropTileMode,
+               r.saveLayerFlags,
+               SkCanvas::FilterSpan{const_cast<sk_sp<SkImageFilter>*>(r.filters.data()),
+                                    r.filters.size()})))
 
 template <> void Draw::draw(const SaveBehind& r) {
     SkCanvasPriv::SaveBehind(fCanvas, r.subset);
@@ -157,7 +158,7 @@ DRAW(DrawRRect, drawRRect(r.rrect, r.paint))
 DRAW(DrawRect, drawRect(r.rect, r.paint))
 DRAW(DrawRegion, drawRegion(r.region, r.paint))
 DRAW(DrawTextBlob, drawTextBlob(r.blob.get(), r.x, r.y, r.paint))
-DRAW(DrawSlug, drawSlug(r.slug.get()))
+DRAW(DrawSlug, drawSlug(r.slug.get(), r.paint))
 DRAW(DrawAtlas, drawAtlas(r.atlas.get(), r.xforms, r.texs, r.colors, r.count, r.mode, r.sampling,
                           r.cull, r.paint))
 DRAW(DrawVertices, drawVertices(r.vertices, r.bmode, r.paint))
@@ -491,7 +492,7 @@ private:
 
     Bounds bounds(const DrawSlug& op) const {
         SkRect dst = op.slug->sourceBoundsWithOrigin();
-        return this->adjustAndMap(dst, &op.slug->initialPaint());
+        return this->adjustAndMap(dst, &op.paint);
     }
 
     Bounds bounds(const DrawDrawable& op) const {

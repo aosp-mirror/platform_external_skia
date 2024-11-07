@@ -10,7 +10,9 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkTileMode.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkNoncopyable.h"
 
@@ -22,12 +24,6 @@ class SkMatrix;
 class SkReadBuffer;
 struct SkRect;
 class SkWriteBuffer;
-
-#if defined(GRAPHITE_TEST_UTILS)
-namespace skgpu::graphite {
-    class TextureProxy;
-}
-#endif
 
 class SkAutoCanvasMatrixPaint : SkNoncopyable {
 public:
@@ -76,10 +72,21 @@ public:
                                                       const SkPaint* paint,
                                                       const SkImageFilter* backdrop,
                                                       SkScalar backdropScale,
+                                                      SkTileMode backdropTileMode,
                                                       SkCanvas::SaveLayerFlags saveLayerFlags,
                                                       SkCanvas::FilterSpan filters = {}) {
-        return SkCanvas::SaveLayerRec(
-                bounds, paint, backdrop, backdropScale, saveLayerFlags, filters);
+        return SkCanvas::SaveLayerRec(bounds, paint, backdrop, nullptr, backdropScale,
+                                      backdropTileMode, saveLayerFlags, filters);
+    }
+
+    static SkCanvas::SaveLayerRec ScaledBackdropLayer(const SkRect* bounds,
+                                                      const SkPaint* paint,
+                                                      const SkImageFilter* backdrop,
+                                                      SkScalar backdropScale,
+                                                      SkCanvas::SaveLayerFlags saveLayerFlags,
+                                                      SkCanvas::FilterSpan filters = {}) {
+        return ScaledBackdropLayer(bounds, paint, backdrop, backdropScale, SkTileMode::kClamp,
+                                   saveLayerFlags, filters);
     }
 
     static SkScalar GetBackdropScaleFactor(const SkCanvas::SaveLayerRec& rec) {
@@ -136,16 +143,19 @@ public:
 
     AutoLayerForImageFilter(const AutoLayerForImageFilter&) = delete;
     AutoLayerForImageFilter& operator=(const AutoLayerForImageFilter&) = delete;
-    AutoLayerForImageFilter(AutoLayerForImageFilter&&) = default;
-    AutoLayerForImageFilter& operator=(AutoLayerForImageFilter&&) = default;
+    AutoLayerForImageFilter(AutoLayerForImageFilter&&);
+    AutoLayerForImageFilter& operator=(AutoLayerForImageFilter&&);
 
     ~AutoLayerForImageFilter();
 
     const SkPaint& paint() const { return fPaint; }
 
+    // This is public so that a canvas can attempt to specially handle mask filters, specifically
+    // for blurs, and then if the attempt fails fall back on a regular draw with the same autolayer.
+    void addMaskFilterLayer(const SkRect* drawBounds);
+
 private:
     void addImageFilterLayer(const SkRect* drawBounds);
-    void addMaskFilterLayer(const SkRect* drawBounds);
 
     void addLayer(const SkPaint& restorePaint, const SkRect* drawBounds, bool coverageOnly);
 

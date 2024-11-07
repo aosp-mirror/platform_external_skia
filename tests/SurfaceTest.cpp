@@ -35,9 +35,9 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkColorMatrix.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/SkImageGanesh.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/SkColorData.h"
@@ -878,7 +878,7 @@ static void test_surface_context_clear(skiatest::Reporter* reporter,
                     msg = "SkSurface should have cleared the render target";
                 }
                 ERRORF(reporter,
-                       "%s but read 0x%08x (instead of 0x%08x) at %x,%d", msg.c_str(), pixel,
+                       "%s but read 0x%08X (instead of 0x%08X) at %d,%d", msg.c_str(), pixel,
                        expectedValue, x, y);
                 return;
             }
@@ -1283,8 +1283,8 @@ DEF_TEST(surface_image_unity, reporter) {
             if ((false)) { // change to true to document the differences
                 if (!img) {
                     SkDebugf("image failed: [%08X %08X] %14s %s\n",
-                             info.width(),
-                             info.height(),
+                             (uint32_t)info.width(),
+                             (uint32_t)info.height(),
                              ToolUtils::colortype_name(info.colorType()),
                              ToolUtils::alphatype_name(info.alphaType()));
                     return;

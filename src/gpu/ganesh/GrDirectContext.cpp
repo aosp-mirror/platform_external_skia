@@ -4,9 +4,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
-
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
@@ -15,9 +13,9 @@
 #include "include/core/SkTextureCompressionType.h"
 #include "include/core/SkTraceMemoryDump.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSemaphore.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContextThreadSafeProxy.h"
+#include "include/gpu/ganesh/GrBackendSemaphore.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrContextThreadSafeProxy.h"
 #include "include/private/base/SingleOwner.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTemplates.h"
@@ -27,6 +25,7 @@
 #include "src/core/SkMipmap.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/DataUtils.h"
 #include "src/gpu/GpuTypesPriv.h"
 #include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/Swizzle.h"
@@ -36,7 +35,6 @@
 #include "src/gpu/ganesh/GrClientMappedBufferManager.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrContextThreadSafeProxyPriv.h"
-#include "src/gpu/ganesh/GrDataUtils.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrDrawOpAtlas.h"
 #include "src/gpu/ganesh/GrDrawingManager.h"
@@ -46,6 +44,7 @@
 #include "src/gpu/ganesh/GrRenderTargetProxy.h"
 #include "src/gpu/ganesh/GrResourceCache.h"
 #include "src/gpu/ganesh/GrResourceProvider.h"
+#include "src/gpu/ganesh/GrSemaphore.h"  // IWYU pragma: keep
 #include "src/gpu/ganesh/GrShaderCaps.h"
 #include "src/gpu/ganesh/GrSurfaceProxy.h"
 #include "src/gpu/ganesh/GrSurfaceProxyView.h"
@@ -67,12 +66,6 @@
 #include <memory>
 #include <utility>
 
-class GrSemaphore;
-
-#ifdef SK_METAL
-#include "include/gpu/mtl/GrMtlBackendContext.h"
-#include "src/gpu/ganesh/mtl/GrMtlTrampoline.h"
-#endif
 #ifdef SK_DIRECT3D
 #include "src/gpu/ganesh/d3d/GrD3DGpu.h"
 #endif
@@ -268,7 +261,7 @@ bool GrDirectContext::init() {
                                                        this->contextID());
     fResourceCache->setProxyProvider(this->proxyProvider());
     fResourceCache->setThreadSafeCache(this->threadSafeCache());
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     if (this->options().fResourceCacheLimitOverride != -1) {
         this->setResourceCacheLimit(this->options().fResourceCacheLimitOverride);
     }
@@ -452,7 +445,7 @@ GrSemaphoresSubmitted GrDirectContext::flush(const GrFlushInfo& info) {
             {}, SkSurfaces::BackendSurfaceAccess::kNoAccess, info, nullptr);
 }
 
-bool GrDirectContext::submit(GrSyncCpu sync) {
+bool GrDirectContext::submit(const GrSubmitInfo& info) {
     ASSERT_SINGLE_OWNER
     if (this->abandoned()) {
         return false;
@@ -462,7 +455,7 @@ bool GrDirectContext::submit(GrSyncCpu sync) {
         return false;
     }
 
-    return fGpu->submitToGpu(sync);
+    return fGpu->submitToGpu(info);
 }
 
 GrSemaphoresSubmitted GrDirectContext::flush(const sk_sp<const SkImage>& image,
@@ -963,7 +956,7 @@ GrBackendTexture GrDirectContext::createCompressedBackendTexture(
     size_t size = SkCompressedDataSize(
             compression, {width, height}, nullptr, mipmapped == skgpu::Mipmapped::kYes);
     auto storage = std::make_unique<char[]>(size);
-    GrFillInCompressedData(compression, {width, height}, mipmapped, storage.get(), color);
+    skgpu::FillInCompressedData(compression, {width, height}, mipmapped, storage.get(), color);
     return create_and_update_compressed_backend_texture(this,
                                                         {width, height},
                                                         backendFormat,
@@ -1053,11 +1046,11 @@ bool GrDirectContext::updateCompressedBackendTexture(const GrBackendTexture& bac
                                        nullptr,
                                        backendTexture.hasMipmaps());
     SkAutoMalloc storage(size);
-    GrFillInCompressedData(compression,
-                           backendTexture.dimensions(),
-                           backendTexture.mipmapped(),
-                           static_cast<char*>(storage.get()),
-                           color);
+    skgpu::FillInCompressedData(compression,
+                                backendTexture.dimensions(),
+                                backendTexture.mipmapped(),
+                                static_cast<char*>(storage.get()),
+                                color);
     return fGpu->updateCompressedBackendTexture(backendTexture,
                                                 std::move(finishedCallback),
                                                 storage.get(),
@@ -1134,9 +1127,11 @@ bool GrDirectContext::precompileShader(const SkData& key, const SkData& data) {
     return fGpu->precompileShader(key, data);
 }
 
-#ifdef SK_ENABLE_DUMP_GPU
+#if defined(SK_ENABLE_DUMP_GPU)
 #include "include/core/SkString.h"
+#include "src/gpu/ganesh/GrUtil.h"
 #include "src/utils/SkJSONWriter.h"
+
 SkString GrDirectContext::dump() const {
     SkDynamicMemoryWStream stream;
     SkJSONWriter writer(&stream, SkJSONWriter::Mode::kPretty);
@@ -1187,50 +1182,6 @@ sk_sp<GrDirectContext> GrDirectContext::MakeMock(const GrMockOptions* mockOption
 
     return direct;
 }
-
-#ifdef SK_METAL
-/*************************************************************************************************/
-sk_sp<GrDirectContext> GrDirectContext::MakeMetal(const GrMtlBackendContext& backendContext) {
-    GrContextOptions defaultOptions;
-    return MakeMetal(backendContext, defaultOptions);
-}
-
-sk_sp<GrDirectContext> GrDirectContext::MakeMetal(const GrMtlBackendContext& backendContext,
-                                                     const GrContextOptions& options) {
-    sk_sp<GrDirectContext> direct(
-            new GrDirectContext(GrBackendApi::kMetal,
-                                options,
-                                GrContextThreadSafeProxyPriv::Make(GrBackendApi::kMetal, options)));
-
-    direct->fGpu = GrMtlTrampoline::MakeGpu(backendContext, options, direct.get());
-    if (!direct->init()) {
-        return nullptr;
-    }
-
-    return direct;
-}
-
-// deprecated
-sk_sp<GrDirectContext> GrDirectContext::MakeMetal(void* device, void* queue) {
-    GrContextOptions defaultOptions;
-    return MakeMetal(device, queue, defaultOptions);
-}
-
-// deprecated
-// remove include/gpu/mtl/GrMtlBackendContext.h, above, when removed
-sk_sp<GrDirectContext> GrDirectContext::MakeMetal(void* device, void* queue,
-                                                  const GrContextOptions& options) {
-    sk_sp<GrDirectContext> direct(
-            new GrDirectContext(GrBackendApi::kMetal,
-                                options,
-                                GrContextThreadSafeProxyPriv::Make(GrBackendApi::kMetal, options)));
-    GrMtlBackendContext backendContext = {};
-    backendContext.fDevice.reset(device);
-    backendContext.fQueue.reset(queue);
-
-    return GrDirectContext::MakeMetal(backendContext, options);
-}
-#endif
 
 #ifdef SK_DIRECT3D
 /*************************************************************************************************/

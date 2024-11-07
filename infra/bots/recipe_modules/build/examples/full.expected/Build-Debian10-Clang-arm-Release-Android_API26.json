@@ -32,6 +32,19 @@
   },
   {
     "cmd": [
+      "python3",
+      "[START_DIR]/cache/work/skia/bin/fetch-ninja"
+    ],
+    "cwd": "[START_DIR]/cache/work/skia",
+    "env": {
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "fetch-ninja"
+  },
+  {
+    "cmd": [
       "[START_DIR]/cache/work/skia/bin/gn",
       "gen",
       "[START_DIR]/cache/work/skia/out/Build-Debian10-Clang-arm-Release-Android_API26/Release",
@@ -63,7 +76,7 @@
       "RECIPE_MODULE[skia::build]/resources/copy_build_products.py",
       "[START_DIR]/cache/work/skia/out/Build-Debian10-Clang-arm-Release-Android_API26/Release",
       "[START_DIR]/[SWARM_OUT_DIR]/out/Release",
-      "dm,nanobench,skpbench,skottie_tool_gpu"
+      "dm,nanobench,skottie_tool_gpu"
     ],
     "infra_step": true,
     "name": "copy build products"

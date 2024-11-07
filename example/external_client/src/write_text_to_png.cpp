@@ -18,7 +18,15 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkStream.h"
 #include "include/encode/SkPngEncoder.h"
+
+#if defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
 #include "include/ports/SkFontMgr_fontconfig.h"
+#include "include/ports/SkFontScanner_FreeType.h"
+#endif
+
+#if defined(SK_FONTMGR_CORETEXT_AVAILABLE)
+#include "include/ports/SkFontMgr_mac_ct.h"
+#endif
 
 #include <cstdio>
 
@@ -34,7 +42,13 @@ int main(int argc, char** argv) {
     }
     sk_sp<SkSurface> surface = SkSurfaces::Raster(SkImageInfo::MakeN32(100, 50, kOpaque_SkAlphaType));
     SkCanvas* canvas = surface->getCanvas();
-    sk_sp<SkFontMgr> mgr = SkFontMgr_New_FontConfig(nullptr);
+#if defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
+    sk_sp<SkFontMgr> mgr = SkFontMgr_New_FontConfig(nullptr, SkFontScanner_Make_FreeType());
+#endif
+#if defined(SK_FONTMGR_CORETEXT_AVAILABLE)
+    sk_sp<SkFontMgr> mgr = SkFontMgr_New_CoreText(nullptr);
+#endif
+
     sk_sp<SkTypeface> face = mgr->matchFamilyStyle("Roboto", SkFontStyle());
     if (!face) {
       printf("Cannot open typeface\n");

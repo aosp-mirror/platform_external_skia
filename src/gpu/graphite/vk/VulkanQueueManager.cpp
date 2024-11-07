@@ -24,11 +24,13 @@ const VulkanSharedContext* VulkanQueueManager::vkSharedContext() const {
 }
 
 std::unique_ptr<CommandBuffer> VulkanQueueManager::getNewCommandBuffer(
-        ResourceProvider* resourceProvider) {
+        ResourceProvider* resourceProvider, Protected isProtected) {
     VulkanResourceProvider* vkResourceProvider =
             static_cast<VulkanResourceProvider*>(resourceProvider);
 
-    auto cmdBuffer = VulkanCommandBuffer::Make(this->vkSharedContext(), vkResourceProvider);
+    auto cmdBuffer = VulkanCommandBuffer::Make(this->vkSharedContext(),
+                                               vkResourceProvider,
+                                               isProtected);
     return cmdBuffer;
 }
 
@@ -39,10 +41,10 @@ public:
     ~VulkanWorkSubmission() override {}
 
 private:
-    bool onIsFinished() override {
+    bool onIsFinished(const SharedContext*) override {
         return static_cast<VulkanCommandBuffer*>(this->commandBuffer())->isFinished();
     }
-    void onWaitUntilFinished() override {
+    void onWaitUntilFinished(const SharedContext*) override {
         return static_cast<VulkanCommandBuffer*>(this->commandBuffer())->waitUntilFinished();
     }
 };

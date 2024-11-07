@@ -26,8 +26,8 @@ DEPS = [
 def RunSteps(api):
   api.vars.setup()
 
-  checkout_root = api.path['start_dir']
-  out_dir = api.vars.cache_dir.join(
+  checkout_root = api.path.start_dir
+  out_dir = api.vars.cache_dir.joinpath(
       'work', 'skia', 'out', api.vars.builder_name, api.vars.configuration)
 
   try:
@@ -41,7 +41,7 @@ def RunSteps(api):
       script = api.build.resource('cleanup_win_processes.py')
       api.step(
           name='cleanup',
-          cmd=['vpython', script],
+          cmd=['vpython3', script],
           infra_step=True)
 
   api.run.check_failure()

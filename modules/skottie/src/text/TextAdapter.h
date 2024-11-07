@@ -9,8 +9,8 @@
 #define SkottieTextAdapter_DEFINED
 
 #include "include/core/SkM44.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkRefCnt.h"
-#include "include/private/base/SkPoint_impl.h"
 #include "modules/skottie/include/TextShaper.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/animator/Animator.h"
@@ -38,6 +38,8 @@ class Group;
 class RenderNode;
 }  // namespace sksg
 
+namespace SkShapers { class Factory; }
+
 namespace skottie {
 namespace internal {
 class AnimationBuilder;
@@ -48,7 +50,8 @@ public:
                                    const AnimationBuilder*,
                                    sk_sp<SkFontMgr>,
                                    sk_sp<CustomFont::GlyphCompMapper>,
-                                   sk_sp<Logger>);
+                                   sk_sp<Logger>,
+                                   sk_sp<::SkShapers::Factory>);
 
     ~TextAdapter() override;
 
@@ -73,6 +76,7 @@ private:
     TextAdapter(sk_sp<SkFontMgr>,
                 sk_sp<CustomFont::GlyphCompMapper>,
                 sk_sp<Logger>,
+                sk_sp<SkShapers::Factory>,
                 AnchorPointGrouping);
 
     struct FragmentRec {
@@ -107,6 +111,7 @@ private:
     const sk_sp<SkFontMgr>                   fFontMgr;
     const sk_sp<CustomFont::GlyphCompMapper> fCustomGlyphMapper;
     sk_sp<Logger>                            fLogger;
+    sk_sp<SkShapers::Factory>                fShapingFactory;
     const AnchorPointGrouping                fAnchorPointGrouping;
 
     std::vector<sk_sp<TextAnimator>>         fAnimators;
