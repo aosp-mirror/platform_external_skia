@@ -264,11 +264,13 @@ static MTLRenderPipelineColorAttachmentDescriptor* create_color_attachment(
 
 } // anonymous namespace
 
-sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sharedContext,
-                                                     MtlResourceProvider* resourceProvider,
-                                                     const RuntimeEffectDictionary* runtimeDict,
-                                                     const GraphicsPipelineDesc& pipelineDesc,
-                                                     const RenderPassDesc& renderPassDesc) {
+sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
+        const MtlSharedContext* sharedContext,
+        MtlResourceProvider* resourceProvider,
+        const RuntimeEffectDictionary* runtimeDict,
+        const GraphicsPipelineDesc& pipelineDesc,
+        const RenderPassDesc& renderPassDesc,
+        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags) {
     std::string vsMSL, fsMSL;
     SkSL::Program::Interface vsInterface, fsInterface;
 
@@ -329,6 +331,11 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sha
     pipelineInfo.fNativeVertexShader = std::move(vsMSL);
     pipelineInfo.fNativeFragmentShader = std::move(fsMSL);
 #endif
+#if SK_HISTOGRAMS_ENABLED
+    pipelineInfo.fFromPrecompile =
+            SkToBool(pipelineCreationFlags & PipelineCreationFlags::kForPrecompilation);
+#endif
+
     std::string pipelineLabel =
             GetPipelineLabel(sharedContext->shaderCodeDictionary(), renderPassDesc, step, paintID);
     return Make(sharedContext,
