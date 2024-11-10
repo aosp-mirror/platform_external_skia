@@ -490,8 +490,16 @@ bool VulkanCommandBuffer::onAddRenderPass(const RenderPassDesc& renderPassDesc,
                                           VK_ACCESS_SHADER_READ_BIT,
                                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                                           false);
-            this->submitPipelineBarriers();
         }
+    }
+    if (fDstCopy.first) {
+        VulkanTexture* vulkanTexture =
+                const_cast<VulkanTexture*>(static_cast<const VulkanTexture*>(fDstCopy.first));
+        vulkanTexture->setImageLayout(this,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                      VK_ACCESS_SHADER_READ_BIT,
+                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                      false);
     }
 
     if (!this->updateIntrinsicUniforms(viewport)) {
@@ -1366,15 +1374,21 @@ void VulkanCommandBuffer::bindTextureSamplers() {
 
 void VulkanCommandBuffer::setScissor(unsigned int left, unsigned int top, unsigned int width,
                                      unsigned int height) {
-    VkRect2D scissor = {
-        {(int32_t)left, (int32_t)top},
-        {width, height}
-    };
+    SkIRect scissor = SkIRect::MakeXYWH(
+            left + fReplayTranslation.x(), top + fReplayTranslation.y(), width, height);
+    if (!scissor.intersect(SkIRect::MakeSize(fColorAttachmentSize)) ||
+        (!fReplayClip.isEmpty() && !scissor.intersect(fReplayClip))) {
+        scissor.setEmpty();
+    }
+
+    VkRect2D vkScissor = {{scissor.x(), scissor.y()},
+                          {static_cast<unsigned int>(scissor.width()),
+                           static_cast<unsigned int>(scissor.height())}};
     VULKAN_CALL(fSharedContext->interface(),
                 CmdSetScissor(fPrimaryCommandBuffer,
                               /*firstScissor=*/0,
                               /*scissorCount=*/1,
-                              &scissor));
+                              &vkScissor));
 }
 
 void VulkanCommandBuffer::draw(PrimitiveType,
