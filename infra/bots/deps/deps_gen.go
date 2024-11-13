@@ -144,7 +144,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/vulkan-deps": {
 		Id:      "chromium.googlesource.com/vulkan-deps",
-		Version: "a2dfb2276ea5f9467eb84c9a19ecf917d92e4135",
+		Version: "aa1dd6b24b8ba03cb444a3dc75b61435bd98d285",
 		Path:    "third_party/externals/vulkan-deps",
 	},
 	"chromium.googlesource.com/webm/libwebp": {
@@ -154,7 +154,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "2a86250e561c56e9b1b9af5774f1253d9d66be97",
+		Version: "04483c84503cffe506393ade6be6ae7faf83191b",
 		Path:    "third_party/externals/dawn",
 	},
 	"infra/3pp/tools/ninja": {
@@ -164,7 +164,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/buildbot": {
 		Id:      "skia.googlesource.com/buildbot",
-		Version: "cf848e50c10017bb0336d9b1f0665106212b252f",
+		Version: "4448a7219f6d0d8380102f62e3505fc89ad0382c",
 		Path:    "infra/skia-infra",
 	},
 	"skia.googlesource.com/external/github.com/AOMediaCodec/libavif": {
@@ -199,7 +199,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools": {
 		Id:      "skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools",
-		Version: "9117e042b93d4ff08d2406542708170f77aaa2a3",
+		Version: "384d527ebb7578b5a8d69fb05f41c5aa9a363115",
 		Path:    "third_party/externals/spirv-tools",
 	},
 	"skia.googlesource.com/external/github.com/abseil/abseil-cpp": {
@@ -244,12 +244,12 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia/tools/sk": {
 		Id:      "skia/tools/sk",
-		Version: "git_revision:cf848e50c10017bb0336d9b1f0665106212b252f",
+		Version: "git_revision:4448a7219f6d0d8380102f62e3505fc89ad0382c",
 		Path:    "bin",
 	},
 	"swiftshader.googlesource.com/SwiftShader": {
 		Id:      "swiftshader.googlesource.com/SwiftShader",
-		Version: "76855a9baecc97fa144ce70d7ae43a9f878e14c8",
+		Version: "d5c4284774115bb1e32c012a2be1b5fbeb1ab1f9",
 		Path:    "third_party/externals/swiftshader",
 	},
 }
