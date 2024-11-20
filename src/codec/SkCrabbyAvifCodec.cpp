@@ -310,6 +310,21 @@ SkCodec::Result SkCrabbyAvifCodec::onGetPixels(const SkImageInfo& dstInfo,
         return kUnimplemented;
     }
 
+    switch (dstInfo.colorType()) {
+        case kRGBA_8888_SkColorType:
+        case kRGB_565_SkColorType:
+            fAvifDecoder->androidMediaCodecOutputColorFormat =
+                    crabbyavif::ANDROID_MEDIA_CODEC_OUTPUT_COLOR_FORMAT_YUV420_FLEXIBLE;
+            break;
+        case kRGBA_F16_SkColorType:
+        case kRGBA_1010102_SkColorType:
+            fAvifDecoder->androidMediaCodecOutputColorFormat =
+                    crabbyavif::ANDROID_MEDIA_CODEC_OUTPUT_COLOR_FORMAT_P010;
+            break;
+        default:
+            return kUnimplemented;
+    }
+
     crabbyavif::avifResult result =
             crabbyavif::avifDecoderNthImage(fAvifDecoder.get(), options.fFrameIndex);
     if (result != crabbyavif::AVIF_RESULT_OK) {
@@ -320,7 +335,21 @@ SkCodec::Result SkCrabbyAvifCodec::onGetPixels(const SkImageInfo& dstInfo,
     }
     crabbyavif::avifImage* image =
             fGainmapOnly ? fAvifDecoder->image->gainMap->image : fAvifDecoder->image;
+    using AvifImagePtr =
+            std::unique_ptr<crabbyavif::avifImage, decltype(&crabbyavif::crabby_avifImageDestroy)>;
+
+    AvifImagePtr scaled_image{nullptr, crabbyavif::crabby_avifImageDestroy};
     if (this->dimensions() != dstInfo.dimensions()) {
+        // |image| contains plane pointers which point to Android MediaCodec's buffers. Those
+        // buffers are read-only and hence we cannot scale in place. Make a copy of the image and
+        // scale the copied image.
+        scaled_image.reset(crabbyavif::crabby_avifImageCreateEmpty());
+        result = crabbyavif::crabby_avifImageCopy(
+            scaled_image.get(), image, crabbyavif::AVIF_PLANES_ALL);
+        if (result != crabbyavif::AVIF_RESULT_OK) {
+            return kInvalidInput;
+        }
+        image = scaled_image.get();
         result = crabbyavif::avifImageScale(
                 image, dstInfo.width(), dstInfo.height(), &fAvifDecoder->diag);
         if (result != crabbyavif::AVIF_RESULT_OK) {
@@ -328,8 +357,6 @@ SkCodec::Result SkCrabbyAvifCodec::onGetPixels(const SkImageInfo& dstInfo,
         }
     }
 
-    using AvifImagePtr =
-            std::unique_ptr<crabbyavif::avifImage, decltype(&crabbyavif::crabby_avifImageDestroy)>;
     // cropped_image is a view into the underlying image. It can be safely deleted once the pixels
     // are converted into RGB (or when it goes out of scope in one of the error paths).
     AvifImagePtr cropped_image{nullptr, crabbyavif::crabby_avifImageDestroy};
