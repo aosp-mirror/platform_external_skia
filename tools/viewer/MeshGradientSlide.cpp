@@ -27,8 +27,8 @@
 #include <limits>
 #include <vector>
 
-#include "imgui.h"
 #include "delaunator.hpp"
+#include "imgui.h"
 
 namespace {
 
@@ -129,7 +129,6 @@ public:
 
         fShader = builder.makeShader();
     }
-
     virtual void buildEffect(size_t vert_count) = 0;
 
 protected:
@@ -142,25 +141,24 @@ protected:
 class AEGradientRenderer final : public SkSlRenderer {
 public:
     void buildEffect(size_t vert_count) override {
-        static constexpr char gAEGradientSkSL[] = R"(
-            uniform half4  u_vertcolors[%zu];
-            uniform float2 u_vertpos[%zu];
+        static constexpr char gAEGradientSkSL[] =
+            "uniform half4  u_vertcolors[%zu];"
+            "uniform float2 u_vertpos[%zu];"
 
-            half4 main(float2 xy) {
-                half4 c = half4(0);
-                float w_acc = 0;
+            "half4 main(float2 xy) {"
+                "half4 c = half4(0);"
+                "float w_acc = 0;"
 
-                for (int i = 0; i < %zu; ++i) {
-                    float d = distance(xy, u_vertpos[i]);
-                    float w = 1 / (d * d);
+                "for (int i = 0; i < %zu; ++i) {"
+                    "float d = distance(xy, u_vertpos[i]);"
+                    "float w = 1 / (d * d);"
 
-                    c += u_vertcolors[i] * w;
-                    w_acc += w;
-                }
+                    "c += u_vertcolors[i] * w;"
+                    "w_acc += w;"
+                "}"
 
-                return c / w_acc;
-            }
-        )";
+                "return c / w_acc;"
+            "}";
 
         const auto res = SkRuntimeEffect::MakeForShader(
                             SkStringPrintf(gAEGradientSkSL, vert_count, vert_count, vert_count));
@@ -177,62 +175,56 @@ public:
 class LinearGradientRenderer final : public SkSlRenderer {
 public:
     void buildEffect(size_t vert_count) override {
-        static constexpr char gAEGradientSkSL[] = R"(
-            uniform half4  u_vertcolors[%zu];
-            uniform float2 u_vertpos[%zu];
+        static constexpr char sksl[] =
+            "uniform half4  u_vertcolors[%zu];"
+            "uniform float2 u_vertpos[%zu];"
 
-            half4 main(float2 xy) {
+            "half4 main(float2 xy) {"
+                "float v[%zu];"
+                "for (int i = 0; i < %zu; i++) {"
+                    "v[i] = 1.;"
+                "}"
 
-                float v[%zu];
-                for (int i = 0; i < %zu; i++) {
-                    v[i] = 1.;
-                }
+                "for (int i = 0; i < %zu; ++i) {"
+                    "for (int j = 0; j < %zu; ++j) {"
+                        "vec2 delta;"
+                        "delta.x = u_vertpos[j].x - u_vertpos[i].x;"
+                        "delta.y = u_vertpos[j].y - u_vertpos[i].y;"
 
-                for (int i = 0; i < %zu; ++i) {
+                        "mat3 m = mat3 ("
+                            "delta.x, delta.y, 0.,"                 // 1st column
+                            "-delta.y, delta.x, 0.,"                // 2nd column
+                            "u_vertpos[i].x, u_vertpos[i].y, 1."    // 3rd column
+                        ");"
+                        "mat3 m_inv = inverse(m);"
 
-                    for (int j = 0; j < %zu; ++j) {
+                        "vec3 p_h = vec3(xy.x, xy.y, 1.);"
+                        "vec3 u = m_inv*p_h;"
+                        "float t = u.x;"
 
-                        vec2 delta;
-                        delta.x = u_vertpos[j].x - u_vertpos[i].x;
-                        delta.y = u_vertpos[j].y - u_vertpos[i].y;
+                        "if (t < 0) {"
+                            "v[j] = 0;"
+                        "} else if (t > 1) {"
+                            "v[i] = 0;"
+                        "} else {"
+                            "v[i] *= 1-t;"
+                            "v[j] *= t;"
+                        "}"
+                    "}"
+                "}"
 
-                        mat3 m = mat3 (
-                            delta.x, delta.y, 0.,  // 1st column
-                            -delta.y, delta.x, 0., // 2nd column
-                            u_vertpos[i].x, u_vertpos[i].y, 1.   // 3rd column
-                        );
-                        mat3 m_inv = inverse(m);
+                "half4 c = half4(0);"
+                "float w_acc = 0;"
+                "for (int i = 0; i < %zu; i++) {"
+                    "c += u_vertcolors[i] * v[i];"
+                    "w_acc += v[i];"
+                "}"
 
-                        vec3 p_h = vec3(xy.x, xy.y, 1.);
-                        vec3 u = m_inv*p_h;
-                        float t = u.x;
-
-                        if (t < 0) {
-                            //v[j] = 1.-min(abs(t), 1.);
-                            v[j] = 0;
-                        } else if (t > 1) {
-                            //v[i] = 1.-min(t-1., 1.);
-                            v[i] = 0;
-                        } else {
-                            v[i] *= 1-t;
-                            v[j] *= t;
-                        }
-                    }
-                }
-
-                half4 c = half4(0);
-                float w_acc = 0;
-                for (int i = 0; i < %zu; i++) {
-                    c += u_vertcolors[i] * v[i];
-                    w_acc += v[i];
-                }
-
-                return c / w_acc;
-            }
-        )";
+                "return c / w_acc;"
+            "}";
 
         const auto res = SkRuntimeEffect::MakeForShader(
-                            SkStringPrintf(gAEGradientSkSL, vert_count, vert_count, vert_count, vert_count, vert_count, vert_count, vert_count));
+                            SkStringPrintf(sksl, vert_count, vert_count, vert_count, vert_count, vert_count, vert_count, vert_count));
         if (!res.effect) {
             SkDEBUGF("%s\n", res.errorText.c_str());
         }
@@ -246,64 +238,60 @@ public:
 class IllGradientRenderer final : public SkSlRenderer {
 public:
     void buildEffect(size_t vert_count) override {
-        static constexpr char gAEGradientSkSL[] = R"(
-            uniform half4  u_vertcolors[%zu];
-            uniform float2 u_vertpos[%zu];
+        static constexpr char sksl[] =
+            "uniform half4  u_vertcolors[%zu];"
+            "uniform float2 u_vertpos[%zu];"
 
-            half4 main(float2 xy) {
+            "half4 main(float2 xy) {"
+                "float d[%zu];"
+                "for (int i = 0; i < %zu; i++) {"
+                    "d[i] = 0.;"
+                "}"
 
-                float d[%zu];
-                for (int i = 0; i < %zu; i++) {
-                    d[i] = 0.;
-                }
+                "for (int i = 0; i < %zu; ++i) {"
+                    "for (int j = 0; j < %zu; ++j) {"
+                        "vec2 delta;"
+                        "delta.x = u_vertpos[j].x - u_vertpos[i].x;"
+                        "delta.y = u_vertpos[j].y - u_vertpos[i].y;"
 
-                for (int i = 0; i < %zu; ++i) {
+                        "mat3 m = mat3 ("
+                            "delta.x, delta.y, 0.,"                 // 1st column
+                            "-delta.y, delta.x, 0.,"                // 2nd column
+                            "u_vertpos[i].x, u_vertpos[i].y, 1."    // 3rd column
+                        ");"
+                        "mat3 m_inv = inverse(m);"
 
-                    for (int j = 0; j < %zu; ++j) {
+                        "vec3 p_h = vec3(xy.x, xy.y, 1.);"
+                        "vec3 u = m_inv*p_h;"
+                        "float t = u.x;"
 
-                        vec2 delta;
-                        delta.x = u_vertpos[j].x - u_vertpos[i].x;
-                        delta.y = u_vertpos[j].y - u_vertpos[i].y;
+                        "float s = length(delta);"
+                        "if (t < 0) {"
+                            "d[i] += s*abs(u.y);"
+                            "d[j] += s*distance(vec2(u.x, u.y), vec2(1., 0.));"
+                        "} else if (t > 1) {"
+                            "d[j] += s*abs(u.y);"
+                            "d[i] += s*distance(vec2(u.x, u.y), vec2(0., 0.));"
+                        "} else {"
+                            "d[i] += s*distance(vec2(u.x, u.y), vec2(0., 0.));"
+                            "d[j] += s*distance(vec2(u.x, u.y), vec2(1., 0.));"
+                        "}"
+                    "}"
+                "}"
 
-                        mat3 m = mat3 (
-                            delta.x, delta.y, 0.,  // 1st column
-                            -delta.y, delta.x, 0., // 2nd column
-                            u_vertpos[i].x, u_vertpos[i].y, 1.   // 3rd column
-                        );
-                        mat3 m_inv = inverse(m);
+                "half4 c = half4(0);"
+                "float w_acc = 0;"
+                "for (int i = 0; i < %zu; i++) {"
+                    "float w = 1 / (d[i] * d[i]);"
+                    "c += u_vertcolors[i] * w;"
+                    "w_acc += w;"
+                "}"
 
-                        vec3 p_h = vec3(xy.x, xy.y, 1.);
-                        vec3 u = m_inv*p_h;
-                        float t = u.x;
-
-                        float s = length(delta);
-                        if (t < 0) {
-                            d[i] += s*abs(u.y);
-                            d[j] += s*distance(vec2(u.x, u.y), vec2(1., 0.));
-                        } else if (t > 1) {
-                            d[j] += s*abs(u.y);
-                            d[i] += s*distance(vec2(u.x, u.y), vec2(0., 0.));
-                        } else {
-                            d[i] += s*distance(vec2(u.x, u.y), vec2(0., 0.));
-                            d[j] += s*distance(vec2(u.x, u.y), vec2(1., 0.));
-                        }
-                    }
-                }
-
-                half4 c = half4(0);
-                float w_acc = 0;
-                for (int i = 0; i < %zu; i++) {
-                    float w = 1 / (d[i] * d[i]);
-                    c += u_vertcolors[i] * w;
-                    w_acc += w;
-                }
-
-                return c / w_acc;
-            }
-        )";
+                "return c / w_acc;"
+            "}";
 
         const auto res = SkRuntimeEffect::MakeForShader(
-                            SkStringPrintf(gAEGradientSkSL, vert_count, vert_count, vert_count, vert_count, vert_count, vert_count, vert_count));
+                            SkStringPrintf(sksl, vert_count, vert_count, vert_count, vert_count, vert_count, vert_count, vert_count));
         if (!res.effect) {
             SkDEBUGF("%s\n", res.errorText.c_str());
         }
