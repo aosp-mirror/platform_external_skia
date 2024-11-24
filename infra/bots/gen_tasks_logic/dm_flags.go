@@ -462,6 +462,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				// b/373845830 - Precompile isn't thread-safe on either Dawn Metal
 				// or Dawn Vulkan
 				skip(ALL, "test", ALL, "ThreadedPrecompileTest")
+				// b/380039123 getting both ASAN and TSAN failures for this test on Dawn
+				skip(ALL, "test", ALL, "ThreadedCompilePrecompileTest")
 
 				if b.extraConfig("Vulkan") {
 					if b.extraConfig("TSAN") {
@@ -492,6 +494,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 						skip(ALL, "test", ALL, "ImageAsyncReadPixelsGraphite")
 						skip(ALL, "test", ALL, "SurfaceAsyncReadPixelsGraphite")
 					}
+
+					// b/380049954 Graphite Native Vulkan has a thread race issue
+					skip(ALL, "test", ALL, "ThreadedCompilePrecompileTest")
 				}
 			}
 		}
