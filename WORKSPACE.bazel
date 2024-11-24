@@ -413,6 +413,9 @@ crates_repository(
                 "@//experimental/rust_png/patches:0105-Fix-a-subset-of-issues-identified-by-cargo-clippy.patch",
                 "@//experimental/rust_png/patches:0106-Avoid-infinite-loop-when-retrying-after-earlier-fata.patch",
                 "@//experimental/rust_png/patches:0107-New-API-Reader.next_frame_control-for-advancing-to-t.patch",
+                "@//experimental/rust_png/patches:0201-Add-EXIF-and-ICC-encoding-and-fix-chunk-order.patch",
+                "@//experimental/rust_png/patches:0301-Add-support-for-parsing-mDCv-and-cLLi-chunks.-528.patch",
+                "@//experimental/rust_png/patches:0302-Add-support-for-parsing-cICP-chunks.-529.patch",
             ],
         )],
     },
@@ -482,6 +485,7 @@ local_repository(
 # @spirv_tools - https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git
 #
 # @dawn - //bazel/external/dawn:BUILD.bazel
+# @delaunator - //bazel/external/delaunator:BUILD.bazel
 # @dng_sdk - //bazel/external/dng_sdk:BUILD.bazel
 # @expat - //bazel/external/expat:BUILD.bazel
 # @freetype - //bazel/external/freetype:BUILD.bazel
@@ -715,7 +719,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:a049ff55ff145ba585cc32fb348a613a8cfb357046c2b56c6d95344410ea4f77",
+    digest = "sha256:c0ad379b6c588552f76116a4c8a81e5d85ada2524f9cfa2e8990341e4b23ddf0",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )
