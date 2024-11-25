@@ -16,6 +16,10 @@
 #include "include/gpu/graphite/Recorder.h"
 #include "include/private/base/SingleOwner.h"
 
+#if defined(GPU_TEST_UTILS)
+#include "include/private/base/SkMutex.h"
+#endif
+
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -33,7 +37,7 @@ class Context;
 class ContextPriv;
 class GlobalCache;
 class PaintOptions;
-class PlotUploadTracker;
+class PrecompileContext;
 class QueueManager;
 class Recording;
 class ResourceProvider;
@@ -52,6 +56,11 @@ public:
     BackendApi backend() const;
 
     std::unique_ptr<Recorder> makeRecorder(const RecorderOptions& = {});
+
+    /** Creates a helper object that can be moved to a different thread and used
+     *  for precompilation.
+     */
+    std::unique_ptr<PrecompileContext> makePrecompileContext();
 
     bool insertRecording(const InsertRecordingInfo&);
     bool submit(SyncToCpu = SyncToCpu::kNo);
@@ -343,11 +352,14 @@ private:
     mutable SingleOwner fSingleOwner;
 
 #if defined(GPU_TEST_UTILS)
+    void deregisterRecorder(const Recorder*) SK_EXCLUDES(fTestingLock);
+
     // In test builds a Recorder may track the Context that was used to create it.
     bool fStoreContextRefInRecorder = false;
     // If this tracking is on, to allow the client to safely delete this Context or its Recorders
     // in any order we must also track the Recorders created here.
-    std::vector<Recorder*> fTrackedRecorders;
+    SkMutex fTestingLock;
+    std::vector<Recorder*> fTrackedRecorders SK_GUARDED_BY(fTestingLock);
 #endif
 
     // Needed for MessageBox handling
