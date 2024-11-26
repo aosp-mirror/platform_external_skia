@@ -52,6 +52,7 @@ skia_cc_binary(
         "MixerSlide.cpp",
         "PathClipSlide.cpp",
         "PathEffectsSlide.cpp",
+        "PathLerpSlide.cpp",
         "PathOverstrokeSlide.cpp",
         "PathSlide.cpp",
         "PathTessellatorsSlide.cpp",
@@ -128,6 +129,7 @@ skia_cc_binary(
         "//tools/skui",
         "//tools/timer",
         "//tools/trace",
+        "@delaunator",
         "@imgui",
     ] + select({
         "@platforms//os:linux": ["@spirv_tools"],

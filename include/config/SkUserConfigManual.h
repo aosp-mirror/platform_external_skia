@@ -8,6 +8,8 @@
 #ifndef SkUserConfigManual_DEFINED
 #define SkUserConfigManual_DEFINED
   #include <android/log.h>
+  #include "include/gpu/graphite/LogPriority.h"
+
   #define SK_BUILD_FOR_ANDROID_FRAMEWORK
   #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
   #define SK_DEFAULT_GLOBAL_DISCARDABLE_MEMORY_POOL_SIZE (512 * 1024)
@@ -31,6 +33,8 @@
   #define SK_SUPPORT_LEGACY_EMBOSSMASKFILTER
   #define SK_FORCE_AAA
 
+  // Logging settings
+  #define SKGPU_GRAPHITE_LOWEST_ACTIVE_LOG_PRIORITY skgpu::graphite::LogPriority::kWarning
   #define SK_ABORT(fmt, ...) __android_log_assert(nullptr, "skia", "[skia] \"" fmt "\" in {%s}",  \
                                                   ##__VA_ARGS__, __PRETTY_FUNCTION__)
 

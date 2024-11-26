@@ -683,6 +683,7 @@ void GrGpu::didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const 
 void GrGpu::executeFlushInfo(SkSpan<GrSurfaceProxy*> proxies,
                              SkSurfaces::BackendSurfaceAccess access,
                              const GrFlushInfo& info,
+                             std::optional<GrTimerQuery> timerQuery,
                              const skgpu::MutableTextureState* newState) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
@@ -712,8 +713,18 @@ void GrGpu::executeFlushInfo(SkSpan<GrSurfaceProxy*> proxies,
         }
     }
 
-    if (info.fFinishedProc) {
-        this->addFinishedProc(info.fFinishedProc, info.fFinishedContext);
+    if (timerQuery) {
+        this->endTimerQuery(*timerQuery);
+    }
+
+    skgpu::AutoCallback callback;
+    if (info.fFinishedWithStatsProc) {
+        callback = skgpu::AutoCallback(info.fFinishedWithStatsProc, info.fFinishedContext);
+    } else {
+        callback = skgpu::AutoCallback(info.fFinishedProc, info.fFinishedContext);
+    }
+    if (callback) {
+        this->addFinishedCallback(std::move(callback), std::move(timerQuery));
     }
 
     if (info.fSubmittedProc) {
@@ -771,7 +782,7 @@ void GrGpu::reportSubmitHistograms() {
     // The max allowed value for SK_HISTOGRAM_EXACT_LINEAR is 100. If we want to support higher
     // values we can add SK_HISTOGRAM_CUSTOM_COUNTS but this has a number of buckets that is less
     // than the number of actual values
-    static constexpr int kMaxRenderPassBucketValue = 100;
+    [[maybe_unused]] static constexpr int kMaxRenderPassBucketValue = 100;
     SK_HISTOGRAM_EXACT_LINEAR("SubmitRenderPasses",
                               std::min(fCurrentSubmitRenderPassCount, kMaxRenderPassBucketValue),
                               kMaxRenderPassBucketValue);

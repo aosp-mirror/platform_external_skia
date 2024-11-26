@@ -52,16 +52,27 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{
 				"//src/codec:buffet_png_srcs",
 				"//src/codec:common_png_srcs",
+				"//src/codec:png_codec_base_hdrs",
+				"//src/codec:png_codec_base_srcs",
 			},
 		},
 		{Var: "skia_codec_rust_png_public",
 			Rules: []string{
+				// TODO(https://crbug.com/379312510): Delete
+				// the `rust_png:hdrs` line once Chromium is
+				// modified to use the header from the new
+				// location.  See also
+				// http://review.skia.org/924317 and
+				// https://crrev.com/c/6050534.
 				"//experimental/rust_png:hdrs",
+				"//experimental/rust_png/decoder:hdrs",
 			},
 		},
 		{Var: "skia_codec_rust_png",
 			Rules: []string{
-				"//experimental/rust_png:srcs",
+				"//experimental/rust_png/decoder:srcs",
+				"//src/codec:png_codec_base_hdrs",
+				"//src/codec:png_codec_base_srcs",
 			},
 		},
 		{Var: "skia_codec_rust_png_ffi_rs_srcs",
@@ -273,6 +284,11 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/ports:typeface_fontations_hdrs",
 				"//src/ports:typeface_fontations_srcs",
 			}},
+		{Var: "skia_ports_typeface_proxy_sources",
+			Rules: []string{
+				"//src/ports:typeface_proxy_hdrs",
+				"//src/ports:typeface_proxy_srcs",
+			}},
 		{Var: "skia_ports_windows_sources",
 			Rules: []string{
 				"//src/ports:osfile_win",
@@ -310,7 +326,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 	{GNI: "gn/sksl.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skia_sksl_core_sources",
 			Rules: []string{
-				"//include/private:sksl_private_hdrs",
 				"//include/sksl:core_hdrs",
 				"//src/sksl/analysis:analysis_hdrs",
 				"//src/sksl/analysis:analysis_srcs",
@@ -325,14 +340,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/sksl/transform:transform_srcs",
 				"//src/sksl:sksl_hdrs",
 				"//src/sksl:sksl_srcs",
-			}},
-		// TODO(kjlubick) remove this group after clients are migrated
-		// onto core and/or graphite
-		{Var: "skia_sksl_default_module_sources",
-			Rules: []string{
-				"//src/sksl:sksl_default_module_srcs",
-				"//src/sksl:sksl_graphite_modules_hdrs",
-				"//src/sksl:sksl_graphite_modules_srcs",
 			}},
 		{Var: "skia_sksl_core_module_sources",
 			Rules: []string{
@@ -355,6 +362,8 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			}},
 		{Var: "skia_sksl_codegen_sources",
 			Rules: []string{
+				"//src/sksl/codegen:codegen_shared_exported",
+				"//src/sksl/codegen:codegen_shared_priv",
 				"//src/sksl/codegen:glsl",
 				"//src/sksl/codegen:metal",
 				"//src/sksl/codegen:spirv",
@@ -702,14 +711,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 	{GNI: "modules/skcms/skcms.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skcms_public_headers",
 			Rules: []string{"//modules/skcms:public_hdrs"}},
-
-		// TODO(b/310927123): Replace external dependencies on skcms_sources with the more fine-
-		// grained dependencies (skcms_public + skcms_Transform*) below, and remove skcms_sources.
-		{Var: "skcms_sources",
-			Rules: []string{
-				"//modules/skcms:srcs",
-				"//modules/skcms:textual_hdrs",
-			}},
 		{Var: "skcms_public",
 			Rules: []string{
 				"//modules/skcms:skcms_public",
