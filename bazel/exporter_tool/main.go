@@ -48,10 +48,18 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/codec:jpeg_xmp_srcs",
 			},
 		},
+		{Var: "skia_codec_png_base",
+			Rules: []string{
+				"//src/codec:png_codec_base_hdrs",
+				"//src/codec:png_codec_base_srcs",
+			},
+		},
 		{Var: "skia_codec_png",
 			Rules: []string{
 				"//src/codec:buffet_png_srcs",
 				"//src/codec:common_png_srcs",
+				"//src/codec:png_codec_base_hdrs",
+				"//src/codec:png_codec_base_srcs",
 			},
 		},
 		{Var: "skia_codec_rust_png_public",
