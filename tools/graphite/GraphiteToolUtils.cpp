@@ -1,64 +1,21 @@
 /*
- * Copyright 2023 Google LLC
+ * Copyright 2024 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
-#include "tools/GpuToolUtils.h"
+#include "tools/graphite/GraphiteToolUtils.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
-
-#if defined(SK_GANESH)
-#include "include/gpu/ganesh/GrDirectContext.h"
-#include "include/gpu/ganesh/GrRecordingContext.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
-#include "src/gpu/ganesh/GrCaps.h"
-#include "src/gpu/ganesh/GrDirectContextPriv.h"
-#endif
-
-#if defined(SK_GRAPHITE)
 #include "include/core/SkTiledImageUtils.h"
 #include "include/gpu/graphite/Image.h"
 #include "include/gpu/graphite/ImageProvider.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "src/core/SkLRUCache.h"
-#endif
 
-
-namespace ToolUtils {
-
-sk_sp<SkImage> MakeTextureImage(SkCanvas* canvas, sk_sp<SkImage> orig) {
-    if (!orig) {
-        return nullptr;
-    }
-
-#if defined(SK_GANESH)
-    if (canvas->recordingContext() && canvas->recordingContext()->asDirectContext()) {
-        GrDirectContext* dContext = canvas->recordingContext()->asDirectContext();
-        const GrCaps* caps = dContext->priv().caps();
-
-        if (orig->width() >= caps->maxTextureSize() || orig->height() >= caps->maxTextureSize()) {
-            // Ganesh is able to tile large SkImage draws. Always forcing SkImages to be uploaded
-            // prevents this feature from being tested by our tools. For now, leave excessively
-            // large SkImages as bitmaps.
-            return orig;
-        }
-
-        return SkImages::TextureFromImage(dContext, orig);
-    }
-#endif
-#if defined(SK_GRAPHITE)
-    if (canvas->recorder()) {
-        return SkImages::TextureFromImage(canvas->recorder(), orig, {false});
-    }
-#endif
-    return orig;
-}
-
-#if defined(SK_GRAPHITE)
-
+namespace {
 // Currently, we give each new Recorder its own ImageProvider. This means we don't have to deal
 // w/ any threading issues.
 // TODO: We should probably have this class generate and report some cache stats
@@ -110,8 +67,8 @@ private:
         ImageKey(const SkImage* image, bool mipmapped) {
             uint32_t flags = mipmapped ? 0x1 : 0x0;
             SkTiledImageUtils::GetImageKeyValues(image, &fValues[1]);
-            fValues[kNumValues-1] = flags;
-            fValues[0] = SkChecksum::Hash32(&fValues[1], (kNumValues-1) * sizeof(uint32_t));
+            fValues[kNumValues - 1] = flags;
+            fValues[0] = SkChecksum::Hash32(&fValues[1], (kNumValues - 1) * sizeof(uint32_t));
         }
 
         uint32_t hash() const { return fValues[0]; }
@@ -140,6 +97,10 @@ private:
     SkLRUCache<ImageKey, sk_sp<SkImage>, ImageHash> fCache;
 };
 
+}  // anonymous namespace
+
+namespace ToolUtils {
+
 skgpu::graphite::RecorderOptions CreateTestingRecorderOptions() {
     skgpu::graphite::RecorderOptions options;
 
@@ -147,7 +108,5 @@ skgpu::graphite::RecorderOptions CreateTestingRecorderOptions() {
 
     return options;
 }
-
-#endif // SK_GRAPHITE
 
 }  // namespace ToolUtils
