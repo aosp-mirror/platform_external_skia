@@ -16,6 +16,7 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
+#include "include/private/SkGainmapInfo.h"
 #include "modules/skcms/skcms.h"
 #include "src/core/SkStreamPriv.h"
 
@@ -26,6 +27,76 @@
 #include "avif/avif.h"
 #include "avif/libavif_compat.h"
 
+namespace {
+
+template <typename NumeratorType>
+float FractionToFloat(NumeratorType numerator, uint32_t denominator) {
+    // First cast to double and not float because uint32_t->float conversion can
+    // cause precision loss.
+    return static_cast<double>(numerator) / denominator;
+}
+
+sk_sp<SkColorSpace> AltImageColorSpace(const crabbyavif::avifGainMap& gain_map,
+                                       const crabbyavif::avifImage& image) {
+    sk_sp<SkColorSpace> color_space = nullptr;
+    if (!gain_map.altICC.size) {
+        return nullptr;
+    }
+    if (image.icc.size == gain_map.altICC.size &&
+        memcmp(gain_map.altICC.data, image.icc.data, gain_map.altICC.size) == 0) {
+        // Same ICC as the base image, no need to specify it.
+        return nullptr;
+    }
+    skcms_ICCProfile icc_profile;
+    if (!skcms_Parse(gain_map.altICC.data, gain_map.altICC.size, &icc_profile)) {
+        return nullptr;
+    }
+    return SkColorSpace::Make(icc_profile);
+}
+
+bool PopulateGainmapInfo(const crabbyavif::avifGainMap& gain_map,
+                         const crabbyavif::avifImage& image,
+                         SkGainmapInfo* info) {
+    if (gain_map.baseHdrHeadroom.d == 0 || gain_map.alternateHdrHeadroom.d == 0) {
+        return false;
+    }
+    const float base_headroom =
+            std::exp2(FractionToFloat(gain_map.baseHdrHeadroom.n, gain_map.baseHdrHeadroom.d));
+    const float alternate_headroom = std::exp2(
+            FractionToFloat(gain_map.alternateHdrHeadroom.n, gain_map.alternateHdrHeadroom.d));
+    const bool base_is_hdr = base_headroom > alternate_headroom;
+    info->fDisplayRatioSdr = base_is_hdr ? alternate_headroom : base_headroom;
+    info->fDisplayRatioHdr = base_is_hdr ? base_headroom : alternate_headroom;
+    info->fBaseImageType =
+            base_is_hdr ? SkGainmapInfo::BaseImageType::kHDR : SkGainmapInfo::BaseImageType::kSDR;
+    for (int i = 0; i < 3; ++i) {
+        if (gain_map.gainMapMin[i].d == 0 || gain_map.gainMapMax[i].d == 0 ||
+            gain_map.gainMapGamma[i].d == 0 || gain_map.baseOffset[i].d == 0 ||
+            gain_map.alternateOffset[i].d == 0 || gain_map.gainMapGamma[i].n == 0) {
+            return false;
+        }
+        const float min_log2 = FractionToFloat(gain_map.gainMapMin[i].n, gain_map.gainMapMin[i].d);
+        const float max_log2 = FractionToFloat(gain_map.gainMapMax[i].n, gain_map.gainMapMax[i].d);
+        info->fGainmapRatioMin[i] = std::exp2(min_log2);
+        info->fGainmapRatioMax[i] = std::exp2(max_log2);
+        // Numerator and denominator intentionally swapped to get 1.0/gamma.
+        info->fGainmapGamma[i] =
+                FractionToFloat(gain_map.gainMapGamma[i].d, gain_map.gainMapGamma[i].n);
+        const float base_offset =
+                FractionToFloat(gain_map.baseOffset[i].n, gain_map.baseOffset[i].d);
+        const float alternate_offset =
+                FractionToFloat(gain_map.alternateOffset[i].n, gain_map.alternateOffset[i].d);
+        info->fEpsilonSdr[i] = base_is_hdr ? alternate_offset : base_offset;
+        info->fEpsilonHdr[i] = base_is_hdr ? base_offset : alternate_offset;
+    }
+    if (!gain_map.useBaseColorSpace) {
+        info->fGainmapMathColorSpace = AltImageColorSpace(gain_map, image);
+    }
+    return true;
+}
+
+}  // namespace
+
 void AvifDecoderDeleter::operator()(crabbyavif::avifDecoder* decoder) const {
     if (decoder != nullptr) {
         crabbyavif::avifDecoderDestroy(decoder);
@@ -34,23 +105,38 @@ void AvifDecoderDeleter::operator()(crabbyavif::avifDecoder* decoder) const {
 
 bool SkCrabbyAvifCodec::IsAvif(const void* buffer, size_t bytesRead) {
     crabbyavif::avifROData avifData = {static_cast<const uint8_t*>(buffer), bytesRead};
-    if (crabbyavif::avifPeekCompatibleFileType(&avifData) == crabbyavif::CRABBY_AVIF_TRUE) {
-        return true;
-    }
-    // Peeking sometimes fails if the ftyp box is too large. Check the signature
-    // just to be sure.
-    const char* bytes = static_cast<const char*>(buffer);
-    return bytesRead >= 12 && !memcmp(&bytes[4], "ftyp", 4) &&
-           (!memcmp(&bytes[8], "avif", 4) || !memcmp(&bytes[8], "avis", 4));
+    return crabbyavif::avifPeekCompatibleFileType(&avifData) == crabbyavif::CRABBY_AVIF_TRUE;
 }
 
 std::unique_ptr<SkCodec> SkCrabbyAvifCodec::MakeFromStream(std::unique_ptr<SkStream> stream,
-                                                           Result* result) {
+                                                           Result* result,
+                                                           bool gainmapOnly /*=false*/) {
     SkASSERT(result);
     if (!stream) {
         *result = SkCodec::kInvalidInput;
         return nullptr;
     }
+
+    // CrabbyAvif needs a contiguous data buffer.
+    sk_sp<SkData> data = nullptr;
+    if (stream->getMemoryBase()) {
+        // It is safe to make without copy because we'll hold onto the stream.
+        data = SkData::MakeWithoutCopy(stream->getMemoryBase(), stream->getLength());
+    } else {
+        data = SkCopyStreamToData(stream.get());
+        // If we are forced to copy the stream to a data, we can go ahead and
+        // delete the stream.
+        stream.reset(nullptr);
+    }
+    return SkCrabbyAvifCodec::MakeFromData(std::move(stream), std::move(data), result, gainmapOnly);
+}
+
+std::unique_ptr<SkCodec> SkCrabbyAvifCodec::MakeFromData(std::unique_ptr<SkStream> stream,
+                                                         sk_sp<SkData> data,
+                                                         Result* result,
+                                                         bool gainmapOnly /*=false*/) {
+    SkASSERT(result);
+
     AvifDecoder avifDecoder(crabbyavif::avifDecoderCreate());
     if (avifDecoder == nullptr) {
         *result = SkCodec::kInternalError;
@@ -71,16 +157,8 @@ std::unique_ptr<SkCodec> SkCrabbyAvifCodec::MakeFromStream(std::unique_ptr<SkStr
     // TODO(vigneshv): Enable threading based on number of CPU cores available.
     avifDecoder->maxThreads = 1;
 
-    // CrabbyAvif needs a contiguous data buffer.
-    sk_sp<SkData> data = nullptr;
-    if (stream->getMemoryBase()) {
-        // It is safe to make without copy because we'll hold onto the stream.
-        data = SkData::MakeWithoutCopy(stream->getMemoryBase(), stream->getLength());
-    } else {
-        data = SkCopyStreamToData(stream.get());
-        // If we are forced to copy the stream to a data, we can go ahead and
-        // delete the stream.
-        stream.reset(nullptr);
+    if (gainmapOnly) {
+        avifDecoder->imageContentToDecode = crabbyavif::AVIF_IMAGE_CONTENT_GAIN_MAP;
     }
 
     crabbyavif::avifResult res =
@@ -103,34 +181,31 @@ std::unique_ptr<SkCodec> SkCrabbyAvifCodec::MakeFromStream(std::unique_ptr<SkStr
     const int bitsPerComponent = 8;
     SkEncodedInfo::Color color;
     SkEncodedInfo::Alpha alpha;
-    if (avifDecoder->alphaPresent) {
+    if (avifDecoder->alphaPresent && !gainmapOnly) {
         color = SkEncodedInfo::kRGBA_Color;
         alpha = SkEncodedInfo::kUnpremul_Alpha;
     } else {
         color = SkEncodedInfo::kRGB_Color;
         alpha = SkEncodedInfo::kOpaque_Alpha;
     }
-    auto width = avifDecoder->image->width;
-    auto height = avifDecoder->image->height;
-    if (avifDecoder->image->transformFlags & crabbyavif::AVIF_TRANSFORM_CLAP) {
+    if (gainmapOnly && !avifDecoder->image->gainMap) {
+        *result = SkCodec::kInvalidInput;
+        return nullptr;
+    }
+    crabbyavif::avifImage* image =
+            gainmapOnly ? avifDecoder->image->gainMap->image : avifDecoder->image;
+    auto width = image->width;
+    auto height = image->height;
+    if (image->transformFlags & crabbyavif::AVIF_TRANSFORM_CLAP) {
         crabbyavif::avifCropRect rect;
-        if (crabbyavif::crabby_avifCropRectConvertCleanApertureBox(&rect,
-                                                                   &avifDecoder->image->clap,
-                                                                   width,
-                                                                   height,
-                                                                   avifDecoder->image->yuvFormat,
-                                                                   nullptr)) {
+        if (crabbyavif::crabby_avifCropRectConvertCleanApertureBox(
+                    &rect, &image->clap, width, height, image->yuvFormat, nullptr)) {
             width = rect.width;
             height = rect.height;
         }
     }
-    SkEncodedInfo info = SkEncodedInfo::Make(width,
-                                             height,
-                                             color,
-                                             alpha,
-                                             bitsPerComponent,
-                                             std::move(profile),
-                                             avifDecoder->image->depth);
+    SkEncodedInfo info = SkEncodedInfo::Make(
+            width, height, color, alpha, bitsPerComponent, std::move(profile), image->depth);
     bool animation = avifDecoder->imageCount > 1;
     *result = kSuccess;
     return std::unique_ptr<SkCodec>(new SkCrabbyAvifCodec(std::move(info),
@@ -138,7 +213,8 @@ std::unique_ptr<SkCodec> SkCrabbyAvifCodec::MakeFromStream(std::unique_ptr<SkStr
                                                           std::move(data),
                                                           std::move(avifDecoder),
                                                           kDefault_SkEncodedOrigin,
-                                                          animation));
+                                                          animation,
+                                                          gainmapOnly));
 }
 
 SkCrabbyAvifCodec::SkCrabbyAvifCodec(SkEncodedInfo&& info,
@@ -146,11 +222,13 @@ SkCrabbyAvifCodec::SkCrabbyAvifCodec(SkEncodedInfo&& info,
                                      sk_sp<SkData> data,
                                      AvifDecoder avifDecoder,
                                      SkEncodedOrigin origin,
-                                     bool useAnimation)
+                                     bool useAnimation,
+                                     bool gainmapOnly)
         : SkScalingCodec(std::move(info), skcms_PixelFormat_RGBA_8888, std::move(stream), origin)
         , fData(std::move(data))
         , fAvifDecoder(std::move(avifDecoder))
-        , fUseAnimation(useAnimation) {}
+        , fUseAnimation(useAnimation)
+        , fGainmapOnly(gainmapOnly) {}
 
 int SkCrabbyAvifCodec::onGetFrameCount() {
     if (!fUseAnimation) {
@@ -219,7 +297,8 @@ bool SkCrabbyAvifCodec::conversionSupported(const SkImageInfo& dstInfo,
                                             bool needsColorXform) {
     return dstInfo.colorType() == kRGBA_8888_SkColorType ||
            dstInfo.colorType() == kRGBA_1010102_SkColorType ||
-           dstInfo.colorType() == kRGBA_F16_SkColorType;
+           dstInfo.colorType() == kRGBA_F16_SkColorType ||
+           dstInfo.colorType() == kRGB_565_SkColorType;
 }
 
 SkCodec::Result SkCrabbyAvifCodec::onGetPixels(const SkImageInfo& dstInfo,
@@ -231,26 +310,56 @@ SkCodec::Result SkCrabbyAvifCodec::onGetPixels(const SkImageInfo& dstInfo,
         return kUnimplemented;
     }
 
+    switch (dstInfo.colorType()) {
+        case kRGBA_8888_SkColorType:
+        case kRGB_565_SkColorType:
+            fAvifDecoder->androidMediaCodecOutputColorFormat =
+                    crabbyavif::ANDROID_MEDIA_CODEC_OUTPUT_COLOR_FORMAT_YUV420_FLEXIBLE;
+            break;
+        case kRGBA_F16_SkColorType:
+        case kRGBA_1010102_SkColorType:
+            fAvifDecoder->androidMediaCodecOutputColorFormat =
+                    crabbyavif::ANDROID_MEDIA_CODEC_OUTPUT_COLOR_FORMAT_P010;
+            break;
+        default:
+            return kUnimplemented;
+    }
+
     crabbyavif::avifResult result =
             crabbyavif::avifDecoderNthImage(fAvifDecoder.get(), options.fFrameIndex);
     if (result != crabbyavif::AVIF_RESULT_OK) {
         return kInvalidInput;
     }
+    if (fGainmapOnly && !fAvifDecoder->image->gainMap) {
+        return kInvalidInput;
+    }
+    crabbyavif::avifImage* image =
+            fGainmapOnly ? fAvifDecoder->image->gainMap->image : fAvifDecoder->image;
+    using AvifImagePtr =
+            std::unique_ptr<crabbyavif::avifImage, decltype(&crabbyavif::crabby_avifImageDestroy)>;
 
+    AvifImagePtr scaled_image{nullptr, crabbyavif::crabby_avifImageDestroy};
     if (this->dimensions() != dstInfo.dimensions()) {
+        // |image| contains plane pointers which point to Android MediaCodec's buffers. Those
+        // buffers are read-only and hence we cannot scale in place. Make a copy of the image and
+        // scale the copied image.
+        scaled_image.reset(crabbyavif::crabby_avifImageCreateEmpty());
+        result = crabbyavif::crabby_avifImageCopy(
+            scaled_image.get(), image, crabbyavif::AVIF_PLANES_ALL);
+        if (result != crabbyavif::AVIF_RESULT_OK) {
+            return kInvalidInput;
+        }
+        image = scaled_image.get();
         result = crabbyavif::avifImageScale(
-                fAvifDecoder->image, dstInfo.width(), dstInfo.height(), &fAvifDecoder->diag);
+                image, dstInfo.width(), dstInfo.height(), &fAvifDecoder->diag);
         if (result != crabbyavif::AVIF_RESULT_OK) {
             return kInvalidInput;
         }
     }
 
-    using AvifImagePtr =
-            std::unique_ptr<crabbyavif::avifImage, decltype(&crabbyavif::crabby_avifImageDestroy)>;
     // cropped_image is a view into the underlying image. It can be safely deleted once the pixels
     // are converted into RGB (or when it goes out of scope in one of the error paths).
     AvifImagePtr cropped_image{nullptr, crabbyavif::crabby_avifImageDestroy};
-    crabbyavif::avifImage* image = fAvifDecoder->image;
     if (image->transformFlags & crabbyavif::AVIF_TRANSFORM_CLAP) {
         crabbyavif::avifCropRect rect;
         if (crabbyavif::crabby_avifCropRectConvertCleanApertureBox(
@@ -279,6 +388,10 @@ SkCodec::Result SkCrabbyAvifCodec::onGetPixels(const SkImageInfo& dstInfo,
             rgbImage.depth = 10;
             rgbImage.format = crabbyavif::AVIF_RGB_FORMAT_RGBA1010102;
             break;
+        case kRGB_565_SkColorType:
+            rgbImage.depth = 8;
+            rgbImage.format = crabbyavif::AVIF_RGB_FORMAT_RGB565;
+            break;
         default:
             // TODO(vigneshv): Check if more color types need to be supported.
             // Currently android supports at least RGB565 and BGRA8888 which is
@@ -297,6 +410,18 @@ SkCodec::Result SkCrabbyAvifCodec::onGetPixels(const SkImageInfo& dstInfo,
 
     *rowsDecoded = image->height;
     return kSuccess;
+}
+
+bool SkCrabbyAvifCodec::onGetGainmapCodec(SkGainmapInfo* info,
+                                          std::unique_ptr<SkCodec>* gainmapCodec) {
+    if (!gainmapCodec || !info || !fAvifDecoder->image || !fAvifDecoder->image->gainMap ||
+        !PopulateGainmapInfo(*fAvifDecoder->image->gainMap, *fAvifDecoder->image, info)) {
+        return false;
+    }
+    Result result;
+    *gainmapCodec = SkCrabbyAvifCodec::MakeFromData(
+            /*stream=*/nullptr, fData, &result, /*gainmapOnly=*/true);
+    return static_cast<bool>(*gainmapCodec);
 }
 
 namespace SkAvifDecoder {
