@@ -72,17 +72,20 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType bac
     // backendType(WebGPU, D3D11, D3D12, Metal, Vulkan, OpenGL, OpenGLES).
     std::sort(
             adapters.begin(), adapters.end(), [](dawn::native::Adapter a, dawn::native::Adapter b) {
+                wgpu::Adapter wgpuA = a.Get();
+                wgpu::Adapter wgpuB = b.Get();
                 wgpu::AdapterInfo infoA;
                 wgpu::AdapterInfo infoB;
-                a.GetInfo(&infoA);
-                b.GetInfo(&infoB);
+                wgpuA.GetInfo(&infoA);
+                wgpuB.GetInfo(&infoB);
                 return std::tuple(infoA.adapterType, infoA.backendType) <
                        std::tuple(infoB.adapterType, infoB.backendType);
             });
 
     for (const auto& adapter : adapters) {
+        wgpu::Adapter wgpuAdapter = adapter.Get();
         wgpu::AdapterInfo props;
-        adapter.GetInfo(&props);
+        wgpuAdapter.GetInfo(&props);
         if (backend == props.backendType) {
             matchedAdaptor = adapter;
             break;
