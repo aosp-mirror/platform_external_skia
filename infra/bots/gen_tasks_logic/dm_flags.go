@@ -319,8 +319,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "PinnedImageTest")
 			skip(ALL, "test", ALL, "RecordingOrderTest_Graphite")
 			skip(ALL, "test", ALL, "RecordingSurfacesTestClear")
+			skip(ALL, "test", ALL, "RecordingSurfacesTestDraw")
 			skip(ALL, "test", ALL, "RecordingSurfacesTestWritePixels")
-			skip(ALL, "test", ALL, "RecordingSurfacesTestWritePixelsOffscreen")
 			skip(ALL, "test", ALL, "ReimportImageTextureWithMipLevels")
 			skip(ALL, "test", ALL, "ReplaceSurfaceBackendTexture")
 			skip(ALL, "test", ALL, "ResourceCacheCache")
@@ -453,7 +453,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					skip(ALL, "gm", ALL, "persptext")
 					skip(ALL, "gm", ALL, "persptext_minimal")
 					skip(ALL, "gm", ALL, "pictureshader_persp")
-					skip(ALL, "gm", ALL, "tall_stretched_bitmaps")
 					skip(ALL, "gm", ALL, "wacky_yuv_formats_frompixmaps")
 
 					// This GM is larger than Dawn compat's max texture size.
@@ -463,6 +462,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				// b/373845830 - Precompile isn't thread-safe on either Dawn Metal
 				// or Dawn Vulkan
 				skip(ALL, "test", ALL, "ThreadedPrecompileTest")
+				// b/380039123 getting both ASAN and TSAN failures for this test on Dawn
+				skip(ALL, "test", ALL, "ThreadedCompilePrecompileTest")
 
 				if b.extraConfig("Vulkan") {
 					if b.extraConfig("TSAN") {
@@ -493,6 +494,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 						skip(ALL, "test", ALL, "ImageAsyncReadPixelsGraphite")
 						skip(ALL, "test", ALL, "SurfaceAsyncReadPixelsGraphite")
 					}
+
+					// b/380049954 Graphite Native Vulkan has a thread race issue
+					skip(ALL, "test", ALL, "ThreadedCompilePrecompileTest")
 				}
 			}
 		}
