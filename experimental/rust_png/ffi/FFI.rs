@@ -88,11 +88,19 @@ mod ffi {
             bx: &mut f32,
             by: &mut f32,
         ) -> bool;
+        fn try_get_cicp_chunk(
+            self: &Reader,
+            primaries_id: &mut u8,
+            transfer_id: &mut u8,
+            matrix_id: &mut u8,
+            is_full_range: &mut bool,
+        ) -> bool;
         fn try_get_gama(self: &Reader, gamma: &mut f32) -> bool;
         fn has_iccp_chunk(self: &Reader) -> bool;
         fn get_iccp_chunk(self: &Reader) -> &[u8];
         fn has_trns_chunk(self: &Reader) -> bool;
         fn get_trns_chunk(self: &Reader) -> &[u8];
+        fn has_plte_chunk(self: &Reader) -> bool;
         fn get_plte_chunk(self: &Reader) -> &[u8];
         fn has_actl_chunk(self: &Reader) -> bool;
         fn get_actl_num_frames(self: &Reader) -> u32;
@@ -315,6 +323,28 @@ impl Reader {
         }
     }
 
+    /// If the decoded PNG image contained a `cICP` chunk then
+    /// `try_get_cicp_chunk` returns `true` and populates the out
+    /// parameters.  Otherwise, returns `false`.
+    fn try_get_cicp_chunk(
+        &self,
+        primaries_id: &mut u8,
+        transfer_id: &mut u8,
+        matrix_id: &mut u8,
+        is_full_range: &mut bool,
+    ) -> bool {
+        match self.reader.info().coding_independent_code_points.as_ref() {
+            None => false,
+            Some(cicp) => {
+                *primaries_id = cicp.color_primaries;
+                *transfer_id = cicp.transfer_function;
+                *matrix_id = cicp.matrix_coefficients;
+                *is_full_range = cicp.is_video_full_range_image;
+                true
+            }
+        }
+    }
+
     /// If the decoded PNG image contained a `gAMA` chunk then `try_get_gama`
     /// returns `true` and populates the `gamma` out parameter.  Otherwise,
     /// returns `false`.
@@ -348,6 +378,11 @@ impl Reader {
     /// chunk.
     fn get_trns_chunk(&self) -> &[u8] {
         self.reader.info().trns.as_ref().unwrap().as_ref()
+    }
+
+    /// Returns whether the `PLTE` chunk exists.
+    fn has_plte_chunk(&self) -> bool {
+        self.reader.info().palette.is_some()
     }
 
     /// Returns contents of the `PLTE` chunk.  Panics if there is no `PLTE`
