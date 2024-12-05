@@ -34,6 +34,7 @@
 #include "src/core/SkMipmap.h"
 #include "src/core/SkSLTypeShared.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/SkRenderEngineAbortf.h"
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/ganesh/GrAttachment.h"
@@ -4290,9 +4291,10 @@ GrGLAttribArrayState* GrGLGpu::HWVertexArrayState::bindInternalVertexArray(GrGLG
     return attribState;
 }
 
-void GrGLGpu::addFinishedProc(GrGpuFinishedProc finishedProc,
-                              GrGpuFinishedContext finishedContext) {
-    fFinishCallbacks.add(finishedProc, finishedContext);
+void GrGLGpu::addFinishedCallback(skgpu::AutoCallback callback,
+                                  std::optional<GrTimerQuery> timerQuery) {
+    GrGLint glQuery = timerQuery ? static_cast<GrGLint>(timerQuery->query) : 0;
+    fFinishCallbacks.add(std::move(callback), glQuery);
 }
 
 void GrGLGpu::flush(FlushType flushType) {
@@ -4332,58 +4334,66 @@ void GrGLGpu::submit(GrOpsRenderPass* renderPass) {
     fCachedOpsRenderPass->reset();
 }
 
-[[nodiscard]] GrGLsync GrGLGpu::insertFence() {
-    if (!this->glCaps().fenceSyncSupport()) {
-        return nullptr;
-    }
-    GrGLsync sync;
-    if (this->glCaps().fenceType() == GrGLCaps::FenceType::kNVFence) {
-        static_assert(sizeof(GrGLsync) >= sizeof(GrGLuint));
-        GrGLuint fence = 0;
-        GL_CALL(GenFences(1, &fence));
-        GL_CALL(SetFence(fence, GR_GL_ALL_COMPLETED));
-        sync = reinterpret_cast<GrGLsync>(static_cast<intptr_t>(fence));
-    } else {
-        GL_CALL_RET(sync, FenceSync(GR_GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
+[[nodiscard]] GrGLsync GrGLGpu::insertSync() {
+    GrGLsync sync = nullptr;
+    switch (this->glCaps().fenceType()) {
+        case GrGLCaps::FenceType::kNone:
+            return nullptr;
+        case GrGLCaps::FenceType::kNVFence: {
+            static_assert(sizeof(GrGLsync) >= sizeof(GrGLuint));
+            GrGLuint fence = 0;
+            GL_CALL(GenFences(1, &fence));
+            GL_CALL(SetFence(fence, GR_GL_ALL_COMPLETED));
+            sync = reinterpret_cast<GrGLsync>(static_cast<intptr_t>(fence));
+            break;
+        }
+        case GrGLCaps::FenceType::kSyncObject: {
+            GL_CALL_RET(sync, FenceSync(GR_GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
+            break;
+        }
     }
     this->setNeedsFlush();
     return sync;
 }
 
-bool GrGLGpu::waitSync(GrGLsync sync, uint64_t timeout, bool flush) {
-    if (this->glCaps().fenceType() == GrGLCaps::FenceType::kNVFence) {
-        GrGLuint nvFence = static_cast<GrGLuint>(reinterpret_cast<intptr_t>(sync));
-        if (!timeout) {
-            if (flush) {
-                this->flush(FlushType::kForce);
-            }
+bool GrGLGpu::testSync(GrGLsync sync) {
+    switch (this->glCaps().fenceType()) {
+        case GrGLCaps::FenceType::kNone:
+            SK_ABORT("Testing sync without sync support.");
+            return false;
+        case GrGLCaps::FenceType::kNVFence: {
+            GrGLuint nvFence = static_cast<GrGLuint>(reinterpret_cast<intptr_t>(sync));
             GrGLboolean result;
             GL_CALL_RET(result, TestFence(nvFence));
             return result == GR_GL_TRUE;
         }
-        // Ignore non-zero timeouts. GL_NV_fence has no timeout functionality.
-        // If this really becomes necessary we could poll TestFence().
-        // FinishFence always flushes so no need to check flush param.
-        GL_CALL(FinishFence(nvFence));
-        return true;
-    } else {
-        GrGLbitfield flags = flush ? GR_GL_SYNC_FLUSH_COMMANDS_BIT : 0;
-        GrGLenum result;
-        GL_CALL_RET(result, ClientWaitSync(sync, flags, timeout));
-        return (GR_GL_CONDITION_SATISFIED == result || GR_GL_ALREADY_SIGNALED == result);
+        case GrGLCaps::FenceType::kSyncObject: {
+            constexpr GrGLbitfield kFlags = 0;
+            GrGLenum result;
+#if defined(__EMSCRIPTEN__)
+            GL_CALL_RET(result, ClientWaitSync(sync, kFlags, 0, 0));
+#else
+            GL_CALL_RET(result, ClientWaitSync(sync, kFlags, 0));
+#endif
+            return (GR_GL_CONDITION_SATISFIED == result || GR_GL_ALREADY_SIGNALED == result);
+        }
     }
+    SkUNREACHABLE;
 }
 
-bool GrGLGpu::waitFence(GrGLsync fence) {
-    if (!this->glCaps().fenceSyncSupport()) {
-        return true;
-    }
-    return this->waitSync(fence, 0, false);
-}
-
-void GrGLGpu::deleteFence(GrGLsync fence) {
-    if (this->glCaps().fenceSyncSupport()) {
-        this->deleteSync(fence);
+void GrGLGpu::deleteSync(GrGLsync sync) {
+    switch (this->glCaps().fenceType()) {
+        case GrGLCaps::FenceType::kNone:
+            SK_ABORT("Deleting sync without sync support.");
+            break;
+        case GrGLCaps::FenceType::kNVFence: {
+            GrGLuint nvFence = SkToUInt(reinterpret_cast<intptr_t>(sync));
+            GL_CALL(DeleteFences(1, &nvFence));
+            break;
+        }
+        case GrGLCaps::FenceType::kSyncObject:
+            GL_CALL(DeleteSync(sync));
+            break;
     }
 }
 
@@ -4412,10 +4422,73 @@ void GrGLGpu::waitSemaphore(GrSemaphore* semaphore) {
     SkASSERT(semaphore);
     GrGLSemaphore* glSem = static_cast<GrGLSemaphore*>(semaphore);
 
+#if defined(__EMSCRIPTEN__)
+    constexpr auto kLo = SkTo<GrGLuint>(GR_GL_TIMEOUT_IGNORED & 0xFFFFFFFFull);
+    constexpr auto kHi = SkTo<GrGLuint>(GR_GL_TIMEOUT_IGNORED >> 32);
+    GL_CALL(WaitSync(glSem->sync(), 0, kLo, kHi));
+#else
     GL_CALL(WaitSync(glSem->sync(), 0, GR_GL_TIMEOUT_IGNORED));
+#endif
 }
 
-void GrGLGpu::checkFinishProcs() {
+std::optional<GrTimerQuery> GrGLGpu::startTimerQuery() {
+    if (glCaps().timerQueryType() == GrGLCaps::TimerQueryType::kNone) {
+        return {};
+    }
+    GrGLuint glQuery;
+    GL_CALL(GenQueries(1, &glQuery));
+    if (!glQuery) {
+        return {};
+    }
+    if (glCaps().timerQueryType() == GrGLCaps::TimerQueryType::kDisjoint) {
+        // Clear the disjoint state
+        GrGLint _;
+        GR_GL_GetIntegerv(this->glInterface(), GR_GL_GPU_DISJOINT, &_);
+    }
+    GL_CALL(BeginQuery(GR_GL_TIME_ELAPSED, glQuery));
+    return GrTimerQuery{glQuery};
+}
+
+void GrGLGpu::endTimerQuery(const GrTimerQuery& timerQuery) {
+    SkASSERT(glCaps().timerQueryType() != GrGLCaps::TimerQueryType::kNone);
+    SkASSERT(SkToUInt(timerQuery.query));
+    // Since only one query of a particular type can be active at once, glEndQuery doesn't take a
+    // query parameter.
+    GL_CALL(EndQuery(GR_GL_TIME_ELAPSED));
+}
+
+uint64_t GrGLGpu::getTimerQueryResult(GrGLuint query) {
+    SkASSERT(glCaps().timerQueryType() != GrGLCaps::TimerQueryType::kNone);
+    SkASSERT(query);
+
+    // Because we only call this after a sync completes the query *should* be available.
+    GrGLuint available;
+    GL_CALL(GetQueryObjectuiv(query, GR_GL_QUERY_RESULT_AVAILABLE, &available));
+    bool getResult = true;
+    if (!available) {
+        SkDebugf("GL timer query is not available.\n");
+        getResult = false;
+    }
+
+    if (glCaps().timerQueryType() == GrGLCaps::TimerQueryType::kDisjoint) {
+        // Clear the disjoint state
+        GrGLint disjoint;
+        GR_GL_GetIntegerv(this->glInterface(), GR_GL_GPU_DISJOINT, &disjoint);
+        if (disjoint) {
+            SkDebugf("GL timer query ignored because of disjoint event.\n");
+            getResult = false;
+        }
+    }
+
+    uint64_t result = 0;
+    if (getResult) {
+        GR_GL_GetQueryObjectui64v(this->glInterface(), query, GR_GL_QUERY_RESULT, &result);
+    }
+    GL_CALL(DeleteQueries(1, &query));
+    return result;
+}
+
+void GrGLGpu::checkFinishedCallbacks() {
     fFinishCallbacks.check();
 }
 
@@ -4438,15 +4511,6 @@ GrGLenum GrGLGpu::getErrorAndCheckForOOM() {
         this->setOOMed();
     }
     return error;
-}
-
-void GrGLGpu::deleteSync(GrGLsync sync) {
-    if (this->glCaps().fenceType() == GrGLCaps::FenceType::kNVFence) {
-        GrGLuint nvFence = SkToUInt(reinterpret_cast<intptr_t>(sync));
-        GL_CALL(DeleteFences(1, &nvFence));
-    } else {
-        GL_CALL(DeleteSync(sync));
-    }
 }
 
 std::unique_ptr<GrSemaphore> GrGLGpu::prepareTextureForCrossContextUsage(GrTexture* texture) {

@@ -28,6 +28,10 @@
 #include "src/gpu/graphite/dawn/DawnUtilsPriv.h"
 #include "src/sksl/SkSLUtil.h"
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/version.h>
+#endif
+
 namespace {
 
 skgpu::UniqueKey::Domain get_pipeline_domain() {
@@ -456,18 +460,15 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
     fResourceBindingReqs.fGradientBufferBinding = DawnGraphicsPipeline::kGradientBufferIndex;
 
 #if !defined(__EMSCRIPTEN__)
-    // TODO(b/318817249): In D3D11, SSBOs trigger FXC compiler failures when attempting to unroll
-    // loops.
     // TODO(b/344963958): SSBOs contribute to OOB shader memory access and dawn device loss on
     // Android. Once the problem is fixed SSBOs can be enabled again.
-    fStorageBufferSupport = info.backendType != wgpu::BackendType::D3D11 &&
-                            info.backendType != wgpu::BackendType::OpenGL &&
+    fStorageBufferSupport = info.backendType != wgpu::BackendType::OpenGL &&
                             info.backendType != wgpu::BackendType::OpenGLES &&
                             info.backendType != wgpu::BackendType::Vulkan;
 #else
-    // WASM doesn't provide a way to query the backend, so can't tell if we are on d3d11 or not.
-    // Pessimistically assume we could be. Once b/318817249 is fixed, this can go away and SSBOs
-    // can always be enabled.
+    // WASM doesn't provide a way to query the backend, so can't tell if we are on a backend that
+    // needs to have SSBOs disabled. Pessimistically assume we could be. Once the above conditions
+    // go away in Dawn-native, then we can assume SSBOs are always supported in pure WebGPU too.
     fStorageBufferSupport = false;
 #endif
 
@@ -503,6 +504,24 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
     fSupportsPartialLoadResolve =
             backendContext.fDevice.HasFeature(wgpu::FeatureName::DawnPartialLoadResolveTexture);
 #endif
+
+    if (backendContext.fDevice.HasFeature(wgpu::FeatureName::TimestampQuery)) {
+        // Native Dawn has an API for writing timestamps on command buffers. WebGPU only supports
+        // begin and end timestamps on render and compute passes.
+#if !defined(__EMSCRIPTEN__)
+        fSupportsCommandBufferTimestamps = true;
+#endif
+
+        // The emscripten C/C++ interface before 3.1.48 for timestamp query writes on render and
+        // compute passes is different than on current emsdk. The older API isn't correctly
+        // translated to the current JS WebGPU API in emsdk. So we require 3.1.48+.
+#if !defined(__EMSCRIPTEN__)                                                                   \
+        || (__EMSCRIPTEN_major__ > 3)                                                          \
+        || (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ > 1)                             \
+        || (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ == 1 && __EMSCRIPTEN_tiny__ >= 48)
+        fSupportedGpuStats |= GpuStatsFlags::kElapsedTime;
+#endif
+    }
 
     if (!backendContext.fTick) {
         fAllowCpuSync = false;
