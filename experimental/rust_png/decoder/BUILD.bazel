@@ -21,7 +21,7 @@ skia_filegroup(
 )
 
 skia_cc_library(
-    name = "rust_png",
+    name = "decoder",
     srcs = [":srcs"],
     hdrs = [":hdrs"],
     features = ["layering_check"],
@@ -29,10 +29,11 @@ skia_cc_library(
         "//:core",
         "//experimental/rust_png/ffi:cxx_bridge",
         "//experimental/rust_png/ffi:ffi_cpp",
+        "//experimental/rust_png/ffi:utils",
         "//modules/skcms",
         "//src/base",
         "//src/codec:any_decoder",
-        "//src/codec:png_decode",
+        "//src/codec:png_codec_base",
         "//src/core:core_priv",
         "@cxx//:core-lib",
     ],

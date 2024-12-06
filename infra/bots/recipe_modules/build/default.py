@@ -260,7 +260,8 @@ def compile_fn(api, checkout_root, out_dir):
     args['skia_use_freetype'] = 'true' # we compare with freetype in tests
     args['skia_use_system_freetype2'] = 'false'
   if 'RustPNG' in extra_tokens:
-    args['skia_use_rust_png'] = 'true'
+    args['skia_use_rust_png_decode'] = 'true'
+    args['skia_use_rust_png_encode'] = 'true'
   if 'FreeType' in extra_tokens:
     args['skia_use_freetype'] = 'true'
     args['skia_use_system_freetype2'] = 'false'
