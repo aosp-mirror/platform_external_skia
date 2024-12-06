@@ -126,9 +126,11 @@ skia_cc_binary(
         "//tools/gpu:ganesh_gl_utils",
         "//tools/graphite:graphite_utils",
         "//tools/sk_app",
+        "//tools/sksltrace:sksltraceutils",
         "//tools/skui",
         "//tools/timer",
         "//tools/trace",
+        "//tools/window:window_graphite",
         "@delaunator",
         "@imgui",
     ] + select({
