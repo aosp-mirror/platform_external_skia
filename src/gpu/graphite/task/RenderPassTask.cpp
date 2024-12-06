@@ -98,17 +98,32 @@ Task::Status RenderPassTask::addCommands(Context* context,
                                          ReplayTargetData replayData) {
     // TBD: Expose the surfaces that will need to be attached within the renderpass?
 
-    // TODO: for task execution, start the render pass, then iterate passes and
-    // possibly(?) start each subpass, and call DrawPass::addCommands() on the command buffer
-    // provided to the task. Then close the render pass and we should have pixels..
-
     // Instantiate the target
     SkASSERT(fTarget && fTarget->isInstantiated());
+    SkASSERT(!fDstCopy || fDstCopy->isInstantiated());
 
+    // Set any replay translation and clip, as needed.
+    // The clip set here will intersect with any scissor set during this render pass.
+    const SkIRect renderTargetBounds = SkIRect::MakeSize(fTarget->dimensions());
     if (fTarget->texture() == replayData.fTarget) {
-        commandBuffer->setReplayTranslation(replayData.fTranslation);
+        // We're drawing to the final replay target, so apply replay translation and clip.
+        if (replayData.fClip.isEmpty()) {
+            // If no replay clip is defined, default to the render target bounds.
+            commandBuffer->setReplayTranslationAndClip(replayData.fTranslation,
+                                                       renderTargetBounds);
+        } else {
+            // If a replay clip is defined, intersect it with the render target bounds.
+            // If the intersection is empty, we can skip this entire render pass.
+            SkIRect replayClip = replayData.fClip;
+            if (!replayClip.intersect(renderTargetBounds)) {
+                return Status::kSuccess;
+            }
+            commandBuffer->setReplayTranslationAndClip(replayData.fTranslation, replayClip);
+        }
     } else {
-        commandBuffer->clearReplayTranslation();
+        // We're not drawing to the final replay target, so don't apply replay translation or clip.
+        // In this case as well, the clip we set defaults to the render target bounds.
+        commandBuffer->setReplayTranslationAndClip({0, 0}, renderTargetBounds);
     }
 
     // We don't instantiate the MSAA or DS attachments in prepareResources because we want to use
@@ -147,13 +162,13 @@ Task::Status RenderPassTask::addCommands(Context* context,
     // TODO(b/313629288) we always pass in the render target's dimensions as the viewport here.
     // Using the dimensions of the logical device that we're drawing to could reduce flakiness in
     // rendering.
-    // TODO(b/280802448): Pass in the dstCopy texture and bounds to addRenderPass() so they can be
-    // bound as intrinsic uniforms.
     if (commandBuffer->addRenderPass(fRenderPassDesc,
                                      std::move(colorAttachment),
                                      std::move(resolveAttachment),
                                      std::move(depthStencilAttachment),
-                                     SkIRect::MakeSize(fTarget->dimensions()),
+                                     fDstCopy ? fDstCopy->texture() : nullptr,
+                                     fDstCopyBounds,
+                                     fTarget->dimensions(),
                                      fDrawPasses)) {
         return Status::kSuccess;
     } else {

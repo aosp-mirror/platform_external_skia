@@ -23,7 +23,7 @@ bool is_map_succeeded(WGPUBufferMapAsyncStatus status) {
 [[maybe_unused]]
 void log_map_error(WGPUBufferMapAsyncStatus status, const char*) {
     const char* statusStr;
-    Priority priority = Priority::kError;
+    LogPriority priority = LogPriority::kError;
     switch (status) {
         case WGPUBufferMapAsyncStatus_ValidationError:
             statusStr = "ValidationError";
@@ -41,11 +41,11 @@ void log_map_error(WGPUBufferMapAsyncStatus status, const char*) {
             break;
         case WGPUBufferMapAsyncStatus_DestroyedBeforeCallback:
             statusStr = "DestroyedBeforeCallback";
-            priority = Priority::kDebug;
+            priority = LogPriority::kDebug;
             break;
         case WGPUBufferMapAsyncStatus_UnmappedBeforeCallback:
             statusStr = "UnmappedBeforeCallback";
-            priority = Priority::kDebug;
+            priority = LogPriority::kDebug;
             break;
         case WGPUBufferMapAsyncStatus_MappingAlreadyPending:
             statusStr = "MappingAlreadyPending";
@@ -87,7 +87,7 @@ void log_map_error(wgpu::MapAsyncStatus status, const char* message) {
             SK_ABORT("This status is not an error");
             break;
     }
-    SKGPU_LOG(Priority::kError,
+    SKGPU_LOG(LogPriority::kError,
               "Buffer async map failed with status %s, message '%s'.",
               statusStr,
               message);
@@ -125,6 +125,9 @@ sk_sp<DawnBuffer> DawnBuffer::Make(const DawnSharedContext* sharedContext,
             usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst |
                     wgpu::BufferUsage::CopySrc;
             break;
+        case BufferType::kQuery:
+            usage = wgpu::BufferUsage::QueryResolve | wgpu::BufferUsage::CopySrc;
+            break;
         case BufferType::kIndirect:
             usage = wgpu::BufferUsage::Indirect | wgpu::BufferUsage::Storage |
                     wgpu::BufferUsage::CopyDst;
@@ -138,13 +141,18 @@ sk_sp<DawnBuffer> DawnBuffer::Make(const DawnSharedContext* sharedContext,
     }
 
     if (sharedContext->caps()->drawBufferCanBeMapped() &&
-        accessPattern == AccessPattern::kHostVisible &&
-        type != BufferType::kXferGpuToCpu) {
-        // If the buffer is intended to be mappabe, add MapWrite usage and remove
-        // CopyDst.
-        // We don't want to allow both CPU and GPU to write to the same buffer.
-        usage |= wgpu::BufferUsage::MapWrite;
-        usage &= ~wgpu::BufferUsage::CopyDst;
+        accessPattern == AccessPattern::kHostVisible && type != BufferType::kXferGpuToCpu) {
+        if (type == BufferType::kQuery) {
+            // We can map the query buffer to get the results directly rather than having to copy to
+            // a transfer buffer.
+            usage |= wgpu::BufferUsage::MapRead;
+        } else {
+            // If the buffer is intended to be mappable, add MapWrite usage and remove
+            // CopyDst.
+            // We don't want to allow both CPU and GPU to write to the same buffer.
+            usage |= wgpu::BufferUsage::MapWrite;
+            usage &= ~wgpu::BufferUsage::CopyDst;
+        }
     }
 
     wgpu::BufferDescriptor desc;
@@ -175,6 +183,7 @@ DawnBuffer::DawnBuffer(const DawnSharedContext* sharedContext,
                        void* mappedAtCreationPtr)
         : Buffer(sharedContext,
                  size,
+                 Protected::kNo, // Dawn doesn't support protected memory
                  /*commandBufferRefsAsUsageRefs=*/buffer.GetUsage() & wgpu::BufferUsage::MapWrite)
         , fBuffer(std::move(buffer)) {
     fMapPtr = mappedAtCreationPtr;

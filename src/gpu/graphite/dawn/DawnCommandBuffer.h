@@ -14,6 +14,7 @@
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/compute/DispatchGroup.h"
 #include "src/gpu/graphite/dawn/DawnGraphicsPipeline.h"
+#include "src/gpu/graphite/dawn/DawnResourceProvider.h"
 
 #include "webgpu/webgpu_cpp.h"  // NO_G3_REWRITE
 
@@ -24,7 +25,6 @@ class ComputePipeline;
 class DawnBuffer;
 class DawnComputePipeline;
 class DawnQueueManager;
-class DawnResourceProvider;
 class DawnSharedContext;
 class DawnTexture;
 class DispatchGroup;
@@ -37,9 +37,21 @@ public:
 
     wgpu::CommandBuffer finishEncoding();
 
+#if defined(SK_DEBUG)
+    bool hasActivePassEncoder() const {
+        return fActiveRenderPassEncoder || fActiveComputePassEncoder;
+    }
+#endif
+
+    bool startTimerQuery() override;
+    void endTimerQuery() override;
+    std::optional<GpuStats> gpuStats() override;
+
 private:
     DawnCommandBuffer(const DawnSharedContext* sharedContext,
                       DawnResourceProvider* resourceProvider);
+
+    ResourceProvider* resourceProvider() const override { return fResourceProvider; }
 
     void onResetCommandBuffer() override;
     bool setNewCommandBufferResources() override;
@@ -84,7 +96,7 @@ private:
     void bindTextureAndSamplers(const DrawPass& drawPass,
                                 const DrawPassCommands::BindTexturesAndSamplers& command);
 
-    void setScissor(unsigned int left, unsigned int top, unsigned int width, unsigned int height);
+    void setScissor(const Scissor&);
     bool updateIntrinsicUniforms(SkIRect viewport);
     void setViewport(SkIRect viewport);
 
@@ -145,15 +157,17 @@ private:
 
     std::array<BindBufferInfo, DawnGraphicsPipeline::kNumUniformBuffers> fBoundUniforms;
 
-    class IntrinsicConstantsManager;
-    std::unique_ptr<IntrinsicConstantsManager> fIntrinsicConstants;
-
     wgpu::CommandEncoder fCommandEncoder;
     wgpu::RenderPassEncoder fActiveRenderPassEncoder;
     wgpu::ComputePassEncoder fActiveComputePassEncoder;
 
     wgpu::Buffer fCurrentIndirectBuffer;
     size_t fCurrentIndirectBufferOffset = 0;
+
+    bool fWroteFirstPassTimestamps = false;
+    wgpu::QuerySet fTimestampQuerySet;
+    sk_sp<DawnBuffer> fTimestampQueryBuffer;
+    sk_sp<DawnBuffer> fTimestampQueryXferBuffer;
 
     const DawnGraphicsPipeline* fActiveGraphicsPipeline = nullptr;
     const DawnComputePipeline* fActiveComputePipeline = nullptr;

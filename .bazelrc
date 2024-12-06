@@ -25,6 +25,7 @@ build --host_platform=//bazel/platform:host_with_hermetic_toolchain
 # Register our toolchains. We do this here, and not in WORKSPACE.bazel because
 # --extra_toolchains has priority over register_toolchains and we conditionally add some toolchains
 # for RBE.
+build --extra_toolchains=//toolchain:clang_ios_arm64_toolchain
 build --extra_toolchains=//toolchain:clang_linux_x64_toolchain
 build --extra_toolchains=//toolchain:clang_mac_x64_toolchain
 build --extra_toolchains=//toolchain:clang_mac_arm64_toolchain
@@ -90,7 +91,7 @@ build:remote --java_runtime_version=rbe_jdk
 build:remote --tool_java_runtime_version=rbe_jdk
 
 # When a remote configuration is chosen, add "remote" to the list of spawn_strategies.
-build:remote --spawn_strategy=remote,sandboxed
+build:remote --spawn_strategy=remote,sandboxed,local
 
 # Enable remote execution so actions are performed on the remote systems.
 build:remote --remote_executor=grpcs://remotebuildexecution.googleapis.com
