@@ -380,6 +380,7 @@ bool SkJpegCodec::onDimensionsSupported(const SkISize& size) {
 
         // Return a failure if we have tried all of the possible scales
         if (1 == num || dstWidth > dinfo.output_width || dstHeight > dinfo.output_height) {
+            jpeg_destroy_decompress(&dinfo);
             return false;
         }
 
