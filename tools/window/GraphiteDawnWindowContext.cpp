@@ -190,9 +190,6 @@ wgpu::Device GraphiteDawnWindowContext::createDevice(wgpu::BackendType type) {
     if (adapter.HasFeature(wgpu::FeatureName::TimestampQuery)) {
         features.push_back(wgpu::FeatureName::TimestampQuery);
     }
-    if (adapter.HasFeature(wgpu::FeatureName::DawnTexelCopyBufferRowAlignment)) {
-        features.push_back(wgpu::FeatureName::DawnTexelCopyBufferRowAlignment);
-    }
 
     wgpu::DeviceDescriptor deviceDescriptor;
     deviceDescriptor.requiredFeatures = features.data();

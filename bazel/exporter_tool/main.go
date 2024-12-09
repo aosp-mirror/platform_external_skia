@@ -71,7 +71,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_codec_rust_png",
 			Rules: []string{
 				"//experimental/rust_png/decoder:srcs",
-				"//experimental/rust_png/ffi:utils",
 			},
 		},
 		{Var: "skia_codec_rust_png_ffi_rs_srcs",
@@ -87,6 +86,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_codec_rust_png_ffi_cpp_hdrs",
 			Rules: []string{
 				"//experimental/rust_png/ffi:ffi_cpp",
+				"//experimental/rust_png/ffi:utils",
 			},
 		},
 	}},
@@ -141,10 +141,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_encode_rust_png_public",
 			Rules: []string{"//experimental/rust_png/encoder:hdrs"}},
 		{Var: "skia_encode_rust_png_srcs",
-			Rules: []string{
-				"//experimental/rust_png/encoder:srcs",
-				"//experimental/rust_png/ffi:utils",
-			}},
+			Rules: []string{"//experimental/rust_png/encoder:srcs"}},
 		{Var: "skia_encode_png_base",
 			Rules: []string{
 				"//src/encode:png_encode_base_srcs",
@@ -408,7 +405,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/sksl:sksl_skslc_module_srcs",
 				"//src/utils:utils_skslc_hdrs",
 				"//src/utils:utils_skslc_srcs",
-				"//src/utils:json_srcs",
 			}}},
 	},
 	{GNI: "gn/sksl_tests.gni", Vars: []exporter.GNIFileListExportDesc{
@@ -448,8 +444,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/utils:core_srcs",
 				"//src/utils:char_to_glyphcache",
 				"//src/utils:canvas_state_utils",
-				"//src/utils:json_hdrs",
-				"//src/utils:json_srcs",
 				"//src/utils:multi_picture_document",
 				"//src/utils:clip_stack_utils",
 				"//src/utils:float_to_decimal",

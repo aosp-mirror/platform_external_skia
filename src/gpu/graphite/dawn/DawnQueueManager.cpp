@@ -15,10 +15,9 @@
 
 namespace skgpu::graphite {
 namespace {
-#if defined(__EMSCRIPTEN__)
 // GpuWorkSubmission with AsyncWait. This is useful for wasm where wgpu::Future
 // is not available yet.
-class DawnWorkSubmissionWithAsyncWait final : public GpuWorkSubmission {
+class [[maybe_unused]] DawnWorkSubmissionWithAsyncWait final : public GpuWorkSubmission {
 public:
     DawnWorkSubmissionWithAsyncWait(std::unique_ptr<CommandBuffer> cmdBuffer,
                                     DawnQueueManager* queueManager,
@@ -37,9 +36,11 @@ DawnWorkSubmissionWithAsyncWait::DawnWorkSubmissionWithAsyncWait(
         const DawnSharedContext* sharedContext)
         : GpuWorkSubmission(std::move(cmdBuffer), queueManager), fAsyncWait(sharedContext) {
     queueManager->dawnQueue().OnSubmittedWorkDone(
+#if defined(__EMSCRIPTEN__)
             // This is parameter is being removed:
             // https://github.com/webgpu-native/webgpu-headers/issues/130
             /*signalValue=*/0,
+#endif
             [](WGPUQueueWorkDoneStatus, void* userData) {
                 auto asyncWaitPtr = static_cast<DawnAsyncWait*>(userData);
                 asyncWaitPtr->signal();
@@ -55,7 +56,7 @@ void DawnWorkSubmissionWithAsyncWait::onWaitUntilFinished(const SharedContext*) 
     fAsyncWait.busyWait();
 }
 
-#else
+#if !defined(__EMSCRIPTEN__)
 
 // The version with wgpu::Future. This is not available in wasm yet so we have
 // to guard behind #if
@@ -104,7 +105,9 @@ void DawnWorkSubmissionWithFuture::onWaitUntilFinished(const SharedContext* shar
     SkASSERT(status == wgpu::WaitStatus::Success);
     SkASSERT(waitInfo.completed);
 }
-#endif  // defined(__EMSCRIPTEN__)
+
+#endif  // !defined(__EMSCRIPTEN__)
+
 } // namespace
 
 DawnQueueManager::DawnQueueManager(wgpu::Queue queue, const SharedContext* sharedContext)

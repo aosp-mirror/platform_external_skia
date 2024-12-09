@@ -14,7 +14,6 @@
 
 #include "include/codec/SkCodec.h"
 #include "include/core/SkRefCnt.h"
-#include "include/private/SkGainmapInfo.h"
 #include "src/codec/SkPngCodecBase.h"
 
 class SkPngChunkReader;
@@ -33,10 +32,6 @@ public:
 
     // FIXME (scroggo): Temporarily needed by AutoCleanPng.
     void setIdatLength(size_t len) { fIdatLength = len; }
-
-    bool onGetGainmapCodec(SkGainmapInfo*, std::unique_ptr<SkCodec>*) override;
-
-    bool onGetGainmapInfo(SkGainmapInfo*) override;
 
     ~SkPngCodec() override;
 
@@ -58,9 +53,7 @@ protected:
                std::unique_ptr<SkStream>,
                SkPngChunkReader*,
                void* png_ptr,
-               void* info_ptr,
-               std::unique_ptr<SkStream>,
-               std::optional<SkGainmapInfo>);
+               void* info_ptr);
 
     Result onGetPixels(const SkImageInfo&, void*, size_t, const Options&, int*)
             override;
@@ -102,7 +95,5 @@ private:
 
     size_t                         fIdatLength;
     bool                           fDecodedIdat;
-    std::unique_ptr<SkStream> fGainmapStream;
-    std::optional<SkGainmapInfo> fGainmapInfo;
 };
 #endif  // SkPngCodec_DEFINED
