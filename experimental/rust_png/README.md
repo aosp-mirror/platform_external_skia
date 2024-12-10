@@ -45,9 +45,8 @@ To test the code (via `tests/SkPngRustDecoderTest.cpp` and
 
 ```
 $ out/RustPng/dm --src tests --nogpu \
-    --match Codec_apng \
-    --match Codec_png \
-    --match Encode_png
+    --match RustPngCodec \
+            RustEncodePng
 ```
 
 TODO(https://crbug.com/356875275): Add support for running older tests
@@ -59,4 +58,9 @@ TODO(https://crbug.com/356875275): Add support for running older tests
     - No APNG support.
     - No CICP support.
 * `SkPngRustCodec` differences - see
-  https://issues.chromium.org/issues?q=parentid:362829876%2B):
+  https://issues.chromium.org/issues?q=parentid:362829876%2B
+
+## Differences between `SkPngEncoder` and `SkPngRustEncoder`
+
+* `SkPngRustEncoder` differences - see
+  https://issues.chromium.org/issues?q=parentid:381140294%2B
