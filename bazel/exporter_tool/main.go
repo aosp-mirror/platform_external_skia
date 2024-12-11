@@ -57,10 +57,16 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		// TODO(https://crbug.com/381900683): Replace this with more granular lists.
 		{Var: "skia_codec_png",
 			Rules: []string{
-				"//src/codec:buffet_png_srcs",
-				"//src/codec:common_png_srcs",
+				"//src/codec:buffet_libpng_srcs",
+				"//src/codec:common_libpng_srcs",
 				"//src/codec:png_codec_base_hdrs",
 				"//src/codec:png_codec_base_srcs",
+			},
+		},
+		{Var: "skia_codec_libpng_srcs",
+			Rules: []string{
+				"//src/codec:buffet_libpng_srcs",
+				"//src/codec:common_libpng_srcs",
 			},
 		},
 		{Var: "skia_codec_rust_png_public",
@@ -408,7 +414,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/sksl:sksl_skslc_module_srcs",
 				"//src/utils:utils_skslc_hdrs",
 				"//src/utils:utils_skslc_srcs",
-				"//src/utils:json_srcs",
 			}}},
 	},
 	{GNI: "gn/sksl_tests.gni", Vars: []exporter.GNIFileListExportDesc{
@@ -448,8 +453,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/utils:core_srcs",
 				"//src/utils:char_to_glyphcache",
 				"//src/utils:canvas_state_utils",
-				"//src/utils:json_hdrs",
-				"//src/utils:json_srcs",
 				"//src/utils:multi_picture_document",
 				"//src/utils:clip_stack_utils",
 				"//src/utils:float_to_decimal",
@@ -742,6 +745,10 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{
 				"//modules/skcms:skcms_TransformSkx",
 			}},
+	}},
+	{GNI: "modules/jsonreader/jsonreader.gni", Vars: []exporter.GNIFileListExportDesc{
+		{Var: "skia_jsonreader_sources",
+			Rules: []string{"//modules/jsonreader:jsonreader"}},
 	}},
 }
 
