@@ -54,6 +54,13 @@ mod ffi {
         Over,
     }
 
+    /// FFI-friendly simplification of `png::CompressionLevel`.
+    enum Compression {
+        Default,
+        Fast,
+        Best,
+    }
+
     /// FFI-friendly simplification of `Option<png::EncodingError>`.
     enum EncodingResult {
         Success,
@@ -146,13 +153,22 @@ mod ffi {
             bits_per_pixel: u8,
         );
 
-        fn new_stream_writer(
+        fn new_writer(
             output: UniquePtr<WriteTrait>,
             width: u32,
             height: u32,
             color: ColorType,
             bits_per_component: u8,
-        ) -> Box<ResultOfStreamWriter>;
+            compression: Compression,
+        ) -> Box<ResultOfWriter>;
+
+        type ResultOfWriter;
+        fn err(self: &ResultOfWriter) -> EncodingResult;
+        fn unwrap(self: &mut ResultOfWriter) -> Box<Writer>;
+
+        type Writer;
+        fn write_text_chunk(self: &mut Writer, keyword: &[u8], text: &[u8]) -> EncodingResult;
+        fn convert_writer_into_stream_writer(writer: Box<Writer>) -> Box<ResultOfStreamWriter>;
 
         type ResultOfStreamWriter;
         fn err(self: &ResultOfStreamWriter) -> EncodingResult;
@@ -227,6 +243,17 @@ impl From<Option<&png::DecodingError>> for ffi::DecodingResult {
                 png::DecodingError::Parameter(_) => Self::ParameterError,
                 png::DecodingError::LimitsExceeded => Self::LimitsExceededError,
             },
+        }
+    }
+}
+
+impl Into<png::Compression> for ffi::Compression {
+    fn into(self) -> png::Compression {
+        match self {
+            Self::Default => png::Compression::Default,
+            Self::Fast => png::Compression::Fast,
+            Self::Best => png::Compression::Best,
+            _ => unreachable!(),
         }
     }
 }
@@ -588,6 +615,107 @@ fn new_reader(input: cxx::UniquePtr<ffi::ReadTrait>) -> Box<ResultOfReader> {
 /// FFI-friendly wrapper around `Result<T, E>` (`cxx` can't handle arbitrary
 /// generics, so we manually monomorphize here, but still expose a minimal,
 /// somewhat tweaked API of the original type).
+struct ResultOfWriter(Result<Writer, png::EncodingError>);
+
+impl ResultOfWriter {
+    fn err(&self) -> ffi::EncodingResult {
+        self.0.as_ref().err().into()
+    }
+
+    fn unwrap(&mut self) -> Box<Writer> {
+        // Leaving `self` in a C++-friendly "moved-away" state.
+        let mut result = Err(png::EncodingError::LimitsExceeded);
+        std::mem::swap(&mut self.0, &mut result);
+
+        Box::new(result.unwrap())
+    }
+}
+
+/// FFI-friendly wrapper around `png::Writer` (`cxx` can't handle
+/// arbitrary generics, so we manually monomorphize here, but still expose a
+/// minimal, somewhat tweaked API of the original type).
+struct Writer(png::Writer<cxx::UniquePtr<ffi::WriteTrait>>);
+
+impl Writer {
+    fn new(
+        output: cxx::UniquePtr<ffi::WriteTrait>,
+        width: u32,
+        height: u32,
+        color: ffi::ColorType,
+        bits_per_component: u8,
+        compression: ffi::Compression,
+    ) -> Result<Self, png::EncodingError> {
+        let mut encoder = png::Encoder::new(output, width, height);
+        encoder.set_color(color.into());
+        encoder.set_depth(match bits_per_component {
+            8 => png::BitDepth::Eight,
+            16 => png::BitDepth::Sixteen,
+
+            // `SkPngRustEncoderImpl` only encodes 8-bit or 16-bit images.
+            _ => unreachable!(),
+        });
+        encoder.set_compression(compression.into());
+        encoder.set_adaptive_filter(match compression {
+            ffi::Compression::Fast => png::AdaptiveFilterType::NonAdaptive,
+            ffi::Compression::Default | ffi::Compression::Best => png::AdaptiveFilterType::Adaptive,
+            _ => unreachable!(),
+        });
+
+        let writer = encoder.write_header()?;
+        Ok(Self(writer))
+    }
+
+    /// FFI-friendly wrapper around `png::Writer::write_text_chunk`.
+    ///
+    /// `keyword` and `text` are treated as strings encoded as Latin-1 (i.e.
+    /// ISO-8859-1).
+    ///
+    /// `ffi::EncodingResult::Parameter` error will be returned if `keyword` or
+    /// `text` don't meet the requirements of the PNG spec.  `text` may have
+    /// any length and contain any of the 191 Latin-1 characters (and/or the
+    /// linefeed character), but `keyword`'s length is restricted to at most
+    /// 79 characters and it can't contain a non-breaking space character.
+    ///
+    /// See also https://docs.rs/png/latest/png/struct.Writer.html#method.write_text_chunk
+    fn write_text_chunk(&mut self, keyword: &[u8], text: &[u8]) -> ffi::EncodingResult {
+        // https://www.w3.org/TR/png-3/#11tEXt says that "`text` is interpreted according to the
+        // Latin-1 character set [ISO_8859-1]. The text string may contain any Latin-1
+        // character."
+        let is_latin1_byte = |b| (0x20..=0x7E).contains(b) || (0xA0..=0xFF).contains(b);
+        let is_nbsp_byte = |&b: &u8| b == 0xA0;
+        let is_linefeed_byte = |&b: &u8| b == 10;
+        if !text.iter().all(|b| is_latin1_byte(b) || is_linefeed_byte(b)) {
+            return ffi::EncodingResult::ParameterError;
+        }
+        fn latin1_bytes_into_string(bytes: &[u8]) -> String {
+            bytes.iter().map(|&b| b as char).collect()
+        }
+        let text = latin1_bytes_into_string(text);
+
+        // https://www.w3.org/TR/png-3/#11keywords says that "keywords shall contain only printable
+        // Latin-1 [ISO_8859-1] characters and spaces; that is, only code points 0x20-7E
+        // and 0xA1-FF are allowed."
+        if !keyword.iter().all(|b| is_latin1_byte(b) && !is_nbsp_byte(b)) {
+            return ffi::EncodingResult::ParameterError;
+        }
+        let keyword = latin1_bytes_into_string(keyword);
+
+        let chunk = png::text_metadata::TEXtChunk { keyword, text };
+        let result = self.0.write_text_chunk(&chunk);
+        result.as_ref().err().into()
+    }
+}
+
+/// FFI-friendly wrapper around `png::Writer::into_stream_writer`.
+///
+/// See also https://docs.rs/png/latest/png/struct.Writer.html#method.into_stream_writer
+fn convert_writer_into_stream_writer(writer: Box<Writer>) -> Box<ResultOfStreamWriter> {
+    Box::new(ResultOfStreamWriter(writer.0.into_stream_writer().map(StreamWriter)))
+}
+
+/// FFI-friendly wrapper around `Result<T, E>` (`cxx` can't handle arbitrary
+/// generics, so we manually monomorphize here, but still expose a minimal,
+/// somewhat tweaked API of the original type).
 struct ResultOfStreamWriter(Result<StreamWriter, png::EncodingError>);
 
 impl ResultOfStreamWriter {
@@ -610,28 +738,6 @@ impl ResultOfStreamWriter {
 struct StreamWriter(png::StreamWriter<'static, cxx::UniquePtr<ffi::WriteTrait>>);
 
 impl StreamWriter {
-    fn new(
-        output: cxx::UniquePtr<ffi::WriteTrait>,
-        width: u32,
-        height: u32,
-        color: ffi::ColorType,
-        bits_per_component: u8,
-    ) -> Result<Self, png::EncodingError> {
-        let mut encoder = png::Encoder::new(output, width, height);
-        encoder.set_color(color.into());
-        encoder.set_depth(match bits_per_component {
-            8 => png::BitDepth::Eight,
-            16 => png::BitDepth::Sixteen,
-
-            // `SkPngRustEncoderImpl` only encodes 8-bit or 16-bit images.
-            _ => unreachable!(),
-        });
-
-        let writer = encoder.write_header()?;
-        let stream_writer = writer.into_stream_writer()?;
-        Ok(Self(stream_writer))
-    }
-
     /// FFI-friendly wrapper around `Write::write` implementation of
     /// `png::StreamWriter`.
     ///
@@ -644,19 +750,21 @@ impl StreamWriter {
 }
 
 /// This provides a public C++ API for encoding a PNG image.
-fn new_stream_writer(
+fn new_writer(
     output: cxx::UniquePtr<ffi::WriteTrait>,
     width: u32,
     height: u32,
     color: ffi::ColorType,
     bits_per_component: u8,
-) -> Box<ResultOfStreamWriter> {
-    Box::new(ResultOfStreamWriter(StreamWriter::new(
+    compression: ffi::Compression,
+) -> Box<ResultOfWriter> {
+    Box::new(ResultOfWriter(Writer::new(
         output,
         width,
         height,
         color,
         bits_per_component,
+        compression,
     )))
 }
 
