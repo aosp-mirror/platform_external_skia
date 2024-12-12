@@ -378,7 +378,10 @@ skia_wasm_lib("canvaskit") {
     defines += [ "CK_INCLUDE_PATHOPS" ]
   }
   if (skia_canvaskit_enable_rt_shader) {
-    defines += [ "CK_INCLUDE_RUNTIME_EFFECT" ]
+    defines += [
+      "CK_INCLUDE_RUNTIME_EFFECT",
+      "CK_DEBUG_TRACE_JSON",
+    ]
   }
   if (!skia_canvaskit_enable_alias_font) {
     defines += [ "CK_NO_ALIAS_FONT" ]
