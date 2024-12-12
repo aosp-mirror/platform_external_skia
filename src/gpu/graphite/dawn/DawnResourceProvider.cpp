@@ -72,6 +72,8 @@ wgpu::RenderPipeline create_blit_render_pipeline(const DawnSharedContext* shared
     wgpu::FragmentState fragment;
     fragment.module = std::move(fsModule);
     fragment.entryPoint = "main";
+    fragment.constantCount = 0;
+    fragment.constants = nullptr;
     fragment.targetCount = 1;
     fragment.targets = &colorTarget;
     descriptor.fragment = &fragment;
@@ -715,6 +717,11 @@ const wgpu::BindGroup& DawnResourceProvider::findOrCreateSingleTextureSamplerBin
 
 void DawnResourceProvider::onFreeGpuResources() {
     fIntrinsicConstantsManager->freeGpuResources();
+    // The wgpu::Textures and wgpu::Buffers held by the BindGroups should be explicitly destroyed
+    // when the DawnTexture and DawnBuffer is destroyed, but removing the bind groups themselves
+    // helps reduce CPU memory periodically.
+    fSingleTextureSamplerBindGroups.reset();
+    fUniformBufferBindGroupCache.reset();
 }
 
 void DawnResourceProvider::onPurgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime) {
