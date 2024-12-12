@@ -126,7 +126,9 @@
 #include "include/sksl/SkSLDebugTrace.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/tracing/SkSLDebugTracePriv.h"
+#if defined(CK_DEBUG_TRACE_JSON)
 #include "tools/sksltrace/SkSLTraceUtils.h"
+#endif
 #endif
 
 #ifndef CK_NO_FONTS
@@ -2221,14 +2223,21 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return nullptr;
         }), allow_raw_pointers());
 
-#ifdef CK_INCLUDE_RUNTIME_EFFECT
+#if defined(CK_INCLUDE_RUNTIME_EFFECT)
     class_<SkSL::DebugTrace>("DebugTrace")
         .smart_ptr<sk_sp<SkSL::DebugTrace>>("sk_sp<DebugTrace>")
         .function("writeTrace", optional_override([](const SkSL::DebugTrace* self) -> std::string {
+#if defined(CK_DEBUG_TRACE_JSON)
             SkDynamicMemoryWStream wstream;
             SkSLTraceUtils::WriteTrace(static_cast<const SkSL::DebugTracePriv&>(*self), &wstream);
             sk_sp<SkData> trace = wstream.detachAsData();
             return std::string(reinterpret_cast<const char*>(trace->bytes()), trace->size());
+#else
+            SkDynamicMemoryWStream wstream;
+            self->dump(&wstream);
+            sk_sp<SkData> trace = wstream.detachAsData();
+            return std::string(reinterpret_cast<const char*>(trace->bytes()), trace->size());
+#endif
         }), allow_raw_pointers());
 
     value_object<SkRuntimeEffect::TracedShader>("TracedShader")

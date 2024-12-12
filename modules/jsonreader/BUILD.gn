@@ -6,7 +6,7 @@
 import("../../gn/skia.gni")
 
 skia_component("jsonreader") {
-  public = [ "SkJSONReader.h" ]
-  sources = [ "SkJSONReader.cpp" ]
+  import("jsonreader.gni")
+  sources = skia_jsonreader_sources
   deps = [ "../..:skia" ]
 }
