@@ -31,7 +31,7 @@ vars = {
 #     ./tools/git-sync-deps
 deps = {
   "buildtools"                                   : "https://chromium.googlesource.com/chromium/src/buildtools.git@1760ff6d7267dd97ae1968c7bee9ce04a2a8489d",
-  "third_party/externals/angle2"                 : "https://chromium.googlesource.com/angle/angle.git@e9b33f04020efd5728dc1a0e9762032e64d52861",
+  "third_party/externals/angle2"                 : "https://chromium.googlesource.com/angle/angle.git@c75bd915ec7d3f5e76bc2c5106aecf6e3bfb2c33",
   "third_party/externals/brotli"                 : "https://skia.googlesource.com/external/github.com/google/brotli.git@6d03dfbedda1615c4cba1211f8d81735575209c8",
   "third_party/externals/d3d12allocator"         : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
@@ -40,7 +40,7 @@ deps = {
   "third_party/externals/jinja2"                 : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@e2d024354e11cc6b041b0cff032d73f0c7e43a07",
   "third_party/externals/markupsafe"             : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@0bad08bb207bbfc1d6f3bbc82b9242b0c50e5794",
   "third_party/externals/abseil-cpp"             : "https://skia.googlesource.com/external/github.com/abseil/abseil-cpp.git@65a55c2ba891f6d2492477707f4a2e327a0b40dc",
-  "third_party/externals/delaunator-cpp"         : "https://github.com/skia-dev/delaunator-cpp@98305ef6c4e862f7d48df9cc647b690d796fec68",
+  "third_party/externals/delaunator-cpp"         : "https://skia.googlesource.com/external/github.com/skia-dev/delaunator-cpp.git@98305ef6c4e862f7d48df9cc647b690d796fec68",
   "third_party/externals/dng_sdk"                : "https://android.googlesource.com/platform/external/dng_sdk.git@c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
   "third_party/externals/egl-registry"           : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@b055c9b483e70ecd57b3cf7204db21f5a06f9ffe",
   "third_party/externals/emsdk"                  : "https://skia.googlesource.com/external/github.com/emscripten-core/emsdk.git@a896e3d066448b3530dbcaa48869fafefd738f57",
