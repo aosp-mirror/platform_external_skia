@@ -57,10 +57,16 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		// TODO(https://crbug.com/381900683): Replace this with more granular lists.
 		{Var: "skia_codec_png",
 			Rules: []string{
-				"//src/codec:buffet_png_srcs",
-				"//src/codec:common_png_srcs",
+				"//src/codec:buffet_libpng_srcs",
+				"//src/codec:common_libpng_srcs",
 				"//src/codec:png_codec_base_hdrs",
 				"//src/codec:png_codec_base_srcs",
+			},
+		},
+		{Var: "skia_codec_libpng_srcs",
+			Rules: []string{
+				"//src/codec:buffet_libpng_srcs",
+				"//src/codec:common_libpng_srcs",
 			},
 		},
 		{Var: "skia_codec_rust_png_public",
@@ -71,6 +77,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_codec_rust_png",
 			Rules: []string{
 				"//experimental/rust_png/decoder:srcs",
+				"//experimental/rust_png/ffi:utils",
 			},
 		},
 		{Var: "skia_codec_rust_png_ffi_rs_srcs",
@@ -86,7 +93,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_codec_rust_png_ffi_cpp_hdrs",
 			Rules: []string{
 				"//experimental/rust_png/ffi:ffi_cpp",
-				"//experimental/rust_png/ffi:utils",
 			},
 		},
 	}},
@@ -141,7 +147,10 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_encode_rust_png_public",
 			Rules: []string{"//experimental/rust_png/encoder:hdrs"}},
 		{Var: "skia_encode_rust_png_srcs",
-			Rules: []string{"//experimental/rust_png/encoder:srcs"}},
+			Rules: []string{
+				"//experimental/rust_png/encoder:srcs",
+				"//experimental/rust_png/ffi:utils",
+			}},
 		{Var: "skia_encode_png_base",
 			Rules: []string{
 				"//src/encode:png_encode_base_srcs",
@@ -405,7 +414,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/sksl:sksl_skslc_module_srcs",
 				"//src/utils:utils_skslc_hdrs",
 				"//src/utils:utils_skslc_srcs",
-				"//src/utils:json_srcs",
 			}}},
 	},
 	{GNI: "gn/sksl_tests.gni", Vars: []exporter.GNIFileListExportDesc{
@@ -445,8 +453,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/utils:core_srcs",
 				"//src/utils:char_to_glyphcache",
 				"//src/utils:canvas_state_utils",
-				"//src/utils:json_hdrs",
-				"//src/utils:json_srcs",
 				"//src/utils:multi_picture_document",
 				"//src/utils:clip_stack_utils",
 				"//src/utils:float_to_decimal",
@@ -739,6 +745,10 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{
 				"//modules/skcms:skcms_TransformSkx",
 			}},
+	}},
+	{GNI: "modules/jsonreader/jsonreader.gni", Vars: []exporter.GNIFileListExportDesc{
+		{Var: "skia_jsonreader_sources",
+			Rules: []string{"//modules/jsonreader:jsonreader"}},
 	}},
 }
 
