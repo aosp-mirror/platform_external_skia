@@ -464,15 +464,19 @@ sk_sp<DawnTexture> DawnResourceProvider::findOrCreateDiscardableMSAALoadTexture(
 
 sk_sp<GraphicsPipeline> DawnResourceProvider::createGraphicsPipeline(
         const RuntimeEffectDictionary* runtimeDict,
+        const UniqueKey& pipelineKey,
         const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc,
-        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags) {
+        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags,
+        uint32_t compilationID) {
     return DawnGraphicsPipeline::Make(this->dawnSharedContext(),
                                       this,
                                       runtimeDict,
+                                      pipelineKey,
                                       pipelineDesc,
                                       renderPassDesc,
-                                      pipelineCreationFlags);
+                                      pipelineCreationFlags,
+                                      compilationID);
 }
 
 sk_sp<ComputePipeline> DawnResourceProvider::createComputePipeline(
@@ -717,6 +721,11 @@ const wgpu::BindGroup& DawnResourceProvider::findOrCreateSingleTextureSamplerBin
 
 void DawnResourceProvider::onFreeGpuResources() {
     fIntrinsicConstantsManager->freeGpuResources();
+    // The wgpu::Textures and wgpu::Buffers held by the BindGroups should be explicitly destroyed
+    // when the DawnTexture and DawnBuffer is destroyed, but removing the bind groups themselves
+    // helps reduce CPU memory periodically.
+    fSingleTextureSamplerBindGroups.reset();
+    fUniformBufferBindGroupCache.reset();
 }
 
 void DawnResourceProvider::onPurgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime) {
