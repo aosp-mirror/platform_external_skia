@@ -5,7 +5,6 @@
 
 #if defined(SK_PDF_USE_HARFBUZZ_SUBSET)
 
-#include "include/core/SkData.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/base/SkAssert.h"
@@ -60,6 +59,12 @@ sk_sp<SkData> to_data(HBBlob blob) {
                                 blob.release());
 }
 
+sk_sp<SkData> extract_cff_data(const hb_face_t* face) {
+    // hb_face_reference_table usually returns hb_blob_get_empty instead of nullptr.
+    HBBlob cff(hb_face_reference_table(face, HB_TAG('C','F','F',' ')));
+    return to_data(std::move(cff));
+}
+
 HBFace make_subset(hb_subset_input_t* input, hb_face_t* face, bool retainZeroGlyph) {
     // TODO: When possible, check if a font is 'tricky' with FT_IS_TRICKY.
     // If it isn't known if a font is 'tricky', retain the hints.
@@ -97,8 +102,15 @@ sk_sp<SkData> subset_harfbuzz(const SkTypeface& typeface, const SkPDFGlyphUse& g
 
     HBFace subset = make_subset(input.get(), face.get(), glyphUsage.has(0));
     if (!subset) {
-        return nullptr;
+        // Even if subsetting fails, extract CFF if available
+        return extract_cff_data(face.get());
     }
+
+    // Extract subset CFF if available
+    if (sk_sp<SkData> cffData = extract_cff_data(subset.get())) {
+        return cffData;
+    }
+
     HBBlob result(hb_face_reference_blob(subset.get()));
     return to_data(std::move(result));
 }

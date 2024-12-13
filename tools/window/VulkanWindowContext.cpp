@@ -8,20 +8,22 @@
 #include "tools/window/VulkanWindowContext.h"
 
 #include "include/core/SkSurface.h"
-#include "include/gpu/GrBackendSemaphore.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrBackendSemaphore.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
 #include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "include/gpu/ganesh/vk/GrVkDirectContext.h"
-#include "include/gpu/vk/GrVkTypes.h"
+#include "include/gpu/ganesh/vk/GrVkTypes.h"
 #include "include/gpu/vk/VulkanExtensions.h"
+#include "src/gpu/GpuTypesPriv.h"
 #include "include/gpu/vk/VulkanMutableTextureState.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/gpu/ganesh/vk/GrVkImage.h"
 #include "src/gpu/ganesh/vk/GrVkUtil.h"
 #include "src/gpu/vk/VulkanInterface.h"
+#include "src/gpu/vk/vulkanmemoryallocator/VulkanAMDMemoryAllocator.h"
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 // windows wants to define this as CreateSemaphoreA or CreateSemaphoreW
@@ -118,6 +120,16 @@ void VulkanWindowContext::initializeContext() {
     GET_DEV_PROC(AcquireNextImageKHR);
     GET_DEV_PROC(QueuePresentKHR);
     GET_DEV_PROC(GetDeviceQueue);
+
+    backendContext.fMemoryAllocator =
+            skgpu::VulkanAMDMemoryAllocator::Make(fInstance,
+                                                  backendContext.fPhysicalDevice,
+                                                  backendContext.fDevice,
+                                                  physDevVersion,
+                                                  &extensions,
+                                                  fInterface.get(),
+                                                  skgpu::ThreadSafe::kNo,
+                                                  /*blockSize=*/std::nullopt);
 
     fContext = GrDirectContexts::MakeVulkan(backendContext, fDisplayParams.fGrContextOptions);
 

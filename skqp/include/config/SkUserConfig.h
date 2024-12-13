@@ -3,12 +3,8 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
-#ifndef GRAPHITE_TEST_UTILS
-#define GRAPHITE_TEST_UTILS 1
-#endif
-
-#ifndef GR_TEST_UTILS
-#define GR_TEST_UTILS 1
+#ifndef GPU_TEST_UTILS
+#define GPU_TEST_UTILS 1
 #endif
 
 #ifndef SKCMS_DISABLE_HSW

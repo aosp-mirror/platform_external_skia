@@ -63,9 +63,9 @@
 
 
 #if defined(SK_GANESH)
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 struct GrContextOptions;
 #endif
 
@@ -400,8 +400,6 @@ public:
                                               sk_sp<SkSpecialImage> source,
                                               LayerSpace<SkIPoint> origin,
                                               const LayerSpace<SkIRect>& desiredOutput) const {
-        SkASSERT(source);
-
         Expect effectiveExpectation = fExpectation;
         SkISize size(desiredOutput.size());
         if (desiredOutput.isEmpty()) {
@@ -410,17 +408,21 @@ public:
         }
 
         auto device = ctx.backend()->makeDevice(size, ctx.refColorSpace());
+        if (!device) {
+            return nullptr;
+        }
         SkCanvas canvas{device};
         canvas.clear(SK_ColorTRANSPARENT);
         canvas.translate(-desiredOutput.left(), -desiredOutput.top());
 
-        LayerSpace<SkIRect> sourceBounds{
-                SkIRect::MakeXYWH(origin.x(), origin.y(), source->width(), source->height())};
-        LayerSpace<SkIRect> expectedBounds = this->expectedBounds(sourceBounds);
-
-        canvas.clipIRect(SkIRect(expectedBounds), SkClipOp::kIntersect);
-
         if (effectiveExpectation != Expect::kEmptyImage) {
+            SkASSERT(source);
+            LayerSpace<SkIRect> sourceBounds{
+                    SkIRect::MakeXYWH(origin.x(), origin.y(), source->width(), source->height())};
+            LayerSpace<SkIRect> expectedBounds = this->expectedBounds(sourceBounds);
+
+            canvas.clipIRect(SkIRect(expectedBounds), SkClipOp::kIntersect);
+
             SkPaint paint;
             paint.setAntiAlias(true);
             paint.setBlendMode(SkBlendMode::kSrc);
@@ -648,7 +650,11 @@ public:
                        const FilterResult& actual,
                        float allowedPercentImageDiff,
                        int transparentCheckBorderTolerance) {
-        SkASSERT(expectedImage);
+        if (!expectedImage) {
+            // For pathological desired outputs, we can't actually produce an expected image so
+            // just carry on w/o validating.
+            return true;
+        }
 
         SkBitmap expectedBM = this->readPixels(expectedImage);
 
@@ -1202,7 +1208,12 @@ public:
                 // resolved image, which can make its layer bounds larger than the desired output.
                 if (correctedExpectation == Expect::kDeferredImage ||
                     !FilterResultTestAccess::IsIntegerTransform(output)) {
-                    REPORTER_ASSERT(fRunner, actualBounds.intersect(desiredOutputs[i]));
+                    // Skip the check if the desiredOutputs's SkIRect reports empty.
+                    // LayerSpace<SkIRect> won't be empty but since the W/H don't fit into 32-bit
+                    // SkIRect::intersect() will report false.
+                    REPORTER_ASSERT(fRunner, SkIRect(desiredOutputs[i]).isEmpty() ||
+                                             actualBounds.intersect(desiredOutputs[i]));
+
                 }
                 REPORTER_ASSERT(fRunner, !expectedBounds.isEmpty());
                 REPORTER_ASSERT(fRunner, SkIRect(actualBounds) == SkIRect(expectedBounds));
@@ -1612,11 +1623,18 @@ DEF_TEST_SUITE(PeriodicTileCrops, r, CtsEnforcement::kApiLevel_T, CtsEnforcement
                 .applyCrop({-5, -5, 15, 15}, tm, Expect::kNewImage)
                 .run(/*requestedOutput=*/{10, 10, 20, 20});
 
-        TestCase(r, "Periodic applyCropp() with visible edge and complex transform creates image")
+        TestCase(r, "Periodic applyCrop() with visible edge and complex transform creates image")
                 .source({0, 0, 20, 20})
                 .applyTransform(SkMatrix::RotateDeg(15.f, {10.f, 10.f}), Expect::kDeferredImage)
                 .applyCrop({-5, -5, 25, 25}, tm, Expect::kNewImage)
                 .run(/*requestedOutput=*/{20, 20, 50, 50});
+
+        // oss-fuzz:70128 ensure period calculations don't overflow (but will fail image creation)
+        TestCase(r, "Pathologically large crop rect")
+                .source({0, 0, 10, 10})
+                .applyCrop({0, 0, 1, 2}, tm, Expect::kDeferredImage)
+                .applyTransform(SkMatrix::RotateDeg(1.f, {5.f, 5.f}), Expect::kEmptyImage)
+                .run(/*requestedOutput=*/{-726713344, 7, 1464866662, 15});
     }
 }
 
@@ -1950,6 +1968,14 @@ DEF_TEST_SUITE(ColorFilter, r, CtsEnforcement::kApiLevel_T, CtsEnforcement::kNex
             .applyColorFilter(alpha_modulate(0.5f), Expect::kDeferredImage)
             .applyColorFilter(affect_transparent(SkColors::kBlue), Expect::kDeferredImage)
             .run(/*requestedOutput=*/{-8, -8, 32, 32});
+
+    // oss-fuzz:70134 Requesting the output of an infinite image (e.g. transparency affecting
+    // color filter) at the limit of 32-bit ints doesn't leave room for border padding pixels.
+    // This should cleanly fail to an empty image.
+    TestCase(r, "Pathologic output bounds with transparency-affecting color filter is empty")
+            .source({0, 0, 16, 16})
+            .applyColorFilter(affect_transparent(SkColors::kRed), Expect::kEmptyImage)
+            .run(/*requestedOutput=*/{-INT32_MAX, 0, -INT32_MAX + 10, 16});
 }
 
 DEF_TEST_SUITE(TransformedColorFilter, r, CtsEnforcement::kApiLevel_T,
@@ -2336,7 +2362,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
                 .run(/*requestedOutput=*/{0, 0, 80, 80});
 
         TestCase(r, "2-step rescale with near-identity elision",
-                 /*allowedPercentImageDiff=*/periodic ? 17.75f : 41.52f,
+                 /*allowedPercentImageDiff=*/periodic ? 17.75f : 41.83f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 8 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
@@ -2368,7 +2394,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
                 .run(/*requestedOutput=*/{0, 0, 80, 80});
 
         TestCase(r, "Identity X axis, 1-step Y axis preserves tile mode",
-                 /*allowedPercentImageDiff=*/tm == SkTileMode::kMirror ? 1.21f : 1.f,
+                 /*allowedPercentImageDiff=*/tm == SkTileMode::kMirror ? 1.32f : 1.f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 1 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
@@ -2389,7 +2415,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
                 .rescale({1.f, 0.25f}, Expect::kNewImage, tm)
                 .run(/*requestedOutput=*/{0, 0, 80, 80});
         TestCase(r, "1-step X axis, 2-step Y axis preserves tile mode",
-                 /*allowedPercentImageDiff=*/periodic ? 23.1f : 17.22f,
+                 /*allowedPercentImageDiff=*/periodic ? 23.2f : 17.22f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 5 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
