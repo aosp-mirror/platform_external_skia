@@ -29,7 +29,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/angle/angle": {
 		Id:      "chromium.googlesource.com/angle/angle",
-		Version: "9b8cf765f6341fa6ce813489f2ff2edf705593bb",
+		Version: "e9b33f04020efd5728dc1a0e9762032e64d52861",
 		Path:    "third_party/externals/angle2",
 	},
 	"chromium.googlesource.com/chromium/deps/icu": {
@@ -144,7 +144,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/vulkan-deps": {
 		Id:      "chromium.googlesource.com/vulkan-deps",
-		Version: "83e6ead8ab3b79845da980ee2605caf0d8806d4f",
+		Version: "b56cde80dd4915663ad83234da576efd1495849b",
 		Path:    "third_party/externals/vulkan-deps",
 	},
 	"chromium.googlesource.com/webm/libwebp": {
@@ -154,7 +154,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "cf71700f44a8f75ce59d6e677e9279350caec006",
+		Version: "b8306de17c9a5775819a8526802fe85a860f5216",
 		Path:    "third_party/externals/dawn",
 	},
 	"github.com/skia-dev/delaunator-cpp": {
@@ -169,7 +169,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/buildbot": {
 		Id:      "skia.googlesource.com/buildbot",
-		Version: "9513bbe24fc9a653b9a724e038e06dcba7405ff8",
+		Version: "9513e7cc4063f53b03dda719f3a65e88d7b81579",
 		Path:    "infra/skia-infra",
 	},
 	"skia.googlesource.com/external/github.com/AOMediaCodec/libavif": {
@@ -249,12 +249,12 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia/tools/sk": {
 		Id:      "skia/tools/sk",
-		Version: "git_revision:9513bbe24fc9a653b9a724e038e06dcba7405ff8",
+		Version: "git_revision:9513e7cc4063f53b03dda719f3a65e88d7b81579",
 		Path:    "bin",
 	},
 	"swiftshader.googlesource.com/SwiftShader": {
 		Id:      "swiftshader.googlesource.com/SwiftShader",
-		Version: "7e54d43d6905f978ccf90680dd22a48b0ede8d8b",
+		Version: "c0fe4d40475b709a42d78315d3929d41d44838c8",
 		Path:    "third_party/externals/swiftshader",
 	},
 }
