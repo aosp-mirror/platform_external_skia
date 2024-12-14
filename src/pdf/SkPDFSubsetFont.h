@@ -3,12 +3,20 @@
 #ifndef SkPDFSubsetFont_DEFINED
 #define SkPDFSubsetFont_DEFINED
 
+#include "include/core/SkData.h" // IWYU pragma: keep
 #include "include/core/SkRefCnt.h"
 
-class SkData;
 class SkPDFGlyphUse;
 class SkTypeface;
 
+/** Subset the typeface's data to only include the glyphs used.
+ *
+ *  The glyph ids will remain the same.
+ *
+ *  If the font data contains a CFF table, only the (possibly subset) CFF table will be returned.
+ *
+ *  @return The subset font data, or nullptr if it cannot be subset.
+ */
 sk_sp<SkData> SkPDFSubsetFont(const SkTypeface& typeface, const SkPDFGlyphUse& glyphUsage);
 
 #endif  // SkPDFSubsetFont_DEFINED

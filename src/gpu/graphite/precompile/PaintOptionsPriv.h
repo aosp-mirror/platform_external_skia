@@ -21,9 +21,7 @@ class PaintOptionsPriv {
 public:
     using ProcessCombination = PaintOptions::ProcessCombination;
 
-    void addColorFilter(sk_sp<PrecompileColorFilter> cf) {
-        fPaintOptions->addColorFilter(std::move(cf));
-    }
+    void addColorFilter(sk_sp<PrecompileColorFilter> cf);
 
     void setClipShaders(SkSpan<const sk_sp<PrecompileShader>> clipShaders) {
         fPaintOptions->setClipShaders(std::move(clipShaders));
@@ -39,9 +37,11 @@ public:
             DrawTypeFlags drawTypes,
             bool withPrimitiveBlender,
             Coverage coverage,
+            const RenderPassDesc& renderPassDesc,
             const ProcessCombination& processCombination) const {
         fPaintOptions->buildCombinations(
-                keyContext, gatherer, drawTypes, withPrimitiveBlender, coverage, processCombination);
+                keyContext, gatherer, drawTypes, withPrimitiveBlender, coverage,
+                renderPassDesc, processCombination);
     }
 
 private:

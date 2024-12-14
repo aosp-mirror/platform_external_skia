@@ -50,6 +50,8 @@ bool DawnFormatIsDepthOrStencil(wgpu::TextureFormat format) {
         default:
             return false;
     }
+
+    SkUNREACHABLE;
 }
 
 bool DawnFormatIsDepth(wgpu::TextureFormat format) {
@@ -62,6 +64,8 @@ bool DawnFormatIsDepth(wgpu::TextureFormat format) {
         default:
             return false;
     }
+
+    SkUNREACHABLE;
 }
 
 bool DawnFormatIsStencil(wgpu::TextureFormat format) {
@@ -73,6 +77,8 @@ bool DawnFormatIsStencil(wgpu::TextureFormat format) {
         default:
             return false;
     }
+
+    SkUNREACHABLE;
 }
 
 wgpu::TextureFormat DawnDepthStencilFlagsToFormat(SkEnumBitMask<DepthStencilFlags> mask) {
@@ -175,7 +181,11 @@ bool DawnCompileWGSLShaderModule(const DawnSharedContext* sharedContext,
                                  const std::string& wgsl,
                                  wgpu::ShaderModule* module,
                                  ShaderErrorHandler* errorHandler) {
+#ifdef WGPU_BREAKING_CHANGE_DROP_DESCRIPTOR
+    wgpu::ShaderSourceWGSL wgslDesc;
+#else
     wgpu::ShaderModuleWGSLDescriptor wgslDesc;
+#endif
     wgslDesc.code = wgsl.c_str();
 
     wgpu::ShaderModuleDescriptor desc;
@@ -188,5 +198,21 @@ bool DawnCompileWGSLShaderModule(const DawnSharedContext* sharedContext,
 
     return check_shader_module(sharedContext, module, wgsl.c_str(), errorHandler);
 }
+
+#if !defined(__EMSCRIPTEN__)
+namespace ycbcrUtils {
+
+bool DawnDescriptorIsValid(const wgpu::YCbCrVkDescriptor& desc) {
+    static const wgpu::YCbCrVkDescriptor kDefaultYcbcrDescriptor = {};
+    return !DawnDescriptorsAreEquivalent(desc, kDefaultYcbcrDescriptor);
+}
+
+bool DawnDescriptorUsesExternalFormat(const wgpu::YCbCrVkDescriptor& desc) {
+    SkASSERT(desc.externalFormat != 0 || desc.vkFormat != 0);
+    return desc.externalFormat != 0;
+}
+
+} // namespace ycbcrUtils
+#endif // !defined(__EMSCRIPTEN__)
 
 } // namespace skgpu::graphite

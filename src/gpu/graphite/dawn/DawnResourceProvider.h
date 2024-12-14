@@ -23,6 +23,11 @@ class DawnBuffer;
 
 class DawnResourceProvider final : public ResourceProvider {
 public:
+    template <size_t NumEntries>
+    using BindGroupKey = FixedSizeKey<2 * NumEntries>;
+
+    static constexpr size_t kNumUniformEntries = 4;
+
     DawnResourceProvider(SharedContext* sharedContext,
                          SingleOwner*,
                          uint32_t recorderID,
@@ -48,13 +53,12 @@ public:
     // - Render step uniforms.
     // - Paint uniforms.
     const wgpu::BindGroup& findOrCreateUniformBuffersBindGroup(
-            const std::array<std::pair<const DawnBuffer*, uint32_t>, 4>& boundBuffersAndSizes);
+            const std::array<std::pair<const DawnBuffer*, uint32_t>, kNumUniformEntries>&
+                    boundBuffersAndSizes);
 
     // Find or create a bind group containing the given sampler & texture.
     const wgpu::BindGroup& findOrCreateSingleTextureSamplerBindGroup(const DawnSampler* sampler,
                                                                      const DawnTexture* texture);
-
-    const sk_sp<DawnBuffer>& getOrCreateIntrinsicConstantBuffer();
 
 private:
     sk_sp<GraphicsPipeline> createGraphicsPipeline(const RuntimeEffectDictionary*,
@@ -76,25 +80,22 @@ private:
 
     DawnSharedContext* dawnSharedContext() const;
 
-    skia_private::THashMap<uint64_t, wgpu::RenderPipeline> fBlitWithDrawPipelines;
+    skia_private::THashMap<uint32_t, wgpu::RenderPipeline> fBlitWithDrawPipelines;
 
     wgpu::BindGroupLayout fUniformBuffersBindGroupLayout;
     wgpu::BindGroupLayout fSingleTextureSamplerBindGroupLayout;
 
     wgpu::Buffer fNullBuffer;
 
-    sk_sp<DawnBuffer> fIntrinsicConstantBuffer;
+    template <size_t NumEntries>
+    using BindGroupCache = SkLRUCache<BindGroupKey<NumEntries>,
+                                      wgpu::BindGroup,
+                                      typename BindGroupKey<NumEntries>::Hash>;
 
-    struct UniqueKeyHash {
-        uint32_t operator()(const skgpu::UniqueKey& key) const { return key.hash(); }
-    };
-
-    using BindGroupCache = SkLRUCache<UniqueKey, wgpu::BindGroup, UniqueKeyHash>;
-
-    BindGroupCache fUniformBufferBindGroupCache;
-    BindGroupCache fSingleTextureSamplerBindGroups;
+    BindGroupCache<kNumUniformEntries> fUniformBufferBindGroupCache;
+    BindGroupCache<1> fSingleTextureSamplerBindGroups;
 };
 
-} // namespace skgpu::graphite
+}  // namespace skgpu::graphite
 
-#endif // skgpu_graphite_DawnResourceProvider_DEFINED
+#endif  // skgpu_graphite_DawnResourceProvider_DEFINED

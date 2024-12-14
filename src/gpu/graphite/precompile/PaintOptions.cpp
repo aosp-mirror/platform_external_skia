@@ -8,10 +8,12 @@
 #include "include/gpu/graphite/precompile/PaintOptions.h"
 
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
+#include "include/gpu/graphite/precompile/PrecompileImageFilter.h"
+#include "include/gpu/graphite/precompile/PrecompileMaskFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextUtils.h"
-#include "src/gpu/graphite/FactoryFunctionsPriv.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/PrecompileInternal.h"
@@ -23,6 +25,7 @@
 #include "src/gpu/graphite/precompile/PrecompileBasePriv.h"
 #include "src/gpu/graphite/precompile/PrecompileBlenderPriv.h"
 #include "src/gpu/graphite/precompile/PrecompileShaderPriv.h"
+#include "src/gpu/graphite/precompile/PrecompileShadersPriv.h"
 
 namespace skgpu::graphite {
 
@@ -222,8 +225,9 @@ namespace {
 
 void create_image_drawing_pipelines(const KeyContext& keyContext,
                                     PipelineDataGatherer* gatherer,
-                                    const PaintOptionsPriv::ProcessCombination& processCombination,
-                                    const PaintOptions& orig) {
+                                    const PaintOptions& orig,
+                                    const RenderPassDesc& renderPassDesc,
+                                    const PaintOptionsPriv::ProcessCombination& processCombination) {
     PaintOptions imagePaintOptions;
 
     // For imagefilters we know we don't have alpha-only textures and don't need cubic filtering.
@@ -241,6 +245,7 @@ void create_image_drawing_pipelines(const KeyContext& keyContext,
                                                DrawTypeFlags::kSimpleShape,
                                                /* withPrimitiveBlender= */ false,
                                                Coverage::kSingleChannel,
+                                               renderPassDesc,
                                                processCombination);
 }
 
@@ -252,6 +257,7 @@ void PaintOptions::buildCombinations(
         DrawTypeFlags drawTypes,
         bool withPrimitiveBlender,
         Coverage coverage,
+        const RenderPassDesc& renderPassDesc,
         const ProcessCombination& processCombination) const {
 
     PaintParamsKeyBuilder builder(keyContext.dict());
@@ -298,15 +304,16 @@ void PaintOptions::buildCombinations(
         }
 
         tmp.buildCombinations(keyContext, gatherer, drawTypes, withPrimitiveBlender, coverage,
-                              processCombination);
+                              renderPassDesc, processCombination);
 
-        create_image_drawing_pipelines(keyContext, gatherer, processCombination, *this);
+        create_image_drawing_pipelines(keyContext, gatherer, *this,
+                                       renderPassDesc, processCombination);
 
         for (const sk_sp<PrecompileImageFilter>& o : fImageFilterOptions) {
-            o->createPipelines(keyContext, gatherer, processCombination);
+            o->createPipelines(keyContext, gatherer, renderPassDesc, processCombination);
         }
         for (const sk_sp<PrecompileMaskFilter>& o : fMaskFilterOptions) {
-            o->createPipelines(keyContext, gatherer, processCombination);
+            o->createPipelines(keyContext, gatherer, *this, renderPassDesc, processCombination);
         }
     } else {
         int numCombinations = this->numCombinations();
@@ -321,9 +328,13 @@ void PaintOptions::buildCombinations(
             // PaintParamsKey. This serves to reset the builder.
             UniquePaintParamsID paintID = keyContext.dict()->findOrCreate(&builder);
 
-            processCombination(paintID, drawTypes, withPrimitiveBlender, coverage);
+            processCombination(paintID, drawTypes, withPrimitiveBlender, coverage, renderPassDesc);
         }
     }
+}
+
+void PaintOptionsPriv::addColorFilter(sk_sp<PrecompileColorFilter> cf) {
+    fPaintOptions->addColorFilter(std::move(cf));
 }
 
 } // namespace skgpu::graphite

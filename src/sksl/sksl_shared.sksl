@@ -499,14 +499,16 @@ $export $pure half3 $css_hsl_to_srgb(half3 hsl) {
 }
 
 $export $pure half3 $css_hwb_to_srgb(half3 hwb) {
+    half3 rgb;
     hwb.yz /= 100;
     if (hwb.y + hwb.z >= 1) {
-        half gray = hwb.y / (hwb.y + hwb.z);
-        return half3(gray);
+        // Emit grayscale
+        rgb = half3(hwb.y / (hwb.y + hwb.z));
+    } else {
+        rgb = $css_hsl_to_srgb(half3(hwb.x, 100, 50));
+        rgb *= (1 - hwb.y - hwb.z);
+        rgb += hwb.y;
     }
-    half3 rgb = $css_hsl_to_srgb(half3(hwb.x, 100, 50));
-    rgb *= (1 - hwb.y - hwb.z);
-    rgb += hwb.y;
     return rgb;
 }
 
@@ -515,7 +517,7 @@ $export $pure half3 $css_hwb_to_srgb(half3 hwb) {
  * (it might be sRGB, linear sRGB, or linear XYZ). The actual space is what's stored
  * in the gradient/SkColor4fXformer's fIntermediateColorSpace.
  */
-$export $pure half4 interpolated_to_rgb_unpremul(half4 color, int colorSpace, int doUnpremul) {
+$export $pure half4 $interpolated_to_rgb_unpremul(half4 color, int colorSpace, int doUnpremul) {
     const int kDestination   = 0;
     const int kSRGBLinear    = 1;
     const int kLab           = 2;
