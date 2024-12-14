@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "cf71700f44a8f75ce59d6e677e9279350caec006",
+        commit = "b8306de17c9a5775819a8526802fe85a860f5216",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -44,7 +44,7 @@ def c_plus_plus_deps(ws = "@skia"):
         name = "delaunator",
         build_file = ws + "//bazel/external/delaunator:BUILD.bazel",
         commit = "98305ef6c4e862f7d48df9cc647b690d796fec68",
-        remote = "https://github.com/skia-dev/delaunator-cpp",
+        remote = "https://skia.googlesource.com/external/github.com/skia-dev/delaunator-cpp.git",
     )
 
     new_git_repository(
@@ -197,7 +197,7 @@ def c_plus_plus_deps(ws = "@skia"):
 
     git_repository(
         name = "spirv_tools",
-        commit = "1229f1ef3b82498af600965141cde29a3c928e29",
+        commit = "13b59bf1d84054b8ccd29cdc6b1303f69e8f9e77",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
