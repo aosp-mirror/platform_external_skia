@@ -806,6 +806,11 @@ size_t Context::maxBudgetedBytes() const {
     return fResourceProvider->getResourceCacheLimit();
 }
 
+void Context::setMaxBudgetedBytes(size_t bytes) {
+    ASSERT_SINGLE_OWNER
+    return fResourceProvider->setResourceCacheLimit(bytes);
+}
+
 void Context::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
     ASSERT_SINGLE_OWNER
     fResourceProvider->dumpMemoryStatistics(traceMemoryDump);
@@ -823,6 +828,10 @@ int Context::maxTextureSize() const {
 
 bool Context::supportsProtectedContent() const {
     return fSharedContext->isProtected() == Protected::kYes;
+}
+
+GpuStatsFlags Context::supportedGpuStats() const {
+    return fSharedContext->caps()->supportedGpuStats();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////

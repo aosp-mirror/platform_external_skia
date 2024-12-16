@@ -396,35 +396,12 @@ icu4x_deps()
 # to support `//experimental/rust_png` code.
 crates_repository(
     name = "rust_png",
-    annotations = {
-        "png": [crate.annotation(
-            patch_args = ["-p6"],
-            # Patches from https://crrev.com/c/5922033:
-            # New public API for `png` crate: `fn next_frame_info`.
-            #
-            # TODO(lukasza, kjlubick): Remove this whole annotation once a new
-            # version of `png` is released on crates.io (presumably including
-            # the already merged PRs).
-            patches = [
-                "@//experimental/rust_png/patches:0101-Add-test-coverage-for-PolledAfterEndOfImage-error.patch",
-                "@//experimental/rust_png/patches:0102-Add-test-showing-next_frame-after-next_row-is-tempor.patch",
-                "@//experimental/rust_png/patches:0103-Call-finish_decoding-after-last-next_row.patch",
-                "@//experimental/rust_png/patches:0104-Simplify-how-Reader-tracks-how-many-frames-remain-to.patch",
-                "@//experimental/rust_png/patches:0105-Fix-a-subset-of-issues-identified-by-cargo-clippy.patch",
-                "@//experimental/rust_png/patches:0106-Avoid-infinite-loop-when-retrying-after-earlier-fata.patch",
-                "@//experimental/rust_png/patches:0107-New-API-Reader.next_frame_control-for-advancing-to-t.patch",
-                "@//experimental/rust_png/patches:0201-Add-EXIF-and-ICC-encoding-and-fix-chunk-order.patch",
-                "@//experimental/rust_png/patches:0301-Add-support-for-parsing-mDCv-and-cLLi-chunks.-528.patch",
-                "@//experimental/rust_png/patches:0302-Add-support-for-parsing-cICP-chunks.-529.patch",
-            ],
-        )],
-    },
     cargo_lockfile = "//experimental/rust_png/ffi:Cargo.lock",
     packages = {
         "png": crate.spec(
             # Note: for additional performance gains `features = ["unstable"]`
             # can be enabled, but this requires the nightly, unstable `rustc`.
-            version = "0.17",
+            version = "0.17.15",
         ),
     },
 )
@@ -695,7 +672,7 @@ load(
 # Pulls the gcr.io/skia-public/debugger-app-base container.
 container_pull(
     name = "debugger-app-base",
-    digest = "sha256:9e05eb5b9edbf7ac05772e7d485336380caf9a0c2e71735f84d62a15c8e1966c",
+    digest = "sha256:e9a6ea69ff3d616e5757891be54a232902b65f790d69655dab25048abacbd84d",
     registry = "gcr.io",
     repository = "skia-public/debugger-app-base",
 )
@@ -703,7 +680,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/jsfiddle-base container.
 container_pull(
     name = "jsfiddle-base",
-    digest = "sha256:99d4627f212efc660cbb33cb18e1158598b4fbf45ad23d6536fa4050c2dc6246",
+    digest = "sha256:fb2d48f7af982ed974832b6eef330985af8f640f5168188bbea3986543d4af90",
     registry = "gcr.io",
     repository = "skia-public/jsfiddle-base",
 )
@@ -711,7 +688,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/shaders-base container.
 container_pull(
     name = "shaders-base",
-    digest = "sha256:7bdb025e3cbbbf134a6a3337d9746525277df85edbfa9fb52df0729c45276043",
+    digest = "sha256:9481c3eb25d23889071ead9351254cc96b295c5290794cb4a13298134d1c5b57",
     registry = "gcr.io",
     repository = "skia-public/shaders-base",
 )
@@ -719,7 +696,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:52028e548417521283dd6409e3728544c9e19dd74584f5598c65e5cf543e1aa4",
+    digest = "sha256:32e4afed6d80609923d419fd854ed7a999b6a3bf53efc09713c0488e908fc7f9",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )

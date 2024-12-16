@@ -318,9 +318,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "OverdrawSurface_Gpu")
 			skip(ALL, "test", ALL, "PinnedImageTest")
 			skip(ALL, "test", ALL, "RecordingOrderTest_Graphite")
-			skip(ALL, "test", ALL, "RecordingSurfacesTestClear")
-			skip(ALL, "test", ALL, "RecordingSurfacesTestDraw")
-			skip(ALL, "test", ALL, "RecordingSurfacesTestWritePixels")
+			skip(ALL, "test", ALL, "RecordingSurfacesTest")
 			skip(ALL, "test", ALL, "ReimportImageTextureWithMipLevels")
 			skip(ALL, "test", ALL, "ReplaceSurfaceBackendTexture")
 			skip(ALL, "test", ALL, "ResourceCacheCache")
@@ -1476,6 +1474,17 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		match = append(match, "srgb_colorfilter")
 		match = append(match, "strokedlines")
 		match = append(match, "sweep_tiling")
+	}
+
+	if b.matchExtraConfig("RustPNG") {
+		// TODO(b/356875275) many PNG decoding tests still fail (e.g. those with SkAndroidCodec
+		// or some from DM's image source). For now, just opt-in the tests we know pass and
+		// eventually remove this special handling to run all image tests.
+		skipped = []string{}
+		match = []string{
+			"RustPngCodec",
+			"RustEncodePng",
+		}
 	}
 
 	if len(skipped) > 0 {

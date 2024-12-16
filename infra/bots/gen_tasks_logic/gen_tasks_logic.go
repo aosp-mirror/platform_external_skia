@@ -736,7 +736,7 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 				"SkottieTracing", "SkottieWASM", "GpuTess", "DMSAAStats", "Docker", "PDF",
 				"Puppeteer", "SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile",
 				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "TintIR", "Protected",
-				"AndroidNDKFonts"}
+				"AndroidNDKFonts", "Upload"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -876,6 +876,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN_GCE,
 			"Win10":      "Windows-10-19045",
+			"Win11":      "Windows-11-26100.1742",
 			"Win2019":    DEFAULT_OS_WIN_GCE,
 			"iOS":        "iOS-13.3.1",
 		}[os]
@@ -993,6 +994,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			if b.matchOs("Win") {
 				gpu, ok := map[string]string{
 					// At some point this might use the device ID, but for now it's like Chromebooks.
+					"GTX1660":       "10de:2184-31.0.15.4601",
 					"GTX660":        "10de:11c0-26.21.14.4120",
 					"GTX960":        "10de:1401-32.0.15.6094",
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
@@ -1626,6 +1628,9 @@ func (b *jobBuilder) codesize() {
 
 // doUpload indicates whether the given Job should upload its results.
 func (b *jobBuilder) doUpload() bool {
+	if b.extraConfig("Upload") {
+		return true
+	}
 	for _, s := range b.cfg.NoUpload {
 		m, err := regexp.MatchString(s, b.Name)
 		if err != nil {
