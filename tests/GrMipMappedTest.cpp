@@ -22,14 +22,14 @@
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContextOptions.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrContextOptions.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/SkImageGanesh.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
-#include "include/gpu/mock/GrMockTypes.h"
+#include "include/gpu/ganesh/mock/GrMockTypes.h"
 #include "include/private/SkColorData.h"
 #include "include/private/gpu/ganesh/GrTextureGenerator.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
@@ -68,17 +68,21 @@
 class GrRenderTask;
 
 #if defined(SK_DIRECT3D)
-#include "include/gpu/d3d/GrD3DTypes.h"
+#include "include/gpu/ganesh/d3d/GrD3DTypes.h"
+#endif
+
+#if defined(SK_METAL)
+#include "include/gpu/ganesh/mtl/GrMtlBackendSurface.h"
 #endif
 
 #if defined(SK_GL)
 #include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
-#include "include/gpu/gl/GrGLTypes.h"
+#include "include/gpu/ganesh/gl/GrGLTypes.h"
 #endif
 
 #if defined(SK_VULKAN)
 #include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
-#include "include/gpu/vk/GrVkTypes.h"
+#include "include/gpu/ganesh/vk/GrVkTypes.h"
 #endif
 
 static constexpr int kSize = 8;
@@ -286,8 +290,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrBackendTextureImageMipMappedTest,
             } else if (GrBackendApi::kMetal == genBackendTex.backend()) {
                 GrMtlTextureInfo genImageInfo;
                 GrMtlTextureInfo origImageInfo;
-                if (genBackendTex.getMtlTextureInfo(&genImageInfo) &&
-                    backendTex.getMtlTextureInfo(&origImageInfo)) {
+                if (GrBackendTextures::GetMtlTextureInfo(genBackendTex, &genImageInfo) &&
+                    GrBackendTextures::GetMtlTextureInfo(backendTex, &origImageInfo)) {
                     if (requestMipmapped == Mipmapped::kYes && betMipmapped == Mipmapped::kNo) {
                         // We did a copy so the texture IDs should be different
                         REPORTER_ASSERT(reporter, origImageInfo.fTexture != genImageInfo.fTexture);

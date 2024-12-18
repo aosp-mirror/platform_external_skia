@@ -44,10 +44,6 @@
 #include <cmath>
 #include <cstring>
 
-#ifdef SK_BUILD_FOR_WIN
-#include "include/ports/SkTypeface_win.h"
-#endif
-
 using namespace skia_private;
 
 namespace ToolUtils {
@@ -82,6 +78,7 @@ const char* colortype_name(SkColorType ct) {
         case kRGBA_10x6_SkColorType:          return "RGBA_10x6";
         case kGray_8_SkColorType:             return "Gray_8";
         case kRGBA_F16Norm_SkColorType:       return "RGBA_F16Norm";
+        case kRGB_F16F16F16x_SkColorType:     return "RGB_F16F16F16x";
         case kRGBA_F16_SkColorType:           return "RGBA_F16";
         case kRGBA_F32_SkColorType:           return "RGBA_F32";
         case kR8G8_unorm_SkColorType:         return "R8G8_unorm";
@@ -89,6 +86,7 @@ const char* colortype_name(SkColorType ct) {
         case kR16G16_float_SkColorType:       return "R16G16_float";
         case kR16G16B16A16_unorm_SkColorType: return "R16G16B16A16_unorm";
         case kR8_unorm_SkColorType:           return "R8_unorm";
+        case kBGRA_10101010_XR_SkColorType:   return "BGRA_10101010_XR";
     }
     SkUNREACHABLE;
 }
@@ -110,9 +108,11 @@ const char* colortype_depth(SkColorType ct) {
         case kRGB_101010x_SkColorType:        return "101010";
         case kBGR_101010x_SkColorType:        return "101010";
         case kBGR_101010x_XR_SkColorType:     return "101010";
+        case kBGRA_10101010_XR_SkColorType:   return "10101010";
         case kRGBA_10x6_SkColorType:          return "10101010";
         case kGray_8_SkColorType:             return "G8";
         case kRGBA_F16Norm_SkColorType:       return "F16Norm";
+        case kRGB_F16F16F16x_SkColorType:     return "F16F16F16x";
         case kRGBA_F16_SkColorType:           return "F16";
         case kRGBA_F32_SkColorType:           return "F32";
         case kR8G8_unorm_SkColorType:         return "88";
@@ -455,6 +455,7 @@ bool equal_pixels(const SkPixmap& a, const SkPixmap& b) {
     if (a.width() != b.width() || a.height() != b.height()) {
         SkDebugf("[ToolUtils::equal_pixels] Dimensions do not match (%d x %d) != (%d x %d)\n",
                  a.width(), a.height(), b.width(), b.height());
+        return false;
     }
 
     if (a.colorType() != b.colorType()) {
@@ -476,16 +477,34 @@ bool equal_pixels(const SkPixmap& a, const SkPixmap& b) {
 
 bool equal_pixels(const SkBitmap& bm0, const SkBitmap& bm1) {
     SkPixmap pm0, pm1;
-    return bm0.peekPixels(&pm0) && bm1.peekPixels(&pm1) && equal_pixels(pm0, pm1);
+    if (!bm0.peekPixels(&pm0)) {
+        SkDebugf("Could not read pixels from A\n");
+        return false;
+    }
+    if (!bm1.peekPixels(&pm1)) {
+        SkDebugf("Could not read pixels from B\n");
+        return false;
+    }
+    return equal_pixels(pm0, pm1);
 }
 
 bool equal_pixels(const SkImage* a, const SkImage* b) {
+    SkASSERT_RELEASE(a);
+    SkASSERT_RELEASE(b);
     // ensure that peekPixels will succeed
     auto imga = a->makeRasterImage();
     auto imgb = b->makeRasterImage();
 
     SkPixmap pm0, pm1;
-    return imga->peekPixels(&pm0) && imgb->peekPixels(&pm1) && equal_pixels(pm0, pm1);
+    if (!imga->peekPixels(&pm0)) {
+        SkDebugf("Could not read pixels from A\n");
+        return false;
+    }
+    if (!imgb->peekPixels(&pm1)) {
+        SkDebugf("Could not read pixels from B\n");
+        return false;
+    }
+    return equal_pixels(pm0, pm1);
 }
 
 sk_sp<SkSurface> makeSurface(SkCanvas*             canvas,

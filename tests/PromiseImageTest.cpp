@@ -21,9 +21,9 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/chromium/GrDeferredDisplayListRecorder.h"
@@ -413,11 +413,11 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(PromiseImageNullFulfill,
         int fFulfillCount = 0;
         int fReleaseCount = 0;
     } counts;
-    auto fulfill = [](GrDeferredDisplayListRecorder::PromiseImageTextureContext ctx) {
+    auto fulfill = [](SkImages::PromiseImageTextureContext ctx) {
         ++static_cast<Counts*>(ctx)->fFulfillCount;
         return sk_sp<GrPromiseImageTexture>();
     };
-    auto release = [](GrDeferredDisplayListRecorder::PromiseImageTextureContext ctx) {
+    auto release = [](SkImages::PromiseImageTextureContext ctx) {
         ++static_cast<Counts*>(ctx)->fReleaseCount;
     };
     GrSurfaceOrigin texOrigin = kTopLeft_GrSurfaceOrigin;

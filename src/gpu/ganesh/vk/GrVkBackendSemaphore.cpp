@@ -6,8 +6,9 @@
  */
 #include "include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
 
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/private/base/SkAssert.h"
+#include "include/private/base/SkDebug.h"
 #include "src/gpu/ganesh/GrBackendSemaphorePriv.h"
 
 class GrVkBackendSemaphoreData final : public GrBackendSemaphoreData {
@@ -47,20 +48,3 @@ VkSemaphore GetVkSemaphore(const GrBackendSemaphore& sem) {
     return data->semaphore();
 }
 }  // namespace GrBackendSemaphores
-
-#if !defined(SK_DISABLE_LEGACY_VULKAN_BACKENDSEMAPHORE)
-void GrBackendSemaphore::initVulkan(VkSemaphore semaphore) {
-    GrVkBackendSemaphoreData data(semaphore);
-    fSemaphoreData.emplace<GrVkBackendSemaphoreData>(data);
-    fIsInitialized = true;
-    fBackend = GrBackendApi::kVulkan;
-}
-
-VkSemaphore GrBackendSemaphore::vkSemaphore() const {
-    if (!fIsInitialized || GrBackendApi::kVulkan != fBackend) {
-        return VK_NULL_HANDLE;
-    }
-    return GrBackendSemaphores::GetVkSemaphore(*this);
-}
-
-#endif

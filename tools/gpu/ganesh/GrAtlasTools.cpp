@@ -16,7 +16,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/encode/SkPngEncoder.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/private/base/SkDebug.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrSurfaceProxy.h"
@@ -88,7 +88,7 @@ void GrAtlasManagerTools::Dump(const GrAtlasManager* am, GrDirectContext* contex
 #ifdef SK_BUILD_FOR_ANDROID
                 filename.printf("/sdcard/fontcache_%d%d%d.png", gDumpCount, i, pageIdx);
 #else
-                filename.printf("fontcache_%d%d%d.png", gDumpCount, i, pageIdx);
+                filename.printf("fontcache_%d%d%u.png", gDumpCount, i, pageIdx);
 #endif
                 SkColorType ct = MaskFormatToColorType(GrAtlasManager::AtlasIndexToMaskFormat(i));
                 save_pixels(

@@ -18,6 +18,7 @@
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/Texture.h"
 #include "src/gpu/graphite/UniformManager.h"
+#include "src/gpu/graphite/task/ClearBuffersTask.h"
 
 namespace skgpu::graphite {
 
@@ -46,8 +47,7 @@ bool DispatchGroup::prepareResources(ResourceProvider* resourceProvider) {
     }
 
     for (const SamplerDesc& desc : fSamplerDescs) {
-        sk_sp<Sampler> sampler = resourceProvider->findOrCreateCompatibleSampler(
-                desc.samplingOptions(), desc.tileModeX(), desc.tileModeY());
+        sk_sp<Sampler> sampler = resourceProvider->findOrCreateCompatibleSampler(desc);
         if (!sampler) {
             SKGPU_LOG_W("Failed to create sampler. Dropping dispatch group!");
             return false;
@@ -70,6 +70,13 @@ void DispatchGroup::addResourceRefs(CommandBuffer* commandBuffer) const {
     for (int i = 0; i < fTextures.size(); ++i) {
         commandBuffer->trackCommandBufferResource(fTextures[i]->refTexture());
     }
+}
+
+sk_sp<Task> DispatchGroup::snapChildTask() {
+    if (fClearList.empty()) {
+        return nullptr;
+    }
+    return ClearBuffersTask::Make(std::move(fClearList));
 }
 
 const Texture* DispatchGroup::getTexture(size_t index) const {
@@ -96,13 +103,13 @@ bool Builder::appendStep(const ComputeStep* step, std::optional<WorkgroupSize> g
                                     globalSize ? *globalSize : step->calculateGlobalDispatchSize());
 }
 
-bool Builder::appendStepIndirect(const ComputeStep* step, BufferView indirectBuffer) {
+bool Builder::appendStepIndirect(const ComputeStep* step, BindBufferInfo indirectBuffer) {
     return this->appendStepInternal(step, indirectBuffer);
 }
 
 bool Builder::appendStepInternal(
         const ComputeStep* step,
-        const std::variant<WorkgroupSize, BufferView>& globalSizeOrIndirect) {
+        const std::variant<WorkgroupSize, BindBufferInfo>& globalSizeOrIndirect) {
     SkASSERT(fObj);
     SkASSERT(step);
 
@@ -159,7 +166,7 @@ bool Builder::appendStepInternal(
                                r.fType == Type::kStorageBuffer ||
                                r.fType == Type::kReadOnlyStorageBuffer ||
                                r.fType == Type::kIndirectBuffer) &&
-                              std::holds_alternative<BufferView>(*slot)) ||
+                              std::holds_alternative<BindBufferInfo>(*slot)) ||
                              ((r.fType == Type::kReadOnlyTexture ||
                                r.fType == Type::kSampledTexture ||
                                r.fType == Type::kWriteOnlyStorageTexture) &&
@@ -200,7 +207,7 @@ bool Builder::appendStepInternal(
 
         int bindingIndex = 0;
         DispatchResource dispatchResource;
-        if (const BufferView* buffer = std::get_if<BufferView>(&maybeResource)) {
+        if (const BindBufferInfo* buffer = std::get_if<BindBufferInfo>(&maybeResource)) {
             dispatchResource = *buffer;
             bindingIndex = bufferOrGlobalIndex++;
         } else if (const TextureIndex* texIdx = std::get_if<TextureIndex>(&maybeResource)) {
@@ -233,12 +240,15 @@ bool Builder::appendStepInternal(
     return true;
 }
 
-void Builder::assignSharedBuffer(BufferView buffer, unsigned int slot) {
+void Builder::assignSharedBuffer(BindBufferInfo buffer, unsigned int slot, ClearBuffer cleared) {
     SkASSERT(fObj);
-    SkASSERT(buffer.fInfo);
+    SkASSERT(buffer);
     SkASSERT(buffer.fSize);
 
     fOutputTable.fSharedSlots[slot] = buffer;
+    if (cleared == ClearBuffer::kYes) {
+        fObj->fClearList.push_back(buffer);
+    }
 }
 
 void Builder::assignSharedTexture(sk_sp<TextureProxy> texture, unsigned int slot) {
@@ -255,12 +265,20 @@ std::unique_ptr<DispatchGroup> Builder::finalize() {
     return obj;
 }
 
+#if defined(GPU_TEST_UTILS)
+void Builder::reset() {
+    fOutputTable.reset();
+    fObj.reset(new DispatchGroup);
+}
+#endif
+
 BindBufferInfo Builder::getSharedBufferResource(unsigned int slot) const {
     SkASSERT(fObj);
 
     BindBufferInfo info;
-    if (const BufferView* slotValue = std::get_if<BufferView>(&fOutputTable.fSharedSlots[slot])) {
-        info = slotValue->fInfo;
+    if (const BindBufferInfo* slotValue =
+                std::get_if<BindBufferInfo>(&fOutputTable.fSharedSlots[slot])) {
+        info = *slotValue;
     }
     return info;
 }
@@ -281,6 +299,7 @@ DispatchResourceOptional Builder::allocateResource(const ComputeStep* step,
                                                    const ComputeStep::ResourceDesc& resource,
                                                    int resourceIdx) {
     SkASSERT(step);
+    SkASSERT(fObj);
     using Type = ComputeStep::ResourceType;
     using ResourcePolicy = ComputeStep::ResourcePolicy;
 
@@ -295,7 +314,7 @@ DispatchResourceOptional Builder::allocateResource(const ComputeStep* step,
                 auto [ptr, bufInfo] = bufferMgr->getStoragePointer(bufferSize);
                 if (ptr) {
                     step->prepareStorageBuffer(resourceIdx, resource, ptr, bufferSize);
-                    result = BufferView{bufInfo, bufferSize};
+                    result = bufInfo;
                 }
             } else {
                 auto bufInfo = bufferMgr->getStorage(bufferSize,
@@ -303,7 +322,7 @@ DispatchResourceOptional Builder::allocateResource(const ComputeStep* step,
                                                              ? ClearBuffer::kYes
                                                              : ClearBuffer::kNo);
                 if (bufInfo) {
-                    result = BufferView{bufInfo, bufferSize};
+                    result = bufInfo;
                 }
             }
             break;
@@ -318,7 +337,7 @@ DispatchResourceOptional Builder::allocateResource(const ComputeStep* step,
                                                                  ? ClearBuffer::kYes
                                                                  : ClearBuffer::kNo);
             if (bufInfo) {
-                result = BufferView{bufInfo, bufferSize};
+                result = bufInfo;
             }
             break;
         }
@@ -329,13 +348,13 @@ DispatchResourceOptional Builder::allocateResource(const ComputeStep* step,
             UniformManager uboMgr(resourceReqs.fUniformBufferLayout);
             step->prepareUniformBuffer(resourceIdx, resource, &uboMgr);
 
-            auto dataBlock = uboMgr.finishUniformDataBlock();
-            SkASSERT(dataBlock.size());
+            auto dataBlock = uboMgr.finish();
+            SkASSERT(!dataBlock.empty());
 
-            auto [writer, bufInfo] = bufferMgr->getUniformWriter(dataBlock.size());
+            auto [writer, bufInfo] = bufferMgr->getUniformWriter(/*count=*/1, dataBlock.size());
             if (bufInfo) {
                 writer.write(dataBlock.data(), dataBlock.size());
-                result = BufferView{bufInfo, dataBlock.size()};
+                result = bufInfo;
             }
             break;
         }
@@ -344,8 +363,10 @@ DispatchResourceOptional Builder::allocateResource(const ComputeStep* step,
             SkASSERT(!size.isEmpty());
             SkASSERT(colorType != kUnknown_SkColorType);
 
-            sk_sp<TextureProxy> texture = TextureProxy::MakeStorage(
-                    fRecorder->priv().caps(), size, colorType, skgpu::Budgeted::kYes);
+            auto textureInfo = fRecorder->priv().caps()->getDefaultStorageTextureInfo(colorType);
+            sk_sp<TextureProxy> texture = TextureProxy::Make(
+                    fRecorder->priv().caps(), fRecorder->priv().resourceProvider(),
+                    size, textureInfo, "DispatchWriteOnlyStorageTexture", skgpu::Budgeted::kYes);
             if (texture) {
                 fObj->fTextures.push_back(std::move(texture));
                 result = TextureIndex{fObj->fTextures.size() - 1u};

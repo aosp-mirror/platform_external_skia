@@ -100,7 +100,7 @@ def png_codec_tests(name):
             size = "large",
             srcs = [
                 "png_codec.cpp",
-                "//tools/flags:common_flags",
+                "//tools/flags:common_flags_legacy",
                 "//tools/testrunners/gm:BazelGMTestRunner.cpp",
             ],
             target_compatible_with = ["@platforms//os:linux"],
@@ -121,7 +121,7 @@ def png_codec_tests(name):
                 "//:core",
                 "//:png_decode_codec",
                 "//gm",
-                "//src/utils:json",
+                "//src/core:core_priv",
                 "//tools:codec_utils",
                 "//tools:hash_and_encode",
                 "//tools:tool_utils",

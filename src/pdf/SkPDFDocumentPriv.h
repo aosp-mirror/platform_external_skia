@@ -8,25 +8,41 @@
 #define SkPDFDocumentPriv_DEFINED
 
 #include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkDocument.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSpan.h"  // IWYU pragma: keep
 #include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
 #include "include/docs/SkPDFDocument.h"
 #include "include/private/base/SkMutex.h"
+#include "include/private/base/SkSemaphore.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkTHash.h"
 #include "src/pdf/SkPDFBitmap.h"
+#include "src/pdf/SkPDFFont.h"
 #include "src/pdf/SkPDFGraphicState.h"
-#include "src/pdf/SkPDFMetadata.h"
 #include "src/pdf/SkPDFShader.h"
 #include "src/pdf/SkPDFTag.h"
+#include "src/pdf/SkPDFTypes.h"
+#include "src/pdf/SkUUID.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <atomic>
 #include <vector>
 #include <memory>
 
+class SkDescriptor;
 class SkExecutor;
 class SkPDFDevice;
-class SkPDFFont;
 struct SkAdvancedTypefaceMetrics;
 struct SkBitmapKey;
+class SkMatrix;
 
 namespace SkPDFGradientShader {
 struct Key;
@@ -159,7 +175,7 @@ public:
     skia_private::THashMap<uint32_t, std::vector<SkUnichar>> fToUnicodeMap;
     skia_private::THashMap<uint32_t, SkPDFIndirectReference> fFontDescriptors;
     skia_private::THashMap<uint32_t, SkPDFIndirectReference> fType3FontDescriptors;
-    skia_private::THashMap<uint64_t, SkPDFFont> fFontMap;
+    skia_private::THashTable<sk_sp<SkPDFStrike>, const SkDescriptor&, SkPDFStrike::Traits> fStrikes;
     skia_private::THashMap<SkPDFStrokeGraphicState,
                            SkPDFIndirectReference,
                            SkPDFStrokeGraphicState::Hash> fStrokeGSMap;

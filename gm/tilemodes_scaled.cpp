@@ -70,10 +70,8 @@ public:
     SkBitmap    fTexture[std::size(gColorTypes)];
 
 protected:
-    enum {
-        kPOTSize = 4,
-        kNPOTSize = 3,
-    };
+    static constexpr int kPOTSize = 4;
+    static constexpr int kNPOTSize = 3;
 
     SkString getName() const override {
         SkString name("scaled_tilemodes");
@@ -186,7 +184,8 @@ static sk_sp<SkShader> make_grad(SkTileMode tx, SkTileMode ty) {
         case 1:
             return SkGradientShader::MakeRadial(center, rad, colors, nullptr, std::size(colors), tx);
         case 2:
-            return SkGradientShader::MakeSweep(center.fX, center.fY, colors, nullptr, std::size(colors));
+            return SkGradientShader::MakeSweep(center.fX, center.fY, colors, nullptr,
+                                               std::size(colors), tx, 135, 225, 0, nullptr);
     }
 
     return nullptr;

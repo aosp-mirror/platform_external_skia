@@ -8,12 +8,16 @@
 #include "src/gpu/graphite/dawn/DawnResourceProvider.h"
 
 #include "include/gpu/graphite/BackendTexture.h"
+#include "include/gpu/graphite/TextureInfo.h"
+#include "include/gpu/graphite/dawn/DawnTypes.h"
 #include "include/private/base/SkAlign.h"
 #include "src/gpu/graphite/ComputePipeline.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/dawn/DawnBuffer.h"
 #include "src/gpu/graphite/dawn/DawnComputePipeline.h"
 #include "src/gpu/graphite/dawn/DawnErrorChecker.h"
 #include "src/gpu/graphite/dawn/DawnGraphicsPipeline.h"
+#include "src/gpu/graphite/dawn/DawnGraphiteTypesPriv.h"
 #include "src/gpu/graphite/dawn/DawnSampler.h"
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
 #include "src/gpu/graphite/dawn/DawnTexture.h"
@@ -24,11 +28,15 @@ namespace skgpu::graphite {
 namespace {
 
 constexpr int kBufferBindingSizeAlignment = 16;
-constexpr int kMaxNumberOfCachedBufferBindGroups = 32;
-constexpr int kMaxNumberOfCachedTextureBindGroups = 256;
+constexpr int kMaxNumberOfCachedBufferBindGroups = 1024;
+constexpr int kMaxNumberOfCachedTextureBindGroups = 4096;
 
 wgpu::ShaderModule create_shader_module(const wgpu::Device& device, const char* source) {
+#ifdef WGPU_BREAKING_CHANGE_DROP_DESCRIPTOR
+    wgpu::ShaderSourceWGSL wgslDesc;
+#else
     wgpu::ShaderModuleWGSLDescriptor wgslDesc;
+#endif
     wgslDesc.code = source;
     wgpu::ShaderModuleDescriptor descriptor;
     descriptor.nextInChain = &wgslDesc;
@@ -43,9 +51,7 @@ wgpu::RenderPipeline create_blit_render_pipeline(const DawnSharedContext* shared
                                                  wgpu::TextureFormat renderPassDepthStencilFormat,
                                                  int numSamples) {
     wgpu::RenderPipelineDescriptor descriptor;
-#if defined(SK_DEBUG)
     descriptor.label = label;
-#endif
     descriptor.layout = nullptr;
 
     wgpu::ColorTargetState colorTarget;
@@ -97,19 +103,21 @@ wgpu::RenderPipeline create_blit_render_pipeline(const DawnSharedContext* shared
     return pipeline;
 }
 
-UniqueKey make_ubo_bind_group_key(
-        const std::array<std::pair<const DawnBuffer*, uint32_t>, 3>& boundBuffersAndSizes) {
-    static const UniqueKey::Domain kBufferBindGroupDomain = UniqueKey::GenerateDomain();
+template <size_t NumEntries>
+using BindGroupKey = typename DawnResourceProvider::BindGroupKey<NumEntries>;
+using UniformBindGroupKey = BindGroupKey<DawnResourceProvider::kNumUniformEntries>;
 
-    UniqueKey uniqueKey;
+UniformBindGroupKey make_ubo_bind_group_key(
+        const std::array<std::pair<const DawnBuffer*, uint32_t>,
+                         DawnResourceProvider::kNumUniformEntries>& boundBuffersAndSizes) {
+    UniformBindGroupKey uniqueKey;
     {
         // Each entry in the bind group needs 2 uint32_t in the key:
         //  - buffer's unique ID: 32 bits.
         //  - buffer's binding size: 32 bits.
-        // We need total of 3 entries in the uniform buffer bind group.
+        // We need total of 4 entries in the uniform buffer bind group.
         // Unused entries will be assigned zero values.
-        UniqueKey::Builder builder(
-                &uniqueKey, kBufferBindGroupDomain, 6, "GraphicsPipelineBufferBindGroup");
+        UniformBindGroupKey::Builder builder(&uniqueKey);
 
         for (uint32_t i = 0; i < boundBuffersAndSizes.size(); ++i) {
             const DawnBuffer* boundBuffer = boundBuffersAndSizes[i].first;
@@ -129,15 +137,11 @@ UniqueKey make_ubo_bind_group_key(
     return uniqueKey;
 }
 
-UniqueKey make_texture_bind_group_key(const DawnSampler* sampler, const DawnTexture* texture) {
-    static const UniqueKey::Domain kTextureBindGroupDomain = UniqueKey::GenerateDomain();
-
-    UniqueKey uniqueKey;
+BindGroupKey<1> make_texture_bind_group_key(const DawnSampler* sampler,
+                                            const DawnTexture* texture) {
+    BindGroupKey<1> uniqueKey;
     {
-        UniqueKey::Builder builder(&uniqueKey,
-                                   kTextureBindGroupDomain,
-                                   2,
-                                   "GraphicsPipelineSingleTextureSamplerBindGroup");
+        BindGroupKey<1>::Builder builder(&uniqueKey);
 
         builder[0] = sampler->uniqueID().asUInt();
         builder[1] = texture->uniqueID().asUInt();
@@ -161,8 +165,8 @@ DawnResourceProvider::~DawnResourceProvider() = default;
 
 wgpu::RenderPipeline DawnResourceProvider::findOrCreateBlitWithDrawPipeline(
         const RenderPassDesc& renderPassDesc) {
-    uint64_t renderPassKey =
-            this->dawnSharedContext()->dawnCaps()->getRenderPassDescKey(renderPassDesc);
+    uint32_t renderPassKey =
+            this->dawnSharedContext()->dawnCaps()->getRenderPassDescKeyForPipeline(renderPassDesc);
     wgpu::RenderPipeline pipeline = fBlitWithDrawPipelines[renderPassKey];
     if (!pipeline) {
         static constexpr char kVertexShaderText[] = R"(
@@ -194,11 +198,11 @@ wgpu::RenderPipeline DawnResourceProvider::findOrCreateBlitWithDrawPipeline(
                 std::move(vsModule),
                 std::move(fsModule),
                 /*renderPassColorFormat=*/
-                renderPassDesc.fColorAttachment.fTextureInfo.dawnTextureSpec().fFormat,
+                TextureInfos::GetDawnViewFormat(renderPassDesc.fColorAttachment.fTextureInfo),
                 /*renderPassDepthStencilFormat=*/
                 renderPassDesc.fDepthStencilAttachment.fTextureInfo.isValid()
-                        ? renderPassDesc.fDepthStencilAttachment.fTextureInfo.dawnTextureSpec()
-                                  .fFormat
+                        ? TextureInfos::GetDawnViewFormat(
+                                  renderPassDesc.fDepthStencilAttachment.fTextureInfo)
                         : wgpu::TextureFormat::Undefined,
                 /*numSamples=*/renderPassDesc.fColorAttachment.fTextureInfo.numSamples());
 
@@ -210,10 +214,10 @@ wgpu::RenderPipeline DawnResourceProvider::findOrCreateBlitWithDrawPipeline(
     return pipeline;
 }
 
-sk_sp<Texture> DawnResourceProvider::createWrappedTexture(const BackendTexture& texture) {
+sk_sp<Texture> DawnResourceProvider::onCreateWrappedTexture(const BackendTexture& texture) {
     // Convert to smart pointers. wgpu::Texture* constructor will increment the ref count.
-    wgpu::Texture dawnTexture         = texture.getDawnTexturePtr();
-    wgpu::TextureView dawnTextureView = texture.getDawnTextureViewPtr();
+    wgpu::Texture dawnTexture         = BackendTextures::GetDawnTexturePtr(texture);
+    wgpu::TextureView dawnTextureView = BackendTextures::GetDawnTextureViewPtr(texture);
     SkASSERT(!dawnTexture || !dawnTextureView);
 
     if (!dawnTexture && !dawnTextureView) {
@@ -239,7 +243,7 @@ sk_sp<DawnTexture> DawnResourceProvider::findOrCreateDiscardableMSAALoadTexture(
 
     // Derive the load texture's info from MSAA texture's info.
     DawnTextureInfo dawnMsaaLoadTextureInfo;
-    msaaInfo.getDawnTextureInfo(&dawnMsaaLoadTextureInfo);
+    SkAssertResult(TextureInfos::GetDawnTextureInfo(msaaInfo, &dawnMsaaLoadTextureInfo));
     dawnMsaaLoadTextureInfo.fSampleCount = 1;
     dawnMsaaLoadTextureInfo.fUsage |= wgpu::TextureUsage::TextureBinding;
 
@@ -253,7 +257,8 @@ sk_sp<DawnTexture> DawnResourceProvider::findOrCreateDiscardableMSAALoadTexture(
     dawnMsaaLoadTextureInfo.fUsage &= (~wgpu::TextureUsage::TransientAttachment);
 #endif
 
-    auto texture = this->findOrCreateDiscardableMSAAAttachment(dimensions, dawnMsaaLoadTextureInfo);
+    auto texture = this->findOrCreateDiscardableMSAAAttachment(
+            dimensions, TextureInfos::MakeDawn(dawnMsaaLoadTextureInfo));
 
     return sk_sp<DawnTexture>(static_cast<DawnTexture*>(texture.release()));
 }
@@ -277,22 +282,20 @@ sk_sp<ComputePipeline> DawnResourceProvider::createComputePipeline(
 sk_sp<Texture> DawnResourceProvider::createTexture(SkISize dimensions,
                                                    const TextureInfo& info,
                                                    skgpu::Budgeted budgeted) {
-    return DawnTexture::Make(this->dawnSharedContext(), dimensions, info, budgeted);
+    return DawnTexture::Make(this->dawnSharedContext(),
+                             dimensions,
+                             info,
+                             budgeted);
 }
 
 sk_sp<Buffer> DawnResourceProvider::createBuffer(size_t size,
                                                  BufferType type,
                                                  AccessPattern accessPattern) {
-    return DawnBuffer::Make(this->dawnSharedContext(),
-                            size,
-                            type,
-                            accessPattern);
+    return DawnBuffer::Make(this->dawnSharedContext(), size, type, accessPattern);
 }
 
-sk_sp<Sampler> DawnResourceProvider::createSampler(const SkSamplingOptions& options,
-                                                   SkTileMode xTileMode,
-                                                   SkTileMode yTileMode) {
-    return DawnSampler::Make(this->dawnSharedContext(), options, xTileMode, yTileMode);
+sk_sp<Sampler> DawnResourceProvider::createSampler(const SamplerDesc& samplerDesc) {
+    return DawnSampler::Make(this->dawnSharedContext(), samplerDesc);
 }
 
 BackendTexture DawnResourceProvider::onCreateBackendTexture(SkISize dimensions,
@@ -304,7 +307,7 @@ BackendTexture DawnResourceProvider::onCreateBackendTexture(SkISize dimensions,
         return {};
     }
 
-    return BackendTexture(texture.MoveToCHandle());
+    return BackendTextures::MakeDawn(texture.MoveToCHandle());
 }
 
 void DawnResourceProvider::onDeleteBackendTexture(const BackendTexture& texture) {
@@ -313,8 +316,15 @@ void DawnResourceProvider::onDeleteBackendTexture(const BackendTexture& texture)
 
     // Automatically release the pointers in wgpu::TextureView & wgpu::Texture's dtor.
     // Acquire() won't increment the ref count.
-    wgpu::TextureView::Acquire(texture.getDawnTextureViewPtr());
-    wgpu::Texture::Acquire(texture.getDawnTexturePtr());
+    wgpu::TextureView::Acquire(BackendTextures::GetDawnTextureViewPtr(texture));
+    // We need to explicitly call Destroy() here since since that is the recommended way to delete
+    // a Dawn texture predictably versus just dropping a ref and relying on garbage collection.
+    //
+    // Additionally this helps to work around an issue where Skia may have cached a BindGroup that
+    // references the underlying texture. Skia currently doesn't destroy BindGroups when its use of
+    // the texture goes away, thus a ref to the texture remains on the BindGroup and memory is never
+    // cleared up unless we call Destroy() here.
+    wgpu::Texture::Acquire(BackendTextures::GetDawnTexturePtr(texture)).Destroy();
 }
 
 DawnSharedContext* DawnResourceProvider::dawnSharedContext() const {
@@ -323,8 +333,9 @@ DawnSharedContext* DawnResourceProvider::dawnSharedContext() const {
 
 sk_sp<DawnBuffer> DawnResourceProvider::findOrCreateDawnBuffer(size_t size,
                                                                BufferType type,
-                                                               AccessPattern accessPattern) {
-    sk_sp<Buffer> buffer = this->findOrCreateBuffer(size, type, accessPattern);
+                                                               AccessPattern accessPattern,
+                                                               std::string_view label) {
+    sk_sp<Buffer> buffer = this->findOrCreateBuffer(size, type, accessPattern, std::move(label));
     DawnBuffer* ptr = static_cast<DawnBuffer*>(buffer.release());
     return sk_sp<DawnBuffer>(ptr);
 }
@@ -334,7 +345,7 @@ const wgpu::BindGroupLayout& DawnResourceProvider::getOrCreateUniformBuffersBind
         return fUniformBuffersBindGroupLayout;
     }
 
-    std::array<wgpu::BindGroupLayoutEntry, 3> entries;
+    std::array<wgpu::BindGroupLayoutEntry, 4> entries;
     entries[0].binding = DawnGraphicsPipeline::kIntrinsicUniformBufferIndex;
     entries[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
     entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
@@ -343,7 +354,7 @@ const wgpu::BindGroupLayout& DawnResourceProvider::getOrCreateUniformBuffersBind
 
     entries[1].binding = DawnGraphicsPipeline::kRenderStepUniformBufferIndex;
     entries[1].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-    entries[1].buffer.type = fSharedContext->caps()->storageBufferPreferred()
+    entries[1].buffer.type = fSharedContext->caps()->storageBufferSupport()
                                      ? wgpu::BufferBindingType::ReadOnlyStorage
                                      : wgpu::BufferBindingType::Uniform;
     entries[1].buffer.hasDynamicOffset = true;
@@ -351,16 +362,27 @@ const wgpu::BindGroupLayout& DawnResourceProvider::getOrCreateUniformBuffersBind
 
     entries[2].binding = DawnGraphicsPipeline::kPaintUniformBufferIndex;
     entries[2].visibility = wgpu::ShaderStage::Fragment;
-    entries[2].buffer.type = fSharedContext->caps()->storageBufferPreferred()
+    entries[2].buffer.type = fSharedContext->caps()->storageBufferSupport()
                                      ? wgpu::BufferBindingType::ReadOnlyStorage
                                      : wgpu::BufferBindingType::Uniform;
     entries[2].buffer.hasDynamicOffset = true;
     entries[2].buffer.minBindingSize = 0;
 
+    // Gradient buffer will only be used when storage buffers are preferred, else large
+    // gradients use a texture fallback, set binding type as a uniform when not in use to
+    // satisfy any binding type restricions for non-supported ssbo devices.
+    entries[3].binding = DawnGraphicsPipeline::kGradientBufferIndex;
+    entries[3].visibility = wgpu::ShaderStage::Fragment;
+    entries[3].buffer.type = fSharedContext->caps()->storageBufferSupport()
+                                     ? wgpu::BufferBindingType::ReadOnlyStorage
+                                     : wgpu::BufferBindingType::Uniform;
+    entries[3].buffer.hasDynamicOffset = true;
+    entries[3].buffer.minBindingSize = 0;
+
     wgpu::BindGroupLayoutDescriptor groupLayoutDesc;
-#if defined(SK_DEBUG)
-    groupLayoutDesc.label = "Uniform buffers bind group layout";
-#endif
+    if (fSharedContext->caps()->setBackendLabels()) {
+        groupLayoutDesc.label = "Uniform buffers bind group layout";
+    }
 
     groupLayoutDesc.entryCount = entries.size();
     groupLayoutDesc.entries = entries.data();
@@ -389,9 +411,9 @@ DawnResourceProvider::getOrCreateSingleTextureSamplerBindGroupLayout() {
     entries[1].texture.multisampled = false;
 
     wgpu::BindGroupLayoutDescriptor groupLayoutDesc;
-#if defined(SK_DEBUG)
-    groupLayoutDesc.label = "Single texture + sampler bind group layout";
-#endif
+    if (fSharedContext->caps()->setBackendLabels()) {
+        groupLayoutDesc.label = "Single texture + sampler bind group layout";
+    }
 
     groupLayoutDesc.entryCount = entries.size();
     groupLayoutDesc.entries = entries.data();
@@ -404,9 +426,9 @@ DawnResourceProvider::getOrCreateSingleTextureSamplerBindGroupLayout() {
 const wgpu::Buffer& DawnResourceProvider::getOrCreateNullBuffer() {
     if (!fNullBuffer) {
         wgpu::BufferDescriptor desc;
-#if defined(SK_DEBUG)
-        desc.label = "UnusedBufferSlot";
-#endif
+        if (fSharedContext->caps()->setBackendLabels()) {
+            desc.label = "UnusedBufferSlot";
+        }
         desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform |
                      wgpu::BufferUsage::Storage;
         desc.size = kBufferBindingSizeAlignment;
@@ -420,7 +442,8 @@ const wgpu::Buffer& DawnResourceProvider::getOrCreateNullBuffer() {
 }
 
 const wgpu::BindGroup& DawnResourceProvider::findOrCreateUniformBuffersBindGroup(
-        const std::array<std::pair<const DawnBuffer*, uint32_t>, 3>& boundBuffersAndSizes) {
+        const std::array<std::pair<const DawnBuffer*, uint32_t>, kNumUniformEntries>&
+                boundBuffersAndSizes) {
     auto key = make_ubo_bind_group_key(boundBuffersAndSizes);
     auto* existingBindGroup = fUniformBufferBindGroupCache.find(key);
     if (existingBindGroup) {
@@ -429,12 +452,13 @@ const wgpu::BindGroup& DawnResourceProvider::findOrCreateUniformBuffersBindGroup
     }
 
     // Translate to wgpu::BindGroupDescriptor
-    std::array<wgpu::BindGroupEntry, 3> entries;
+    std::array<wgpu::BindGroupEntry, kNumUniformEntries> entries;
 
     constexpr uint32_t kBindingIndices[] = {
         DawnGraphicsPipeline::kIntrinsicUniformBufferIndex,
         DawnGraphicsPipeline::kRenderStepUniformBufferIndex,
         DawnGraphicsPipeline::kPaintUniformBufferIndex,
+        DawnGraphicsPipeline::kGradientBufferIndex,
     };
 
     for (uint32_t i = 0; i < boundBuffersAndSizes.size(); ++i) {
