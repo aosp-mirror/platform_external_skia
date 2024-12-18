@@ -18,6 +18,12 @@ class Surface;
 
 class RecordingPriv {
 public:
+    TextureProxy* deferredTargetProxy();
+    const Texture* setupDeferredTarget(ResourceProvider*,
+                                       Surface* targetSurface,
+                                       SkIVector targetTranslation,
+                                       SkIRect targetClip);
+
     bool hasVolatileLazyProxies() const;
     bool instantiateVolatileLazyProxies(ResourceProvider*);
     void deinstantiateVolatileLazyProxies();
@@ -27,7 +33,11 @@ public:
 
     void setFailureResultForFinishedProcs();
 
-    bool addCommands(Context*, CommandBuffer*, Surface* targetSurface, SkIVector targetTranslation);
+    bool addCommands(Context*,
+                     CommandBuffer*,
+                     const Texture* replayTarget,
+                     SkIVector targetTranslation,
+                     SkIRect targetClip);
     // This will eventually lead to adding a Usage Ref on the CommandBuffer. For now that is fine
     // since the only Resource's we are reffing here are Buffers. However, if we ever want to track
     // Textures or GPU only Buffers as well, we should keep a second list for Refs that we want to

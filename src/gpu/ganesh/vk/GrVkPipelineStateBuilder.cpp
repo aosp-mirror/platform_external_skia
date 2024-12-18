@@ -8,6 +8,7 @@
 #include "src/gpu/ganesh/vk/GrVkPipelineStateBuilder.h"
 
 #include "include/core/SkData.h"
+#include "include/core/SkFourByteTag.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/ganesh/GrContextOptions.h"
@@ -203,9 +204,10 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrProgramDesc& desc,
     SkSL::ProgramSettings settings;
     settings.fRTFlipBinding = this->gpu()->vkCaps().getFragmentUniformBinding();
     settings.fRTFlipSet = this->gpu()->vkCaps().getFragmentUniformSet();
-    settings.fSharpenTextures = true;
+    settings.fSharpenTextures =
+            this->gpu()->getContext()->priv().options().fSharpenMipmappedTextures;
     settings.fRTFlipOffset = fUniformHandler.getRTFlipOffset();
-    settings.fUsePushConstants = usePushConstants;
+    settings.fUseVulkanPushConstantsForGaneshRTAdjust = usePushConstants;
     if (fFS.fForceHighPrecision) {
         settings.fForceHighPrecision = true;
     }

@@ -4,31 +4,40 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "src/core/SkFontScanner.h"
-#include "src/sfnt/SkOTUtils.h"
-
-#include "src/ports/SkFontScanner_fontations.h"
+#include "src/ports/SkFontScanner_fontations_priv.h"
 #include "src/ports/SkTypeface_fontations_priv.h"
 #include "src/ports/fontations/src/skpath_bridge.h"
+#include "src/sfnt/SkOTUtils.h"
 
 using namespace skia_private;
 
 namespace {
-rust::Box<::fontations_ffi::BridgeFontRef> make_bridge_font_ref(sk_sp<SkData> fontData,
-                                                                uint32_t index) {
+rust::Box<::fontations_ffi::BridgeFontRef> make_bridge_font_ref(SkData* fontData, uint32_t index) {
     rust::Slice<const uint8_t> slice{fontData->bytes(), fontData->size()};
     return fontations_ffi::make_font_ref(slice, index);
 }
-}
+  // TODO(drott): Remove this once SkData::MakeFromStream is able to do this itself.
+sk_sp<SkData> make_data_avoiding_copy(SkStreamAsset* stream) {
+    if (!stream) {
+        return SkData::MakeEmpty();
+    }
+    if (stream->getData()) {
+        return stream->getData();
+    }
+    if (stream->getMemoryBase() && stream->getLength()) {
+        return SkData::MakeWithoutCopy(stream->getMemoryBase(), stream->getLength());
+    }
 
-SkFontScanner_Fontations::SkFontScanner_Fontations() {
+    return SkData::MakeFromStream(stream, stream->getLength());
 }
+}  // namespace
 
-SkFontScanner_Fontations::~SkFontScanner_Fontations() {
-}
+SkFontScanner_Fontations::SkFontScanner_Fontations() {}
+
+SkFontScanner_Fontations::~SkFontScanner_Fontations() {}
 
 bool SkFontScanner_Fontations::scanFile(SkStreamAsset* stream, int* numFaces) const {
-    sk_sp<SkData> fontData = SkData::MakeFromStream(stream, stream->getLength());
+    sk_sp<SkData> fontData = make_data_avoiding_copy(stream);
     stream->rewind();
     rust::Slice<const uint8_t> slice{fontData->bytes(), fontData->size()};
     ::std::uint32_t num_fonts;
@@ -42,8 +51,9 @@ bool SkFontScanner_Fontations::scanFile(SkStreamAsset* stream, int* numFaces) co
 bool SkFontScanner_Fontations::scanFace(SkStreamAsset* stream,
                                         int faceIndex,
                                         int* numInstances) const {
+    sk_sp<SkData> fontData = make_data_avoiding_copy(stream);
     rust::Box<fontations_ffi::BridgeFontRef> fontRef =
-            make_bridge_font_ref(SkData::MakeFromStream(stream, stream->getLength()), faceIndex);
+            make_bridge_font_ref(fontData.get(), faceIndex);
     stream->rewind();
     if (!fontations_ffi::font_ref_is_valid(*fontRef)) {
         return false;
@@ -72,10 +82,11 @@ bool SkFontScanner_Fontations::scanInstance(SkStreamAsset* stream,
                                             SkString* name,
                                             SkFontStyle* style,
                                             bool* isFixedPitch,
-                                            AxisDefinitions* axes) const {
-
+                                            AxisDefinitions* axes,
+                                            VariationPosition* position) const {
+    sk_sp<SkData> fontData = make_data_avoiding_copy(stream);
     rust::Box<fontations_ffi::BridgeFontRef> bridgeFontFaceRef =
-            make_bridge_font_ref(SkData::MakeFromStream(stream, stream->getLength()), faceIndex);
+            make_bridge_font_ref(fontData.get(), faceIndex);
     stream->rewind();
     if (!fontations_ffi::font_ref_is_valid(*bridgeFontFaceRef)) {
         return false;
@@ -137,12 +148,18 @@ bool SkFontScanner_Fontations::scanInstance(SkStreamAsset* stream,
                                      fontStyle.width,
                                      static_cast<SkFontStyle::Slant>(fontStyle.slant));
             }
+            if (position) {
+                position->reset(variationPosition.coordinateCount);
+                for (int i = 0; i < variationPosition.coordinateCount; ++i) {
+                    (*position)[i] = variationPosition.coordinates[i];
+                }
+            }
         }
     }
 
     if (axes != nullptr) {
         rust::Box<fontations_ffi::BridgeFontRef> bridgeFontNamedInstanceRef =
-                make_bridge_font_ref(SkData::MakeFromStream(stream, stream->getLength()), faceIndex + (instanceIndex << 16));
+                make_bridge_font_ref(fontData.get(), faceIndex + (instanceIndex << 16));
         stream->rewind();
         auto size = SkToInt(fontations_ffi::num_axes(*bridgeFontNamedInstanceRef));
         axes->reset(size);
@@ -152,13 +169,25 @@ bool SkFontScanner_Fontations::scanInstance(SkStreamAsset* stream,
         SkASSERT(size == size1);
         for (auto i = 0; i < size; ++i) {
             const auto var = variationAxes[i];
-            (*axes)[i].fTag = var.tag;
-            (*axes)[i].fMinimum = var.min;
-            (*axes)[i].fDefault = var.def;
-            (*axes)[i].fMaximum = var.max;
+            (*axes)[i].tag = var.tag;
+            (*axes)[i].min = var.min;
+            (*axes)[i].def = var.def;
+            (*axes)[i].max = var.max;
         }
     }
 
     return true;
 }
 
+sk_sp<SkTypeface> SkFontScanner_Fontations::MakeFromStream(std::unique_ptr<SkStreamAsset> stream,
+                                                           const SkFontArguments& args) const {
+    return SkTypeface_Fontations::MakeFromStream(std::move(stream), args);
+}
+
+SkTypeface::FactoryId SkFontScanner_Fontations::getFactoryId() const {
+    return SkTypeface_Fontations::FactoryId;
+}
+
+std::unique_ptr<SkFontScanner> SkFontScanner_Make_Fontations() {
+    return std::make_unique<SkFontScanner_Fontations>();
+}

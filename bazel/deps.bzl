@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "d3b7a448690d9a1e0f9fa7b1b300235ff378cffd",
+        commit = "cc2acb18f2a8c0f5f5fcf0f28f365dfe3a73f8d9",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -38,6 +38,13 @@ def c_plus_plus_deps(ws = "@skia"):
         name = "abseil_cpp",
         commit = "65a55c2ba891f6d2492477707f4a2e327a0b40dc",
         remote = "https://skia.googlesource.com/external/github.com/abseil/abseil-cpp.git",
+    )
+
+    new_git_repository(
+        name = "delaunator",
+        build_file = ws + "//bazel/external/delaunator:BUILD.bazel",
+        commit = "98305ef6c4e862f7d48df9cc647b690d796fec68",
+        remote = "https://skia.googlesource.com/external/github.com/skia-dev/delaunator-cpp.git",
     )
 
     new_git_repository(
@@ -50,21 +57,21 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "expat",
         build_file = ws + "//bazel/external/expat:BUILD.bazel",
-        commit = "441f98d02deafd9b090aea568282b28f66a50e36",
+        commit = "624da0f593bb8d7e146b9f42b06d8e6c80d032a3",
         remote = "https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git",
     )
 
     new_git_repository(
         name = "freetype",
         build_file = ws + "//bazel/external/freetype:BUILD.bazel",
-        commit = "f92c96550ad763639158587974cf11067ace743d",
+        commit = "59320b2d3c2584ac01914ed0deff64bcc8fb23b2",
         remote = "https://chromium.googlesource.com/chromium/src/third_party/freetype2.git",
     )
 
     new_git_repository(
         name = "harfbuzz",
         build_file = ws + "//bazel/external/harfbuzz:BUILD.bazel",
-        commit = "b74a7ecc93e283d059df51ee4f46961a782bcdb8",
+        commit = "a070f9ebbe88dc71b248af9731dd49ec93f4e6e6",
         remote = "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git",
     )
 
@@ -184,13 +191,13 @@ def c_plus_plus_deps(ws = "@skia"):
 
     git_repository(
         name = "spirv_headers",
-        commit = "efb6b4099ddb8fa60f62956dee592c4b94ec6a49",
+        commit = "3f17b2af6784bfa2c5aa5dbb8e0e74a607dd8b3b",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git",
     )
 
     git_repository(
         name = "spirv_tools",
-        commit = "2a67ced4331d22f2fc1b17f2d54b2330c5ad8765",
+        commit = "1a84052a5c332faaed12ea2431420b72febda807",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
@@ -204,21 +211,21 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "vulkan_headers",
         build_file = ws + "//bazel/external/vulkan_headers:BUILD.bazel",
-        commit = "c6391a7b8cd57e79ce6b6c832c8e3043c4d9967b",
+        commit = "6a74a7d65cafa19e38ec116651436cce6efd5b2e",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers",
     )
 
     new_git_repository(
         name = "vulkan_tools",
         build_file = ws + "//bazel/external/vulkan_tools:BUILD.bazel",
-        commit = "4c63e845962ff3b197855f3ae4907a47d0863f5a",
+        commit = "2744de9936755fea6912d47e7a0a8857d8a4fdee",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
     )
 
     new_git_repository(
         name = "vulkan_utility_libraries",
         build_file = ws + "//bazel/external/vulkan_utility_libraries:BUILD.bazel",
-        commit = "fbb4db92c6b2ac09003b2b8e5ceb978f4f2dda71",
+        commit = "0ab12c1668642874f77bad0e4f4006cbd2f7eaee",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries",
     )
 
@@ -259,7 +266,7 @@ def bazel_deps():
     )
 
 def header_based_configs():
-    skia_revision = "9f271dd94582411feddce92dbea3bce25d0e06f5"
+    skia_revision = "d211141c45c9171437fa8e6e07989edb5bffa17a"
     maybe(
         download_config_files,
         name = "expat_config",

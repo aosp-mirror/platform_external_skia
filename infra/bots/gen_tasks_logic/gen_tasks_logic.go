@@ -203,7 +203,7 @@ var (
 			Path: "mac_toolchain",
 			// When this is updated, also update
 			// https://skia.googlesource.com/skcms.git/+/f1e2b45d18facbae2dece3aca673fe1603077846/infra/bots/gen_tasks.go#56
-			Version: "git_revision:e018acef6f136ec8bbf378a026a910b40ba3a7a9",
+			Version: "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd",
 		},
 	}
 
@@ -570,6 +570,9 @@ func GenTasks(cfg *Config) {
 			"skia/include/config", // There's a WORKSPACE.bazel in here
 			"skia/requirements.txt",
 			"skia/toolchain",
+			// TODO(kjlubick, lukasza) remove after rust's png crate is updated
+			// and we don't need the patches anymore
+			"skia/experimental/rust_png",
 			// Actually needed to build the task drivers
 			"skia/infra/bots/BUILD.bazel",
 			"skia/infra/bots/build_task_drivers.sh",
@@ -732,7 +735,8 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 				"DDLRecord", "BonusConfigs", "ColorSpaces", "GL",
 				"SkottieTracing", "SkottieWASM", "GpuTess", "DMSAAStats", "Docker", "PDF",
 				"Puppeteer", "SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile",
-				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "TintIR", "Protected"}
+				"WebGL2", "i5", "OldestSupportedSkpVersion", "FakeWGPU", "TintIR", "Protected",
+				"AndroidNDKFonts", "Upload"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -831,6 +835,7 @@ var androidDeviceInfos = map[string][]string{
 	"JioNext":         {"msm8937", "RKQ1.210602.002"},
 	"Mokey":           {"mokey", "UDC_11161052"},
 	"MokeyGo32":       {"mokey_go32", "UQ1A.240105.003.A1_11159138"},
+	"MotoG73":         {"devonf", "U1TNS34.82-12-7-4"},
 	"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 	"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
 	"P30":             {"HWELE", "HUAWEIELE-L29"},
@@ -843,6 +848,7 @@ var androidDeviceInfos = map[string][]string{
 	"Pixel5":          {"redfin", "RD1A.200810.022.A4"},
 	"Pixel6":          {"oriole", "SD1A.210817.037"},
 	"Pixel7":          {"cheetah", "TD1A.221105.002"},
+	"Pixel9":          {"tokay", "AD1A.240905.004"},
 	"TecnoSpark3Pro":  {"TECNO-KB8", "PPR1.180610.011"},
 	"Wembley":         {"wembley", "SP2A.220505.008"},
 }
@@ -871,6 +877,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN_GCE,
 			"Win10":      "Windows-10-19045",
+			"Win11":      "Windows-11-26100.1742",
 			"Win2019":    DEFAULT_OS_WIN_GCE,
 			"iOS":        "iOS-13.3.1",
 		}[os]
@@ -988,18 +995,19 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			if b.matchOs("Win") {
 				gpu, ok := map[string]string{
 					// At some point this might use the device ID, but for now it's like Chromebooks.
+					"GTX1660":       "10de:2184-31.0.15.4601",
 					"GTX660":        "10de:11c0-26.21.14.4120",
-					"GTX960":        "10de:1401-31.0.15.3699",
+					"GTX960":        "10de:1401-32.0.15.6094",
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
 					"IntelIris540":  "8086:1926-31.0.101.2115",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
 					"IntelIris655":  "8086:3ea5-26.20.100.7463",
-					"IntelIrisXe":   "8086:9a49-31.0.101.5537",
+					"IntelIrisXe":   "8086:9a49-32.0.101.5972",
 					"RadeonHD7770":  "1002:683d-26.20.13031.18002",
 					"RadeonR9M470X": "1002:6646-26.20.13031.18002",
 					"QuadroP400":    "10de:1cb3-31.0.15.5222",
 					"RadeonVega6":   "1002:1636-31.0.14057.5006",
-					"RTX3060":       "10de:2489-31.0.15.3699",
+					"RTX3060":       "10de:2489-32.0.15.6094",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in Win GPU mapping.", b.parts["cpu_or_gpu_value"])
@@ -1084,9 +1092,9 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 
 			// Dodge Raspberry Pis.
 			d["cpu"] = "x86-64"
-			// Target the RTX3060 Intel machines, as they are beefy and we have
-			// 20 of them, and they are setup to compile.
-			d["gpu"] = "10de:2489"
+			// Target the AMDRyzen 5 4500U machines, as they are beefy and we have
+			// 19 of them, and they are setup to compile.
+			d["gpu"] = "1002:1636"
 		} else {
 			d["gpu"] = "none"
 		}
@@ -1261,7 +1269,7 @@ func (b *jobBuilder) compile() string {
 		b.addTask(name, func(b *taskBuilder) {
 			recipe := "compile"
 			casSpec := CAS_COMPILE
-			if b.extraConfig("NoDEPS", "CMake", "Flutter", "NoPatch", "Vello", "Fontations") {
+			if b.extraConfig("NoDEPS", "CMake", "Flutter", "NoPatch") || b.shellsOutToBazel() {
 				recipe = "sync_and_compile"
 				casSpec = CAS_RUN_RECIPE
 				b.recipeProps(EXTRA_PROPS)
@@ -1317,7 +1325,7 @@ func (b *jobBuilder) compile() string {
 				}
 				b.asset("ccache_linux")
 				b.usesCCache()
-				if b.extraConfig("Vello") || b.extraConfig("Fontations") {
+				if b.shellsOutToBazel() {
 					b.usesBazel("linux_x64")
 					b.attempts(1)
 				}
@@ -1340,7 +1348,7 @@ func (b *jobBuilder) compile() string {
 				if b.extraConfig("iOS") {
 					b.asset("provisioning_profile_ios")
 				}
-				if b.extraConfig("Vello") || b.extraConfig("Fontations") {
+				if b.shellsOutToBazel() {
 					// All of our current Mac compile machines are x64 Mac only.
 					b.usesBazel("mac_x64")
 					b.attempts(1)
@@ -1621,6 +1629,9 @@ func (b *jobBuilder) codesize() {
 
 // doUpload indicates whether the given Job should upload its results.
 func (b *jobBuilder) doUpload() bool {
+	if b.extraConfig("Upload") {
+		return true
+	}
 	for _, s := range b.cfg.NoUpload {
 		m, err := regexp.MatchString(s, b.Name)
 		if err != nil {

@@ -58,7 +58,6 @@ class UploadBufferManager;
 class UploadList;
 
 template<typename T> class PipelineDataCache;
-using UniformDataCache = PipelineDataCache<UniformDataBlock>;
 using TextureDataCache = PipelineDataCache<TextureDataBlock>;
 
 struct SK_API RecorderOptions final {
@@ -211,6 +210,12 @@ public:
     size_t maxBudgetedBytes() const;
 
     /**
+     * Sets the size of Recorders's gpu memory cache budget in bytes. If the new budget is lower
+     * than the current budget, the cache will try to free resources to get under the new budget.
+     */
+    void setMaxBudgetedBytes(size_t bytes);
+
+    /**
      * Enumerates all cached GPU resources owned by the Recorder and dumps their memory to
      * traceMemoryDump.
      */
@@ -262,7 +267,6 @@ private:
     // Aggregated one-time uploads that preceed all tasks in the root task list.
     std::unique_ptr<UploadList> fRootUploads;
 
-    std::unique_ptr<UniformDataCache> fUniformDataCache;
     std::unique_ptr<TextureDataCache> fTextureDataCache;
     std::unique_ptr<DrawBufferManager> fDrawBufferManager;
     std::unique_ptr<UploadBufferManager> fUploadBufferManager;

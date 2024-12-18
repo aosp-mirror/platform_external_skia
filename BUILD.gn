@@ -3,6 +3,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("gn/codec.gni")
 import("gn/fuchsia_defines.gni")
 import("gn/shared_sources.gni")
 import("gn/skia.gni")
@@ -202,9 +203,6 @@ template("optional") {
       if (defined(invoker.public_configs)) {
         configs = invoker.public_configs
       }
-      if (defined(invoker.public_include_dirs)) {
-        include_dirs = invoker.public_include_dirs
-      }
     }
     skia_source_set(target_name) {
       visibility = [ ":*" ]
@@ -249,7 +247,10 @@ template("optional") {
         if (!defined(deps)) {
           deps = []
         }
-        deps += [ ":test" ]
+        deps += [
+          ":test",
+          ":" + target_name,
+        ]
         all_dependent_configs = [ ":" + target_name + "_public" ]
       }
     }
@@ -308,12 +309,28 @@ optional("fontmgr_android") {
 
   deps = [
     ":typeface_freetype",
+    ":typeface_proxy",
     "//third_party/expat",
   ]
   public_defines = [ "SK_FONTMGR_ANDROID_AVAILABLE" ]
   public = skia_ports_fontmgr_android_public
   sources = skia_ports_fontmgr_android_sources
   sources_for_tests = [ "tests/FontMgrAndroidParserTest.cpp" ]
+}
+
+# if building Skia for API >= 30 and not using custom fonts, enable
+# skia_enable_fontmgr_android_ndk and disable skia_enable_fontmgr_android
+optional("fontmgr_android_ndk") {
+  enabled = skia_enable_fontmgr_android_ndk
+
+  deps = [
+    ":typeface_freetype",
+    ":typeface_proxy",
+  ]
+  libs = [ "android" ]
+  public_defines = [ "SK_FONTMGR_ANDROID_NDK_AVAILABLE" ]
+  public = skia_ports_fontmgr_android_ndk_public
+  sources = skia_ports_fontmgr_android_ndk_sources
 }
 
 optional("fontmgr_custom") {
@@ -358,6 +375,11 @@ optional("fontmgr_custom_empty") {
   sources = skia_ports_fontmgr_empty_sources
 }
 
+skia_source_set("typeface_proxy") {
+  configs = [ ":skia_public" ]
+  sources = skia_ports_typeface_proxy_sources
+}
+
 optional("fontmgr_fontconfig") {
   enabled = skia_enable_fontmgr_fontconfig
   public_defines = [ "SK_FONTMGR_FONTCONFIG_AVAILABLE" ]
@@ -365,9 +387,22 @@ optional("fontmgr_fontconfig") {
   # The public header includes fontconfig.h and uses FcConfig*
   public_deps = [ "//third_party:fontconfig" ]
   public = skia_ports_fontmgr_fontconfig_public
-  deps = [ ":typeface_freetype" ]
+  deps = [
+    ":typeface_freetype",
+    ":typeface_proxy",
+  ]
   sources = skia_ports_fontmgr_fontconfig_sources
   sources_for_tests = [ "tests/FontMgrFontConfigTest.cpp" ]
+}
+
+skia_source_set("fontscanner_tests") {
+  testonly = true
+
+  deps = [ ":skia" ]
+  sources = [
+    "tests/FontScanner.cpp",
+    "tests/FontScanner.h",
+  ]
 }
 
 optional("fontmgr_FontConfigInterface") {
@@ -505,6 +540,9 @@ if (skia_lex) {
       # confused due to the same file being named by two different paths
     ]
     sksllex_path = "$root_out_dir/"
+    if (host_toolchain != default_toolchain_name) {
+      sksllex_path += "$host_toolchain/"
+    }
     sksllex_path += "sksllex"
     if (host_os == "win") {
       sksllex_path += ".exe"
@@ -855,6 +893,7 @@ group("compile_all_sksl_tests") {
 optional("gpu_shared") {
   enabled = skia_enable_ganesh || skia_enable_graphite
 
+  configs = []
   deps = []
   libs = []
   public_defines = []
@@ -901,6 +940,7 @@ optional("gpu_shared") {
   if (skia_use_vulkan) {
     public_defines += [ "SK_VULKAN" ]
     sources += skia_shared_vk_sources
+    configs += [ ":use_skia_vulkan_headers" ]
     if (skia_enable_vulkan_debug_layers) {
       public_defines += [ "SK_ENABLE_VK_LAYERS" ]
     }
@@ -930,6 +970,7 @@ optional("gpu") {
   if (skia_generate_workarounds) {
     deps += [ ":workaround_list" ]
   }
+  configs = []
   public_defines = []
   public_configs = []
   public_deps = []
@@ -1003,6 +1044,7 @@ optional("gpu") {
   if (skia_use_vulkan) {
     public += skia_gpu_vk_public
     sources += skia_gpu_vk_private
+    configs += [ ":use_skia_vulkan_headers" ]
     if (is_fuchsia) {
       if (using_fuchsia_sdk) {
         public_deps += [ "$fuchsia_sdk_root/pkg:vulkan" ]
@@ -1081,6 +1123,18 @@ optional("avif") {
   sources = [ "src/codec/SkAvifCodec.cpp" ]
 }
 
+optional("crabbyavif") {
+  enabled = skia_use_crabbyavif
+  public_defines = [ "SK_CODEC_DECODES_AVIF" ]
+
+  # AVIF decoding is provided by CrabbyAvif (a Rust library). Since skia's
+  # standalone builds do not support Rust, it is only being enabled when
+  # building for the Android framework.
+  # The dependency for Android is set in gn_to_bp.py
+  deps = []
+  sources = [ "src/codec/SkCrabbyAvifCodec.cpp" ]
+}
+
 optional("jpeg_mpf") {
   enabled = skia_use_jpeg_gainmaps &&
             (skia_use_libjpeg_turbo_encode || skia_use_libjpeg_turbo_decode)
@@ -1116,6 +1170,7 @@ optional("jpeg_decode") {
 
 optional("jpeg_encode") {
   enabled = skia_use_libjpeg_turbo_encode && !skia_use_ndk_images
+  public_defines = [ "SK_CODEC_ENCODES_JPEG" ]
 
   deps = [ "//third_party/libjpeg-turbo:libjpeg" ]
   public = skia_encode_jpeg_public
@@ -1147,6 +1202,7 @@ optional("ndk_images") {
 }
 
 optional("graphite") {
+  configs = []
   libs = []
   frameworks = []
   public_defines = []
@@ -1188,10 +1244,14 @@ optional("graphite") {
   if (skia_use_vulkan) {
     public += skia_graphite_vk_public
     sources += skia_graphite_vk_sources
+    configs += [ ":use_skia_vulkan_headers" ]
   }
   if (skia_enable_precompile) {
     public += skia_graphite_precompile_public
     sources += skia_graphite_precompile_sources
+  }
+  if (is_debug) {
+    public_defines += [ "SK_PIPELINE_LIFETIME_LOGGING" ]
   }
 }
 
@@ -1221,21 +1281,27 @@ optional("xps") {
   sources = skia_xps_sources
 }
 
-optional("png_decode") {
+optional("png_decode_libpng") {
   enabled = skia_use_libpng_decode
   public_defines = [
     "SK_CODEC_DECODES_ICO",
     "SK_CODEC_DECODES_PNG",
+    "SK_CODEC_DECODES_PNG_WITH_LIBPNG",
   ]
 
   deps = [ "//third_party/libpng" ]
-  sources = [ "src/codec/SkIcoCodec.cpp" ] + skia_codec_png
+  sources = [ "src/codec/SkIcoCodec.cpp" ] + skia_codec_png_base +
+            skia_codec_libpng_srcs
 }
 
 optional("png_encode") {
   enabled = skia_use_libpng_encode && !skia_use_ndk_images
-  public = skia_encode_png_public
+  public_defines = [
+    "SK_CODEC_ENCODES_PNG",
+    "SK_CODEC_ENCODES_PNG_WITH_LIBPNG",
+  ]
 
+  public = skia_encode_png_public
   deps = [ "//third_party/libpng" ]
   sources = skia_encode_png_srcs
 }
@@ -1263,22 +1329,24 @@ optional("typeface_freetype") {
   public_defines = [ "SK_TYPEFACE_FACTORY_FREETYPE" ]
   deps = [ "//third_party/freetype2" ]
   sources = skia_ports_freetype_sources
+  sources_for_tests = [ "tests/FontScanner_FreeTypeTest.cpp" ]
+}
+
+bazel_args = []
+if (is_mac && target_cpu == "arm64") {
+  # TODO: Normally the target toolchain would be specified with `--platforms` but that doesn't
+  # work. When building and running on an arm64 mac, setting `--host_platform` seems to do the
+  # right thing but may not be the right build configuration in the long run.
+  bazel_args += [ "--host_platform=//bazel/platform:mac_arm64_hermetic" ]
+}
+if (is_debug) {
+  bazel_args += [ "--compilation_mode=dbg" ]
+} else {
+  bazel_args += [ "--compilation_mode=opt" ]
 }
 
 if (skia_use_fontations) {
-  action("fontations_rust_side") {
-    bazel_args = []
-    if (is_mac && target_cpu == "arm64") {
-      # TODO: Normally the target toolchain would be specified with `--platforms` but that doesn't
-      # work. When building and running on an arm64 mac, setting `--host_platform` seems to do the
-      # right thing but may not be the right build configuration in the long run.
-      bazel_args += [ "--host_platform=//bazel/platform:mac_arm64_hermetic" ]
-    }
-    if (is_debug) {
-      bazel_args += [ "--compilation_mode=dbg" ]
-    } else {
-      bazel_args += [ "--compilation_mode=opt" ]
-    }
+  action("fontations_rust_side_bazel_build") {
     script = "gn/bazel_build.py"
     sources = [
       "src/ports/fontations/BUILD.bazel",
@@ -1293,67 +1361,177 @@ if (skia_use_fontations) {
         ] + bazel_args
   }
 
-  action("fontations_ffi") {
-    bazel_args = []
-    if (is_mac && target_cpu == "arm64") {
-      # TODO: Normally the target toolchain would be specified with `--platforms` but that doesn't
-      # work. When building and running on an arm64 mac, setting `--host_platform` seems to do the
-      # right thing but may not be the right build configuration in the long run.
-      bazel_args += [ "--host_platform=//bazel/platform:mac_arm64_hermetic" ]
-    }
-    if (is_debug) {
-      bazel_args += [ "--compilation_mode=dbg" ]
-    } else {
-      bazel_args += [ "--compilation_mode=opt" ]
-    }
+  # We only use Bazel to get the generated `.cc` and `.h` file and then compile
+  # them on GN/ninja side using `skia_source_set` below.  This ensures that the
+  # same C++ stdlib and compiler is used throughout the build (in some scenarios
+  # Bazel may end up using different ones).
+  action("fontations_ffi_bazel_build") {
     script = "gn/bazel_build.py"
     sources = [
       "src/ports/fontations/BUILD.bazel",
       "src/ports/fontations/src/ffi.rs",
     ]
     outputs = [
-      "$root_out_dir/libfontations_ffi.a",
       "$root_out_dir/src/ports/fontations/src/ffi.rs.h",
+      "$root_out_dir/src/ports/fontations/src/ffi.rs.cc",
     ]
     args = [
              "//src/ports/fontations:fontations_ffi",
-             rebase_path("//bazel-bin/src/ports/fontations/libfontations_ffi.a",
-                         root_build_dir),
 
              # we want the header to not simply be copied into the output directory,
              # but in the same path as the Bazel build uses.
              rebase_path("//bazel-bin/src/ports/fontations/src/ffi.rs.h",
                          root_build_dir) + "=src/ports/fontations/src/ffi.rs.h",
+             rebase_path("//bazel-bin/src/ports/fontations/src/ffi.rs.cc",
+                         root_build_dir) +
+                 "=src/ports/fontations/src/ffi.rs.cc",
            ] + bazel_args
+  }
+  config("fontations_ffi_public_config") {
+    include_dirs = [
+      # This is where `src/ports/fontations/src/ffi.rs.h` was put by Bazel
+      "$root_out_dir",
+    ]
+  }
+  config("fontations_ffi_private_config") {
+    include_dirs = [
+      # This entry is needed so that `ffi.rs.cc` can resolve
+      # `#include "src/ports/fontations/src/ffi.rs.h"`
+      ".",
+    ]
+  }
+  skia_source_set("fontations_ffi") {
+    deps = [
+      ":fontations_ffi_bazel_build",
+      ":fontations_rust_side_bazel_build",
+    ]
+    public = [ "${root_out_dir}/src/ports/fontations/src/ffi.rs.h" ]
+    sources = [ "${root_out_dir}/src/ports/fontations/src/ffi.rs.cc" ]
+    libs = [ "$root_out_dir/libbridge_rust_side.a" ]
+    public_configs = [ ":fontations_ffi_public_config" ]
+    configs = [ ":fontations_ffi_private_config" ]
   }
 }
 
 optional("typeface_fontations") {
   public_defines = [ "SK_TYPEFACE_FACTORY_FONTATIONS" ]
   enabled = skia_use_fontations
-  if (enabled) {
-    # this is where src/ports/fontations/src/ffi.rs.h was generated and exists.
-    public_include_dirs = [ "$root_out_dir" ]
-  }
-
-  deps = [
-    ":fontations_ffi",
-    ":fontations_rust_side",
-  ]
-
-  libs = [
-    "$root_out_dir/libfontations_ffi.a",
-    "$root_out_dir/libbridge_rust_side.a",
-  ]
-  sources = skia_ports_typeface_fontations_sources + [
-              "src/ports/SkFontScanner_fontations.cpp",
-              "src/ports/SkFontScanner_fontations.h",
-            ]
-
+  public_deps = [ ":fontations_ffi" ]
+  sources = skia_ports_typeface_fontations_sources
   sources_for_tests = [
     "tests/FontationsTest.cpp",
     "tests/FontationsFtCompTest.cpp",
+    "tests/FontScanner_FontationsTest.cpp",
   ]
+}
+
+if (skia_use_rust_png_decode || skia_use_rust_png_encode) {
+  # We only use Bazel to get the generated `.cc` and `.h` file and then compile
+  # them on GN/ninja side using `skia_source_set` below.  This ensures that the
+  # same C++ stdlib and compiler is used throughout the build (in some scenarios
+  # Bazel may end up using different ones).
+  action("rust_png_ffi_bazel_build") {
+    script = "gn/bazel_build.py"
+    sources = [
+      "experimental/rust_png/ffi/BUILD.bazel",
+      "experimental/rust_png/ffi/FFI.h",
+      "experimental/rust_png/ffi/FFI.rs",
+    ]
+    outputs = [
+      "$root_out_dir/librust_png_ffi_rs.a",
+      "$root_out_dir/experimental/rust_png/ffi/FFI.rs.h",
+      "$root_out_dir/experimental/rust_png/ffi/FFI.rs.cc",
+    ]
+    args =
+        [
+          "//experimental/rust_png/ffi:*",
+
+          rebase_path("//bazel-bin/experimental/rust_png/ffi/libffi_rs.a",
+                      root_build_dir) + "=librust_png_ffi_rs.a",
+
+          # we want the `cxx`-generated headers to not simply be copied into
+          # the output directory, but in the same path as the Bazel build
+          # uses.
+          rebase_path("//bazel-bin/experimental/rust_png/ffi/FFI.rs.h",
+                      root_build_dir) + "=experimental/rust_png/ffi/FFI.rs.h",
+          rebase_path("//bazel-bin/experimental/rust_png/ffi/FFI.rs.cc",
+                      root_build_dir) + "=experimental/rust_png/ffi/FFI.rs.cc",
+        ] + bazel_args
+  }
+  action("rust_png_cxx_core_bazel_build") {
+    script = "gn/bazel_build.py"
+    sources = [
+      "WORKSPACE.bazel",
+      "bazel/external/cxx/BUILD.bazel",
+      "bazel/external/cxx/BUILD.bazel.skia",
+    ]
+    outputs = [
+      "$root_out_dir/librust_png_cxx_core_lib.a",
+      "$root_out_dir/third_party/rust/cxx/v1/cxx.h",
+    ]
+    args = [
+             "@cxx//:core-lib",
+
+             rebase_path("//bazel-bin/external/cxx/libcore-lib.a",
+                         root_build_dir) + "=librust_png_cxx_core_lib.a",
+
+             # we want the `cxx.h` header to not simply be copied into the
+             # output directory, but in the same path as the Bazel build uses.
+             rebase_path(
+                     "//bazel-bin/external/cxx/_virtual_includes/core-lib/third_party/rust/cxx/v1/cxx.h",
+                     root_build_dir) + "=third_party/rust/cxx/v1/cxx.h",
+           ] + bazel_args
+  }
+  config("rust_png_cxx_bridge_public_config") {
+    include_dirs = [
+      # This is where `experimental/rust_png/ffi/FFI.rs.h` and
+      # `third_party/rust/cxx/v1/cxx.h` were put by Bazel
+      "$root_out_dir",
+    ]
+  }
+  config("rust_png_cxx_bridge_private_config") {
+    include_dirs = [
+      # This entry is needed so that `FFI.rs.cc` can resolve
+      # `#include "experimental/rust_png/ffi/FFI.h"`
+      ".",
+    ]
+  }
+  skia_source_set("rust_png_cxx_bridge") {
+    deps = [ ":rust_png_ffi_bazel_build" ]
+    public = [ "${root_out_dir}/experimental/rust_png/ffi/FFI.rs.h" ]
+    sources = [ "${root_out_dir}/experimental/rust_png/ffi/FFI.rs.cc" ]
+    libs = [ "$root_out_dir/librust_png_ffi_rs.a" ]
+    public_configs = [ ":rust_png_cxx_bridge_public_config" ]
+    configs = [ ":rust_png_cxx_bridge_private_config" ]
+  }
+}
+
+optional("png_decode_rust") {
+  public_defines = [ "SK_CODEC_DECODES_PNG_WITH_RUST" ]
+  enabled = skia_use_rust_png_decode
+  public = skia_codec_rust_png_public
+  sources = skia_codec_rust_png + skia_codec_png_base
+  sources_for_tests = [ "tests/SkPngRustDecoderTest.cpp" ]
+
+  deps = [
+    ":rust_png_cxx_bridge",
+    ":rust_png_cxx_core_bazel_build",
+  ]
+  libs = [ "$root_out_dir/librust_png_cxx_core_lib.a" ]
+}
+
+optional("png_encode_rust") {
+  public_defines = [ "SK_CODEC_ENCODES_PNG_WITH_RUST" ]
+  enabled = skia_use_rust_png_encode
+  public = skia_encode_rust_png_public  # From `gn/core.gni`
+  sources =
+      skia_encode_rust_png_srcs + skia_encode_png_base  # From `gn/core.gni`
+  sources_for_tests = [ "tests/SkPngRustEncoderTest.cpp" ]
+  deps = [
+    ":rust_png_cxx_bridge",
+    ":rust_png_cxx_core_bazel_build",
+  ]
+  libs = [ "$root_out_dir/librust_png_cxx_core_lib.a" ]
 }
 
 optional("webp_decode") {
@@ -1366,6 +1544,7 @@ optional("webp_decode") {
 
 optional("webp_encode") {
   enabled = skia_use_libwebp_encode && !skia_use_ndk_images
+  public_defines = [ "SK_CODEC_ENCODES_WEBP" ]
   public = skia_encode_webp_public
 
   deps = [ "//third_party/libwebp" ]
@@ -1427,6 +1606,7 @@ skia_component("skia") {
   public_deps = [
     ":fontmgr_FontConfigInterface",
     ":fontmgr_android",
+    ":fontmgr_android_ndk",
     ":fontmgr_custom_directory",
     ":fontmgr_custom_embedded",
     ":fontmgr_custom_empty",
@@ -1448,6 +1628,7 @@ skia_component("skia") {
   deps = [
     ":android_utils",
     ":avif",
+    ":crabbyavif",
     ":heif",
     ":hsw",
     ":jpeg_decode",
@@ -1455,7 +1636,8 @@ skia_component("skia") {
     ":lasx",
     ":minify_sksl",
     ":ndk_images",
-    ":png_decode",
+    ":png_decode_libpng",
+    ":png_decode_rust",
     ":raw",
     ":skx",
     ":typeface_fontations",
@@ -1705,8 +1887,9 @@ group("modules") {
   }
 }
 
-config("our_vulkan_headers") {
+config("use_skia_vulkan_headers") {
   include_dirs = [ "include/third_party/vulkan" ]
+  defines = [ "SK_USE_INTERNAL_VULKAN_HEADERS" ]
 }
 
 config("vulkan_memory_allocator") {
@@ -1796,7 +1979,7 @@ if (skia_enable_tools) {
   skia_source_set("public_headers_warnings_check") {
     sources = [ "tools/public_headers_warnings_check.cpp" ]
     configs = [
-      ":our_vulkan_headers",
+      ":use_skia_vulkan_headers",
       ":cpp17",
     ]
     if (defined(skia_header_target_default_configs)) {
@@ -1921,7 +2104,7 @@ if (skia_enable_tools) {
 
     # Bots and even devs may not have Vulkan headers, so put
     # include/third_party/vulkan on our path so they're always available.
-    all_dependent_configs = [ ":our_vulkan_headers" ]
+    all_dependent_configs = [ ":use_skia_vulkan_headers" ]
 
     defines = []
     if (skia_enable_discrete_gpu) {
@@ -2041,24 +2224,34 @@ if (skia_enable_tools) {
       ]
     }
     if (skia_enable_graphite) {
-      sources += [ "tools/graphite/ContextFactory.h" ]
-      sources += [ "tools/graphite/ContextFactory.cpp" ]
-      sources += [ "tools/graphite/GraphiteTestContext.h" ]
-      sources += [ "tools/graphite/GraphiteTestContext.cpp" ]
-      sources += [ "tools/graphite/ProtectedUtils_Graphite.cpp" ]
-      sources += [ "tools/graphite/UniqueKeyUtils.cpp" ]
-      sources += [ "tools/graphite/UniqueKeyUtils.h" ]
+      sources += [
+        "tools/graphite/ContextFactory.cpp",
+        "tools/graphite/ContextFactory.h",
+        "tools/graphite/GraphiteTestContext.cpp",
+        "tools/graphite/GraphiteTestContext.h",
+        "tools/graphite/GraphiteToolUtils.cpp",
+        "tools/graphite/GraphiteToolUtils.h",
+        "tools/graphite/ProtectedUtils_Graphite.cpp",
+        "tools/graphite/UniqueKeyUtils.cpp",
+        "tools/graphite/UniqueKeyUtils.h",
+      ]
       if (skia_use_dawn) {
-        sources += [ "tools/graphite/dawn/GraphiteDawnTestContext.cpp" ]
-        sources += [ "tools/graphite/dawn/GraphiteDawnTestContext.h" ]
+        sources += [
+          "tools/graphite/dawn/GraphiteDawnTestContext.cpp",
+          "tools/graphite/dawn/GraphiteDawnTestContext.h",
+        ]
       }
       if (skia_use_metal) {
-        sources += [ "tools/graphite/mtl/GraphiteMtlTestContext.h" ]
-        sources += [ "tools/graphite/mtl/GraphiteMtlTestContext.mm" ]
+        sources += [
+          "tools/graphite/mtl/GraphiteMtlTestContext.h",
+          "tools/graphite/mtl/GraphiteMtlTestContext.mm",
+        ]
       }
       if (skia_use_vulkan) {
-        sources += [ "tools/graphite/vk/GraphiteVulkanTestContext.cpp" ]
-        sources += [ "tools/graphite/vk/GraphiteVulkanTestContext.h" ]
+        sources += [
+          "tools/graphite/vk/GraphiteVulkanTestContext.cpp",
+          "tools/graphite/vk/GraphiteVulkanTestContext.h",
+        ]
       }
     }
 
@@ -2131,11 +2324,8 @@ if (skia_enable_tools) {
       "tools/DecodeUtils.h",
       "tools/EncodeUtils.cpp",
       "tools/EncodeUtils.h",
-      "tools/GpuToolUtils.cpp",
       "tools/GpuToolUtils.h",
       "tools/LsanSuppressions.cpp",
-      "tools/MSKPPlayer.cpp",
-      "tools/MSKPPlayer.h",
       "tools/ProcStats.cpp",
       "tools/ProcStats.h",
       "tools/Resources.cpp",
@@ -2144,13 +2334,12 @@ if (skia_enable_tools) {
       "tools/RuntimeBlendUtils.h",
       "tools/SkMetaData.cpp",
       "tools/SkMetaData.h",
-      "tools/SkSharingProc.cpp",
-      "tools/SkSharingProc.h",
       "tools/Stats.h",
       "tools/TestFontDataProvider.cpp",
       "tools/TestFontDataProvider.h",
       "tools/ToolUtils.cpp",
       "tools/ToolUtils.h",
+      "tools/TsanSuppressions.cpp",
       "tools/UrlDataManager.cpp",
       "tools/UrlDataManager.h",
       "tools/debugger/DebugCanvas.cpp",
@@ -2172,6 +2361,8 @@ if (skia_enable_tools) {
       "tools/fonts/TestSVGTypeface.h",
       "tools/fonts/TestTypeface.cpp",
       "tools/fonts/TestTypeface.h",
+      "tools/sksltrace/SkSLTraceUtils.cpp",
+      "tools/sksltrace/SkSLTraceUtils.h",
       "tools/text/SkTextBlobTrace.cpp",
       "tools/text/SkTextBlobTrace.h",
       "tools/timer/TimeUtils.h",
@@ -2184,6 +2375,15 @@ if (skia_enable_tools) {
         "tools/SvgPathExtractor.h",
       ]
     }
+    if (skia_use_libpng_decode) {
+      sources += [
+        "tools/MSKPPlayer.cpp",
+        "tools/MSKPPlayer.h",
+        "tools/SkSharingProc.cpp",
+        "tools/SkSharingProc.h",
+      ]
+    }
+
     if (target_cpu != "wasm") {
       sources += [ "tools/CrashHandler.cpp" ]
     }
@@ -2209,7 +2409,10 @@ if (skia_enable_tools) {
     if (skia_enable_svg) {
       deps += [ "modules/svg" ]
     }
-    public_deps = [ ":gpu_tool_utils" ]
+    public_deps = [
+      ":gpu_tool_utils",
+      "modules/jsonreader",
+    ]
   }
 
   test_lib("etc1") {
@@ -2311,9 +2514,13 @@ if (skia_enable_tools) {
     }
     deps = [
       ":flags",
+      ":fontmgr_FontConfigInterface_tests",
       ":fontmgr_android_tests",
       ":fontmgr_fontconfig_tests",
       ":fontmgr_mac_ct_tests",
+      ":fontscanner_tests",
+      ":png_decode_rust_tests",
+      ":png_encode_rust_tests",
       ":skia",
       ":test",
       ":tool_utils",
@@ -2392,7 +2599,7 @@ if (skia_enable_tools) {
     }
     test_app("imgcvt") {
       sources = [ "tools/imgcvt.cpp" ]
-      configs = [ ":our_vulkan_headers" ]
+      configs = [ ":use_skia_vulkan_headers" ]
       deps = [
         ":skia",
         "modules/skcms",
@@ -2425,8 +2632,10 @@ if (skia_enable_tools) {
         "modules/skottie:utils",
         "modules/skshaper",
         "modules/skunicode",
-        "modules/svg",
       ]
+      if (skia_use_libpng_decode) {
+        deps += [ "modules/svg" ]
+      }
     }
     test_app("filterfuzz") {
       sources = [ "experimental/filterfuzz/filterfuzz.cpp" ]
@@ -2460,33 +2669,35 @@ if (skia_enable_tools) {
     }
   }
 
-  test_app("nanobench") {
-    sources = [
-      "bench/nanobench.cpp",
-      "bench/nanobench.h",
-    ]
-    deps = [
-      ":bench",
-      ":common_flags_config",
-      ":common_flags_gpu",
-      ":common_flags_graphite",
-      ":common_flags_images",
-      ":flags",
-      ":gm",
-      ":gpu_tool_utils",
-      ":skia",
-      ":tool_utils",
-      ":trace",
-      "modules/skparagraph",
-      "modules/skshaper",
-      "modules/skunicode",
-      "modules/svg",
-    ]
+  if (skia_use_libpng_decode) {
+    test_app("nanobench") {
+      sources = [
+        "bench/nanobench.cpp",
+        "bench/nanobench.h",
+      ]
+      deps = [
+        ":bench",
+        ":common_flags_config",
+        ":common_flags_gpu",
+        ":common_flags_graphite",
+        ":common_flags_images",
+        ":flags",
+        ":gm",
+        ":gpu_tool_utils",
+        ":skia",
+        ":tool_utils",
+        ":trace",
+        "modules/skparagraph",
+        "modules/skshaper",
+        "modules/skunicode",
+        "modules/svg",
+      ]
+    }
   }
 
   test_app("skpinfo") {
     sources = [ "tools/skpinfo.cpp" ]
-    configs = [ ":our_vulkan_headers" ]
+    configs = [ ":use_skia_vulkan_headers" ]
     deps = [
       ":flags",
       ":skia",
@@ -2507,19 +2718,21 @@ if (skia_enable_tools) {
     }
   }
 
-  test_app("skpbench") {
-    sources = [
-      "bench/BigPath.cpp",
-      "tools/skpbench/skpbench.cpp",
-    ]
-    deps = [
-      ":common_flags_config",
-      ":common_flags_gpu",
-      ":flags",
-      ":gpu_tool_utils",
-      ":skia",
-      ":tool_utils",
-    ]
+  if (skia_use_libpng_decode) {
+    test_app("skpbench") {
+      sources = [
+        "bench/BigPath.cpp",
+        "tools/skpbench/skpbench.cpp",
+      ]
+      deps = [
+        ":common_flags_config",
+        ":common_flags_gpu",
+        ":flags",
+        ":gpu_tool_utils",
+        ":skia",
+        ":tool_utils",
+      ]
+    }
   }
 
   if (is_linux && skia_use_icu) {
@@ -2651,6 +2864,7 @@ if (skia_enable_tools) {
       "tools/debugger/JsonWriteBuffer.cpp",
       "tools/fonts/FontToolUtils.cpp",
     ]
+
     if (skia_enable_graphite && skia_enable_precompile) {
       sources += [ "fuzz/FuzzPrecompile.cpp" ]
     }
@@ -2658,6 +2872,7 @@ if (skia_enable_tools) {
       ":flags",
       ":gpu_tool_utils",
       ":skia",
+      "modules/jsonreader",
       "modules/skottie:fuzz",
       "modules/skparagraph",
       "modules/svg",
@@ -2672,22 +2887,24 @@ if (skia_enable_tools) {
     ]
   }
 
-  test_app("skdiff") {
-    sources = [
-      "tools/skdiff/skdiff.cpp",
-      "tools/skdiff/skdiff_html.cpp",
-      "tools/skdiff/skdiff_main.cpp",
-      "tools/skdiff/skdiff_utils.cpp",
-    ]
-    deps = [ ":skia" ]
-  }
+  if (skia_use_libpng_decode) {
+    test_app("skdiff") {
+      sources = [
+        "tools/skdiff/skdiff.cpp",
+        "tools/skdiff/skdiff_html.cpp",
+        "tools/skdiff/skdiff_main.cpp",
+        "tools/skdiff/skdiff_utils.cpp",
+      ]
+      deps = [ ":skia" ]
+    }
 
-  test_app("skp_parser") {
-    sources = [ "tools/skp_parser.cpp" ]
-    deps = [
-      ":skia",
-      ":tool_utils",
-    ]
+    test_app("skp_parser") {
+      sources = [ "tools/skp_parser.cpp" ]
+      deps = [
+        ":skia",
+        ":tool_utils",
+      ]
+    }
   }
 
   if (!is_win) {
@@ -2707,11 +2924,13 @@ if (skia_enable_tools) {
         ":tool_utils",
       ]
     }
-    test_app("skqp") {
-      sources = [ "tools/skqp/src/skqp_main.cpp" ]
-      include_dirs = [ "//" ]
-      lib_dirs = []
-      deps = [ ":skqp_lib" ]
+    if (skia_use_libpng_decode) {
+      test_app("skqp") {
+        sources = [ "tools/skqp/src/skqp_main.cpp" ]
+        include_dirs = [ "//" ]
+        lib_dirs = []
+        deps = [ ":skqp_lib" ]
+      }
     }
   }
   if (is_fuchsia) {
@@ -2899,6 +3118,7 @@ if (skia_enable_tools) {
         "tools/viewer/AnimBlurSlide.cpp",
         "tools/viewer/AnimTimer.h",
         "tools/viewer/AnimatedImageSlide.cpp",
+        "tools/viewer/AnimatedImageSlide.h",
         "tools/viewer/AnimatedRectsSlide.cpp",
         "tools/viewer/AnimatedTextSlide.cpp",
         "tools/viewer/ArcSlide.cpp",
@@ -2931,17 +3151,17 @@ if (skia_enable_tools) {
         "tools/viewer/ImageSlide.cpp",
         "tools/viewer/ImageSlide.h",
         "tools/viewer/LayersSlide.cpp",
-        "tools/viewer/MSKPSlide.cpp",
-        "tools/viewer/MSKPSlide.h",
         "tools/viewer/ManyRectsSlide.cpp",
         "tools/viewer/MaterialShadowsSlide.cpp",
         "tools/viewer/MegaStrokeSlide.cpp",
+        "tools/viewer/MeshGradientSlide.cpp",
         "tools/viewer/MeshSlide.cpp",
         "tools/viewer/MixerSlide.cpp",
         "tools/viewer/MotionMarkSlide.cpp",
         "tools/viewer/PatchSlide.cpp",
         "tools/viewer/PathClipSlide.cpp",
         "tools/viewer/PathEffectsSlide.cpp",
+        "tools/viewer/PathLerpSlide.cpp",
         "tools/viewer/PathOverstrokeSlide.cpp",
         "tools/viewer/PathSlide.cpp",
         "tools/viewer/PathTessellatorsSlide.cpp",
@@ -3006,12 +3226,21 @@ if (skia_enable_tools) {
         "modules/skottie",
         "modules/skottie:utils",
         "modules/skparagraph:slides",
+        "modules/skresources",
         "modules/sksg:slides",
         "modules/skshaper:skshaper",
         "modules/skunicode",
-        "modules/svg",
+        "//third_party/delaunator",
         "//third_party/imgui",
       ]
+      if (skia_use_libpng_decode) {
+        deps += [ "modules/svg" ]
+
+        sources += [
+          "tools/viewer/MSKPSlide.cpp",
+          "tools/viewer/MSKPSlide.h",
+        ]
+      }
       if (skia_use_vulkan) {
         deps += [
           "//third_party/externals/spirv-tools:spvtools",
@@ -3028,7 +3257,7 @@ if (skia_enable_tools) {
       # Bots and even devs may not have Vulkan headers, so put
       # include/third_party/vulkan on our path so they're always available.
       all_dependent_configs = [
-        ":our_vulkan_headers",
+        ":use_skia_vulkan_headers",
         ":vulkan_memory_allocator",
       ]
 
@@ -3303,6 +3532,7 @@ if (skia_enable_tools) {
     libfuzzer_app("skottie_json") {
       sources = [ "modules/skottie/fuzz/FuzzSkottieJSON.cpp" ]
       deps = [
+        "modules/jsonreader",
         "modules/skottie:skottie",
         "modules/svg",
       ]
@@ -3310,7 +3540,7 @@ if (skia_enable_tools) {
 
     libfuzzer_app("skjson") {
       sources = [ "fuzz/oss_fuzz/FuzzJSON.cpp" ]
-      deps = []
+      deps = [ "modules/jsonreader" ]
     }
 
     libfuzzer_app("api_polyutils") {

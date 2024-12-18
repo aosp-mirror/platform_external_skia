@@ -92,6 +92,12 @@ alias(
 ###
 
 alias(
+    name = "graphite_dawn_vulkan",
+    actual = "//src/gpu/graphite/vk:graphite_dawn_vulkan",
+    visibility = ["//visibility:public"],
+)
+
+alias(
     name = "graphite_native_metal",
     actual = "//src/gpu/graphite/mtl:graphite_native_metal",
     visibility = ["//visibility:public"],
@@ -198,8 +204,20 @@ alias(
 )
 
 alias(
+    name = "freetype_support",
+    actual = "//src/ports:freetype_support",
+    visibility = ["//visibility:public"],
+)
+
+alias(
     name = "fontmgr_fontconfig_freetype",
     actual = "//src/ports:fontmgr_fontconfig_freetype",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "fontmgr_fontconfig_fontations",
+    actual = "//src/ports:fontmgr_fontconfig_fontations",
     visibility = ["//visibility:public"],
 )
 

@@ -7,6 +7,8 @@
 
 #include "src/pdf/SkPDFFont.h"
 
+#include "include/codec/SkCodec.h"
+#include "include/codec/SkJpegDecoder.h"
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
@@ -23,8 +25,8 @@
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
-#include "include/core/SkPathEffect.h"
 #include "include/core/SkPathTypes.h"
+#include "include/core/SkPixmap.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
@@ -66,6 +68,8 @@
 #include <initializer_list>
 #include <memory>
 #include <utility>
+
+using namespace skia_private;
 
 void SkPDFFont::GetType1GlyphNames(const SkTypeface& face, SkString* dst) {
     face.getPostScriptGlyphNames(dst);
@@ -118,9 +122,9 @@ static bool scale_paint(SkPaint& paint, SkScalar fontToEMScale) {
         }
     }
     if (SkPathEffectBase* peb = as_PEB(paint.getPathEffect())) {
-        skia_private::AutoSTMalloc<4, SkScalar> intervals;
+        AutoSTMalloc<4, SkScalar> intervals;
         SkPathEffectBase::DashInfo dashInfo(intervals, 4, 0);
-        if (peb->asADash(&dashInfo) == SkPathEffect::kDash_DashType) {
+        if (peb->asADash(&dashInfo) == SkPathEffectBase::DashType::kDash) {
             if (dashInfo.fCount > 4) {
                 intervals.realloc(dashInfo.fCount);
                 peb->asADash(&dashInfo);
@@ -315,6 +319,16 @@ const std::vector<SkUnichar>& SkPDFFont::GetUnicodeMap(const SkTypeface& typefac
     return *canon->fToUnicodeMap.set(id, std::move(buffer));
 }
 
+THashMap<SkGlyphID, SkString>& SkPDFFont::GetUnicodeMapEx(const SkTypeface& typeface,
+                                                          SkPDFDocument* canon) {
+    SkASSERT(canon);
+    SkTypefaceID id = typeface.uniqueID();
+    if (THashMap<SkGlyphID, SkString>* ptr = canon->fToUnicodeMapEx.find(id)) {
+        return *ptr;
+    }
+    return *canon->fToUnicodeMapEx.set(id, THashMap<SkGlyphID, SkString>());
+}
+
 SkAdvancedTypefaceMetrics::FontType SkPDFFont::FontType(const SkPDFStrike& pdfStrike,
                                                         const SkAdvancedTypefaceMetrics& metrics) {
     if (SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kVariable_FontFlag) ||
@@ -325,6 +339,12 @@ SkAdvancedTypefaceMetrics::FontType SkPDFFont::FontType(const SkPDFStrike& pdfSt
         // https://skia-review.googlesource.com/c/skia/+/543485
         SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kAltDataFormat_FontFlag) ||
         SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kNotEmbeddable_FontFlag) ||
+        // Something like 45eeeddb00741493 and 7c86e7641b348ca7b0 to output OpenType should work,
+        // but requires PDF 1.6 which is still not supported by all printers. One could fix this by
+        // using bare CFF like 31a170226c22244cbd00497b67f6ae181f0f3e76 which is only PDF 1.3,
+        // but this only works when the CFF CIDs == CFF index == GlyphID as PDF bare CFF prefers
+        // CFF CIDs instead of GlyphIDs and Skia doesn't know the CIDs.
+        metrics.fType == SkAdvancedTypefaceMetrics::kCFF_Font ||
         pdfStrike.fHasMaskFilter)
     {
         // force Type3 fallback.
@@ -446,26 +466,11 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
         SkDebugf("Error: (SkTypeface)(%p)::openStream() returned "
                  "empty stream (%p) when identified as kType1CID_Font "
                  "or kTrueType_Font.\n", &typeface, fontAsset.get());
-    } else if (type == SkAdvancedTypefaceMetrics::kTrueType_Font ||
-               type == SkAdvancedTypefaceMetrics::kCFF_Font)
-    {
-        // Avoid use of FontFile3 OpenType (OpenType with CFF) which is PDF 1.6 (2004).
-        // Instead use FontFile3 CIDFontType0C (bare CFF) which is PDF 1.3 (2000).
-        // See b/352098914
+    } else if (type == SkAdvancedTypefaceMetrics::kTrueType_Font) {
         sk_sp<SkData> subsetFontData;
         if (can_subset(metrics)) {
             SkASSERT(font.firstGlyphID() == 1);
-            // If the face has CFF the subsetter will always return just the CFF.
             subsetFontData = SkPDFSubsetFont(typeface, font.glyphUsage());
-        }
-        if (!subsetFontData) {
-            // If the data cannot be subset, still ensure bare CFF.
-            constexpr SkFontTableTag CFFTag = SkSetFourByteTag('C', 'F', 'F', ' ');
-            size_t cffTableSize = typeface.getTableSize(CFFTag);
-            if (cffTableSize) {
-                subsetFontData = SkData::MakeUninitialized(cffTableSize);
-                typeface.getTableData(CFFTag, 0, cffTableSize, subsetFontData->writable_data());
-            }
         }
         std::unique_ptr<SkStreamAsset> subsetFontAsset;
         if (subsetFontData) {
@@ -476,14 +481,7 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
         }
         std::unique_ptr<SkPDFDict> streamDict = SkPDFMakeDict();
         streamDict->insertInt("Length1", subsetFontAsset->getLength());
-        const char* fontFileKey;
-        if (type == SkAdvancedTypefaceMetrics::kTrueType_Font) {
-            fontFileKey = "FontFile2";
-        } else {
-            streamDict->insertName("Subtype", "CIDFontType0C");
-            fontFileKey = "FontFile3";
-        }
-        descriptor->insertRef(fontFileKey,
+        descriptor->insertRef("FontFile2",
                               SkPDFStreamOut(std::move(streamDict), std::move(subsetFontAsset),
                                              doc, SkPDFSteamCompressionEnabled::Yes));
     } else if (type == SkAdvancedTypefaceMetrics::kType1CID_Font) {
@@ -503,10 +501,6 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
     switch (type) {
         case SkAdvancedTypefaceMetrics::kType1CID_Font:
             newCIDFont->insertName("Subtype", "CIDFontType0");
-            break;
-        case SkAdvancedTypefaceMetrics::kCFF_Font:
-            newCIDFont->insertName("Subtype", "CIDFontType0");
-            newCIDFont->insertName("CIDToGIDMap", "Identity");
             break;
         case SkAdvancedTypefaceMetrics::kTrueType_Font:
             newCIDFont->insertName("Subtype", "CIDFontType2");
@@ -548,6 +542,7 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
     SkASSERT(SkToSizeT(typeface.countGlyphs()) == glyphToUnicode.size());
     std::unique_ptr<SkStreamAsset> toUnicode =
             SkPDFMakeToUnicodeCmap(glyphToUnicode.data(),
+                                   SkPDFFont::GetUnicodeMapEx(typeface, doc),
                                    &font.glyphUsage(),
                                    font.multiByteGlyphs(),
                                    font.firstGlyphID(),
@@ -831,14 +826,20 @@ static void emit_subset_type3(const SkPDFFont& pdfFont, SkPDFDocument* doc) {
                 AppendScalar(pimg.fOffset.y() * bitmapScale, &content);
                 content.writeText(" cm\n");
 
-                // Convert Gray image to jpeg if needed
+                // Convert Grey image to deferred jpeg image to emit as jpeg
                 if (pdfStrike.fHasMaskFilter) {
                     SkJpegEncoder::Options jpegOptions;
-                    jpegOptions.fQuality = 50; // SK_PDF_MASK_QUALITY
+                    jpegOptions.fQuality = SK_PDF_MASK_QUALITY;
                     SkImage* image = pimg.fImage.get();
-                    sk_sp<SkData> jpegData = SkJpegEncoder::Encode(nullptr, image, jpegOptions);
-                    if (jpegData) {
-                        sk_sp<SkImage> jpegImage = SkImages::DeferredFromEncodedData(jpegData);
+                    SkPixmap pm;
+                    SkAssertResult(image->peekPixels(&pm));
+                    SkDynamicMemoryWStream buffer;
+                    // By encoding this into jpeg, it be embedded efficiently during drawImage.
+                    if (SkJpegEncoder::Encode(&buffer, pm, jpegOptions)) {
+                        std::unique_ptr<SkCodec> codec =
+                                SkJpegDecoder::Decode(buffer.detachAsData(), nullptr);
+                        SkASSERT(codec);
+                        sk_sp<SkImage> jpegImage = SkCodecs::DeferredImage(std::move(codec));
                         SkASSERT(jpegImage);
                         if (jpegImage) {
                             pimg.fImage = jpegImage;
@@ -910,6 +911,7 @@ static void emit_subset_type3(const SkPDFFont& pdfFont, SkPDFDocument* doc) {
     const std::vector<SkUnichar>& glyphToUnicode = SkPDFFont::GetUnicodeMap(pathTypeface, doc);
     SkASSERT(glyphToUnicode.size() == SkToSizeT(pathTypeface.countGlyphs()));
     auto toUnicodeCmap = SkPDFMakeToUnicodeCmap(glyphToUnicode.data(),
+                                                SkPDFFont::GetUnicodeMapEx(pathTypeface, doc),
                                                 &subset,
                                                 false,
                                                 firstGlyphID,
@@ -927,7 +929,6 @@ void SkPDFFont::emitSubset(SkPDFDocument* doc) const {
     switch (fFontType) {
         case SkAdvancedTypefaceMetrics::kType1CID_Font:
         case SkAdvancedTypefaceMetrics::kTrueType_Font:
-        case SkAdvancedTypefaceMetrics::kCFF_Font:
             return emit_subset_type0(*this, doc);
 #ifndef SK_PDF_DO_NOT_SUPPORT_TYPE_1_FONTS
         case SkAdvancedTypefaceMetrics::kType1_Font:

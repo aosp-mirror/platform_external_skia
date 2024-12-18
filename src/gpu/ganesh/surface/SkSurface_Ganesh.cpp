@@ -504,7 +504,8 @@ bool SkSurface_Ganesh::replaceBackendTexture(const GrBackendTexture& backendText
     int sampleCnt = oldTexture->asRenderTarget()->numSamples();
     GrColorType grColorType = SkColorTypeToGrColorType(this->getCanvas()->imageInfo().colorType());
     if (!validate_backend_texture(
-                rContext->priv().caps(), backendTexture, sampleCnt, grColorType, true)) {
+                rContext->priv().caps(), backendTexture, sampleCnt, grColorType,
+                /* texturable= */ true)) {
         return false;
     }
 
@@ -705,7 +706,7 @@ sk_sp<SkSurface> WrapBackendRenderTarget(GrRecordingContext* rContext,
                                          ReleaseContext releaseContext) {
     auto releaseHelper = skgpu::RefCntedCallback::Make(relProc, releaseContext);
 
-    if (!rContext) {
+    if (!rContext || !rt.isValid()) {
         return nullptr;
     }
 

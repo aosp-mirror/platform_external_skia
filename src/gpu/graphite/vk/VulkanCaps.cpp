@@ -80,6 +80,10 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
     fRequiredStorageBufferAlignment =  physDevProperties.limits.minStorageBufferOffsetAlignment;
     fRequiredTransferBufferAlignment = 4;
 
+    // Unlike D3D, WebGPU, and Metal, the Vulkan NDC coordinate space is aligned with the top-left
+    // Y-down coordinate space of the viewport.
+    fNDCYAxisPointsDown = true;
+
     fResourceBindingReqs.fUniformBufferLayout = Layout::kStd140;
     // We can enable std430 and ensure no array stride mismatch in functions because all bound
     // buffers will either be a UBO or SSBO, depending on if storage buffers are enabled or not.
@@ -111,7 +115,8 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
         requiredLazyFlags |= VK_MEMORY_PROPERTY_PROTECTED_BIT;
     }
     for (uint32_t i = 0; i < deviceMemoryProperties.memoryTypeCount; ++i) {
-        if (deviceMemoryProperties.memoryTypes[i].propertyFlags & requiredLazyFlags) {
+        const uint32_t& supportedFlags = deviceMemoryProperties.memoryTypes[i].propertyFlags;
+        if ((supportedFlags & requiredLazyFlags) == requiredLazyFlags) {
             fSupportsMemorylessAttachments = true;
         }
     }
@@ -204,6 +209,18 @@ void VulkanCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropert
     // On Mali galaxy s7 we see lots of rendering issues when we suballocate VkImages.
     if (kARM_VkVendor == properties.vendorID && androidAPIVersion <= 28) {
         fShouldAlwaysUseDedicatedImageMemory = true;
+    }
+
+    // On Qualcomm the gpu resolves an area larger than the render pass bounds when using
+    // discardable msaa attachments. This causes the resolve to resolve uninitialized data from the
+    // msaa image into the resolve image. This was reproed on a Pixel4 using the DstReadShuffle GM
+    // where the top half of the GM would drop out. In Ganesh we had also seen this on Arm devices,
+    // but the issue hasn't appeared yet in Graphite. It may just have occured on older Arm drivers
+    // that we don't even test any more. This also occurs on swiftshader: b/303705884 in Ganesh, but
+    // we aren't currently testing that in Graphite yet so leaving that off the workaround for now
+    // until we run into it.
+    if (kQualcomm_VkVendor == properties.vendorID) {
+        fMustLoadFullImageForMSAA = true;
     }
 }
 

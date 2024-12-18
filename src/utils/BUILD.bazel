@@ -21,29 +21,12 @@ split_srcs_and_hdrs(
 )
 
 skia_filegroup(
-    name = "json_hdrs",
-    srcs = [
-        "SkJSON.h",
-        "SkJSONWriter.h",
-    ],
-)
-
-skia_filegroup(
-    name = "json_srcs",
-    srcs = [
-        "SkJSON.cpp",
-        "SkJSONWriter.cpp",
-    ],
-)
-
-skia_filegroup(
     name = "core_priv_hdrs",
     srcs = [
         "SkBitSet.h",
         "SkCallableTraits.h",
         "SkCanvasStack.h",
         "SkDashPathPriv.h",
-        "SkJSON.h",
         "SkJSONWriter.h",
         "SkMatrix22.h",
         "SkOSPath.h",
@@ -62,7 +45,6 @@ skia_filegroup(
         "SkDashPath.cpp",
         "SkEventTracer.cpp",
         "SkFloatUtils.h",
-        "SkJSON.cpp",
         "SkJSONWriter.cpp",
         "SkMatrix22.cpp",
         "SkNWayCanvas.cpp",
@@ -81,15 +63,6 @@ skia_filegroup(
         "SkTextUtils.cpp",
     ],
     visibility = ["//src/core:__pkg__"],
-)
-
-skia_filegroup(
-    name = "char_to_glyphcache",
-    srcs = [
-        "SkCharToGlyphCache.cpp",
-        "SkCharToGlyphCache.h",
-    ],
-    visibility = ["//src/ports:__pkg__"],
 )
 
 skia_filegroup(
@@ -125,6 +98,7 @@ skia_cc_library(
         "//include/docs:multi_picture_document_hdrs",
     ],
     visibility = [
+        "//dm:__pkg__",
         "//tools:__pkg__",
         "//tools/debugger:__pkg__",
     ],
@@ -179,4 +153,14 @@ skia_cc_library(
         "//src/core:__pkg__",
         "//tools/sksl-minify:__pkg__",
     ],
+)
+
+skia_cc_library(
+    name = "char_to_glyphcache",
+    srcs = ["SkCharToGlyphCache.cpp"],
+    hdrs = ["SkCharToGlyphCache.h"],
+    visibility = [
+        "//src/ports:__pkg__",
+    ],
+    deps = ["//:core"],
 )
