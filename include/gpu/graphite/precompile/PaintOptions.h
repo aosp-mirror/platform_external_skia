@@ -25,13 +25,14 @@ class PrecompileMaskFilter;
 class PrecompileShader;
 
 enum class Coverage;
-enum DrawTypeFlags : uint8_t;
+enum DrawTypeFlags : uint16_t;
 enum class PrecompileImageFilterFlags : uint32_t;
 
 class KeyContext;
 class PaintOptionsPriv;
 class PaintParamsKeyBuilder;
 class PipelineDataGatherer;
+struct RenderPassDesc;
 class UniquePaintParamsID;
 
 /** \class PaintOptions
@@ -144,6 +145,8 @@ public:
 
 private:
     friend class PaintOptionsPriv;
+    friend class PrecompileImageFilter; // for ProcessCombination access
+    friend class PrecompileMaskFilter;  // for ProcessCombination access
 
     void addColorFilter(sk_sp<PrecompileColorFilter> cf);
     void addBlendMode(SkBlendMode bm) {
@@ -169,14 +172,16 @@ private:
     typedef std::function<void(UniquePaintParamsID id,
                                DrawTypeFlags,
                                bool withPrimitiveBlender,
-                               Coverage)> ProcessCombination;
+                               Coverage,
+                               const RenderPassDesc&)> ProcessCombination;
 
     void buildCombinations(const KeyContext&,
                            PipelineDataGatherer*,
-                           DrawTypeFlags drawTypes,
+                           DrawTypeFlags,
                            bool addPrimitiveBlender,
-                           Coverage coverage,
-                           const ProcessCombination& processCombination) const;
+                           Coverage,
+                           const RenderPassDesc&,
+                           const ProcessCombination&) const;
 
     skia_private::TArray<sk_sp<PrecompileShader>> fShaderOptions;
     skia_private::TArray<sk_sp<PrecompileColorFilter>> fColorFilterOptions;

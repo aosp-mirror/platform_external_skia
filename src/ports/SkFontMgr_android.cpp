@@ -172,6 +172,14 @@ public:
                 continue;
             }
 
+            AutoSTMalloc<4, SkFixed> axisValues(axisDefinitions.size());
+            SkFontArguments::VariationPosition position = {
+                fontFile.fVariationDesignPosition.begin(),
+                fontFile.fVariationDesignPosition.size()
+            };
+            SkFontScanner_FreeType::computeAxisValues(
+                    axisDefinitions, position, axisValues, familyName, &style);
+
             int weight = fontFile.fWeight != 0 ? fontFile.fWeight : style.weight();
             SkFontStyle::Slant slant = style.slant();
             switch (fontFile.fStyle) {
@@ -193,14 +201,6 @@ public:
             if (cannonicalFamilyName != nullptr) {
                 familyName = *cannonicalFamilyName;
             }
-
-            AutoSTMalloc<4, SkFixed> axisValues(axisDefinitions.size());
-            SkFontArguments::VariationPosition position = {
-                fontFile.fVariationDesignPosition.begin(),
-                fontFile.fVariationDesignPosition.size()
-            };
-            SkFontScanner_FreeType::computeAxisValues(
-                    axisDefinitions, position, axisValues, familyName, &style);
 
             fStyles.push_back().reset(new SkTypeface_AndroidSystem(
                     pathName, cacheFontFiles, ttcIndex, axisValues.get(), axisDefinitions.size(),
@@ -434,7 +434,10 @@ protected:
             // default family instead.
             return sk_sp<SkTypeface>(this->onMatchFamilyStyle(familyName, style));
         }
-        return sk_sp<SkTypeface>(fDefaultStyleSet->matchStyle(style));
+        if (fDefaultStyleSet) {
+            return sk_sp<SkTypeface>(fDefaultStyleSet->matchStyle(style));
+        }
+        return SkTypeface::MakeEmpty();
     }
 
 
@@ -481,8 +484,6 @@ private:
     }
 
     void findDefaultStyleSet() {
-        SkASSERT(!fStyleSets.empty());
-
         static const char* defaultNames[] = { "sans-serif" };
         for (const char* defaultName : defaultNames) {
             fDefaultStyleSet = this->onMatchFamily(defaultName);
@@ -490,10 +491,9 @@ private:
                 break;
             }
         }
-        if (nullptr == fDefaultStyleSet) {
+        if (!fDefaultStyleSet && !fStyleSets.empty()) {
             fDefaultStyleSet = fStyleSets[0];
         }
-        SkASSERT(fDefaultStyleSet);
     }
 
     using INHERITED = SkFontMgr;

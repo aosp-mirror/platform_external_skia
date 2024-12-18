@@ -24,6 +24,7 @@
   #define SK_DISABLE_LEGACY_SKSURFACE_FLUSH
   #define SK_DISABLE_LEGACY_CANVAS_FLUSH
   #define SK_LEGACY_GPU_GETTERS_CONST
+  #define SK_USE_LEGACY_BLUR_GANESH
 
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
@@ -36,4 +37,9 @@
   // TODO (b/239048372): Remove this flag when we can safely migrate apps to the
   // new behavior.
   #define SK_SUPPORT_LEGACY_ALPHA_BITMAP_AS_COVERAGE
+
+#if defined(__APPLE__) && !defined(SK_R32_SHIFT)
+  // Set macOS to use BGRA format to match Linux and Windows
+  #define SK_R32_SHIFT 16
+#endif
 #endif // SkUserConfigManual_DEFINED

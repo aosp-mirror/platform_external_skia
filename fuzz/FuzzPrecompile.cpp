@@ -19,23 +19,21 @@
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/precompile/Precompile.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "modules/skcms/skcms.h"
 #include "src/core/SkBlenderBase.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
-#include "src/gpu/graphite/FactoryFunctions.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/PipelineData.h"
-#include "src/gpu/graphite/PrecompileInternal.h"
-#include "src/gpu/graphite/PublicPrecompile.h"
 #include "src/gpu/graphite/RecorderPriv.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/precompile/PaintOptionsPriv.h"
-#include "tools/ToolUtils.h"
 #include "tools/gpu/GrContextFactory.h"
 #include "tools/graphite/ContextFactory.h"
 
@@ -278,8 +276,10 @@ void check_draw(Context* context,
         SkCanvas* canvas = surf->getCanvas();
 
         switch (dt) {
-            case DrawTypeFlags::kShape:
+            case DrawTypeFlags::kSimpleShape:
                 canvas->drawRect(SkRect::MakeWH(16, 16), paint);
+                break;
+            case DrawTypeFlags::kNonSimpleShape:
                 canvas->drawPath(path, paint);
                 break;
             default:
@@ -328,15 +328,14 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
                                                             skgpu::Budgeted::kYes);
     constexpr SkIPoint fakeDstOffset = SkIPoint::Make(0, 0);
 
-    DrawTypeFlags kDrawType = DrawTypeFlags::kShape;
+    DrawTypeFlags kDrawType = DrawTypeFlags::kSimpleShape;
     SkPath path = make_path();
 
     Layout layout = context->backend() == skgpu::BackendApi::kMetal ? Layout::kMetal
                                                                     : Layout::kStd140;
 
     PaintParamsKeyBuilder builder(dict);
-    PipelineDataGatherer gatherer(recorder->priv().caps(), layout);
-
+    PipelineDataGatherer gatherer(layout);
 
     auto [paint, paintOptions] = create_random_paint(fuzz, depth);
 
@@ -364,6 +363,7 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
                                                     {},
                                                     PaintParams(paint,
                                                                 /* primitiveBlender= */ nullptr,
+                                                                /* analyticClip= */ {},
                                                                 /* clipShader= */ nullptr,
                                                                 dstReadReq,
                                                                 /* skipColorXform= */ false),
@@ -372,16 +372,20 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
                                                     fakeDstOffset,
                                                     ci);
 
+    RenderPassDesc unusedRenderPassDesc;
+
     std::vector<UniquePaintParamsID> precompileIDs;
     paintOptions.priv().buildCombinations(precompileKeyContext,
                                           &gatherer,
                                           DrawTypeFlags::kNone,
                                           /* withPrimitiveBlender= */ false,
                                           coverage,
+                                          unusedRenderPassDesc,
                                           [&](UniquePaintParamsID id,
                                               DrawTypeFlags,
                                               bool /* withPrimitiveBlender */,
-                                              Coverage) {
+                                              Coverage,
+                                              const RenderPassDesc&) {
                                                   precompileIDs.push_back(id);
                                           });
 
@@ -404,10 +408,12 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
     SkASSERT_RELEASE(result != precompileIDs.end());
 
     {
+        static const RenderPassProperties kDefaultRenderPassProperties;
+
         context->priv().globalCache()->resetGraphicsPipelines();
 
         int before = context->priv().globalCache()->numGraphicsPipelines();
-        Precompile(context, paintOptions, kDrawType);
+        Precompile(context, paintOptions, kDrawType, { kDefaultRenderPassProperties });
         int after = context->priv().globalCache()->numGraphicsPipelines();
 
         SkASSERT_RELEASE(before == 0);
