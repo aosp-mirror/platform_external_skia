@@ -10,7 +10,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/SkImageGanesh.h"
 #include "src/base/SkRandom.h"
 #include "src/core/SkCanvasPriv.h"
@@ -63,7 +63,7 @@ public:
 
 protected:
     SkRect         fRects[kRectCount];
-    sk_sp<SkImage> fImages[kImageCount];
+    sk_sp<SkImage> fImages[kImageCount > 0 ? kImageCount : 1];
     SkColor4f      fColors[kRectCount];
     SkString       fName;
 

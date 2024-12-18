@@ -46,15 +46,14 @@ bool textBlobsAllPathsEqual(sk_sp<const SkTextBlob> blobA,
             sk_sp<SkData> dataB = streamB.detachAsData();
             if (dataA->size() != dataB->size() ||
                 memcmp(dataA->data(), dataB->data(), dataA->size() - 1)) {
-                SkDebugf(
-                        "Different path in font %s for glyph index: %d glyph id: %d, data sizes "
-                        "%ld "
-                        "vs %ld\n",
-                        fontName.c_str(),
-                        i,
-                        runAInfo.glyphs[i],
-                        dataA->size(),
-                        dataB->size());
+                // See https://issues.skia.org/345178242 for details.
+                // If there are path differences between FreeType and Fontations,
+                // it might be needed to test for path equality after PathOps::Simplify()
+                // as FreeType does the simplification, but Fontations does not.
+                SkDebugf("Different path in font %s for glyph index: %d glyph id: %d, data sizes "
+                         "%zu vs %zu\n",
+                         fontName.c_str(), i, runAInfo.glyphs[i],
+                         dataA->size(), dataB->size());
                 std::string fontationsPath(reinterpret_cast<const char*>(dataA->bytes()),
                                            dataA->size());
                 std::string freetypePath(reinterpret_cast<const char*>(dataB->bytes()),

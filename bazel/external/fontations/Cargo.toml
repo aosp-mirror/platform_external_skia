@@ -7,10 +7,11 @@ edition = "2021"
 version = "0.1.0"
 
 [dependencies]
-read-fonts = "0.15"
-font-types = "0.4"
-skrifa = "0.15.4"
-cxx = "1.0.110"
+read-fonts = "0.22"
+font-types = "0.7"
+skrifa = "0.22"
+bytemuck = "1.16"
+cxx = "1.0"
 
 [lib]
 name = "fontations_ffi"

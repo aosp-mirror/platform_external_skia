@@ -23,12 +23,6 @@ class SkReadBuffer;
 struct SkRect;
 class SkWriteBuffer;
 
-#if defined(GRAPHITE_TEST_UTILS)
-namespace skgpu::graphite {
-    class TextureProxy;
-}
-#endif
-
 class SkAutoCanvasMatrixPaint : SkNoncopyable {
 public:
     SkAutoCanvasMatrixPaint(SkCanvas*, const SkMatrix*, const SkPaint*, const SkRect& bounds);
@@ -79,7 +73,7 @@ public:
                                                       SkCanvas::SaveLayerFlags saveLayerFlags,
                                                       SkCanvas::FilterSpan filters = {}) {
         return SkCanvas::SaveLayerRec(
-                bounds, paint, backdrop, backdropScale, saveLayerFlags, filters);
+                bounds, paint, backdrop, nullptr, backdropScale, saveLayerFlags, filters);
     }
 
     static SkScalar GetBackdropScaleFactor(const SkCanvas::SaveLayerRec& rec) {
@@ -136,16 +130,19 @@ public:
 
     AutoLayerForImageFilter(const AutoLayerForImageFilter&) = delete;
     AutoLayerForImageFilter& operator=(const AutoLayerForImageFilter&) = delete;
-    AutoLayerForImageFilter(AutoLayerForImageFilter&&) = default;
-    AutoLayerForImageFilter& operator=(AutoLayerForImageFilter&&) = default;
+    AutoLayerForImageFilter(AutoLayerForImageFilter&&);
+    AutoLayerForImageFilter& operator=(AutoLayerForImageFilter&&);
 
     ~AutoLayerForImageFilter();
 
     const SkPaint& paint() const { return fPaint; }
 
+    // This is public so that a canvas can attempt to specially handle mask filters, specifically
+    // for blurs, and then if the attempt fails fall back on a regular draw with the same autolayer.
+    void addMaskFilterLayer(const SkRect* drawBounds);
+
 private:
     void addImageFilterLayer(const SkRect* drawBounds);
-    void addMaskFilterLayer(const SkRect* drawBounds);
 
     void addLayer(const SkPaint& restorePaint, const SkRect* drawBounds, bool coverageOnly);
 

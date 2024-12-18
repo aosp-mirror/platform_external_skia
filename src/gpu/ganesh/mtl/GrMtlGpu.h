@@ -8,7 +8,7 @@
 #ifndef GrMtlGpu_DEFINED
 #define GrMtlGpu_DEFINED
 
-#include "include/gpu/mtl/GrMtlBackendContext.h"
+#include "include/gpu/ganesh/mtl/GrMtlBackendContext.h"
 #include "include/private/base/SkDeque.h"
 #include "src/gpu/ganesh/mtl/GrMtlTypesPriv.h"
 
@@ -65,7 +65,7 @@ public:
 
     bool precompileShader(const SkData& key, const SkData& data) override;
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
     GrBackendRenderTarget createTestingOnlyBackendRenderTarget(SkISize dimensions,
@@ -88,12 +88,6 @@ public:
     bool onCopySurface(GrSurface* dst, const SkIRect& dstRect,
                        GrSurface* src, const SkIRect& srcRect,
                        GrSamplerState::Filter) override;
-
-#if GR_METAL_SDK_VERSION >= 230
-    id<MTLBinaryArchive> binaryArchive() const SK_API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) {
-        return fBinaryArchive;
-    }
-#endif
 
     void submit(GrOpsRenderPass* renderPass) override;
 
@@ -124,8 +118,7 @@ public:
     GrRingBuffer* uniformsRingBuffer() override { return &fUniformsRingBuffer; }
 
 private:
-    GrMtlGpu(GrDirectContext*, const GrContextOptions&, id<MTLDevice>,
-             id<MTLCommandQueue>, GrMTLHandle binaryArchive);
+    GrMtlGpu(GrDirectContext*, const GrContextOptions&, id<MTLDevice>, id<MTLCommandQueue>);
 
     void destroyResources();
 
@@ -277,7 +270,7 @@ private:
                                               SkISize dimensions, int numStencilSamples) override;
 
     GrBackendFormat getPreferredStencilFormat(const GrBackendFormat&) override {
-        return GrBackendFormat::MakeMtl(this->mtlCaps().preferredStencilFormat());
+        return GrBackendFormats::MakeMtl(this->mtlCaps().preferredStencilFormat());
     }
 
     sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
@@ -294,7 +287,7 @@ private:
                                            skgpu::Mipmapped,
                                            GrMtlTextureInfo*);
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     void testingOnly_startCapture() override;
     void testingOnly_stopCapture() override;
 #endif
@@ -312,10 +305,6 @@ private:
 
     using OutstandingCommandBuffer = sk_sp<GrMtlCommandBuffer>;
     SkDeque fOutstandingCommandBuffers;
-
-#if GR_METAL_SDK_VERSION >= 230
-    id<MTLBinaryArchive> fBinaryArchive SK_API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0));
-#endif
 
     GrMtlResourceProvider fResourceProvider;
     GrStagingBufferManager fStagingBufferManager;

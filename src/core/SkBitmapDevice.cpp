@@ -531,10 +531,9 @@ void SkBitmapDevice::drawImageRect(const SkImage* image, const SkRect* src, cons
 
 void SkBitmapDevice::onDrawGlyphRunList(SkCanvas* canvas,
                                         const sktext::GlyphRunList& glyphRunList,
-                                        const SkPaint& initialPaint,
-                                        const SkPaint& drawingPaint) {
+                                        const SkPaint& paint) {
     SkASSERT(!glyphRunList.hasRSXForm());
-    LOOP_TILER( drawGlyphRunList(canvas, &fGlyphPainter, glyphRunList, drawingPaint), nullptr )
+    LOOP_TILER( drawGlyphRunList(canvas, &fGlyphPainter, glyphRunList, paint), nullptr )
 }
 
 void SkBitmapDevice::drawVertices(const SkVertices* vertices,
@@ -550,7 +549,7 @@ void SkBitmapDevice::drawVertices(const SkVertices* vertices,
 }
 
 void SkBitmapDevice::drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) {
-    // TODO(brianosman): Implement, maybe with a subclass of BitmapDevice that has SkSL support.
+    // TODO: Implement, maybe with a subclass of BitmapDevice that has SkSL support.
 }
 
 void SkBitmapDevice::drawAtlas(const SkRSXform xform[],

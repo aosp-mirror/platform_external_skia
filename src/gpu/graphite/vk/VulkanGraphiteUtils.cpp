@@ -14,6 +14,7 @@
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/vk/VulkanQueueManager.h"
+#include "src/gpu/graphite/vk/VulkanSampler.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/sksl/SkSLProgramSettings.h"
 
@@ -55,7 +56,7 @@ VkShaderModule createVulkanShaderModule(const VulkanSharedContext* context,
 
     VkShaderModule shaderModule;
     VkResult result;
-    VULKAN_CALL_RESULT(context->interface(),
+    VULKAN_CALL_RESULT(context,
                        result,
                        CreateShaderModule(context->device(),
                                           &moduleCreateInfo,
@@ -73,17 +74,19 @@ void DescriptorDataToVkDescSetLayout(const VulkanSharedContext* ctxt,
                                      VkDescriptorSetLayout* outLayout) {
     skia_private::STArray<kDescriptorTypeCount, VkDescriptorSetLayoutBinding> bindingLayouts;
     for (size_t i = 0; i < requestedDescriptors.size(); i++) {
-        if (requestedDescriptors[i].count != 0) {
+        if (requestedDescriptors[i].fCount != 0) {
             const DescriptorData& currDescriptor = requestedDescriptors[i];
             VkDescriptorSetLayoutBinding& layoutBinding = bindingLayouts.push_back();
             memset(&layoutBinding, 0, sizeof(VkDescriptorSetLayoutBinding));
-            layoutBinding.binding = currDescriptor.bindingIndex;
-            layoutBinding.descriptorType = DsTypeEnumToVkDs(currDescriptor.type);
-            layoutBinding.descriptorCount = currDescriptor.count;
+            layoutBinding.binding = currDescriptor.fBindingIndex;
+            layoutBinding.descriptorType = DsTypeEnumToVkDs(currDescriptor.fType);
+            layoutBinding.descriptorCount = currDescriptor.fCount;
             layoutBinding.stageFlags =
-                    PipelineStageFlagsToVkShaderStageFlags(currDescriptor.pipelineStageFlags);
-            // TODO(b/302126498): Optionally set immutableSamplers here. Needed for YCbCr
-            layoutBinding.pImmutableSamplers = nullptr;
+                    PipelineStageFlagsToVkShaderStageFlags(currDescriptor.fPipelineStageFlags);
+            layoutBinding.pImmutableSamplers = currDescriptor.fImmutableSampler
+                    ? (static_cast<const VulkanSampler*>(
+                            currDescriptor.fImmutableSampler))->constVkSamplerPtr()
+                    : nullptr;
         }
     }
 
@@ -96,12 +99,10 @@ void DescriptorDataToVkDescSetLayout(const VulkanSharedContext* ctxt,
     layoutCreateInfo.pBindings = &bindingLayouts.front();
 
     VkResult result;
-    VULKAN_CALL_RESULT(ctxt->interface(),
-                       result,
-                       CreateDescriptorSetLayout(ctxt->device(),
-                                                 &layoutCreateInfo,
-                                                 nullptr,
-                                                 outLayout));
+    VULKAN_CALL_RESULT(
+            ctxt,
+            result,
+            CreateDescriptorSetLayout(ctxt->device(), &layoutCreateInfo, nullptr, outLayout));
     if (result != VK_SUCCESS) {
         SkDebugf("Failed to create VkDescriptorSetLayout\n");
         outLayout = VK_NULL_HANDLE;
@@ -111,7 +112,7 @@ void DescriptorDataToVkDescSetLayout(const VulkanSharedContext* ctxt,
 VkDescriptorType DsTypeEnumToVkDs(DescriptorType type) {
     switch (type) {
         case DescriptorType::kUniformBuffer:
-            return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         case DescriptorType::kTextureSampler:
             return VK_DESCRIPTOR_TYPE_SAMPLER;
         case DescriptorType::kTexture:
@@ -119,7 +120,7 @@ VkDescriptorType DsTypeEnumToVkDs(DescriptorType type) {
         case DescriptorType::kCombinedTextureSampler:
             return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         case DescriptorType::kStorageBuffer:
-            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
         case DescriptorType::kInputAttachment:
             return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
     }
@@ -151,6 +152,8 @@ bool vkFormatIsSupported(VkFormat format) {
         case VK_FORMAT_R16G16B16A16_UNORM:
         case VK_FORMAT_R16G16_SFLOAT:
         case VK_FORMAT_S8_UINT:
+        case VK_FORMAT_D16_UNORM:
+        case VK_FORMAT_D32_SFLOAT:
         case VK_FORMAT_D24_UNORM_S8_UINT:
         case VK_FORMAT_D32_SFLOAT_S8_UINT:
             return true;
@@ -173,5 +176,44 @@ VkShaderStageFlags PipelineStageFlagsToVkShaderStageFlags(
     }
     return vkStageFlags;
 }
+
+namespace ycbcrPackaging {
+uint32_t nonFormatInfoAsUInt32(const VulkanYcbcrConversionInfo& conversionInfo) {
+    static_assert(kComponentAShift + kComponentBits <= 32);
+
+    SkASSERT(conversionInfo.fYcbcrModel                  < (1u << kYcbcrModelBits        ));
+    SkASSERT(conversionInfo.fYcbcrRange                  < (1u << kYcbcrRangeBits        ));
+    SkASSERT(conversionInfo.fXChromaOffset               < (1u << kXChromaOffsetBits     ));
+    SkASSERT(conversionInfo.fYChromaOffset               < (1u << kYChromaOffsetBits     ));
+    SkASSERT(conversionInfo.fChromaFilter                < (1u << kChromaFilterBits      ));
+    SkASSERT(conversionInfo.fForceExplicitReconstruction < (1u << kForceExplicitReconBits));
+    SkASSERT(conversionInfo.fComponents.r                < (1u << kComponentBits         ));
+    SkASSERT(conversionInfo.fComponents.g                < (1u << kComponentBits         ));
+    SkASSERT(conversionInfo.fComponents.b                < (1u << kComponentBits         ));
+    SkASSERT(conversionInfo.fComponents.a                < (1u << kComponentBits         ));
+
+    bool usesExternalFormat = conversionInfo.fFormat == VK_FORMAT_UNDEFINED;
+
+    return (((uint32_t)(usesExternalFormat                         ) << kUsesExternalFormatShift) |
+            ((uint32_t)(conversionInfo.fYcbcrModel                 ) << kYcbcrModelShift        ) |
+            ((uint32_t)(conversionInfo.fYcbcrRange                 ) << kYcbcrRangeShift        ) |
+            ((uint32_t)(conversionInfo.fXChromaOffset              ) << kXChromaOffsetShift     ) |
+            ((uint32_t)(conversionInfo.fYChromaOffset              ) << kYChromaOffsetShift     ) |
+            ((uint32_t)(conversionInfo.fChromaFilter               ) << kChromaFilterShift      ) |
+            ((uint32_t)(conversionInfo.fForceExplicitReconstruction) << kForceExplicitReconShift) |
+            ((uint32_t)(conversionInfo.fComponents.r               ) << kComponentRShift        ) |
+            ((uint32_t)(conversionInfo.fComponents.g               ) << kComponentGShift        ) |
+            ((uint32_t)(conversionInfo.fComponents.b               ) << kComponentBShift        ) |
+            ((uint32_t)(conversionInfo.fComponents.a               ) << kComponentAShift        ));
+}
+
+int numInt32sNeeded(const VulkanYcbcrConversionInfo& conversionInfo) {
+    if (!conversionInfo.isValid()) {
+        return 0;
+    }
+    return (conversionInfo.fFormat == VK_FORMAT_UNDEFINED) ? kInt32sNeededExternalFormat
+                                                           : kInt32sNeededKnownFormat;
+}
+} // namespace ycbcrPackaging
 
 } // namespace skgpu::graphite

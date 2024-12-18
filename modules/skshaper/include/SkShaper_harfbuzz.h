@@ -8,6 +8,7 @@
 #ifndef SkShaper_harfbuzz_DEFINED
 #define SkShaper_harfbuzz_DEFINED
 
+#include "include/core/SkFourByteTag.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
 #include "modules/skshaper/include/SkShaper.h"
@@ -19,11 +20,11 @@ class SkFontMgr;
 class SkUnicode;
 
 namespace SkShapers::HB {
-SKSHAPER_API std::unique_ptr<SkShaper> ShaperDrivenWrapper(std::unique_ptr<SkUnicode> unicode,
+SKSHAPER_API std::unique_ptr<SkShaper> ShaperDrivenWrapper(sk_sp<SkUnicode> unicode,
                                                            sk_sp<SkFontMgr> fallback);
-SKSHAPER_API std::unique_ptr<SkShaper> ShapeThenWrap(std::unique_ptr<SkUnicode> unicode,
+SKSHAPER_API std::unique_ptr<SkShaper> ShapeThenWrap(sk_sp<SkUnicode> unicode,
                                                      sk_sp<SkFontMgr> fallback);
-SKSHAPER_API std::unique_ptr<SkShaper> ShapeDontWrapOrReorder(std::unique_ptr<SkUnicode> unicode,
+SKSHAPER_API std::unique_ptr<SkShaper> ShapeDontWrapOrReorder(sk_sp<SkUnicode> unicode,
                                                               sk_sp<SkFontMgr> fallback);
 
 SKSHAPER_API std::unique_ptr<SkShaper::ScriptRunIterator> ScriptRunIterator(const char* utf8,

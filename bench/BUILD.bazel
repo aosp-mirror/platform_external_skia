@@ -1,15 +1,17 @@
 load(
     "//bazel:skia_rules.bzl",
-    "exports_files_legacy",
     "skia_cc_library",
     "skia_cc_test",
     "skia_filegroup",
+    "supports_platforms",
 )
 load("//tools/testrunners/benchmark:android_benchmark_test.bzl", "android_benchmark_test")
 
-licenses(["notice"])
+package(
+    default_applicable_licenses = ["//:license"],
+)
 
-exports_files_legacy()
+licenses(["notice"])
 
 skia_filegroup(
     name = "gpu_tools",
@@ -33,7 +35,7 @@ COMMON_DEPS = [
     "//:png_encode_codec",
     "//bench:benchmark",
     "//src/base",
-    "//src/utils:json",
+    "//src/core:core_priv",
     "//tools:autorelease_pool",
     "//tools:registry",
     "//tools:resources",
@@ -58,11 +60,11 @@ skia_cc_test(
         "nonrendering",
         "--autoTuneLoops",
     ],
-    target_compatible_with = [
+    target_compatible_with = supports_platforms(
         "@platforms//os:linux",
         "@platforms//os:windows",
         "@platforms//os:macos",
-    ],
+    ),
     deps = COMMON_DEPS + [
         "//tools/testrunners/benchmark/target:raster",
     ],
@@ -80,11 +82,11 @@ skia_cc_test(
         "8888",
         "--autoTuneLoops",
     ],
-    target_compatible_with = [
+    target_compatible_with = supports_platforms(
         "@platforms//os:linux",
         "@platforms//os:windows",
         "@platforms//os:macos",
-    ],
+    ),
     deps = COMMON_DEPS + [
         "//tools/testrunners/benchmark/target:raster",
     ],
@@ -104,11 +106,11 @@ skia_cc_test(
             surfaceConfig,
             "--autoTuneLoops",
         ],
-        target_compatible_with = [
+        target_compatible_with = supports_platforms(
             "@platforms//os:linux",
             "@platforms//os:windows",
             "@platforms//os:macos",
-        ],
+        ),
         deps = COMMON_DEPS + [
             "//tools/testrunners/benchmark/target:ganesh_vulkan",
         ],
@@ -157,11 +159,11 @@ skia_cc_test(
         "gles",
         "--autoTuneLoops",
     ],
-    target_compatible_with = [
+    target_compatible_with = supports_platforms(
         "@platforms//os:linux",
         "@platforms//os:windows",
         "@platforms//os:macos",
-    ],
+    ),
     deps = COMMON_DEPS + [
         "//tools/testrunners/benchmark/target:ganesh_gl",
     ],

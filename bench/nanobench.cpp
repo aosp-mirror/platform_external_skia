@@ -52,12 +52,14 @@
 #include "tools/ToolUtils.h"
 #include "tools/flags/CommonFlags.h"
 #include "tools/flags/CommonFlagsConfig.h"
+#include "tools/flags/CommonFlagsGanesh.h"
 #include "tools/fonts/FontToolUtils.h"
 #include "tools/ios_utils.h"
 #include "tools/trace/EventTracingPriv.h"
 #include "tools/trace/SkDebugfTracer.h"
 
 #if defined(SK_ENABLE_SVG)
+#include "modules/skshaper/utils/FactoryHelpers.h"
 #include "modules/svg/include/SkSVGDOM.h"
 #include "modules/svg/include/SkSVGNode.h"
 #endif
@@ -73,6 +75,7 @@
 #include "include/gpu/graphite/Recording.h"
 #include "include/gpu/graphite/Surface.h"
 #include "tools/GpuToolUtils.h"
+#include "tools/flags/CommonFlagsGraphite.h"
 #include "tools/graphite/ContextFactory.h"
 #include "tools/graphite/GraphiteTestContext.h"
 #endif
@@ -87,11 +90,10 @@ extern bool gSkForceRasterPipelineBlitter;
 extern bool gForceHighPrecisionRasterPipeline;
 
 #ifndef SK_BUILD_FOR_WIN
-    #include <unistd.h>
-
+#include <unistd.h>
 #endif
 
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
@@ -105,6 +107,10 @@ using sk_gpu_test::GrContextFactory;
 using sk_gpu_test::TestContext;
 
 GrContextOptions grContextOpts;
+
+#if defined(SK_GRAPHITE)
+skiatest::graphite::TestOptions gTestOptions;
+#endif
 
 static const int kAutoTuneLoops = 0;
 
@@ -253,17 +259,19 @@ struct GPUTarget : public Target {
         surface.reset();
     }
 
-    void setup() override {
+    void onSetup() override {
         this->contextInfo.testContext()->makeCurrent();
-        // Make sure we're done with whatever came before.
-        this->contextInfo.testContext()->finish();
     }
     void endTiming() override {
         if (this->contextInfo.testContext()) {
             this->contextInfo.testContext()->flushAndWaitOnSync(contextInfo.directContext());
         }
     }
-    void syncCPU() override { this->contextInfo.testContext()->finish(); }
+    void submitWorkAndSyncCPU() override {
+        if (this->contextInfo.testContext()) {
+            this->contextInfo.testContext()->flushAndSyncCpu(contextInfo.directContext());
+        }
+    }
 
     bool needsFrameTiming(int* maxFrameLag) const override {
         if (!this->contextInfo.testContext()->getMaxGpuFrameLag(maxFrameLag)) {
@@ -316,9 +324,12 @@ struct GraphiteTarget : public Target {
     skgpu::graphite::Context* context;
     std::unique_ptr<skgpu::graphite::Recorder> recorder;
 
-    ~GraphiteTarget() override {}
-
-    void setup() override {}
+    ~GraphiteTarget() override {
+        // For Vulkan we need to release all our refs before we destroy the vulkan context which
+        // happens at the end of this destructor. Thus we need to release the surface here which
+        // holds a ref to the Graphite device
+        surface.reset();
+    }
 
     void endTiming() override {
         if (context && recorder) {
@@ -328,7 +339,7 @@ struct GraphiteTarget : public Target {
             }
         }
     }
-    void syncCPU() override {
+    void submitWorkAndSyncCPU() override {
         if (context && recorder) {
             // TODO: have a way to sync work with out submitting a Recording which is currently
             // required. Probably need to get to the point where the backend command buffers are
@@ -348,11 +359,10 @@ struct GraphiteTarget : public Target {
         return true;
     }
     bool init(SkImageInfo info, Benchmark* bench) override {
-        GrContextOptions options = grContextOpts;
-        bench->modifyGrContextOptions(&options);
-        // TODO: We should merge Ganesh and Graphite context options and then actually use the
-        // context options when we make the factory here.
-        this->factory = std::make_unique<ContextFactory>();
+        skiatest::graphite::TestOptions testOptions = gTestOptions;
+        bench->modifyGraphiteContextOptions(&testOptions.fContextOptions);
+
+        this->factory = std::make_unique<ContextFactory>(testOptions);
 
         skiatest::graphite::ContextInfo ctxInfo =
                 this->factory->getContextInfo(this->config.ctxType);
@@ -536,7 +546,7 @@ static int setup_gpu_bench(Target* target, Benchmark* bench, int maxGpuFrameLag)
         loops = clamp_loops(loops);
 
         // Make sure we're not still timing our calibration.
-        target->syncCPU();
+        target->submitWorkAndSyncCPU();
     } else {
         loops = detect_forever_loops(loops);
     }
@@ -607,7 +617,7 @@ static std::optional<Config> create_config(const SkCommandLineConfig* config) {
 
         using ContextFactory = skiatest::graphite::ContextFactory;
 
-        ContextFactory factory(gpuConfig->asConfigGraphite()->getOptions());
+        ContextFactory factory(gTestOptions);
         skiatest::graphite::ContextInfo ctxInfo = factory.getContextInfo(graphiteCtxType);
         skgpu::graphite::Context* ctx = ctxInfo.fContext;
         if (ctx) {
@@ -869,8 +879,10 @@ public:
 
 #if defined(SK_ENABLE_SVG)
         SkMemoryStream stream(std::move(data));
-        sk_sp<SkSVGDOM> svgDom =
-                SkSVGDOM::Builder().setFontManager(ToolUtils::TestFontMgr()).make(stream);
+        sk_sp<SkSVGDOM> svgDom = SkSVGDOM::Builder()
+                                         .setFontManager(ToolUtils::TestFontMgr())
+                                         .setTextShapingFactory(SkShapers::BestAvailable())
+                                         .make(stream);
         if (!svgDom) {
             SkDebugf("Could not parse %s.\n", path);
             return nullptr;
@@ -1359,6 +1371,10 @@ int main(int argc, char** argv) {
     SkTaskGroup::Enabler enabled(FLAGS_threads);
 
     CommonFlags::SetCtxOptions(&grContextOpts);
+
+#if defined(SK_GRAPHITE)
+    CommonFlags::SetTestOptions(&gTestOptions);
+#endif
 
     NanobenchShaderErrorHandler errorHandler;
     grContextOpts.fShaderErrorHandler = &errorHandler;

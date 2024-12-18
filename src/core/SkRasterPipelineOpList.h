@@ -11,7 +11,7 @@
 // `SK_RASTER_PIPELINE_OPS_LOWP` defines ops that have parallel lowp and highp implementations.
 #define SK_RASTER_PIPELINE_OPS_LOWP(M)                             \
     M(move_src_dst) M(move_dst_src) M(swap_src_dst)                \
-    M(clamp_01) M(clamp_gamut)                                     \
+    M(clamp_01) M(clamp_a_01) M(clamp_gamut)                       \
     M(premul) M(premul_dst)                                        \
     M(force_opaque) M(force_opaque_dst)                            \
     M(set_rgb) M(swap_rb) M(swap_rb_dst)                           \
@@ -52,7 +52,12 @@
     M(emboss)                                                      \
     M(swizzle)
 
-// `SK_RASTER_PIPELINE_OPS_SKSL` defines ops used by SkSL.
+/**
+ * `SK_RASTER_PIPELINE_OPS_SKSL` defines ops used by SkSL.
+ *
+ * Design docs for SkSL in Raster Pipeline: go/sksl-rp
+ * https://docs.google.com/document/d/1GCQeAGVGHubOCbmULVdXUkNiXdw9J4umai_M5X3JGS4/edit?usp=sharing
+ */
 #define SK_RASTER_PIPELINE_OPS_SKSL(M)                                                          \
     M(init_lane_masks) M(store_device_xy01) M(exchange_src)                                     \
     M(load_condition_mask)  M(store_condition_mask)                                             \
@@ -166,6 +171,8 @@
     M(load_1010102_xr) M(load_1010102_xr_dst) M(store_1010102_xr)              \
     M(gather_1010102_xr)                                                       \
     M(load_10x6) M(load_10x6_dst) M(store_10x6) M(gather_10x6)                 \
+    M(gather_10101010_xr) M(load_10101010_xr) M(load_10101010_xr_dst)          \
+    M(store_10101010_xr)                                                       \
     M(store_src_rg) M(load_src_rg)                                             \
     M(byte_tables)                                                             \
     M(colorburn) M(colordodge) M(softlight)                                    \

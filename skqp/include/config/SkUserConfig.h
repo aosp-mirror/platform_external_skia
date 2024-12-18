@@ -3,12 +3,8 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
-#ifndef GRAPHITE_TEST_UTILS
-#define GRAPHITE_TEST_UTILS 1
-#endif
-
-#ifndef GR_TEST_UTILS
-#define GR_TEST_UTILS 1
+#ifndef GPU_TEST_UTILS
+#define GPU_TEST_UTILS 1
 #endif
 
 #ifndef SKCMS_DISABLE_HSW
@@ -17,10 +13,6 @@
 
 #ifndef SKCMS_DISABLE_SKX
 #define SKCMS_DISABLE_SKX
-#endif
-
-#ifndef SKSL_ENABLE_TRACING
-#define SKSL_ENABLE_TRACING
 #endif
 
 #ifndef SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
@@ -57,10 +49,6 @@
 
 #ifndef SK_CODEC_DECODES_WEBP
 #define SK_CODEC_DECODES_WEBP
-#endif
-
-#ifndef SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
-#define SK_DISABLE_LEGACY_VULKAN_MUTABLE_TEXTURE_STATE
 #endif
 
 #ifndef SK_DISABLE_TRACING

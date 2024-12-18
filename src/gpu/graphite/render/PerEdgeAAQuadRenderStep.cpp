@@ -145,7 +145,9 @@ static void write_index_buffer(VertexWriter writer) {
         kTL+3,kTR+3,kBL+3,kBR+3
     };
 
-    writer << kIndices;
+    if (writer) {
+        writer << kIndices;
+    } // otherwise static buffer creation failed, so do nothing; Context initialization will fail.
 }
 
 static void write_vertex_buffer(VertexWriter writer) {
@@ -165,16 +167,19 @@ static void write_vertex_buffer(VertexWriter writer) {
         { {0.0f, 0.0f} },
     };
 
-    writer << kCornerTemplate  // TL
-           << kCornerTemplate  // TR
-           << kCornerTemplate  // BR
-           << kCornerTemplate; // BL
+    if (writer) {
+        writer << kCornerTemplate  // TL
+               << kCornerTemplate  // TR
+               << kCornerTemplate  // BR
+               << kCornerTemplate; // BL
+    } // otherwise static buffer creation failed, so do nothing; Context initialization will fail.
 }
 
 PerEdgeAAQuadRenderStep::PerEdgeAAQuadRenderStep(StaticBufferManager* bufferManager)
         : RenderStep("PerEdgeAAQuadRenderStep",
                      "",
-                     Flags::kPerformsShading | Flags::kEmitsCoverage | Flags::kOutsetBoundsForAA,
+                     Flags::kPerformsShading | Flags::kEmitsCoverage | Flags::kOutsetBoundsForAA |
+                     Flags::kUseNonAAInnerFill,
                      /*uniforms=*/{},
                      PrimitiveType::kTriangleStrip,
                      kDirectDepthGreaterPass,

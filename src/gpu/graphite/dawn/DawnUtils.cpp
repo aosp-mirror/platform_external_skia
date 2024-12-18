@@ -33,6 +33,7 @@ size_t DawnFormatBytesPerBlock(wgpu::TextureFormat format) {
         // Depth24PlusStencil8 can either be a 24 bit value or Depth32Float value. There is also
         // currently no way to query this in WebGPU so we just use the highest values here.
         case wgpu::TextureFormat::Stencil8:              return 4; // could be backed by d24s8
+        case wgpu::TextureFormat::Depth16Unorm:          return 2;
         case wgpu::TextureFormat::Depth32Float:          return 4;
         case wgpu::TextureFormat::Depth32FloatStencil8:  return 5;
         case wgpu::TextureFormat::Depth24PlusStencil8:   return 5; // could be backed by d32s8
@@ -40,9 +41,22 @@ size_t DawnFormatBytesPerBlock(wgpu::TextureFormat format) {
 #if !defined(__EMSCRIPTEN__)
         case wgpu::TextureFormat::R16Unorm:              return 2;
         case wgpu::TextureFormat::RG16Unorm:             return 4;
+        // Note: We don't actually know the size of external formats, so this
+        // is an arbitrary value. We will see external formats only in wrapped
+        // SkImages, so this won't impact Skia's internal budgeting.
+        case wgpu::TextureFormat::External:
+            return 4;
 #endif
         default:
             SkUNREACHABLE;
+    }
+}
+
+SkTextureCompressionType DawnFormatToCompressionType(wgpu::TextureFormat format) {
+    switch (format) {
+        case wgpu::TextureFormat::ETC2RGB8Unorm: return SkTextureCompressionType::kETC2_RGB8_UNORM;
+        case wgpu::TextureFormat::BC1RGBAUnorm:  return SkTextureCompressionType::kBC1_RGBA8_UNORM;
+        default:                                 return SkTextureCompressionType::kNone;
     }
 }
 
@@ -68,4 +82,3 @@ uint32_t DawnFormatChannels(wgpu::TextureFormat format) {
 }
 
 } // namespace skgpu::graphite
-

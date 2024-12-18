@@ -7,6 +7,7 @@
 
 #include "src/gpu/ganesh/mock/GrMockCaps.h"
 
+#include "include/private/base/SkDebug.h"
 #include "src/base/SkMathPriv.h"
 #include "src/gpu/ganesh/GrProgramDesc.h"
 #include "src/gpu/ganesh/TestFormatColorTypeCombination.h"
@@ -43,7 +44,7 @@ uint64_t GrMockCaps::computeFormatKey(const GrBackendFormat& format) const {
     return (uint64_t)ct;
 }
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
 std::vector<GrTest::TestFormatColorTypeCombination> GrMockCaps::getTestingCombinations() const {
     // TODO: need to add compressed formats to this list
     std::vector<GrTest::TestFormatColorTypeCombination> combos = {
@@ -76,6 +77,8 @@ std::vector<GrTest::TestFormatColorTypeCombination> GrMockCaps::getTestingCombin
         { GrColorType::kRGBA_F16,       GrBackendFormat::MakeMock(GrColorType::kRGBA_F16,
                                                                   SkTextureCompressionType::kNone)},
         { GrColorType::kRGBA_F16_Clamped,GrBackendFormat::MakeMock(GrColorType::kRGBA_F16_Clamped,
+                                                                  SkTextureCompressionType::kNone)},
+        { GrColorType::kRGB_F16F16F16x,  GrBackendFormat::MakeMock(GrColorType::kRGB_F16F16F16x,
                                                                   SkTextureCompressionType::kNone)},
         { GrColorType::kAlpha_16,       GrBackendFormat::MakeMock(GrColorType::kAlpha_16,
                                                                   SkTextureCompressionType::kNone)},

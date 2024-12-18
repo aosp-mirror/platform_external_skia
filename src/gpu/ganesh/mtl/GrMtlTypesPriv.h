@@ -8,8 +8,8 @@
 #ifndef GrMtlTypesPriv_DEFINED
 #define GrMtlTypesPriv_DEFINED
 
-#include "include/gpu/GrTypes.h"
-#include "include/gpu/mtl/GrMtlTypes.h"
+#include "include/gpu/ganesh/GrTypes.h"
+#include "include/gpu/ganesh/mtl/GrMtlTypes.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 

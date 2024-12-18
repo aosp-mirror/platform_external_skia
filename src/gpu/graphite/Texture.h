@@ -35,9 +35,7 @@ public:
 
     const char* getResourceType() const override { return "Texture"; }
 
-#if defined(GRAPHITE_TEST_UTILS)
     const Texture* asTexture() const override { return this; }
-#endif
 
 protected:
     Texture(const SharedContext*,
@@ -51,6 +49,9 @@ protected:
 
     void invokeReleaseProc() override;
 
+    void onDumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump,
+                                const char* dumpName) const override;
+
 private:
     SkISize fDimensions;
     TextureInfo fInfo;
@@ -58,6 +59,6 @@ private:
     sk_sp<RefCntedCallback> fReleaseCallback;
 };
 
-} // namepsace skgpu::graphite
+} // namespace skgpu::graphite
 
 #endif // skgpu_graphite_Texture_DEFINED

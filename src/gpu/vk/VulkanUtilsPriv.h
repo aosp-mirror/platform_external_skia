@@ -8,19 +8,22 @@
 #ifndef skgpu_VulkanUtilsPriv_DEFINED
 #define skgpu_VulkanUtilsPriv_DEFINED
 
-#include <cstdint>
-#include <string>
-
-#include "include/gpu/vk/VulkanTypes.h"
-#include "src/gpu/vk/VulkanInterface.h"
-
 #include "include/core/SkColor.h"
-#include "src/gpu/PipelineUtils.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTextureCompressionType.h"
+#include "include/gpu/vk/VulkanTypes.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/gpu/vk/SkiaVulkan.h"
+#include "src/gpu/SkSLToBackend.h"
 #include "src/sksl/codegen/SkSLSPIRVCodeGenerator.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
 #include <android/hardware_buffer.h>
 #endif
+
+#include <cstdint>
+#include <string>
+#include <cstddef>
 
 namespace SkSL {
 
@@ -34,6 +37,9 @@ struct ShaderCaps;
 namespace skgpu {
 
 class ShaderErrorHandler;
+struct VulkanInterface;
+struct VulkanBackendContext;
+class VulkanExtensions;
 
 inline bool SkSLToSPIRV(const SkSL::ShaderCaps* caps,
                         const std::string& sksl,
@@ -70,6 +76,8 @@ static constexpr uint32_t VkFormatChannels(VkFormat vkFormat) {
         case VK_FORMAT_R16G16B16A16_UNORM:       return kRGBA_SkColorChannelFlags;
         case VK_FORMAT_R16G16_SFLOAT:            return kRG_SkColorChannelFlags;
         case VK_FORMAT_S8_UINT:                  return 0;
+        case VK_FORMAT_D16_UNORM:                return 0;
+        case VK_FORMAT_D32_SFLOAT:               return 0;
         case VK_FORMAT_D24_UNORM_S8_UINT:        return 0;
         case VK_FORMAT_D32_SFLOAT_S8_UINT:       return 0;
         default:                                 return 0;
@@ -106,10 +114,21 @@ static constexpr size_t VkFormatBytesPerBlock(VkFormat vkFormat) {
         case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:  return 3;
         case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16: return 6;
         case VK_FORMAT_S8_UINT:                   return 1;
+        case VK_FORMAT_D16_UNORM:                 return 2;
+        case VK_FORMAT_D32_SFLOAT:                return 4;
         case VK_FORMAT_D24_UNORM_S8_UINT:         return 4;
         case VK_FORMAT_D32_SFLOAT_S8_UINT:        return 8;
 
-        default:                                 return 0;
+        default:                                  return 0;
+    }
+}
+
+static constexpr SkTextureCompressionType VkFormatToCompressionType(VkFormat vkFormat) {
+    switch (vkFormat) {
+        case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK: return SkTextureCompressionType::kETC2_RGB8_UNORM;
+        case VK_FORMAT_BC1_RGB_UNORM_BLOCK:     return SkTextureCompressionType::kBC1_RGB8_UNORM;
+        case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:    return SkTextureCompressionType::kBC1_RGBA8_UNORM;
+        default:                                return SkTextureCompressionType::kNone;
     }
 }
 
@@ -126,6 +145,8 @@ static constexpr int VkFormatIsStencil(VkFormat format) {
 
 static constexpr int VkFormatIsDepth(VkFormat format) {
     switch (format) {
+        case VK_FORMAT_D16_UNORM:
+        case VK_FORMAT_D32_SFLOAT:
         case VK_FORMAT_D24_UNORM_S8_UINT:
         case VK_FORMAT_D32_SFLOAT_S8_UINT:
             return true;
@@ -247,6 +268,8 @@ static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
         case VK_FORMAT_R16G16B16A16_UNORM:       return "R16G16B16A16_UNORM";
         case VK_FORMAT_R16G16_SFLOAT:            return "R16G16_SFLOAT";
         case VK_FORMAT_S8_UINT:                  return "S8_UINT";
+        case VK_FORMAT_D16_UNORM:                return "D16_UNORM";
+        case VK_FORMAT_D32_SFLOAT:               return "D32_SFLOAT";
         case VK_FORMAT_D24_UNORM_S8_UINT:        return "D24_UNORM_S8_UINT";
         case VK_FORMAT_D32_SFLOAT_S8_UINT:       return "D32_SFLOAT_S8_UINT";
 
@@ -289,6 +312,11 @@ void InvokeDeviceLostCallback(const skgpu::VulkanInterface* vulkanInterface,
                               skgpu::VulkanDeviceLostContext faultContext,
                               skgpu::VulkanDeviceLostProc faultProc,
                               bool supportsDeviceFaultInfoExtension);
+
+sk_sp<skgpu::VulkanInterface> MakeInterface(const skgpu::VulkanBackendContext&,
+                                            const skgpu::VulkanExtensions* extOverride,
+                                            uint32_t* physDevVersionOut,
+                                            uint32_t* instanceVersionOut);
 
 }  // namespace skgpu
 

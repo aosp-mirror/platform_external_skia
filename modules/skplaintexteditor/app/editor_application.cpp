@@ -15,8 +15,6 @@
 
 #include "modules/skplaintexteditor/include/editor.h"
 
-#include "third_party/icu/SkLoadICU.h"
-
 #if defined(SK_FONTMGR_FONTCONFIG_AVAILABLE)
 #include "include/ports/SkFontMgr_fontconfig.h"
 #endif
@@ -447,10 +445,7 @@ struct EditorApplication : public sk_app::Application {
 }  // namespace
 
 sk_app::Application* sk_app::Application::Create(int argc, char** argv, void* dat) {
-    if (!SkLoadICU()) {
-        SK_ABORT("SkLoadICU failed.");
-    }
-    std::unique_ptr<sk_app::Window> win(sk_app::Window::CreateNativeWindow(dat));
+    std::unique_ptr<sk_app::Window> win(sk_app::Windows::CreateNativeWindow(dat));
     if (!win) {
         SK_ABORT("CreateNativeWindow failed.");
     }
