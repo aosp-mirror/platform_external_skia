@@ -8,10 +8,11 @@
 #include "src/gpu/graphite/mtl/MtlTexture.h"
 
 #include "include/gpu/MutableTextureState.h"
+#include "include/gpu/graphite/TextureInfo.h"
 #include "include/gpu/graphite/mtl/MtlGraphiteTypes.h"
-#include "include/private/gpu/graphite/MtlGraphiteTypesPriv.h"
 #include "src/core/SkMipmap.h"
 #include "src/gpu/graphite/mtl/MtlCaps.h"
+#include "src/gpu/graphite/mtl/MtlGraphiteTypesPriv.h"
 #include "src/gpu/graphite/mtl/MtlSharedContext.h"
 #include "src/gpu/mtl/MtlUtilsPriv.h"
 
@@ -26,7 +27,7 @@ sk_cfp<id<MTLTexture>> MtlTexture::MakeMtlTexture(const MtlSharedContext* shared
         return nullptr;
     }
 
-    const MtlTextureSpec& mtlSpec = info.mtlTextureSpec();
+    const MtlTextureSpec mtlSpec = TextureInfos::GetMtlTextureSpec(info);
     SkASSERT(!mtlSpec.fFramebufferOnly);
 
     if (mtlSpec.fUsage & MTLTextureUsageShaderRead && !caps->isTexturable(info)) {
@@ -34,7 +35,7 @@ sk_cfp<id<MTLTexture>> MtlTexture::MakeMtlTexture(const MtlSharedContext* shared
     }
 
     if (mtlSpec.fUsage & MTLTextureUsageRenderTarget &&
-        !(caps->isRenderable(info) || MtlFormatIsDepthOrStencil((MTLPixelFormat)mtlSpec.fFormat))) {
+        !(caps->isRenderable(info) || MtlFormatIsDepthOrStencil(mtlSpec.fFormat))) {
         return nullptr;
     }
 
@@ -49,7 +50,7 @@ sk_cfp<id<MTLTexture>> MtlTexture::MakeMtlTexture(const MtlSharedContext* shared
 
     sk_cfp<MTLTextureDescriptor*> desc([[MTLTextureDescriptor alloc] init]);
     (*desc).textureType = (info.numSamples() > 1) ? MTLTextureType2DMultisample : MTLTextureType2D;
-    (*desc).pixelFormat = (MTLPixelFormat)mtlSpec.fFormat;
+    (*desc).pixelFormat = mtlSpec.fFormat;
     (*desc).width = dimensions.width();
     (*desc).height = dimensions.height();
     (*desc).depth = 1;
@@ -57,7 +58,7 @@ sk_cfp<id<MTLTexture>> MtlTexture::MakeMtlTexture(const MtlSharedContext* shared
     (*desc).sampleCount = info.numSamples();
     (*desc).arrayLength = 1;
     (*desc).usage = mtlSpec.fUsage;
-    (*desc).storageMode = (MTLStorageMode)mtlSpec.fStorageMode;
+    (*desc).storageMode = mtlSpec.fStorageMode;
 
     sk_cfp<id<MTLTexture>> texture([sharedContext->device() newTextureWithDescriptor:desc.get()]);
     return texture;

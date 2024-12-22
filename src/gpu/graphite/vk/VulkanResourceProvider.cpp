@@ -24,6 +24,7 @@
 #include "src/gpu/graphite/vk/VulkanDescriptorSet.h"
 #include "src/gpu/graphite/vk/VulkanFramebuffer.h"
 #include "src/gpu/graphite/vk/VulkanGraphicsPipeline.h"
+#include "src/gpu/graphite/vk/VulkanGraphiteTypesPriv.h"
 #include "src/gpu/graphite/vk/VulkanRenderPass.h"
 #include "src/gpu/graphite/vk/VulkanSampler.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
@@ -85,9 +86,9 @@ const VulkanSharedContext* VulkanResourceProvider::vulkanSharedContext() const {
 
 sk_sp<Texture> VulkanResourceProvider::onCreateWrappedTexture(const BackendTexture& texture) {
     sk_sp<VulkanYcbcrConversion> ycbcrConversion;
-    if (texture.info().vulkanTextureSpec().fYcbcrConversionInfo.isValid()) {
+    if (TextureInfos::GetVulkanYcbcrConversionInfo(texture.info()).isValid()) {
         ycbcrConversion = this->findOrCreateCompatibleYcbcrConversion(
-                texture.info().vulkanTextureSpec().fYcbcrConversionInfo);
+                TextureInfos::GetVulkanYcbcrConversionInfo(texture.info()));
         if (!ycbcrConversion) {
             return nullptr;
         }
@@ -96,9 +97,9 @@ sk_sp<Texture> VulkanResourceProvider::onCreateWrappedTexture(const BackendTextu
     return VulkanTexture::MakeWrapped(this->vulkanSharedContext(),
                                       texture.dimensions(),
                                       texture.info(),
-                                      texture.getMutableState(),
-                                      texture.getVkImage(),
-                                      /*alloc=*/{}  /*Skia does not own wrapped texture memory*/,
+                                      BackendTextures::GetMutableState(texture),
+                                      BackendTextures::GetVkImage(texture),
+                                      /*alloc=*/{} /*Skia does not own wrapped texture memory*/,
                                       std::move(ycbcrConversion));
 }
 
@@ -114,14 +115,10 @@ sk_sp<GraphicsPipeline> VulkanResourceProvider::createGraphicsPipeline(
         const RuntimeEffectDictionary* runtimeDict,
         const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc) {
-    auto compatibleRenderPass =
-            this->findOrCreateRenderPass(renderPassDesc, /*compatibleOnly=*/true);
-    return VulkanGraphicsPipeline::Make(this->vulkanSharedContext(),
+    return VulkanGraphicsPipeline::Make(this,
                                         runtimeDict,
                                         pipelineDesc,
-                                        renderPassDesc,
-                                        compatibleRenderPass,
-                                        this->pipelineCache());
+                                        renderPassDesc);
 }
 
 sk_sp<ComputePipeline> VulkanResourceProvider::createComputePipeline(const ComputePipelineDesc&) {
@@ -132,9 +129,9 @@ sk_sp<Texture> VulkanResourceProvider::createTexture(SkISize size,
                                                      const TextureInfo& info,
                                                      skgpu::Budgeted budgeted) {
     sk_sp<VulkanYcbcrConversion> ycbcrConversion;
-    if (info.vulkanTextureSpec().fYcbcrConversionInfo.isValid()) {
+    if (TextureInfos::GetVulkanYcbcrConversionInfo(info).isValid()) {
         ycbcrConversion = this->findOrCreateCompatibleYcbcrConversion(
-                info.vulkanTextureSpec().fYcbcrConversionInfo);
+                TextureInfos::GetVulkanYcbcrConversionInfo(info));
         if (!ycbcrConversion) {
             return nullptr;
         }
@@ -178,16 +175,14 @@ sk_sp<Sampler> VulkanResourceProvider::createSampler(const SamplerDesc& samplerD
     }
 
     return VulkanSampler::Make(this->vulkanSharedContext(),
-                               samplerDesc.samplingOptions(),
-                               samplerDesc.tileModeX(),
-                               samplerDesc.tileModeY(),
+                               samplerDesc,
                                std::move(ycbcrConversion));
 }
 
 BackendTexture VulkanResourceProvider::onCreateBackendTexture(SkISize dimensions,
                                                               const TextureInfo& info) {
     VulkanTextureInfo vkTexInfo;
-    if (!info.getVulkanTextureInfo(&vkTexInfo)) {
+    if (!TextureInfos::GetVulkanTextureInfo(info, &vkTexInfo)) {
         return {};
     }
     VulkanTexture::CreatedImageInfo createdTextureInfo;
@@ -195,32 +190,46 @@ BackendTexture VulkanResourceProvider::onCreateBackendTexture(SkISize dimensions
                                     &createdTextureInfo)) {
         return {};
     }
-    return {dimensions,
+    return BackendTextures::MakeVulkan(
+            dimensions,
             vkTexInfo,
             skgpu::MutableTextureStates::GetVkImageLayout(createdTextureInfo.fMutableState.get()),
-            skgpu::MutableTextureStates::GetVkQueueFamilyIndex(createdTextureInfo.fMutableState.get()),
+            skgpu::MutableTextureStates::GetVkQueueFamilyIndex(
+                    createdTextureInfo.fMutableState.get()),
             createdTextureInfo.fImage,
-            createdTextureInfo.fMemoryAlloc};
+            createdTextureInfo.fMemoryAlloc);
 }
 
 namespace {
 GraphiteResourceKey build_desc_set_key(const SkSpan<DescriptorData>& requestedDescriptors) {
     static const ResourceType kType = GraphiteResourceKey::GenerateResourceType();
 
-    const int num32DataCnt = requestedDescriptors.size() + 1;
+    // The number of int32s needed for a key can depend on whether we use immutable samplers or not.
+    // So, accumulte key data while passing through to check for that quantity and simply copy
+    // into builder afterwards.
+    skia_private::TArray<uint32_t> keyData (requestedDescriptors.size() + 1);
+
+    keyData.push_back(requestedDescriptors.size());
+    for (const DescriptorData& desc : requestedDescriptors) {
+        keyData.push_back(static_cast<uint8_t>(desc.fType) << 24 |
+                          desc.fBindingIndex << 16 |
+                          static_cast<uint16_t>(desc.fCount));
+        if (desc.fImmutableSampler) {
+            const VulkanSampler* sampler =
+                    static_cast<const VulkanSampler*>(desc.fImmutableSampler);
+            SkASSERT(sampler);
+            keyData.push_back_n(sampler->samplerDesc().asSpan().size(),
+                                sampler->samplerDesc().asSpan().data());
+        }
+    }
 
     GraphiteResourceKey key;
-    GraphiteResourceKey::Builder builder(&key, kType, num32DataCnt, Shareable::kNo);
+    GraphiteResourceKey::Builder builder(&key, kType, keyData.size(), Shareable::kNo);
 
-    builder[0] = requestedDescriptors.size();
-    for (int i = 1; i < num32DataCnt; i++) {
-        const auto& currDesc = requestedDescriptors[i - 1];
-        // TODO: Consider making the DescriptorData struct itself just use uint16_t.
-        uint16_t smallerCount = static_cast<uint16_t>(currDesc.fCount);
-        builder[i] = static_cast<uint8_t>(currDesc.fType) << 24 |
-                     currDesc.fBindingIndex << 16 |
-                     smallerCount;
+    for (int i = 0; i < keyData.size(); i++) {
+        builder[i] = keyData[i];
     }
+
     builder.finish();
     return key;
 }
@@ -295,19 +304,18 @@ sk_sp<VulkanDescriptorSet> VulkanResourceProvider::findOrCreateDescriptorSet(
 }
 
 namespace {
-UniqueKey make_ubo_bind_group_key(SkSpan<DescriptorData> requestedDescriptors,
-                                  SkSpan<BindUniformBufferInfo> bindUniformBufferInfo) {
-    static const UniqueKey::Domain kBufferBindGroupDomain = UniqueKey::GenerateDomain();
 
-    UniqueKey uniqueKey;
+VulkanResourceProvider::UniformBindGroupKey make_ubo_bind_group_key(
+        SkSpan<DescriptorData> requestedDescriptors,
+        SkSpan<BindBufferInfo> bindUniformBufferInfo) {
+    VulkanResourceProvider::UniformBindGroupKey uniqueKey;
     {
         // Each entry in the bind group needs 2 uint32_t in the key:
         //  - buffer's unique ID: 32 bits.
         //  - buffer's binding size: 32 bits.
-        // We need total of 3 entries in the uniform buffer bind group.
+        // We need total of 4 entries in the uniform buffer bind group.
         // Unused entries will be assigned zero values.
-        UniqueKey::Builder builder(
-                &uniqueKey, kBufferBindGroupDomain, 6, "GraphicsPipelineBufferDescSet");
+        VulkanResourceProvider::UniformBindGroupKey::Builder builder(&uniqueKey);
 
         for (uint32_t i = 0; i < VulkanGraphicsPipeline::kNumUniformBuffers; ++i) {
             builder[2 * i] = 0;
@@ -322,9 +330,8 @@ UniqueKey make_ubo_bind_group_key(SkSpan<DescriptorData> requestedDescriptors,
             const auto& bindInfo = bindUniformBufferInfo[descriptorBindingIndex];
             const VulkanBuffer* boundBuffer = static_cast<const VulkanBuffer*>(bindInfo.fBuffer);
             SkASSERT(boundBuffer);
-            const uint32_t bindingSize = bindInfo.fBindingSize;
             builder[2 * descriptorBindingIndex] = boundBuffer->uniqueID().asUInt();
-            builder[2 * descriptorBindingIndex + 1] = bindingSize;
+            builder[2 * descriptorBindingIndex + 1] = bindInfo.fSize;
         }
 
         builder.finish();
@@ -334,7 +341,7 @@ UniqueKey make_ubo_bind_group_key(SkSpan<DescriptorData> requestedDescriptors,
 }
 
 void update_uniform_descriptor_set(SkSpan<DescriptorData> requestedDescriptors,
-                                   SkSpan<BindUniformBufferInfo> bindUniformBufferInfo,
+                                   SkSpan<BindBufferInfo> bindUniformBufferInfo,
                                    VkDescriptorSet descSet,
                                    const VulkanSharedContext* sharedContext) {
     for (size_t i = 0; i < requestedDescriptors.size(); i++) {
@@ -343,16 +350,18 @@ void update_uniform_descriptor_set(SkSpan<DescriptorData> requestedDescriptors,
         const auto& bindInfo = bindUniformBufferInfo[descriptorBindingIndex];
         if (bindInfo.fBuffer) {
 #if defined(SK_DEBUG)
-            static uint64_t maxUniformBufferRange =
-                    sharedContext->vulkanCaps().maxUniformBufferRange();
-            SkASSERT(bindInfo.fBindingSize <= maxUniformBufferRange);
+            static uint64_t maxBufferRange =
+                sharedContext->caps()->storageBufferSupport()
+                    ? sharedContext->vulkanCaps().maxStorageBufferRange()
+                    : sharedContext->vulkanCaps().maxUniformBufferRange();
+            SkASSERT(bindInfo.fSize <= maxBufferRange);
 #endif
             VkDescriptorBufferInfo bufferInfo;
             memset(&bufferInfo, 0, sizeof(VkDescriptorBufferInfo));
             auto vulkanBuffer = static_cast<const VulkanBuffer*>(bindInfo.fBuffer);
             bufferInfo.buffer = vulkanBuffer->vkBuffer();
             bufferInfo.offset = 0; // We always use dynamic ubos so we set the base offset to 0
-            bufferInfo.range = bindInfo.fBindingSize;
+            bufferInfo.range = bindInfo.fSize;
 
             VkWriteDescriptorSet writeInfo;
             memset(&writeInfo, 0, sizeof(VkWriteDescriptorSet));
@@ -386,7 +395,7 @@ void update_uniform_descriptor_set(SkSpan<DescriptorData> requestedDescriptors,
 
 sk_sp<VulkanDescriptorSet> VulkanResourceProvider::findOrCreateUniformBuffersDescriptorSet(
         SkSpan<DescriptorData> requestedDescriptors,
-        SkSpan<BindUniformBufferInfo> bindUniformBufferInfo) {
+        SkSpan<BindBufferInfo> bindUniformBufferInfo) {
     SkASSERT(requestedDescriptors.size() <= VulkanGraphicsPipeline::kNumUniformBuffers);
 
     auto key = make_ubo_bind_group_key(requestedDescriptors, bindUniformBufferInfo);
@@ -487,24 +496,23 @@ void VulkanResourceProvider::onDeleteBackendTexture(const BackendTexture& textur
     SkASSERT(texture.backend() == BackendApi::kVulkan);
 
     VULKAN_CALL(this->vulkanSharedContext()->interface(),
-                DestroyImage(this->vulkanSharedContext()->device(), texture.getVkImage(),
+                DestroyImage(this->vulkanSharedContext()->device(),
+                             BackendTextures::GetVkImage(texture),
                              /*VkAllocationCallbacks=*/nullptr));
 
+    VulkanAlloc alloc = BackendTextures::GetMemoryAlloc(texture);
     // Free the image memory used for the BackendTexture's VkImage.
     //
     // How we do this is dependent upon on how the image was allocated (via the memory allocator or
     // with a direct call to the Vulkan driver) . If the VulkanAlloc's fBackendMemory is != 0, then
     // that means the allocator was used. Otherwise, a direct driver call was used and we should
     // free the VkDeviceMemory (fMemory).
-    if (texture.getMemoryAlloc()->fBackendMemory) {
-        skgpu::VulkanMemory::FreeImageMemory(this->vulkanSharedContext()->memoryAllocator(),
-                                             *(texture.getMemoryAlloc()));
+    if (alloc.fBackendMemory) {
+        skgpu::VulkanMemory::FreeImageMemory(this->vulkanSharedContext()->memoryAllocator(), alloc);
     } else {
-        SkASSERT(texture.getMemoryAlloc()->fMemory != VK_NULL_HANDLE);
+        SkASSERT(alloc.fMemory != VK_NULL_HANDLE);
         VULKAN_CALL(this->vulkanSharedContext()->interface(),
-                    FreeMemory(this->vulkanSharedContext()->device(),
-                               texture.getMemoryAlloc()->fMemory,
-                               nullptr));
+                    FreeMemory(this->vulkanSharedContext()->device(), alloc.fMemory, nullptr));
     }
 }
 
@@ -676,6 +684,7 @@ BackendTexture VulkanResourceProvider::onCreateBackendTexture(AHardwareBuffer* h
                         "format properties.\n");
             return {};
         }
+        vkTexInfo.fYcbcrConversionInfo = ycbcrInfo;
         externalFormat.externalFormat = hwbFormatProps.externalFormat;
     }
     const VkExternalMemoryImageCreateInfo externalMemoryImageInfo{
@@ -722,8 +731,12 @@ BackendTexture VulkanResourceProvider::onCreateBackendTexture(AHardwareBuffer* h
         return {};
     }
 
-    return { dimensions, vkTexInfo, VK_IMAGE_LAYOUT_UNDEFINED, VK_QUEUE_FAMILY_FOREIGN_EXT,
-             image, alloc};
+    return BackendTextures::MakeVulkan(dimensions,
+                                       vkTexInfo,
+                                       VK_IMAGE_LAYOUT_UNDEFINED,
+                                       VK_QUEUE_FAMILY_FOREIGN_EXT,
+                                       image,
+                                       alloc);
 }
 
 #endif // SK_BUILD_FOR_ANDROID
