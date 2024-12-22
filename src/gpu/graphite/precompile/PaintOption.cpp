@@ -9,6 +9,7 @@
 
 #include "include/core/SkBlender.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
+#include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
@@ -35,7 +36,7 @@ void PaintOption::toKey(const KeyContext& keyContext,
     }
 
     if (fClipShader.first) {
-        ClipShaderBlock::BeginBlock(keyContext, keyBuilder, gatherer);
+        ClipBlock::BeginBlock(keyContext, keyBuilder, gatherer);
             fClipShader.first->priv().addToKey(keyContext, keyBuilder, gatherer,
                                                fClipShader.second);
         keyBuilder->endBlock();
@@ -43,10 +44,7 @@ void PaintOption::toKey(const KeyContext& keyContext,
 
     // Set the hardware blend mode.
     SkASSERT(finalBlendMode);
-    BuiltInCodeSnippetID fixedFuncBlendModeID = static_cast<BuiltInCodeSnippetID>(
-            kFixedFunctionBlendModeIDOffset + static_cast<int>(*finalBlendMode));
-
-    keyBuilder->addBlock(fixedFuncBlendModeID);
+    AddFixedBlendMode(keyContext, keyBuilder, gatherer, *finalBlendMode);
 }
 
 void PaintOption::addPaintColorToKey(const KeyContext& keyContext,
@@ -74,7 +72,7 @@ void PaintOption::handlePrimitiveColor(const KeyContext& keyContext,
                   this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
               },
               /* addDstToKey= */ [&]() -> void {
-                  keyBuilder->addBlock(BuiltInCodeSnippetID::kPrimitiveColor);
+                  PrimitiveColorBlock::AddBlock(keyContext, keyBuilder, gatherer);
               });
     } else {
         this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
@@ -95,7 +93,7 @@ void PaintOption::handlePaintAlpha(const KeyContext& keyContext,
     if (!fOpaquePaintColor) {
         Blend(keyContext, keyBuilder, gatherer,
               /* addBlendToKey= */ [&] () -> void {
-                  AddKnownModeBlend(keyContext, keyBuilder, gatherer, SkBlendMode::kSrcIn);
+                  AddFixedBlendMode(keyContext, keyBuilder, gatherer, SkBlendMode::kSrcIn);
               },
               /* addSrcToKey= */ [&]() -> void {
                   this->handlePrimitiveColor(keyContext, keyBuilder, gatherer);
@@ -176,7 +174,7 @@ void PaintOption::handleDstRead(const KeyContext& keyContext,
                         fFinalBlender.first->priv().addToKey(keyContext, builder, gatherer,
                                                              fFinalBlender.second);
                     } else {
-                        AddKnownModeBlend(keyContext, builder, gatherer, SkBlendMode::kSrcOver);
+                        AddFixedBlendMode(keyContext, builder, gatherer, SkBlendMode::kSrcOver);
                     }
                 },
                 /* addSrcToKey= */ [&]() -> void {

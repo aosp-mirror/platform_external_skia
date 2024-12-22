@@ -87,8 +87,7 @@ void AnalyticBlurRenderStep::writeUniformsAndTextures(const DrawParams& params,
     SkSamplingOptions samplingOptions = blur.shapeType() == AnalyticBlurMask::ShapeType::kRect
                                                 ? SkFilterMode::kLinear
                                                 : SkFilterMode::kNearest;
-    constexpr SkTileMode kTileModes[2] = {SkTileMode::kClamp, SkTileMode::kClamp};
-    gatherer->add(samplingOptions, kTileModes, blur.refProxy());
+    gatherer->add(blur.refProxy(), {samplingOptions, SkTileMode::kClamp});
 }
 
 }  // namespace skgpu::graphite

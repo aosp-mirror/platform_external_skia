@@ -43,7 +43,8 @@ class AndroidFlavor(default.DefaultFlavor):
     # on the list, we fail the task to avoid perf inconsistencies.
     self.cant_root = ['GalaxyS7_G930FD', 'GalaxyS9',
                       'GalaxyS20', 'MotoG4', 'NVIDIA_Shield',
-                      'P30', 'Pixel4','Pixel4XL', 'Pixel5', 'TecnoSpark3Pro', 'JioNext']
+                      'P30', 'Pixel4','Pixel4XL', 'Pixel5', 'TecnoSpark3Pro', 'JioNext',
+                      'GalaxyS24']
 
     # Maps device type -> CPU ids that should be scaled for nanobench.
     # Many devices have two (or more) different CPUs (e.g. big.LITTLE
@@ -138,7 +139,7 @@ class AndroidFlavor(default.DefaultFlavor):
     def wait_for_device(attempt):
       return self._wait_for_device(title, attempt)
 
-    with self.m.context(cwd=self.m.path.start_dir.join('skia')):
+    with self.m.context(cwd=self.m.path.start_dir.joinpath('skia')):
       with self.m.env({'ADB_VENDOR_KEYS': self.ADB_PUB_KEY}):
         return self.m.run.with_retry(self.m.step, title, attempts,
                                      cmd=[self.ADB_BINARY]+list(cmd),
@@ -183,7 +184,7 @@ class AndroidFlavor(default.DefaultFlavor):
     for i in self.cpus_to_scale.get(device, [0]):
       if device in ['Pixel6', 'Pixel7']:
         self._set_governor(i, 'powersave')
-      else:
+      elif device not in self.cant_root:
         self._set_governor(i, 'userspace')
         self._scale_cpu(i, 0.6)
 
@@ -252,7 +253,7 @@ class AndroidFlavor(default.DefaultFlavor):
 
 
   def _asan_setup_path(self):
-    return self.m.vars.workdir.join(
+    return self.m.vars.workdir.joinpath(
         'android_ndk_linux', 'toolchains', 'llvm', 'prebuilt', 'linux-x86_64',
         'lib', 'clang', '17', 'bin', 'asan_device_setup')
 
@@ -280,7 +281,7 @@ class AndroidFlavor(default.DefaultFlavor):
         self._scale_for_nanobench()
       else:
         self._scale_for_dm()
-      app_path = self.host_dirs.bin_dir.join(self.app_name)
+      app_path = self.host_dirs.bin_dir.joinpath(self.app_name)
       self._adb('push %s' % self.app_name,
                 'push', app_path, self.device_dirs.bin_dir)
 
@@ -346,13 +347,13 @@ class AndroidFlavor(default.DefaultFlavor):
 
   def step(self, name, cmd):
     sh = '%s.sh' % cmd[0]
-    self.m.run.writefile(self.m.vars.tmp_dir.join(sh),
+    self.m.run.writefile(self.m.vars.tmp_dir.joinpath(sh),
         'set -x; LD_LIBRARY_PATH=%s %s%s; echo $? >%src' % (
             self.device_dirs.bin_dir,
             self.device_dirs.bin_dir, subprocess.list2cmdline(map(str, cmd)),
             self.device_dirs.bin_dir))
     self._adb('push %s' % sh,
-              'push', self.m.vars.tmp_dir.join(sh), self.device_dirs.bin_dir)
+              'push', self.m.vars.tmp_dir.joinpath(sh), self.device_dirs.bin_dir)
 
     self._adb('clear log', 'logcat', '-c')
     script = self.module.resource('run_sh.py')

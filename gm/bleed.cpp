@@ -26,14 +26,14 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTiledImageUtils.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrContextOptions.h"
+#include "include/gpu/ganesh/GrContextOptions.h"
 #include "include/private/base/SkTDArray.h"
 #include "src/core/SkBlurMask.h"
 #include "tools/ToolUtils.h"
 
 #if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/ContextOptions.h"
-#include "include/private/gpu/graphite/ContextOptionsPriv.h"
+#include "src/gpu/graphite/ContextOptionsPriv.h"
 #endif
 
 /** Creates an image with two one-pixel wide borders around a checkerboard. The checkerboard is 2x2
