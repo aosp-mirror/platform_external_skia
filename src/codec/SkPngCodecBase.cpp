@@ -283,6 +283,13 @@ void SkPngCodecBase::applyXformRow(void* dstRow, const uint8_t* srcRow) {
 
 // Note: SkColorPalette claims to store SkPMColors, which is not necessarily the case here.
 bool SkPngCodecBase::createColorTable(const SkImageInfo& dstInfo) {
+    if (fDstInfoOfPreviousColorTableCreation.has_value() &&
+        *fDstInfoOfPreviousColorTableCreation == dstInfo) {
+        return !!fColorTable;
+    }
+    fColorTable.reset();
+    fDstInfoOfPreviousColorTableCreation = dstInfo;
+
     std::optional<SkSpan<const PaletteColorEntry>> maybePlteChunk = this->onTryGetPlteChunk();
     if (!maybePlteChunk.has_value()) {
         return false;
@@ -303,8 +310,10 @@ bool SkPngCodecBase::createColorTable(const SkImageInfo& dstInfo) {
         numColorsWithAlpha = maybeTrnsChunk->size();
     }
 
+    bool shouldApplyColorXformToColorTable = this->colorXform() && !this->xformOnDecode();
     if (alphas) {
-        bool premultiply = needs_premul(dstInfo.alphaType(), this->getEncodedInfo().alpha());
+        bool premultiply = !shouldApplyColorXformToColorTable &&
+                           needs_premul(dstInfo.alphaType(), this->getEncodedInfo().alpha());
 
         // Choose which function to use to create the color table. If the final destination's
         // colortype is unpremultiplied, the color table will store unpremultiplied colors.
@@ -339,7 +348,7 @@ bool SkPngCodecBase::createColorTable(const SkImageInfo& dstInfo) {
         }
     }
 
-    if (this->colorXform() && !this->xformOnDecode()) {
+    if (shouldApplyColorXformToColorTable) {
         this->applyColorXform(colorTable, colorTable, numColors);
     }
 
