@@ -264,11 +264,15 @@ static MTLRenderPipelineColorAttachmentDescriptor* create_color_attachment(
 
 } // anonymous namespace
 
-sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sharedContext,
-                                                     MtlResourceProvider* resourceProvider,
-                                                     const RuntimeEffectDictionary* runtimeDict,
-                                                     const GraphicsPipelineDesc& pipelineDesc,
-                                                     const RenderPassDesc& renderPassDesc) {
+sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
+        const MtlSharedContext* sharedContext,
+        MtlResourceProvider* resourceProvider,
+        const RuntimeEffectDictionary* runtimeDict,
+        const UniqueKey& pipelineKey,
+        const GraphicsPipelineDesc& pipelineDesc,
+        const RenderPassDesc& renderPassDesc,
+        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags,
+        uint32_t compilationID) {
     std::string vsMSL, fsMSL;
     SkSL::Program::Interface vsInterface, fsInterface;
 
@@ -324,11 +328,13 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sha
     sk_cfp<id<MTLDepthStencilState>> dss =
             resourceProvider->findOrCreateCompatibleDepthStencilState(step->depthStencilSettings());
 
-    PipelineInfo pipelineInfo{*shaderInfo};
+    PipelineInfo pipelineInfo{ *shaderInfo, pipelineCreationFlags,
+                               pipelineKey.hash(), compilationID };
 #if defined(GPU_TEST_UTILS)
     pipelineInfo.fNativeVertexShader = std::move(vsMSL);
     pipelineInfo.fNativeFragmentShader = std::move(fsMSL);
 #endif
+
     std::string pipelineLabel =
             GetPipelineLabel(sharedContext->shaderCodeDictionary(), renderPassDesc, step, paintID);
     return Make(sharedContext,

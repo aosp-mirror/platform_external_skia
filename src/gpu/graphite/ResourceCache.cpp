@@ -90,6 +90,9 @@ void ResourceCache::insertResource(Resource* resource) {
     // to update this check.
     SkASSERT(resource->ownership() == Ownership::kOwned);
 
+    // Make sure we have the most accurate memory size for "memoryless" resources.
+    resource->updateGpuMemorySize();
+
     // The reason to call processReturnedResources here is to get an accurate accounting of our
     // memory usage as some resources can go from unbudgeted to budgeted when they return. So we
     // want to have them all returned before adding the budget for the new resource in case we need
@@ -307,11 +310,21 @@ void ResourceCache::returnResourceToCache(Resource* resource, LastRemovedRef rem
             SkASSERT(fResourceMap.find(resource->key()));
         } else {
             SkDEBUGCODE(resource->fNonShareableInCache = true;)
+            resource->setLabel("Scratch");
             fResourceMap.insert(resource->key(), resource);
             if (resource->budgeted() == skgpu::Budgeted::kNo) {
                 resource->makeBudgeted();
                 fBudgetedBytes += resource->gpuMemorySize();
             }
+        }
+    }
+
+    if (resource->budgeted() == skgpu::Budgeted::kYes) {
+        size_t oldSize = resource->gpuMemorySize();
+        resource->updateGpuMemorySize();
+        if (oldSize != resource->gpuMemorySize()) {
+            fBudgetedBytes -= oldSize;
+            fBudgetedBytes += resource->gpuMemorySize();
         }
     }
 
@@ -556,12 +569,25 @@ void ResourceCache::setResourceTimestamp(Resource* resource, uint32_t timestamp)
 }
 
 void ResourceCache::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
+    ASSERT_SINGLE_OWNER
+
+    // There is no need to process the return queue here. Resources in the queue are still in
+    // either the purgeable queue or the nonpurgeable resources list (likely to be moved to the
+    // purgeable queue). However, the Resource's own ref counts are used to report its purgeable
+    // state to the memory dump, which is accurate without draining the return queue.
+
     for (int i = 0; i < fNonpurgeableResources.size(); ++i) {
         fNonpurgeableResources[i]->dumpMemoryStatistics(traceMemoryDump);
     }
     for (int i = 0; i < fPurgeableQueue.count(); ++i) {
         fPurgeableQueue.at(i)->dumpMemoryStatistics(traceMemoryDump);
     }
+}
+
+void ResourceCache::setMaxBudget(size_t bytes) {
+    fMaxBytes = bytes;
+    this->processReturnedResources();
+    this->purgeAsNeeded();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -725,12 +751,6 @@ bool ResourceCache::isInCache(const Resource* resource) const {
 
 int ResourceCache::numFindableResources() const {
     return fResourceMap.count();
-}
-
-void ResourceCache::setMaxBudget(size_t bytes) {
-    fMaxBytes = bytes;
-    this->processReturnedResources();
-    this->purgeAsNeeded();
 }
 
 Resource* ResourceCache::topOfPurgeableQueue() {
