@@ -473,9 +473,15 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
 #if !defined(__EMSCRIPTEN__)
     // TODO(b/344963958): SSBOs contribute to OOB shader memory access and dawn device loss on
     // Android. Once the problem is fixed SSBOs can be enabled again.
+    // TODO(dawn:388028942): In compat mode, the number of storage buffers in vertex stage could be
+    // zero on some devices. We currently use SSBO in vertex shaders so disabling it entirely in
+    // this case. There is a bug in D3D11's backend where it sets number of SSBOs in vertex shader
+    // to non-zero in compat mode. Once that bug is fixed, and a new limit is used for readonly
+    // SSBOs, we can enable this again.
     fStorageBufferSupport = info.backendType != wgpu::BackendType::OpenGL &&
                             info.backendType != wgpu::BackendType::OpenGLES &&
-                            info.backendType != wgpu::BackendType::Vulkan;
+                            info.backendType != wgpu::BackendType::Vulkan &&
+                            info.compatibilityMode == false;
 #else
     // WASM doesn't provide a way to query the backend, so can't tell if we are on a backend that
     // needs to have SSBOs disabled. Pessimistically assume we could be. Once the above conditions
@@ -1099,54 +1105,14 @@ UniqueKey DawnCaps::makeComputePipelineKey(const ComputePipelineDesc& pipelineDe
     return pipelineKey;
 }
 
-#if !defined(__EMSCRIPTEN__)
-namespace {
-using namespace ycbcrUtils;
-
-uint32_t non_format_info_as_uint32(const wgpu::YCbCrVkDescriptor& desc) {
-    static_assert(kComponentAShift + kComponentBits <= 32);
-    SkASSERT(desc.vkYCbCrModel                          < (1u << kYcbcrModelBits    ));
-    SkASSERT(desc.vkYCbCrRange                          < (1u << kYcbcrRangeBits    ));
-    SkASSERT(desc.vkXChromaOffset                       < (1u << kXChromaOffsetBits ));
-    SkASSERT(desc.vkYChromaOffset                       < (1u << kYChromaOffsetBits ));
-    SkASSERT(static_cast<uint32_t>(desc.vkChromaFilter) < (1u << kChromaFilterBits  ));
-    SkASSERT(desc.vkComponentSwizzleRed                 < (1u << kComponentBits     ));
-    SkASSERT(desc.vkComponentSwizzleGreen               < (1u << kComponentBits     ));
-    SkASSERT(desc.vkComponentSwizzleBlue                < (1u << kComponentBits     ));
-    SkASSERT(desc.vkComponentSwizzleAlpha               < (1u << kComponentBits     ));
-    SkASSERT(static_cast<uint32_t>(desc.forceExplicitReconstruction)
-             < (1u << kForceExplicitReconBits));
-
-    return (((uint32_t)(DawnDescriptorUsesExternalFormat(desc)) << kUsesExternalFormatShift) |
-            ((uint32_t)(desc.vkYCbCrModel                     ) << kYcbcrModelShift        ) |
-            ((uint32_t)(desc.vkYCbCrRange                     ) << kYcbcrRangeShift        ) |
-            ((uint32_t)(desc.vkXChromaOffset                  ) << kXChromaOffsetShift     ) |
-            ((uint32_t)(desc.vkYChromaOffset                  ) << kYChromaOffsetShift     ) |
-            ((uint32_t)(desc.vkChromaFilter                   ) << kChromaFilterShift      ) |
-            ((uint32_t)(desc.forceExplicitReconstruction      ) << kForceExplicitReconShift) |
-            ((uint32_t)(desc.vkComponentSwizzleRed            ) << kComponentRShift        ) |
-            ((uint32_t)(desc.vkComponentSwizzleGreen          ) << kComponentGShift        ) |
-            ((uint32_t)(desc.vkComponentSwizzleBlue           ) << kComponentBShift        ) |
-            ((uint32_t)(desc.vkComponentSwizzleAlpha          ) << kComponentAShift        ));
-}
-} // anonymous
-#endif
-
 ImmutableSamplerInfo DawnCaps::getImmutableSamplerInfo(const TextureProxy* proxy) const {
 #if !defined(__EMSCRIPTEN__)
     if (proxy) {
         const wgpu::YCbCrVkDescriptor& ycbcrConversionInfo =
                 TextureInfos::GetDawnTextureSpec(proxy->textureInfo()).fYcbcrVkDescriptor;
 
-        if (ycbcrUtils::DawnDescriptorIsValid(ycbcrConversionInfo)) {
-            ImmutableSamplerInfo immutableSamplerInfo;
-            // A vkFormat of 0 indicates we are using an external format rather than a known one.
-            immutableSamplerInfo.fFormat = (ycbcrConversionInfo.vkFormat == 0)
-                    ? ycbcrConversionInfo.externalFormat
-                    : ycbcrConversionInfo.vkFormat;
-            immutableSamplerInfo.fNonFormatYcbcrConversionInfo =
-                    non_format_info_as_uint32(ycbcrConversionInfo);
-            return immutableSamplerInfo;
+        if (DawnDescriptorIsValid(ycbcrConversionInfo)) {
+            return DawnDescriptorToImmutableSamplerInfo(ycbcrConversionInfo);
         }
     }
 #endif
@@ -1184,10 +1150,8 @@ void DawnCaps::buildKeyForTexture(SkISize dimensions,
     bool hasYcbcrInfo = false;
 #if !defined(__EMSCRIPTEN__)
     // If we are using ycbcr texture/sampling, more key information is needed.
-    if ((hasYcbcrInfo = ycbcrUtils::DawnDescriptorIsValid(dawnSpec.fYcbcrVkDescriptor))) {
-        num32DataCnt += ycbcrUtils::DawnDescriptorUsesExternalFormat(dawnSpec.fYcbcrVkDescriptor)
-                ? SamplerDesc::kInt32sNeededExternalFormat
-                : SamplerDesc::kInt32sNeededKnownFormat;
+    if ((hasYcbcrInfo = DawnDescriptorIsValid(dawnSpec.fYcbcrVkDescriptor))) {
+        num32DataCnt += 3; // non-format flags and 64-bit format
     }
 #endif
     GraphiteResourceKey::Builder builder(key, type, num32DataCnt, shareable);
@@ -1201,16 +1165,14 @@ void DawnCaps::buildKeyForTexture(SkISize dimensions,
 
 #if !defined(__EMSCRIPTEN__)
     if (hasYcbcrInfo) {
-        builder[4] = non_format_info_as_uint32(dawnSpec.fYcbcrVkDescriptor);
+        ImmutableSamplerInfo packedInfo =
+                DawnDescriptorToImmutableSamplerInfo(dawnSpec.fYcbcrVkDescriptor);
+        builder[4] = packedInfo.fNonFormatYcbcrConversionInfo;
         // Even though we already have formatKey appended to the texture key, we still need to add
         // fYcbcrVkDescriptor's vkFormat or externalFormat. The latter two are distinct from
         // dawnSpec's wgpu::TextureFormat.
-        if (!ycbcrUtils::DawnDescriptorUsesExternalFormat(dawnSpec.fYcbcrVkDescriptor)) {
-            builder[5] = dawnSpec.fYcbcrVkDescriptor.vkFormat;
-        } else {
-            builder[5] = (uint32_t)(dawnSpec.fYcbcrVkDescriptor.externalFormat >> 32);
-            builder[6] = (uint32_t)dawnSpec.fYcbcrVkDescriptor.externalFormat;
-        }
+        builder[5] = (uint32_t) packedInfo.fFormat;
+        builder[6] = (uint32_t) (packedInfo.fFormat >> 32);
     }
 #endif
 }
