@@ -315,11 +315,11 @@ wgpu::YCbCrVkDescriptor DawnDescriptorFromImmutableSamplerInfo(ImmutableSamplerI
     const bool usesExternalFormat =
             (nonFormatInfo >> kUsesExternalFormatShift) & kUseExternalFormatMask;
     if (usesExternalFormat) {
-        desc.vkFormat = (uint32_t) info.fFormat;
-        desc.externalFormat = 0;
-    } else {
         desc.vkFormat = 0;
         desc.externalFormat = info.fFormat;
+    } else {
+        desc.vkFormat = (uint32_t) info.fFormat;
+        desc.externalFormat = 0;
     }
 
     desc.vkYCbCrModel                = (nonFormatInfo & kYcbcrModelMask)    >> kYcbcrModelShift;
