@@ -53,10 +53,10 @@ public:
         return fPurgeableQueue.count() + fNonpurgeableResources.size();
     }
 
-    void insertResource(Resource*);
+    void insertResource(Resource*, const GraphiteResourceKey&, Budgeted, Shareable);
 
     // Find a resource that matches a key.
-    Resource* findAndRefResource(const GraphiteResourceKey& key, skgpu::Budgeted);
+    Resource* findAndRefResource(const GraphiteResourceKey& key, skgpu::Budgeted, Shareable);
 
     // This is a thread safe call. If it fails the ResourceCache is no longer valid and the
     // Resource should clean itself up if it is the last ref.
@@ -114,6 +114,11 @@ private:
     void addToNonpurgeableArray(Resource* resource);
     void removeFromNonpurgeableArray(Resource* resource);
     void removeFromPurgeableQueue(Resource* resource);
+
+    // Resources in the resource map are reusable (can be returned from findAndRef), but are not
+    // necessarily purgeable.
+    void addToResourceMap(Resource* resource);
+    void removeFromResourceMap(Resource* resource);
 
     // This will return true if any resources were actually returned to the cache
     bool processReturnedResources();

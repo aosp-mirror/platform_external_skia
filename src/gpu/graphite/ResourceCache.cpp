@@ -79,13 +79,19 @@ void ResourceCache::shutdown() {
     TRACE_EVENT_INSTANT0("skia.gpu.cache", TRACE_FUNC, TRACE_EVENT_SCOPE_THREAD);
 }
 
-void ResourceCache::insertResource(Resource* resource) {
+void ResourceCache::insertResource(Resource* resource,
+                                   const GraphiteResourceKey& key,
+                                   Budgeted budgeted,
+                                   Shareable shareable) {
     ASSERT_SINGLE_OWNER
     SkASSERT(resource);
+    SkASSERT(key.isValid());
+    SkASSERT(shareable == Shareable::kNo || budgeted == Budgeted::kYes);
+
     SkASSERT(!this->isInCache(resource));
     SkASSERT(!resource->wasDestroyed());
     SkASSERT(!resource->isPurgeable());
-    SkASSERT(resource->key().isValid());
+    SkASSERT(!resource->key().isValid());
     // All resources in the cache are owned. If we track wrapped resources in the cache we'll need
     // to update this check.
     SkASSERT(resource->ownership() == Ownership::kOwned);
@@ -103,7 +109,7 @@ void ResourceCache::insertResource(Resource* resource) {
         this->processReturnedResources();
     }
 
-    resource->registerWithCache(sk_ref_sp(this));
+    resource->registerWithCache(sk_ref_sp(this), key, budgeted, shareable);
     resource->refCache();
 
     // We must set the timestamp before adding to the array in case the timestamp wraps and we wind
@@ -115,11 +121,11 @@ void ResourceCache::insertResource(Resource* resource) {
 
     SkDEBUGCODE(fCount++;)
 
-    if (resource->key().shareable() == Shareable::kYes) {
-        fResourceMap.insert(resource->key(), resource);
+    if (resource->shareable() == Shareable::kYes) {
+        this->addToResourceMap(resource);
     }
 
-    if (resource->budgeted() == skgpu::Budgeted::kYes) {
+    if (resource->budgeted() == Budgeted::kYes) {
         fBudgetedBytes += resource->gpuMemorySize();
     }
 
@@ -127,35 +133,44 @@ void ResourceCache::insertResource(Resource* resource) {
 }
 
 Resource* ResourceCache::findAndRefResource(const GraphiteResourceKey& key,
-                                            skgpu::Budgeted budgeted) {
+                                            Budgeted budgeted,
+                                            Shareable shareable) {
     ASSERT_SINGLE_OWNER
 
     SkASSERT(key.isValid());
 
-    Resource* resource = fResourceMap.find(key);
+    auto shareablePredicate = [shareable](Resource* r) {
+        // If the resource is in fResourceMap then it's available, so a non-shareable state means
+        // it really has no outstanding uses and can be converted to any other shareable state.
+        // Otherwise, if it's available, it can only be reused with the same mode.
+        return r->shareable() == Shareable::kNo || r->shareable() == shareable;
+    };
+
+    Resource* resource = fResourceMap.find(key, shareablePredicate);
     if (!resource) {
         // The main reason to call processReturnedResources in this call is to see if there are any
         // resources that we could match with the key. However, there is overhead into calling it.
         // So we only call it if we first failed to find a matching resource.
         if (this->processReturnedResources()) {
-            resource = fResourceMap.find(key);
+            resource = fResourceMap.find(key, shareablePredicate);
         }
     }
     if (resource) {
         // All resources we pull out of the cache for use should be budgeted
-        SkASSERT(resource->budgeted() == skgpu::Budgeted::kYes);
-        if (key.shareable() == Shareable::kNo) {
-            // If a resource is not shareable (i.e. scratch resource) then we remove it from the map
-            // so that it isn't found again.
-            fResourceMap.remove(key, resource);
-            if (budgeted == skgpu::Budgeted::kNo) {
-                resource->makeUnbudgeted();
+        SkASSERT(resource->budgeted() == Budgeted::kYes);
+        if (shareable == Shareable::kNo) {
+            // If the returned resource is no longer shareable then we remove it from the map so
+            // that it isn't found again.
+            SkASSERT(resource->shareable() == Shareable::kNo);
+            this->removeFromResourceMap(resource);
+            if (budgeted == Budgeted::kNo) {
+                resource->setBudgeted(Budgeted::kNo);
                 fBudgetedBytes -= resource->gpuMemorySize();
             }
-            SkDEBUGCODE(resource->fNonShareableInCache = false;)
         } else {
-            // Shareable resources should never be requested as non budgeted
-            SkASSERT(budgeted == skgpu::Budgeted::kYes);
+            // Shareable resources should never be requested as non-budgeted
+            SkASSERT(budgeted == Budgeted::kYes);
+            resource->setShareable(shareable);
         }
         this->refAndMakeResourceMRU(resource);
         this->validate();
@@ -201,11 +216,11 @@ bool ResourceCache::returnResource(Resource* resource, LastRemovedRef removedRef
 
     SkASSERT(resource);
 
-    // When a non-shareable resource's CB and Usage refs are both zero, give it a chance prepare
+    // When a non-shareable resource's CB and Usage refs are both zero, give it a chance to prepare
     // itself to be reused. On Dawn/WebGPU we use this to remap kXferCpuToGpu buffers asynchronously
     // so that they are already mapped before they come out of the cache again.
     if (resource->shouldDeleteASAP() == Resource::DeleteASAP::kNo &&
-        resource->key().shareable() == Shareable::kNo &&
+        resource->shareable() == Shareable::kNo &&
         removedRef == LastRemovedRef::kUsage) {
         resource->prepareForReturnToCache([resource] { resource->initialUsageRef(); });
         // Check if resource was re-ref'ed. In that case exit without adding to the queue.
@@ -305,16 +320,36 @@ void ResourceCache::returnResourceToCache(Resource* resource, LastRemovedRef rem
 
     SkASSERT(this->isInCache(resource));
     if (removedRef == LastRemovedRef::kUsage) {
-        if (resource->key().shareable() == Shareable::kYes) {
-            // Shareable resources should still be in the cache
-            SkASSERT(fResourceMap.find(resource->key()));
+        if (resource->shareable() == Shareable::kYes) {
+            // Shareable resources should still be in the cache.
+            SkASSERT(fResourceMap.has(resource, resource->key()));
+            SkASSERT(resource->isAvailableForReuse());
+
+            // Reset the resource's sharing mode so that any shareable request can use it (e.g. now
+            // that no more usages that required it to be fully shareable are held, the underlying
+            // resource can be used in a non-shareable manner the next time it's fetched from the
+            // cache). We can only change the shareable state when there are no outstanding usage
+            // refs. Because this resource was shareable, it remained in fResourceMap and could have
+            // a new usage ref before a prior LastRemovedRef::kUsage event was processed from the
+            // return queue. However, when a shareable ref has no usage refs, this is the only
+            // thread that could add an initial usage ref so it is safe to adjust its shareable type
+            if (!resource->hasUsageRef()) {
+                resource->setShareable(Shareable::kNo);
+                resource->setLabel("Scratch");
+            }
         } else {
-            SkDEBUGCODE(resource->fNonShareableInCache = true;)
-            resource->setLabel("Scratch");
-            fResourceMap.insert(resource->key(), resource);
-            if (resource->budgeted() == skgpu::Budgeted::kNo) {
-                resource->makeBudgeted();
-                fBudgetedBytes += resource->gpuMemorySize();
+            // Non-shareable resources are removed from the resource map when they are given out by
+            // the cache. A resource is returned for either becoming reusable (needs to be added to
+            // the resource map) or becoming purgeable (needs to be moved to the purgeable queue).
+            // Becoming purgeable always implies becoming reusable, so as long as a previous return
+            // hasn't put it into the resource map already, we do that now.
+            if (!resource->isAvailableForReuse()) {
+                resource->setLabel("Scratch");
+                this->addToResourceMap(resource);
+                if (resource->budgeted() == Budgeted::kNo) {
+                    resource->setBudgeted(Budgeted::kYes);
+                    fBudgetedBytes += resource->gpuMemorySize();
+                }
             }
         }
     }
@@ -359,6 +394,22 @@ void ResourceCache::returnResourceToCache(Resource* resource, LastRemovedRef rem
     this->validate();
 }
 
+void ResourceCache::addToResourceMap(Resource* resource) {
+    SkASSERT(this->isInCache(resource));
+    SkASSERT(!resource->isAvailableForReuse());
+    SkASSERT(!fResourceMap.has(resource, resource->key()));
+    fResourceMap.insert(resource->key(), resource);
+    resource->setAvailableForReuse(true);
+}
+
+void ResourceCache::removeFromResourceMap(Resource* resource) {
+    SkASSERT(this->isInCache(resource));
+    SkASSERT(resource->isAvailableForReuse());
+    SkASSERT(fResourceMap.has(resource, resource->key()));
+    fResourceMap.remove(resource->key(), resource);
+    resource->setAvailableForReuse(false);
+}
+
 void ResourceCache::addToNonpurgeableArray(Resource* resource) {
     int index = fNonpurgeableResources.size();
     *fNonpurgeableResources.append() = resource;
@@ -401,7 +452,7 @@ void ResourceCache::purgeResource(Resource* resource) {
     TRACE_EVENT_INSTANT1("skia.gpu.cache", TRACE_FUNC, TRACE_EVENT_SCOPE_THREAD,
                          "size", resource->gpuMemorySize());
 
-    fResourceMap.remove(resource->key(), resource);
+    this->removeFromResourceMap(resource);
 
     if (resource->shouldDeleteASAP() == Resource::DeleteASAP::kNo) {
         SkASSERT(this->inPurgeableQueue(resource));
@@ -426,7 +477,7 @@ void ResourceCache::purgeAsNeeded() {
     while (this->overbudget() && fPurgeableQueue.count()) {
         Resource* resource = fPurgeableQueue.peek();
         SkASSERT(!resource->wasDestroyed());
-        SkASSERT(fResourceMap.find(resource->key()));
+        SkASSERT(fResourceMap.has(resource, resource->key()));
 
         if (resource->timestamp() == kMaxTimestamp) {
             // If we hit a resource that is at kMaxTimestamp, then we've hit the part of the
@@ -648,21 +699,21 @@ void ResourceCache::validate() const {
             // given back out from a cache requests. After processing all the resources we assert
             // that the fScratch + fShareable equals the count in the fResourceMap.
             if (resource->isUsableAsScratch()) {
-                SkASSERT(key.shareable() == Shareable::kNo);
+                SkASSERT(resource->shareable() == Shareable::kNo);
                 SkASSERT(!resource->hasUsageRef());
                 ++fScratch;
                 SkASSERT(fResourceMap->has(resource, key));
-                SkASSERT(resource->budgeted() == skgpu::Budgeted::kYes);
-            } else if (key.shareable() == Shareable::kNo) {
+                SkASSERT(resource->budgeted() == Budgeted::kYes);
+            } else if (resource->shareable() == Shareable::kNo) {
                 SkASSERT(!fResourceMap->has(resource, key));
             } else {
-                SkASSERT(key.shareable() == Shareable::kYes);
+                SkASSERT(resource->shareable() == Shareable::kYes);
                 ++fShareable;
                 SkASSERT(fResourceMap->has(resource, key));
-                SkASSERT(resource->budgeted() == skgpu::Budgeted::kYes);
+                SkASSERT(resource->budgeted() == Budgeted::kYes);
             }
 
-            if (resource->budgeted() == skgpu::Budgeted::kYes) {
+            if (resource->budgeted() == Budgeted::kYes) {
                 fBudgetedBytes += resource->gpuMemorySize();
             }
 
@@ -683,8 +734,8 @@ void ResourceCache::validate() const {
     {
         int count = 0;
         fResourceMap.foreach([&](const Resource& resource) {
-            SkASSERT(resource.isUsableAsScratch() || resource.key().shareable() == Shareable::kYes);
-            SkASSERT(resource.budgeted() == skgpu::Budgeted::kYes);
+            SkASSERT(resource.isUsableAsScratch() || resource.shareable() == Shareable::kYes);
+            SkASSERT(resource.budgeted() == Budgeted::kYes);
             count++;
         });
         SkASSERT(count == fResourceMap.count());

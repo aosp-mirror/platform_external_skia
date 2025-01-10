@@ -94,7 +94,9 @@ public:
 
     Ownership ownership() const { return fOwnership; }
 
-    skgpu::Budgeted budgeted() const { return fBudgeted; }
+    Budgeted budgeted() const { return fBudgeted; }
+    Shareable shareable() const { return fShareable; }
+    const GraphiteResourceKey& key() const { return fKey; }
 
     // Retrieves the amount of GPU memory used by this resource in bytes. It is approximate since we
     // aren't aware of additional padding or copies made by the driver.
@@ -150,13 +152,6 @@ public:
     // object yet.
     bool wasDestroyed() const { return fSharedContext == nullptr; }
 
-    const GraphiteResourceKey& key() const { return fKey; }
-    // This should only ever be called by the ResourceProvider
-    void setKey(const GraphiteResourceKey& key) {
-        SkASSERT(key.shareable() == Shareable::kNo || this->budgeted() == skgpu::Budgeted::kYes);
-        fKey = key;
-    }
-
     // Dumps memory usage information for this Resource to traceMemoryDump.
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
 
@@ -178,7 +173,6 @@ public:
 protected:
     Resource(const SharedContext*,
              Ownership,
-             skgpu::Budgeted,
              size_t gpuMemorySize,
              bool commandBufferRefsAsUsageRefs = false);
     virtual ~Resource();
@@ -231,8 +225,17 @@ private:
     ////////////////////////////////////////////////////////////////////////////
     friend ResourceCache;
 
-    void makeBudgeted() { fBudgeted = skgpu::Budgeted::kYes; }
-    void makeUnbudgeted() { fBudgeted = skgpu::Budgeted::kNo; }
+    void setBudgeted(Budgeted budgeted) {
+        SkASSERT(budgeted == Budgeted::kNo || fOwnership == Ownership::kOwned);
+        fBudgeted = budgeted;
+    }
+    void setShareable(Shareable shareable) {
+        SkASSERT(shareable == Shareable::kNo || fBudgeted == Budgeted::kYes);
+        fShareable = shareable;
+    }
+
+    void setAvailableForReuse(bool avail) { fAvailableForReuse = avail; }
+    bool isAvailableForReuse() const { return fAvailableForReuse; }
 
     // If possible, queries the backend API to check the current allocation size of the gpu
     // resource and updates the tracked value. This is specifically useful for Vulkan backends which
@@ -259,7 +262,7 @@ private:
     uint32_t timestamp() const { return fTimestamp; }
     void setTimestamp(uint32_t ts) { fTimestamp = ts; }
 
-    void registerWithCache(sk_sp<ResourceCache>);
+    void registerWithCache(sk_sp<ResourceCache>, const GraphiteResourceKey&, Budgeted, Shareable);
 
     // Adds a cache ref to the resource. This is only called by ResourceCache. A Resource will only
     // ever add a ref when the Resource is part of the cache (i.e. when insertResource is called)
@@ -289,7 +292,7 @@ private:
 
 #ifdef SK_DEBUG
     bool isUsableAsScratch() const {
-        return fKey.shareable() == Shareable::kNo && !this->hasUsageRef() && fNonShareableInCache;
+        return fShareable == Shareable::kNo && !this->hasUsageRef() && fAvailableForReuse;
     }
 #endif
 
@@ -362,16 +365,22 @@ private:
     // be returned or not.
     mutable int fReturnIndex = -1;
 
-    Ownership fOwnership;
+    const Ownership fOwnership;
 
     static const size_t kInvalidGpuMemorySize = ~static_cast<size_t>(0);
     mutable size_t fGpuMemorySize = kInvalidGpuMemorySize;
 
-    // All resource created internally by Graphite and held in the ResourceCache as a shared
-    // resource or available scratch resource are considered budgeted. Resources that back client
-    // owned objects (e.g. SkSurface or SkImage) are not budgeted and do not count against cache
-    // limits.
-    skgpu::Budgeted fBudgeted;
+    // All resources created internally by Graphite that are held in the ResourceCache as shared or
+    // available scratch resources are considered budgeted. Resources that back client-owned objects
+    // (e.g. SkSurface or SkImage) and wrapper objects (e.g. BackendTexture) do not count against
+    // cache limits and therefore should never be budgeted.
+    Budgeted fBudgeted = Budgeted::kNo;
+    // All resources start out as non-shareable (the strictest mode) and revert to non-shareable
+    // when they are returned to the cache and have no more usage refs. An available resource can
+    // be returned if its shareable type matches the request, or if it was non-shareable at which
+    // point the resource is upgraded to the more permissive mode (until all shared usages are
+    // dropped at which point it can be used for any purpose again).
+    Shareable fShareable = Shareable::kNo;
 
     // This is only used by ProxyCache::purgeProxiesNotUsedSince which is called from
     // ResourceCache::purgeResourcesNotUsedSince. When kYes, this signals that the Resource
@@ -379,6 +388,10 @@ private:
     // current timestamp may indicate (since the timestamp will be updated when the Resource
     // is returned to the ResourceCache).
     DeleteASAP fDeleteASAP = DeleteASAP::kNo;
+
+    // Set to true when the resource is contained in its cache's `fResourceMap`, which allows it to
+    // be returned from findAndRefResource().
+    bool fAvailableForReuse = false;
 
     // An index into a heap when this resource is purgeable or an array when not. This is maintained
     // by the cache.
@@ -392,12 +405,6 @@ private:
 
     // String used to describe the current use of this Resource.
     std::string fLabel;
-
-    // This is only used during validation checking. Lots of the validation code depends on a
-    // resource being purgeable or not. However, purgeable itself just means having no refs. The
-    // refs can be removed before a Resource is returned to the cache (or even added to the
-    // ReturnQueue).
-    SkDEBUGCODE(mutable bool fNonShareableInCache = false;)
 };
 
 } // namespace skgpu::graphite
