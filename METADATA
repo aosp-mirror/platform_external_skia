@@ -9,7 +9,7 @@ third_party {
     type: GIT
     value: "https://skia.googlesource.com/skia"
   }
-  version: "3ff37110462fe1bafb50b421c83ed7eead2c05da"
+  version: "63a37d183a51b912bbb16b9e52f390df277f2304"
   license_type: RECIPROCAL
   last_upgrade_date {
     year: 2025
