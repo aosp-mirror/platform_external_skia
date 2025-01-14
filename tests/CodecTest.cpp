@@ -41,6 +41,7 @@
 #include "include/utils/SkRandom.h"
 #include "src/codec/SkCodecImageGenerator.h"
 #include "src/core/SkAutoMalloc.h"
+#include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkStreamPriv.h"
@@ -1920,4 +1921,27 @@ DEF_TEST(Codec_noConversion, r) {
         }
         REPORTER_ASSERT(r, bm.getColor(0, 0) == rec.color);
     }
+}
+
+DEF_TEST(Codec_bmp_indexed_colorxform, r) {
+    constexpr char path[] = "images/bmp-size-32x32-8bpp.bmp";
+    std::unique_ptr<SkStream> stream(GetResourceAsStream(path));
+    if (!stream) {
+        SkDebugf("Missing resource '%s'\n", path);
+        return;
+    }
+
+    std::unique_ptr<SkCodec> codec = SkCodec::MakeFromStream(std::move(stream));
+    REPORTER_ASSERT(r, codec);
+
+    // decode to a < 32bpp buffer with a color transform
+    const SkImageInfo decodeInfo = codec->getInfo().makeColorType(kRGB_565_SkColorType)
+                                                   .makeColorSpace(SkColorSpace::MakeSRGBLinear());
+    SkAutoPixmapStorage aps;
+    aps.alloc(decodeInfo);
+
+    // should not crash
+    auto res = codec->getPixels(aps);
+
+    REPORTER_ASSERT(r, res == SkCodec::kSuccess);
 }
