@@ -40,6 +40,7 @@
 #include "src/base/SkAutoMalloc.h"
 #include "src/base/SkRandom.h"
 #include "src/codec/SkCodecImageGenerator.h"
+#include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkStreamPriv.h"
@@ -2080,4 +2081,27 @@ DEF_TEST(Codec_jpeg_can_return_data_from_original_stream, r) {
     // The returned data should the same as what went in.
     REPORTER_ASSERT(r, encodedData->size() == expectedBytes);
     REPORTER_ASSERT(r, SkJpegDecoder::IsJpeg(encodedData->data(), encodedData->size()));
+}
+
+DEF_TEST(Codec_bmp_indexed_colorxform, r) {
+    constexpr char path[] = "images/bmp-size-32x32-8bpp.bmp";
+    std::unique_ptr<SkStream> stream(GetResourceAsStream(path));
+    if (!stream) {
+        SkDebugf("Missing resource '%s'\n", path);
+        return;
+    }
+
+    std::unique_ptr<SkCodec> codec = SkCodec::MakeFromStream(std::move(stream));
+    REPORTER_ASSERT(r, codec);
+
+    // decode to a < 32bpp buffer with a color transform
+    const SkImageInfo decodeInfo = codec->getInfo().makeColorType(kRGB_565_SkColorType)
+                                                   .makeColorSpace(SkColorSpace::MakeSRGBLinear());
+    SkAutoPixmapStorage aps;
+    aps.alloc(decodeInfo);
+
+    // should not crash
+    auto res = codec->getPixels(aps);
+
+    REPORTER_ASSERT(r, res == SkCodec::kSuccess);
 }
