@@ -21,6 +21,7 @@
 #include "include/private/SkColorData.h"
 #include "include/private/base/SkTArray.h"
 #include "src/core/SkColorSpaceXformSteps.h"
+#include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/ReadSwizzle.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/shaders/SkShaderBase.h"
@@ -363,10 +364,10 @@ struct CircularRRectClipBlock {
     struct CircularRRectClipData {
         CircularRRectClipData(SkRect rect,
                               SkPoint radiusPlusHalf,
-                              SkRect edgeSelect) :
-            fRect(rect),
-            fRadiusPlusHalf(radiusPlusHalf),
-            fEdgeSelect(edgeSelect) {}
+                              SkRect edgeSelect)
+                : fRect(rect)
+                , fRadiusPlusHalf(radiusPlusHalf)
+                , fEdgeSelect(edgeSelect) {}
         SkRect  fRect;            // bounds, outset by 0.5
         SkPoint fRadiusPlusHalf;  // abs() of .x is radius+0.5, if < 0 indicates inverse fill
                                   // .y is 1/(radius+0.5)
@@ -377,6 +378,25 @@ struct CircularRRectClipBlock {
                          PaintParamsKeyBuilder*,
                          PipelineDataGatherer*,
                          const CircularRRectClipData&);
+};
+
+struct AtlasClipBlock {
+    struct AtlasClipData {
+        AtlasClipData(SkPoint texCoordOffset,
+                      SkRect maskBounds,
+                      SkISize atlasSize)
+                : fTexCoordOffset(texCoordOffset)
+                , fMaskBounds(maskBounds)
+                , fAtlasSize(atlasSize) {}
+        SkPoint fTexCoordOffset;  // translation from fragCoords to unnormalized texel coords
+        SkRect  fMaskBounds;      // bounds of mask area, in unnormalized texel coords
+        SkISize fAtlasSize;       // size of atlas texture
+    };
+
+    static void AddBlock(const KeyContext&,
+                         PaintParamsKeyBuilder*,
+                         PipelineDataGatherer*,
+                         const AtlasClipData&);
 };
 
 /**
@@ -462,6 +482,39 @@ void AddToKey(const KeyContext& keyContext,
 void NotifyImagesInUse(Recorder*, DrawContext*, const SkBlender*);
 void NotifyImagesInUse(Recorder*, DrawContext*, const SkColorFilter*);
 void NotifyImagesInUse(Recorder*, DrawContext*, const SkShader*);
+
+template <typename AddBlendToKeyT, typename AddSrcToKeyT, typename AddDstToKeyT>
+void Blend(const KeyContext& keyContext,
+           PaintParamsKeyBuilder* keyBuilder,
+           PipelineDataGatherer* gatherer,
+           AddBlendToKeyT addBlendToKey,
+           AddSrcToKeyT addSrcToKey,
+           AddDstToKeyT addDstToKey) {
+    BlendComposeBlock::BeginBlock(keyContext, keyBuilder, gatherer);
+
+        addSrcToKey();
+
+        addDstToKey();
+
+        addBlendToKey();
+
+    keyBuilder->endBlock();  // BlendComposeBlock
+}
+
+template <typename AddInnerToKeyT, typename AddOuterToKeyT>
+void Compose(const KeyContext& keyContext,
+             PaintParamsKeyBuilder* keyBuilder,
+             PipelineDataGatherer* gatherer,
+             AddInnerToKeyT addInnerToKey,
+             AddOuterToKeyT addOuterToKey) {
+    ComposeBlock::BeginBlock(keyContext, keyBuilder, gatherer);
+
+        addInnerToKey();
+
+        addOuterToKey();
+
+    keyBuilder->endBlock();  // ComposeBlock
+}
 
 } // namespace skgpu::graphite
 
