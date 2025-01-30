@@ -64,10 +64,6 @@ $pure float3 $apply_hlg_inv_xfer_fn(float3 x, half3 abc, half3 def) {
                lessThanEqual(x, float3(1)));
 }
 
-$pure half4 sk_premul_alpha(float4 color) {
-    return half4(color.rgb*color.a, color.a);
-}
-
 $pure half4 sk_color_space_transform(half4 color,
                                      half3x3 gamut,
                                      half4 srcGABC,
@@ -221,10 +217,10 @@ $pure half4 sk_color_space_transform_srgb(half4 color,
     return color;
 }
 
-$pure half4 sk_circular_rrect_clip(float2 coords,
-                                   float4 rect,
-                                   float2 radiusPlusHalf,
-                                   half4 edgeSelect) {
+$pure half4 sk_analytic_clip(float2 coords,
+                             float4 rect,
+                             float2 radiusPlusHalf,
+                             half4 edgeSelect) {
     // Negative x indicates inverse fill
     float2 radius = float2(abs(radiusPlusHalf.x));
     float2 dxy0 = edgeSelect.LT*((rect.LT + radius) - coords);
@@ -244,15 +240,22 @@ $pure half4 sk_circular_rrect_clip(float2 coords,
     return half4(alpha);
 }
 
-$pure half4 sk_atlas_clip(float2 coords,
-                          half2 texCoordOffset,
-                          half4 maskBounds,
-                          float2 invAtlasSize,
-                          sampler2D clipAtlas) {
+$pure half4 sk_analytic_and_atlas_clip(float2 coords,
+                                       float4 rect,
+                                       float2 radiusPlusHalf,
+                                       half4 edgeSelect,
+                                       half2 texCoordOffset,
+                                       half4 maskBounds,
+                                       float2 invAtlasSize,
+                                       sampler2D atlasSampler) {
+    half4 analyticClip = sk_analytic_clip(coords, rect, radiusPlusHalf, edgeSelect);
+
     float2 texCoord = coords + texCoordOffset;
     float2 clampedTexCoord = clamp(texCoord, maskBounds.LT, maskBounds.RB);
 
-    return half4(sample(clipAtlas, clampedTexCoord * invAtlasSize).r);
+    half atlasClip = sample(atlasSampler, clampedTexCoord * invAtlasSize).r;
+
+    return analyticClip * atlasClip;
 }
 
 $pure float $tile(int tileMode, float f, float low, float high) {
@@ -1281,7 +1284,7 @@ $pure half4 sk_perlin_noise_shader(float2 coords,
     color = saturate(color);
 
     // Pre-multiply the result
-    return sk_premul_alpha(color);
+    return half4(color.rgb * color.a, color.a);
 }
 
 $pure half4 sk_porter_duff_blend(half4 src, half4 dst, half4 coeffs) {

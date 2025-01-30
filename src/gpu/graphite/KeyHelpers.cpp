@@ -1123,47 +1123,57 @@ void ColorSpaceTransformBlock::AddBlock(const KeyContext& keyContext,
 //--------------------------------------------------------------------------------------------------
 namespace {
 
-void add_circular_rrect_clip_data(
+void add_analytic_clip_data(
         const ShaderCodeDictionary* dict,
-        const CircularRRectClipBlock::CircularRRectClipData& data,
+        const NonMSAAClipBlock::NonMSAAClipData& data,
         PipelineDataGatherer* gatherer) {
-    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kCircularRRectClip)
+    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kAnalyticClip)
     gatherer->write(data.fRect);
     gatherer->write(data.fRadiusPlusHalf);
     gatherer->writeHalf(data.fEdgeSelect);
 }
 
-}  // anonymous namespace
-
-void CircularRRectClipBlock::AddBlock(const KeyContext& keyContext,
-                                      PaintParamsKeyBuilder* builder,
-                                      PipelineDataGatherer* gatherer,
-                                      const CircularRRectClipData& data) {
-    add_circular_rrect_clip_data(keyContext.dict(), data, gatherer);
-    builder->addBlock(BuiltInCodeSnippetID::kCircularRRectClip);
-}
-
-//--------------------------------------------------------------------------------------------------
-namespace {
-
-void add_atlas_clip_data(
+void add_analytic_and_atlas_clip_data(
         const ShaderCodeDictionary* dict,
-        const AtlasClipBlock::AtlasClipData& data,
+        const NonMSAAClipBlock::NonMSAAClipData& data,
         PipelineDataGatherer* gatherer) {
-    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kAtlasClip)
+    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kAnalyticAndAtlasClip)
+    gatherer->write(data.fRect);
+    gatherer->write(data.fRadiusPlusHalf);
+    gatherer->writeHalf(data.fEdgeSelect);
     gatherer->writeHalf(data.fTexCoordOffset);
     gatherer->writeHalf(data.fMaskBounds);
-    gatherer->write(SkSize::Make(1.f/data.fAtlasSize.width(), 1.f/data.fAtlasSize.height()));
+    if (data.fAtlasTexture) {
+        gatherer->write(SkSize::Make(1.f/data.fAtlasTexture->dimensions().width(),
+                                     1.f/data.fAtlasTexture->dimensions().height()));
+    } else {
+        gatherer->write(SkSize::Make(0, 0));
+    }
 }
 
 }  // anonymous namespace
 
-void AtlasClipBlock::AddBlock(const KeyContext& keyContext,
-                              PaintParamsKeyBuilder* builder,
-                              PipelineDataGatherer* gatherer,
-                              const AtlasClipData& data) {
-    add_atlas_clip_data(keyContext.dict(), data, gatherer);
-    builder->addBlock(BuiltInCodeSnippetID::kAtlasClip);
+void NonMSAAClipBlock::AddBlock(const KeyContext& keyContext,
+                                PaintParamsKeyBuilder* builder,
+                                PipelineDataGatherer* gatherer,
+                                const NonMSAAClipData& data) {
+    if (data.fAtlasTexture) {
+        add_analytic_and_atlas_clip_data(keyContext.dict(), data, gatherer);
+        builder->beginBlock(BuiltInCodeSnippetID::kAnalyticAndAtlasClip);
+
+        const Caps* caps = keyContext.caps();
+        ImmutableSamplerInfo info =
+                caps->getImmutableSamplerInfo(data.fAtlasTexture->textureInfo());
+        SamplerDesc samplerDesc {SkSamplingOptions(SkFilterMode::kNearest, SkMipmapMode::kNone),
+                                 {SkTileMode::kClamp, SkTileMode::kClamp},
+                                 info};
+        gatherer->add(data.fAtlasTexture, samplerDesc);
+
+        builder->endBlock();
+    } else {
+        add_analytic_clip_data(keyContext.dict(), data, gatherer);
+        builder->addBlock(BuiltInCodeSnippetID::kAnalyticClip);
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1760,16 +1770,6 @@ static void notify_in_use(Recorder*, DrawContext*, const SkEmptyShader*) {
     // No-op
 }
 
-static bool is_premul_alpha_only(const ColorSpaceTransformBlock::ColorSpaceTransformData& data) {
-    // A mask value of 16 means premul only.
-    if (SkTo<int>(data.fSteps.flags.mask()) != 16) {
-        return false;
-    }
-
-    // If read swizzle is RGBA or BGRA we don't need to do alpha swizzle
-    return (data.fReadSwizzle == ReadSwizzle::kRGBA || data.fReadSwizzle == ReadSwizzle::kBGRA);
-}
-
 static void add_yuv_image_to_key(const KeyContext& keyContext,
                                  PaintParamsKeyBuilder* builder,
                                  PipelineDataGatherer* gatherer,
@@ -1911,26 +1911,13 @@ static void add_yuv_image_to_key(const KeyContext& keyContext,
     }
     ColorSpaceTransformBlock::ColorSpaceTransformData data(steps);
 
-    // We only do this for YUV images because this is the only case where we expect
-    // a premul-only colorspace transformation to be common. Otherwise it's not
-    // worth the combinatorial explosion in the precompile system.
-    if (is_premul_alpha_only(data)) {
-        Compose(keyContext, builder, gatherer,
-                /* addInnerToKey= */ [&]() -> void {
-                    YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
-                },
-                /* addOuterToKey= */ [&]() -> void {
-                    builder->addBlock(BuiltInCodeSnippetID::kPremulAlphaColorFilter);
-                });
-    } else {
-        Compose(keyContext, builder, gatherer,
-                /* addInnerToKey= */ [&]() -> void {
-                    YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
-                },
-                /* addOuterToKey= */ [&]() -> void {
-                    ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer, data);
-                });
-    }
+    Compose(keyContext, builder, gatherer,
+            /* addInnerToKey= */ [&]() -> void {
+                YUVImageShaderBlock::AddBlock(keyContext, builder, gatherer, imgData);
+            },
+            /* addOuterToKey= */ [&]() -> void {
+                ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer, data);
+            });
 }
 
 static skgpu::graphite::ReadSwizzle swizzle_class_to_read_enum(const skgpu::Swizzle& swizzle) {
