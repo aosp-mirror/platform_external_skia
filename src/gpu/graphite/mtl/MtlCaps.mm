@@ -1043,6 +1043,30 @@ bool MtlCaps::extractGraphicsDescs(const UniqueKey& key,
     return true;
 }
 
+// c.f. MtlTextureInfoData::serialize
+bool MtlCaps::deserializeTextureInfo(SkStream* stream,
+                                     BackendApi backendApi,
+                                     Mipmapped mipmapped,
+                                     Protected isProtected,
+                                     uint32_t sampleCount,
+                                     TextureInfo* out) const {
+    SkASSERT(backendApi == BackendApi::kMetal);
+    SkASSERT(isProtected == Protected::kNo);
+
+    MtlTextureSpec spec;
+    if (!MtlTextureSpec::Deserialize(stream, &spec)) {
+        return false;
+    }
+
+    *out = TextureInfos::MakeMetal(MtlTextureInfo(sampleCount,
+                                                  mipmapped,
+                                                  spec.fFormat,
+                                                  spec.fUsage,
+                                                  spec.fStorageMode,
+                                                  spec.fFramebufferOnly));
+    return true;
+}
+
 uint64_t MtlCaps::getRenderPassDescKey(const RenderPassDesc& renderPassDesc) const {
     MtlTextureInfo colorInfo, depthStencilInfo;
     SkAssertResult(TextureInfos::GetMtlTextureInfo(renderPassDesc.fColorAttachment.fTextureInfo,
@@ -1180,7 +1204,7 @@ std::pair<SkColorType, bool /*isRGBFormat*/> MtlCaps::supportedWritePixelsColorT
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
         const auto& ctInfo = info.fColorTypeInfos[i];
         if (ctInfo.fColorType == dstColorType) {
-            return {dstColorType, false};
+            return {ctInfo.fTransferColorType, false};
         }
     }
     return {kUnknown_SkColorType, false};
@@ -1205,7 +1229,7 @@ std::pair<SkColorType, bool /*isRGBFormat*/> MtlCaps::supportedReadPixelsColorTy
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
         const auto& ctInfo = info.fColorTypeInfos[i];
         if (ctInfo.fColorType == srcColorType) {
-            return {srcColorType, false};
+            return {ctInfo.fTransferColorType, false};
         }
     }
     return {kUnknown_SkColorType, false};
