@@ -55,8 +55,6 @@ public:
                                       const RenderPassDesc&) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override { return {}; }
 
-    GraphiteResourceKey makeSamplerKey(const SamplerDesc&) const override;
-
     uint32_t channelMask(const TextureInfo&) const override;
 
     bool isTexturable(const VulkanTextureInfo&) const;
@@ -68,7 +66,6 @@ public:
     void buildKeyForTexture(SkISize dimensions,
                             const TextureInfo&,
                             ResourceType,
-                            Shareable,
                             GraphiteResourceKey*) const override;
 
     bool shouldAlwaysUseDedicatedImageMemory() const {
@@ -89,14 +86,10 @@ public:
     }
 
     bool supportsYcbcrConversion() const { return fSupportsYcbcrConversion; }
-
     bool supportsDeviceFaultInfo() const { return fSupportsDeviceFaultInfo; }
 
-    uint32_t maxVertexAttributes() const {
-        return fMaxVertexAttributes;
-    }
+    uint32_t maxVertexAttributes()   const { return fMaxVertexAttributes;   }
     uint64_t maxUniformBufferRange() const { return fMaxUniformBufferRange; }
-
     uint64_t maxStorageBufferRange() const { return fMaxStorageBufferRange; }
 
     const VkPhysicalDeviceMemoryProperties2& physicalDeviceMemoryProperties2() const {

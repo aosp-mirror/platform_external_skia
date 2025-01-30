@@ -487,7 +487,11 @@ public:
         // linear srgb is the last child node.)
         const ShaderNode* toLinearSrgbNode = fNode->child(fNode->numChildren() - 2);
         SkASSERT(toLinearSrgbNode->codeSnippetId() ==
-                        (int) BuiltInCodeSnippetID::kColorSpaceXformColorFilter);
+                         (int)BuiltInCodeSnippetID::kColorSpaceXformColorFilter ||
+                 toLinearSrgbNode->codeSnippetId() ==
+                         (int)BuiltInCodeSnippetID::kColorSpaceXformPremul ||
+                 toLinearSrgbNode->codeSnippetId() ==
+                         (int)BuiltInCodeSnippetID::kColorSpaceXformSRGB);
 
         ShaderSnippet::Args args = ShaderSnippet::kDefaultArgs;
         args.fPriorStageOutput = SkSL::String::printf("(%s).rgb1", color.c_str());
@@ -504,7 +508,11 @@ public:
         // linear srgb is the last child node.
         const ShaderNode* fromLinearSrgbNode = fNode->child(fNode->numChildren() - 1);
         SkASSERT(fromLinearSrgbNode->codeSnippetId() ==
-                        (int) BuiltInCodeSnippetID::kColorSpaceXformColorFilter);
+                         (int)BuiltInCodeSnippetID::kColorSpaceXformColorFilter ||
+                 fromLinearSrgbNode->codeSnippetId() ==
+                         (int)BuiltInCodeSnippetID::kColorSpaceXformPremul ||
+                 fromLinearSrgbNode->codeSnippetId() ==
+                         (int)BuiltInCodeSnippetID::kColorSpaceXformSRGB);
 
         ShaderSnippet::Args args = ShaderSnippet::kDefaultArgs;
         args.fPriorStageOutput = SkSL::String::printf("(%s).rgb1", color.c_str());
@@ -961,7 +969,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kImageShader] = {
             /*name=*/"ImageShader",
             /*staticFn=*/"sk_image_shader",
-            SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresData,
+            SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresSamplerDescData,
             /*uniforms=*/{ { "invImgSize",            SkSLType::kFloat2 },
                            { "subset",                SkSLType::kFloat4 },
                            { "tilemodeX",             SkSLType::kInt },
@@ -972,7 +980,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCubicImageShader] = {
             /*name=*/"CubicImageShader",
             /*staticFn=*/"sk_cubic_image_shader",
-            SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresData,
+            SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresSamplerDescData,
             /*uniforms=*/{ { "invImgSize",            SkSLType::kFloat2 },
                            { "subset",                SkSLType::kFloat4 },
                            { "tilemodeX",             SkSLType::kInt },
@@ -983,7 +991,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWImageShader] = {
             /*name=*/"HardwareImageShader",
             /*staticFn=*/"sk_hw_image_shader",
-            SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresData,
+            SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresSamplerDescData,
             /*uniforms=*/{ { "invImgSize",            SkSLType::kFloat2 } },
             /*texturesAndSamplers=*/{"image"}
     };
@@ -1137,25 +1145,46 @@ ShaderCodeDictionary::ShaderCodeDictionary(Layout layout)
             /*uniforms=*/{}
     };
 
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kColorSpaceXformPremul] = {
+            /*name=*/"ColorSpaceTransformPremul",
+            /*staticFn=*/"sk_color_space_transform_premul",
+            SnippetRequirementFlags::kPriorStageOutput,
+            /*uniforms=*/{ { "args", SkSLType::kHalf2 } }
+    };
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kColorSpaceXformSRGB] = {
+            /*name=*/"ColorSpaceTransformSRGB",
+            /*staticFn=*/"sk_color_space_transform_srgb",
+            SnippetRequirementFlags::kPriorStageOutput,
+            /*uniforms=*/{ { "gamut",       SkSLType::kHalf3x3 },
+                           { "srcGABC",     SkSLType::kHalf4 },
+                           { "srcDEF_args", SkSLType::kHalf4 },
+                           { "dstGABC",     SkSLType::kHalf4 },
+                           { "dstDEF_args", SkSLType::kHalf4 } }
+    };
+
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPrimitiveColor] = {
             /*name=*/"PrimitiveColor",
-            /*staticFn=*/"sk_color_space_transform",
+            /*staticFn=*/"sk_passthrough",
             SnippetRequirementFlags::kPrimitiveColor,
-            /*uniforms=*/{ { "csXformFlags",          SkSLType::kInt },
-                           { "csXformSrcKind",        SkSLType::kInt },
-                           { "csXformGamutTransform", SkSLType::kHalf3x3 },
-                           { "csXformDstKind",        SkSLType::kInt },
-                           { "csXformCoeffs",         SkSLType::kHalf4x4 } },
-            /*texturesAndSamplers=*/{}
+            /*uniforms=*/{}
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCircularRRectClip] = {
             /*name=*/"CircularRRectClip",
             /*staticFn=*/"sk_circular_rrect_clip",
-            SnippetRequirementFlags::kNone,
+            SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{ { "rect",           SkSLType::kFloat4 },
                            { "radiusPlusHalf", SkSLType::kFloat2 },
                            { "edgeSelect",     SkSLType::kHalf4 } }
+    };
+
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kAtlasClip] = {
+            /*name=*/"AtlasClip",
+            /*staticFn=*/"sk_atlas_clip",
+            SnippetRequirementFlags::kLocalCoords,
+            /*uniforms=*/{ { "texCoordOffset", SkSLType::kHalf2 },
+                           { "maskBounds",     SkSLType::kHalf4 },
+                           { "invAtlasSize",   SkSLType::kFloat2 } }
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCompose] = {

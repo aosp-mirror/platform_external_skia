@@ -347,7 +347,7 @@ sk_sp<SkColorSpace> SkAndroidCodec::computeOutputColorSpace(SkColorType outputCo
     }
 }
 
-static bool supports_any_down_scale(const SkCodec* codec) {
+static bool is_webp(const SkCodec* codec) {
     return codec->getEncodedFormat() == SkEncodedImageFormat::kWEBP;
 }
 
@@ -383,7 +383,11 @@ int SkAndroidCodec::computeSampleSize(SkISize* desiredSize) const {
                                      std::max(1, desiredSize->height()));
     }
 
-    if (supports_any_down_scale(fCodec.get())) {
+    if (is_webp(fCodec.get())) {
+        if (fCodec->getFrameCount() > 1) {
+           // Cannot downscale animated webp
+           *desiredSize = origDims;
+        }
         return 1;
     }
 
@@ -456,7 +460,7 @@ SkISize SkAndroidCodec::getSampledDimensions(int sampleSize) const {
 }
 
 bool SkAndroidCodec::getSupportedSubset(SkIRect* desiredSubset) const {
-    if (!desiredSubset || !is_valid_subset(*desiredSubset, fCodec->dimensions())) {
+    if (!desiredSubset || !SkCodecPriv::IsValidSubset(*desiredSubset, fCodec->dimensions())) {
         return false;
     }
 
@@ -483,8 +487,8 @@ SkISize SkAndroidCodec::getSampledSubsetDimensions(int sampleSize, const SkIRect
 
     // This should perhaps call a virtual function, but currently both of our subclasses
     // want the same implementation.
-    return {get_scaled_dimension(subset.width(), sampleSize),
-            get_scaled_dimension(subset.height(), sampleSize)};
+    return {SkCodecPriv::GetSampledDimension(subset.width(), sampleSize),
+            SkCodecPriv::GetSampledDimension(subset.height(), sampleSize)};
 }
 
 SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo& requestInfo,
@@ -501,7 +505,7 @@ SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo& requestInfo,
         options = &defaultOptions;
     } else {
         if (options->fSubset) {
-            if (!is_valid_subset(*options->fSubset, fCodec->dimensions())) {
+            if (!SkCodecPriv::IsValidSubset(*options->fSubset, fCodec->dimensions())) {
                 return SkCodec::kInvalidParameters;
             }
 

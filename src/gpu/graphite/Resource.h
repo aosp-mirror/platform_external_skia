@@ -24,6 +24,7 @@ class SkTraceMemoryDump;
 
 namespace skgpu::graphite {
 
+class GlobalCache;
 class ResourceCache;
 class SharedContext;
 class Texture;
@@ -94,7 +95,9 @@ public:
 
     Ownership ownership() const { return fOwnership; }
 
-    skgpu::Budgeted budgeted() const { return fBudgeted; }
+    Budgeted budgeted() const { return fBudgeted; }
+    Shareable shareable() const { return fShareable; }
+    const GraphiteResourceKey& key() const { return fKey; }
 
     // Retrieves the amount of GPU memory used by this resource in bytes. It is approximate since we
     // aren't aware of additional padding or copies made by the driver.
@@ -118,13 +121,6 @@ public:
     // Gets an id that is unique for this Resource object. It is static in that it does not change
     // when the content of the Resource object changes. This will never return 0.
     UniqueID uniqueID() const { return fUniqueID; }
-
-    // Describes the type of gpu resource that is represented by the implementing
-    // class (e.g. texture, buffer, etc).  This data is used for diagnostic
-    // purposes by dumpMemoryStatistics().
-    //
-    // The value returned is expected to be long lived and will not be copied by the caller.
-    virtual const char* getResourceType() const = 0;
 
     std::string getLabel() const { return fLabel; }
 
@@ -150,12 +146,92 @@ public:
     // object yet.
     bool wasDestroyed() const { return fSharedContext == nullptr; }
 
-    const GraphiteResourceKey& key() const { return fKey; }
-    // This should only ever be called by the ResourceProvider
-    void setKey(const GraphiteResourceKey& key) {
-        SkASSERT(key.shareable() == Shareable::kNo || this->budgeted() == skgpu::Budgeted::kYes);
-        fKey = key;
+    // Describes the type of gpu resource that is represented by the implementing
+    // class (e.g. texture, buffer, etc).  This data is used for diagnostic
+    // purposes by dumpMemoryStatistics().
+    //
+    // The value returned is expected to be long lived and will not be copied by the caller.
+    virtual const char* getResourceType() const = 0;
+
+    virtual const Texture* asTexture() const { return nullptr; }
+
+#if defined(GPU_TEST_UTILS)
+    bool testingShouldDeleteASAP() const { return fDeleteASAP == DeleteASAP::kYes; }
+#endif
+
+protected:
+    Resource(const SharedContext*,
+             Ownership,
+             size_t gpuMemorySize,
+             bool commandBufferRefsAsUsageRefs = false);
+    virtual ~Resource();
+
+    const SharedContext* sharedContext() const { return fSharedContext; }
+
+#ifdef SK_DEBUG
+    bool debugHasCommandBufferRef() const {
+        return hasCommandBufferRef();
     }
+#endif
+
+    // Needed to be protected for DawnBuffer's emscripten prepareForReturnToCache()
+    void setDeleteASAP() { fDeleteASAP = DeleteASAP::kYes; }
+
+private:
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // The following set of functions are only meant to be called by the [Global|Proxy]Cache. We
+    // don't want them public general users of a Resource, but they also aren't purely internal.
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    friend class ProxyCache; // for setDeleteASAP and updateAccessTime
+    friend GlobalCache; // for lastAccessTime and updateAccessTime
+
+    enum class DeleteASAP : bool {
+        kNo = false,
+        kYes = true,
+    };
+
+    DeleteASAP shouldDeleteASAP() const { return fDeleteASAP; }
+
+    // In the ResourceCache this is called whenever a Resource is moved into the purgeableQueue. It
+    // may also be called by the ProxyCache and GlobalCache to track the time on Resources they are
+    // holding on to.
+    void updateAccessTime() {
+        fLastAccess = skgpu::StdSteadyClock::now();
+    }
+    skgpu::StdSteadyClock::time_point lastAccessTime() const {
+        return fLastAccess;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // The following set of functions are only meant to be called by the ResourceCache. We don't
+    // want them public general users of a Resource, but they also aren't purely internal calls.
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    friend ResourceCache;
+
+    void setBudgeted(Budgeted budgeted) {
+        SkASSERT(budgeted == Budgeted::kNo || fOwnership == Ownership::kOwned);
+        fBudgeted = budgeted;
+    }
+    void setShareable(Shareable shareable) {
+        SkASSERT(shareable == Shareable::kNo || fBudgeted == Budgeted::kYes);
+        fShareable = shareable;
+    }
+
+    void setAvailableForReuse(bool avail) { fAvailableForReuse = avail; }
+    bool isAvailableForReuse() const { return fAvailableForReuse; }
+
+    int* accessReturnIndex()  const { return &fReturnIndex; }
+    int* accessCacheIndex()  const { return &fCacheArrayIndex; }
+
+    uint32_t lastUseToken() const { return fLastUseToken; }
+    void setLastUseToken(uint32_t token) { fLastUseToken = token; }
+
+    // If possible, queries the backend API to check the current allocation size of the gpu
+    // resource and updates the tracked value. This is specifically useful for Vulkan backends which
+    // use lazy allocated memory for "memoryless" resources. Ideally that memory should stay zero
+    // throughout its usage, but certain usage patterns can trigger the device to commit real memory
+    // to the resource. So this will allow us to have a more accurate tracking of our memory usage.
+    void updateGpuMemorySize() { fGpuMemorySize = this->onUpdateGpuMemorySize(); }
 
     // Dumps memory usage information for this Resource to traceMemoryDump.
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
@@ -169,71 +245,6 @@ public:
      */
     virtual void prepareForReturnToCache(const std::function<void()>& takeRef) {}
 
-    virtual const Texture* asTexture() const { return nullptr; }
-
-#if defined(GPU_TEST_UTILS)
-    bool testingShouldDeleteASAP() const { return fDeleteASAP == DeleteASAP::kYes; }
-#endif
-
-protected:
-    Resource(const SharedContext*,
-             Ownership,
-             skgpu::Budgeted,
-             size_t gpuMemorySize,
-             bool commandBufferRefsAsUsageRefs = false);
-    virtual ~Resource();
-
-    const SharedContext* sharedContext() const { return fSharedContext; }
-
-    // Overridden to add extra information to the memory dump.
-    virtual void onDumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump,
-                                        const char* dumpName) const {}
-
-#ifdef SK_DEBUG
-    bool debugHasCommandBufferRef() const {
-        return hasCommandBufferRef();
-    }
-#endif
-
-    // Needed to be protected for DawnBuffer emscripten prepareForReturnToCache
-    void setDeleteASAP() { fDeleteASAP = DeleteASAP::kYes; }
-
-private:
-    friend class ProxyCache; // for setDeleteASAP and updateAccessTime
-
-    // Overridden to free GPU resources in the backend API.
-    virtual void freeGpuData() = 0;
-
-    // Overridden to call any release callbacks, if necessary
-    virtual void invokeReleaseProc() {}
-
-    enum class DeleteASAP : bool {
-        kNo = false,
-        kYes = true,
-    };
-
-    DeleteASAP shouldDeleteASAP() const { return fDeleteASAP; }
-
-    // In the ResourceCache this is called whenever a Resource is moved into the purgeableQueue. It
-    // may also be called by the ProxyCache to track the time on Resources it is holding on to.
-    void updateAccessTime() {
-        fLastAccess = skgpu::StdSteadyClock::now();
-    }
-    skgpu::StdSteadyClock::time_point lastAccessTime() const {
-        return fLastAccess;
-    }
-
-    virtual void setBackendLabel(char const* label) {}
-
-    ////////////////////////////////////////////////////////////////////////////
-    // The following set of functions are only meant to be called by the ResourceCache. We don't
-    // want them public general users of a Resource, but they also aren't purely internal calls.
-    ////////////////////////////////////////////////////////////////////////////
-    friend ResourceCache;
-
-    void makeBudgeted() { fBudgeted = skgpu::Budgeted::kYes; }
-    void makeUnbudgeted() { fBudgeted = skgpu::Budgeted::kNo; }
-
     // This version of ref allows adding a ref when the usage count is 0. This should only be called
     // from the ResourceCache.
     void initialUsageRef() const {
@@ -243,14 +254,8 @@ private:
         (void)fUsageRefCnt.fetch_add(+1, std::memory_order_relaxed);
     }
 
-    bool isPurgeable() const;
-    int* accessReturnIndex()  const { return &fReturnIndex; }
-    int* accessCacheIndex()  const { return &fCacheArrayIndex; }
-
-    uint32_t timestamp() const { return fTimestamp; }
-    void setTimestamp(uint32_t ts) { fTimestamp = ts; }
-
-    void registerWithCache(sk_sp<ResourceCache>);
+    // May only be called once.
+    void registerWithCache(sk_sp<ResourceCache>, const GraphiteResourceKey&, Budgeted, Shareable);
 
     // Adds a cache ref to the resource. This is only called by ResourceCache. A Resource will only
     // ever add a ref when the Resource is part of the cache (i.e. when insertResource is called)
@@ -278,20 +283,40 @@ private:
         }
     }
 
+    bool isPurgeable() const;
+
 #ifdef SK_DEBUG
     bool isUsableAsScratch() const {
-        return fKey.shareable() == Shareable::kNo && !this->hasUsageRef() && fNonShareableInCache;
+        return fShareable == Shareable::kScratch ||
+               (fShareable == Shareable::kNo && !this->hasUsageRef() && fAvailableForReuse);
     }
 #endif
 
-    ////////////////////////////////////////////////////////////////////////////
-    // The remaining calls are meant to be truely private
-    ////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // The remaining calls are meant to be truely private.
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Overridden to free GPU resources in the backend API.
+    virtual void freeGpuData() = 0;
+
+    // Overridden to call any release callbacks, if necessary
+    virtual void invokeReleaseProc() {}
+
+    // Overridden to set the label on the underlying GPU resource
+    virtual void setBackendLabel(char const* label) {}
+
+    // Overridden to add extra information to the memory dump.
+    virtual void onDumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump,
+                                        const char* dumpName) const {}
+
+    // Overridden to calculate a more up-to-date size in bytes.
+    virtual size_t onUpdateGpuMemorySize() { return fGpuMemorySize; }
+
     bool hasUsageRef() const {
         if (0 == fUsageRefCnt.load(std::memory_order_acquire)) {
-            // The acquire barrier is only really needed if we return true.  It
-            // prevents code conditioned on the result of hasUsageRef() from running until previous
-            // owners are all totally done calling unref().
+            // The acquire barrier is only really needed if we return true.  It prevents code
+            // conditioned on the result of hasUsageRef() from running until previous owners are all
+            // totally done calling unref().
             return false;
         }
         return true;
@@ -301,9 +326,9 @@ private:
         // Note that we don't check here for fCommandBufferRefsAsUsageRefs. This should always
         // report zero if that value is true.
         if (0 == fCommandBufferRefCnt.load(std::memory_order_acquire)) {
-            // The acquire barrier is only really needed if we return true.  It
-            // prevents code conditioned on the result of hasCommandBufferRef() from running
-            // until previous owners are all totally done calling unrefCommandBuffer().
+            // The acquire barrier is only really needed if we return true.  It prevents code
+            // conditioned on the result of hasCommandBufferRef() from running until previous owners
+            // are all totally done calling unrefCommandBuffer().
             return false;
         }
         SkASSERT(!fCommandBufferRefsAsUsageRefs);
@@ -312,9 +337,9 @@ private:
 
     bool hasCacheRef() const {
         if (0 == fCacheRefCnt.load(std::memory_order_acquire)) {
-            // The acquire barrier is only really needed if we return true. It
-            // prevents code conditioned on the result of hasUsageRef() from running until previous
-            // owners are all totally done calling unref().
+            // The acquire barrier is only really needed if we return true. It prevents code
+            // conditioned on the result of hasUsageRef() from running until previous owners are all
+            // totally done calling unref().
             return false;
         }
         return true;
@@ -326,43 +351,53 @@ private:
 
     bool notifyARefIsZero(LastRemovedRef removedRef) const;
 
-    // Frees the object in the underlying 3D API.
+    // Frees the object in the underlying 3D API *and* deletes the object itself.
     void internalDispose();
+
+    static const size_t kInvalidGpuMemorySize = ~static_cast<size_t>(0);
 
     // We need to guard calling unref on the usage and command buffer refs since they each could be
     // unreffed on different threads. This can lead to calling notifyARefIsZero twice with each
     // instance thinking there are no more refs left and both trying to delete the object.
     mutable SkMutex fUnrefMutex;
+    mutable std::atomic<int32_t> fUsageRefCnt;
+    mutable std::atomic<int32_t> fCommandBufferRefCnt;
+    mutable std::atomic<int32_t> fCacheRefCnt;
 
-    SkDEBUGCODE(mutable bool fCalledRemovedFromCache = false;)
+    // Indicates that CommandBufferRefs should be rerouted to UsageRefs.
+    const bool fCommandBufferRefsAsUsageRefs = false;
 
     // This is not ref'ed but internalDispose() will be called before the Gpu object is destroyed.
     // That call will set this to nullptr.
     const SharedContext* fSharedContext;
 
-    mutable std::atomic<int32_t> fUsageRefCnt;
-    mutable std::atomic<int32_t> fCommandBufferRefCnt;
-    mutable std::atomic<int32_t> fCacheRefCnt;
-    // Indicates that CommandBufferRefs should be rerouted to UsageRefs.
-    const bool fCommandBufferRefsAsUsageRefs = false;
+    const Ownership fOwnership;
+    const UniqueID fUniqueID;
 
-    GraphiteResourceKey fKey;
+    // The resource key and return cache are both set at most once, during registerWithCache().
+    /*const*/ GraphiteResourceKey  fKey;
+    /*const*/ sk_sp<ResourceCache> fReturnCache;
 
-    sk_sp<ResourceCache> fReturnCache;
     // An index into the return cache so we know whether or not the resource is already waiting to
     // be returned or not.
     mutable int fReturnIndex = -1;
 
-    Ownership fOwnership;
+    // The remaining fields are mutable state that is only modified by the ResourceCache on the
+    // cache's thread, guarded by `fReturnCache::fSingleOwner`.
 
-    static const size_t kInvalidGpuMemorySize = ~static_cast<size_t>(0);
-    mutable size_t fGpuMemorySize = kInvalidGpuMemorySize;
+    size_t fGpuMemorySize = kInvalidGpuMemorySize;
 
-    // All resource created internally by Graphite and held in the ResourceCache as a shared
-    // resource or available scratch resource are considered budgeted. Resources that back client
-    // owned objects (e.g. SkSurface or SkImage) are not budgeted and do not count against cache
-    // limits.
-    skgpu::Budgeted fBudgeted;
+    // All resources created internally by Graphite that are held in the ResourceCache as shared or
+    // available scratch resources are considered budgeted. Resources that back client-owned objects
+    // (e.g. SkSurface or SkImage) and wrapper objects (e.g. BackendTexture) do not count against
+    // cache limits and therefore should never be budgeted.
+    Budgeted fBudgeted = Budgeted::kNo;
+    // All resources start out as non-shareable (the strictest mode) and revert to non-shareable
+    // when they are returned to the cache and have no more usage refs. An available resource can
+    // be returned if its shareable type matches the request, or if it was non-shareable at which
+    // point the resource is upgraded to the more permissive mode (until all shared usages are
+    // dropped at which point it can be used for any purpose again).
+    Shareable fShareable = Shareable::kNo;
 
     // This is only used by ProxyCache::purgeProxiesNotUsedSince which is called from
     // ResourceCache::purgeResourcesNotUsedSince. When kYes, this signals that the Resource
@@ -371,24 +406,24 @@ private:
     // is returned to the ResourceCache).
     DeleteASAP fDeleteASAP = DeleteASAP::kNo;
 
-    // An index into a heap when this resource is purgeable or an array when not. This is maintained
-    // by the cache.
-    mutable int fCacheArrayIndex = -1;
-    // This value reflects how recently this resource was accessed in the cache. This is maintained
-    // by the cache.
-    uint32_t fTimestamp;
-    skgpu::StdSteadyClock::time_point fLastAccess;
+    // Set to true when the resource is contained in its cache's `fResourceMap`, which allows it to
+    // be returned from findAndRefResource().
+    bool fAvailableForReuse = false;
 
-    const UniqueID fUniqueID;
+    // An index into a heap when this resource is purgeable or an array when not. This is maintained
+    // by the cache. Must be mutable to fit SkTDPQueue's access API.
+    mutable int fCacheArrayIndex = -1;
+
+    // This value reflects how recently this resource was accessed in the cache. This is maintained
+    // by the cache. It defines a total order over resources, even if their fLastAccess times are
+    // the same (i.e. returned at time points less than the system's granularity).
+    uint32_t fLastUseToken;
+    skgpu::StdSteadyClock::time_point fLastAccess;
 
     // String used to describe the current use of this Resource.
     std::string fLabel;
 
-    // This is only used during validation checking. Lots of the validation code depends on a
-    // resource being purgeable or not. However, purgeable itself just means having no refs. The
-    // refs can be removed before a Resource is returned to the cache (or even added to the
-    // ReturnQueue).
-    SkDEBUGCODE(mutable bool fNonShareableInCache = false;)
+    SkDEBUGCODE(mutable bool fCalledRemovedFromCache = false;)
 };
 
 } // namespace skgpu::graphite

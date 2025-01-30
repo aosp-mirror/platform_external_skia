@@ -54,7 +54,7 @@ PaintParams::PaintParams(const SkPaint& paint,
                          sk_sp<SkBlender> primitiveBlender,
                          const CircularRRectClip& analyticClip,
                          sk_sp<SkShader> clipShader,
-                         DstReadRequirement dstReadReq,
+                         bool dstReadRequired,
                          bool skipColorXform)
         : fColor(paint.getColor4f())
         , fFinalBlender(paint.refBlender())
@@ -63,7 +63,7 @@ PaintParams::PaintParams(const SkPaint& paint,
         , fPrimitiveBlender(std::move(primitiveBlender))
         , fAnalyticClip(analyticClip)
         , fClipShader(std::move(clipShader))
-        , fDstReadReq(dstReadReq)
+        , fDstReadRequired(dstReadRequired)
         , fSkipColorXform(skipColorXform)
         , fDither(paint.isDither()) {}
 
@@ -92,37 +92,6 @@ SkColor4f PaintParams::Color4fPrepForDst(SkColor4f srcColor, const SkColorInfo& 
     SkColor4f result = srcColor;
     steps.apply(result.vec());
     return result;
-}
-
-void Blend(const KeyContext& keyContext,
-           PaintParamsKeyBuilder* keyBuilder,
-           PipelineDataGatherer* gatherer,
-           AddToKeyFn addBlendToKey,
-           AddToKeyFn addSrcToKey,
-           AddToKeyFn addDstToKey) {
-    BlendComposeBlock::BeginBlock(keyContext, keyBuilder, gatherer);
-
-        addSrcToKey();
-
-        addDstToKey();
-
-        addBlendToKey();
-
-    keyBuilder->endBlock();  // BlendComposeBlock
-}
-
-void Compose(const KeyContext& keyContext,
-             PaintParamsKeyBuilder* keyBuilder,
-             PipelineDataGatherer* gatherer,
-             AddToKeyFn addInnerToKey,
-             AddToKeyFn addOuterToKey) {
-    ComposeBlock::BeginBlock(keyContext, keyBuilder, gatherer);
-
-        addInnerToKey();
-
-        addOuterToKey();
-
-    keyBuilder->endBlock();  // ComposeBlock
 }
 
 void AddFixedBlendMode(const KeyContext& keyContext,
@@ -200,7 +169,17 @@ void PaintParams::handlePrimitiveColor(const KeyContext& keyContext,
                   this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
               },
               /* addDstToKey= */ [&]() -> void {
-                  PrimitiveColorBlock::AddBlock(keyContext, keyBuilder, gatherer);
+                  // When fSkipColorXform is true, it's assumed that the primitive color is
+                  // already in the dst color space. We could change the paint key to not have
+                  // any colorspace block wrapping the primitive color block, but for now just
+                  // use the dst color space as the src color space to produce an identity CS
+                  // transform.
+                  //
+                  // When fSkipColorXform is false (most cases), it's assumed to be in sRGB.
+                  const SkColorSpace* primitiveCS =
+                        fSkipColorXform ? keyContext.dstColorInfo().colorSpace()
+                                        : sk_srgb_singleton();
+                  AddPrimitiveColor(keyContext, keyBuilder, gatherer, primitiveCS);
               });
     } else {
         this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
@@ -319,7 +298,7 @@ void PaintParams::toKey(const KeyContext& keyContext,
     // Root Node 1 is the final blender
     std::optional<SkBlendMode> finalBlendMode = this->asFinalBlendMode();
     if (finalBlendMode) {
-        if (fDstReadReq == DstReadRequirement::kNone) {
+        if (!fDstReadRequired) {
             // With no shader blending, be as explicit as possible about the final blend
             AddFixedBlendMode(keyContext, builder, gatherer, *finalBlendMode);
         } else {

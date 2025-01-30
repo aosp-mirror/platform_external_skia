@@ -12,7 +12,6 @@
 #include "include/core/SkPaint.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/geom/AnalyticClip.h"
-#include <functional>  // std::function
 
 class SkColorInfo;
 class SkShader;
@@ -38,7 +37,7 @@ public:
                          sk_sp<SkBlender> primitiveBlender,
                          const CircularRRectClip& analyticClip,
                          sk_sp<SkShader> clipShader,
-                         DstReadRequirement dstReadReq,
+                         bool dstReadRequired,
                          bool skipColorXform);
 
     PaintParams(const PaintParams&);
@@ -61,7 +60,7 @@ public:
     SkBlender* primitiveBlender() const { return fPrimitiveBlender.get(); }
     sk_sp<SkBlender> refPrimitiveBlender() const;
 
-    DstReadRequirement dstReadRequirement() const { return fDstReadReq; }
+    bool dstReadRequired() const { return fDstReadRequired; }
     bool skipColorXform() const { return fSkipColorXform; }
     bool dither() const { return fDither; }
 
@@ -93,17 +92,11 @@ private:
     sk_sp<SkBlender>     fPrimitiveBlender;
     CircularRRectClip    fAnalyticClip;
     sk_sp<SkShader>      fClipShader;
-    DstReadRequirement   fDstReadReq;
+    bool                 fDstReadRequired;
     bool                 fSkipColorXform;
     bool                 fDither;
 };
 
-using AddToKeyFn = std::function<void()>;
-
-void Blend(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*,
-           AddToKeyFn addBlendToKey, AddToKeyFn addSrcToKey, AddToKeyFn addDstToKey);
-void Compose(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*,
-             AddToKeyFn addInnerToKey, AddToKeyFn addOuterToKey);
 // Add a fixed blend mode node for a specific SkBlendMode.
 void AddFixedBlendMode(const KeyContext&,
                        PaintParamsKeyBuilder*,

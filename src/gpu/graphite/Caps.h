@@ -61,14 +61,18 @@ struct ResourceBindingRequirements {
     // Whether buffer, texture, and sampler resource bindings use distinct index ranges.
     bool fDistinctIndexRanges = false;
 
+    // Whether intrinsic constant information is stored as push constants (rather than normal UBO).
+    // Currently only relevant or possibly true for Vulkan.
+    bool fUseVulkanPushConstantsForIntrinsicConstants = false;
+
     int fIntrinsicBufferBinding = -1;
     int fRenderStepBufferBinding = -1;
     int fPaintParamsBufferBinding = -1;
     int fGradientBufferBinding = -1;
 };
 
-enum class DstReadRequirement {
-    kNone,
+enum class DstReadStrategy {
+    kNoneRequired,
     kTextureCopy,
     kTextureSample,
     kFramebufferFetch,
@@ -119,13 +123,6 @@ public:
                                               const RenderPassDesc&) const = 0;
     virtual UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const = 0;
 
-    // Returns a GraphiteResourceKey based upon a SamplerDesc with any additional information that
-    // backends append within their implementation. By default, simply returns a key based upon
-    // the SamplerDesc with no extra info.
-    // TODO: Rather than going through a GraphiteResourceKey, migrate to having a cache of samplers
-    // keyed off of SamplerDesc to minimize heap allocations.
-    virtual GraphiteResourceKey makeSamplerKey(const SamplerDesc& samplerDesc) const;
-
     // Backends can optionally override this method to return meaningful sampler conversion info.
     // By default, simply return a default ImmutableSamplerInfo.
     virtual ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy*) const {
@@ -152,7 +149,6 @@ public:
     virtual void buildKeyForTexture(SkISize dimensions,
                                     const TextureInfo&,
                                     ResourceType,
-                                    Shareable,
                                     GraphiteResourceKey*) const = 0;
 
     const ResourceBindingRequirements& resourceBindingRequirements() const {
@@ -298,8 +294,10 @@ public:
 
     skgpu::ShaderErrorHandler* shaderErrorHandler() const { return fShaderErrorHandler; }
 
-    // Returns what method of dst read is required for a draw using the dst color.
-    DstReadRequirement getDstReadRequirement() const;
+    // Returns what method of dst read a draw should use for obtaining the dst color.
+    // TODO(b/390457657): This method should take in target texture information to better inform dst
+    // read strategy selection.
+    DstReadStrategy getDstReadStrategy() const;
 
     float minDistanceFieldFontSize() const { return fMinDistanceFieldFontSize; }
     float glyphsAsPathsFontSize() const { return fGlyphsAsPathsFontSize; }
@@ -321,6 +319,8 @@ public:
     sktext::gpu::SubRunControl getSubRunControl(bool useSDFTForSmallText) const;
 
     bool setBackendLabels() const { return fSetBackendLabels; }
+
+    GpuStatsFlags supportedGpuStats() const { return fSupportedGpuStats; }
 
 protected:
     Caps();
@@ -408,6 +408,8 @@ protected:
 
     ResourceBindingRequirements fResourceBindingReqs;
 
+    GpuStatsFlags fSupportedGpuStats = GpuStatsFlags::kNone;
+
     //////////////////////////////////////////////////////////////////////////////////////////
     // Client-provided Caps
 
@@ -432,7 +434,6 @@ protected:
     bool fAllowMultipleAtlasTextures = true;
     bool fSupportBilerpFromGlyphAtlas = false;
 
-    // Set based on client options
     bool fRequireOrderedRecordings = false;
 
     bool fSetBackendLabels = false;

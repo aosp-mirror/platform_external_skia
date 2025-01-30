@@ -1048,6 +1048,95 @@ void add_color_space_xform_uniform_data(
     add_color_space_uniforms(data.fSteps, data.fReadSwizzle, gatherer);
 }
 
+void add_color_space_xform_premul_uniform_data(
+        const ShaderCodeDictionary* dict,
+        const ColorSpaceTransformBlock::ColorSpaceTransformData& data,
+        PipelineDataGatherer* gatherer) {
+    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kColorSpaceXformPremul)
+
+    // If either of these asserts would fail, we can't correctly use this specialized shader for
+    // the given transform.
+    SkASSERT(data.fReadSwizzle == ReadSwizzle::kRGBA || data.fReadSwizzle == ReadSwizzle::kRGB1);
+    // If these are both true, that implies there's a color space transfer or gamut transform.
+    SkASSERT(!(data.fSteps.flags.unpremul && data.fSteps.flags.premul));
+
+    // This shader can either do nothing, or perform one of three actions. These four possibilities
+    // are encoded in a half2 argument as:
+    // - identity: {0, 1}
+    // - do unpremul: {-1, 1}
+    // - do premul: {0, 0}
+    // - make opaque: {1, 1}
+    const bool opaque = data.fReadSwizzle == ReadSwizzle::kRGB1;
+    const float x = data.fSteps.flags.unpremul ? -1.f :
+                    opaque ? 1.f
+                           : 0.f;
+    const float y = data.fSteps.flags.premul ? 0.f : 1.f;
+    gatherer->writeHalf(SkV2{x, y});
+}
+
+void add_color_space_xform_srgb_uniform_data(
+        const ShaderCodeDictionary* dict,
+        const ColorSpaceTransformBlock::ColorSpaceTransformData& data,
+        PipelineDataGatherer* gatherer) {
+    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kColorSpaceXformSRGB)
+
+    SkMatrix gamutTransform;
+    const float identity[] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+    // TODO: it seems odd to copy this into an SkMatrix just to write it to the gatherer
+    // src_to_dst_matrix is column-major, SkMatrix is row-major.
+    const float* m = data.fSteps.flags.gamut_transform ? data.fSteps.src_to_dst_matrix : identity;
+    if (data.fReadSwizzle == ReadSwizzle::kRRR1) {
+        gamutTransform.setAll(m[0] + m[3] + m[6], 0, 0,
+                              m[1] + m[4] + m[7], 0, 0,
+                              m[2] + m[5] + m[8], 0, 0);
+    } else if (data.fReadSwizzle == ReadSwizzle::kBGRA) {
+        gamutTransform.setAll(m[6], m[3], m[0],
+                              m[7], m[4], m[1],
+                              m[8], m[5], m[2]);
+    } else if (data.fReadSwizzle == ReadSwizzle::k000R) {
+        gamutTransform.setAll(0, 0, 0,
+                              0, 0, 0,
+                              0, 0, 0);
+    } else if (data.fSteps.flags.gamut_transform) {
+        gamutTransform.setAll(m[0], m[3], m[6],
+                              m[1], m[4], m[7],
+                              m[2], m[5], m[8]);
+    }
+    gatherer->writeHalf(gamutTransform);
+
+    // To encode whether to do premul/unpremul or make the output opaque, we use
+    // srcDEF_args.w and dstDEF_args.w:
+    // - identity: {0, 1}
+    // - do unpremul: {-1, 1}
+    // - do premul: {0, 0}
+    // - do both: {-1, 0}
+    // - alpha swizzle 1: {1, 1}
+    // - alpha swizzle r: {1, 0}
+    const bool alphaSwizzleR = data.fReadSwizzle == ReadSwizzle::k000R;
+    const bool alphaSwizzle1 = data.fReadSwizzle == ReadSwizzle::kRGB1 ||
+                               data.fReadSwizzle == ReadSwizzle::kRRR1;
+
+    // It doesn't make sense to unpremul/premul in opaque cases, but we might get a request to
+    // anyways, which we can just ignore.
+    const bool unpremul = alphaSwizzle1 ? false : data.fSteps.flags.unpremul;
+    const bool premul = alphaSwizzle1 ? false : data.fSteps.flags.premul;
+
+    const float srcW = unpremul ? -1.f :
+                       (alphaSwizzleR || alphaSwizzle1) ? 1.f :
+                                                          0.f;
+    const float dstW = (premul || alphaSwizzleR) ? 0.f : 1.f;
+
+    gatherer->writeHalf(SkV4{data.fSteps.srcTF.g, data.fSteps.srcTF.a,
+                             data.fSteps.srcTF.b, data.fSteps.srcTF.c});
+    gatherer->writeHalf(SkV4{data.fSteps.srcTF.d, data.fSteps.srcTF.e,
+                             data.fSteps.srcTF.f, srcW});
+
+    gatherer->writeHalf(SkV4{data.fSteps.dstTFInv.g, data.fSteps.dstTFInv.a,
+                             data.fSteps.dstTFInv.b, data.fSteps.dstTFInv.c});
+    gatherer->writeHalf(SkV4{data.fSteps.dstTFInv.d, data.fSteps.dstTFInv.e,
+                             data.fSteps.dstTFInv.f, dstW});
+}
+
 }  // anonymous namespace
 
 ColorSpaceTransformBlock::ColorSpaceTransformData::ColorSpaceTransformData(const SkColorSpace* src,
@@ -1060,6 +1149,28 @@ void ColorSpaceTransformBlock::AddBlock(const KeyContext& keyContext,
                                         PaintParamsKeyBuilder* builder,
                                         PipelineDataGatherer* gatherer,
                                         const ColorSpaceTransformData& data) {
+    const bool xformNeedsGamutOrXferFn = data.fSteps.flags.linearize || data.fSteps.flags.encode ||
+                                         data.fSteps.flags.gamut_transform;
+    const bool swizzleNeedsGamutTransform = !(data.fReadSwizzle == ReadSwizzle::kRGBA ||
+                                              data.fReadSwizzle == ReadSwizzle::kRGB1);
+
+    // Use a specialized shader if we don't need transfer function or gamut transforms.
+    if (!(xformNeedsGamutOrXferFn || swizzleNeedsGamutTransform)) {
+        add_color_space_xform_premul_uniform_data(keyContext.dict(), data, gatherer);
+        builder->addBlock(BuiltInCodeSnippetID::kColorSpaceXformPremul);
+        return;
+    }
+
+    // Use a specialized shader if we're transferring to and from sRGB-ish color spaces.
+    if (data.fSteps.flags.linearize && data.fSteps.flags.encode &&
+        skcms_TransferFunction_isSRGBish(&data.fSteps.srcTF) &&
+        skcms_TransferFunction_isSRGBish(&data.fSteps.dstTFInv)) {
+        add_color_space_xform_srgb_uniform_data(keyContext.dict(), data, gatherer);
+        builder->addBlock(BuiltInCodeSnippetID::kColorSpaceXformSRGB);
+        return;
+    }
+
+    // Use the most general color space transform shader if no specializations can be used.
     add_color_space_xform_uniform_data(keyContext.dict(), data, gatherer);
     builder->addBlock(BuiltInCodeSnippetID::kColorSpaceXformColorFilter);
 }
@@ -1090,27 +1201,43 @@ void CircularRRectClipBlock::AddBlock(const KeyContext& keyContext,
 //--------------------------------------------------------------------------------------------------
 namespace {
 
-void add_primitive_color_uniform_data(
+void add_atlas_clip_data(
         const ShaderCodeDictionary* dict,
-        const SkColorSpaceXformSteps& steps,
+        const AtlasClipBlock::AtlasClipData& data,
         PipelineDataGatherer* gatherer) {
-
-    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kPrimitiveColor)
-    add_color_space_uniforms(steps, ReadSwizzle::kRGBA, gatherer);
+    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kAtlasClip)
+    gatherer->writeHalf(data.fTexCoordOffset);
+    gatherer->writeHalf(data.fMaskBounds);
+    gatherer->write(SkSize::Make(1.f/data.fAtlasSize.width(), 1.f/data.fAtlasSize.height()));
 }
 
 }  // anonymous namespace
 
-void PrimitiveColorBlock::AddBlock(const KeyContext& keyContext,
-                                   PaintParamsKeyBuilder* builder,
-                                   PipelineDataGatherer* gatherer) {
-    SkColorSpaceXformSteps steps = SkColorSpaceXformSteps(SkColorSpace::MakeSRGB().get(),
-                                                          kPremul_SkAlphaType,
-                                                          keyContext.dstColorInfo().colorSpace(),
-                                                          keyContext.dstColorInfo().alphaType());
-    add_primitive_color_uniform_data(keyContext.dict(), steps, gatherer);
+void AtlasClipBlock::AddBlock(const KeyContext& keyContext,
+                              PaintParamsKeyBuilder* builder,
+                              PipelineDataGatherer* gatherer,
+                              const AtlasClipData& data) {
+    add_atlas_clip_data(keyContext.dict(), data, gatherer);
+    builder->addBlock(BuiltInCodeSnippetID::kAtlasClip);
+}
 
-    builder->addBlock(BuiltInCodeSnippetID::kPrimitiveColor);
+//--------------------------------------------------------------------------------------------------
+
+void AddPrimitiveColor(const KeyContext& keyContext,
+                       PaintParamsKeyBuilder* builder,
+                       PipelineDataGatherer* gatherer,
+                       const SkColorSpace* primitiveColorSpace) {
+    ColorSpaceTransformBlock::ColorSpaceTransformData toDst(primitiveColorSpace,
+                                                            kPremul_SkAlphaType,
+                                                            keyContext.dstColorInfo().colorSpace(),
+                                                            keyContext.dstColorInfo().alphaType());
+    Compose(keyContext, builder, gatherer,
+            /* addInnerToKey= */ [&]() -> void {
+                builder->addBlock(BuiltInCodeSnippetID::kPrimitiveColor);
+            },
+            /* addOuterToKey= */ [&]() -> void {
+                ColorSpaceTransformBlock::AddBlock(keyContext, builder, gatherer, toDst);
+            });
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1122,7 +1249,7 @@ void AddBlendModeColorFilter(const KeyContext& keyContext,
                              const SkPMColor4f& srcColor) {
     Blend(keyContext, builder, gatherer,
           /* addBlendToKey= */ [&] () -> void {
-            AddBlendMode(keyContext, builder, gatherer, bm);
+              AddBlendMode(keyContext, builder, gatherer, bm);
           },
           /* addSrcToKey= */ [&]() -> void {
               SolidColorShaderBlock::AddBlock(keyContext, builder, gatherer, srcColor);
@@ -1629,25 +1756,12 @@ static void add_to_key(const KeyContext& keyContext,
                        const SkColorShader* shader) {
     SkASSERT(shader);
 
-    SolidColorShaderBlock::AddBlock(keyContext, builder, gatherer,
-                                    SkColor4f::FromColor(shader->color()).premul());
-}
-static void notify_in_use(Recorder*, DrawContext*, const SkColorShader*) {
-    // No-op
-}
-
-static void add_to_key(const KeyContext& keyContext,
-                       PaintParamsKeyBuilder* builder,
-                       PipelineDataGatherer* gatherer,
-                       const SkColor4Shader* shader) {
-    SkASSERT(shader);
-
-    SkPMColor4f color = map_color(shader->color(), shader->colorSpace().get(),
+    SkPMColor4f color = map_color(shader->color(), sk_srgb_singleton(),
                                   keyContext.dstColorInfo().colorSpace());
 
     SolidColorShaderBlock::AddBlock(keyContext, builder, gatherer, color);
 }
-static void notify_in_use(Recorder*, DrawContext*, const SkColor4Shader*) {
+static void notify_in_use(Recorder*, DrawContext*, const SkColorShader*) {
     // No-op
 }
 

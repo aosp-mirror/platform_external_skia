@@ -12,11 +12,6 @@ var deps = deps_parser.DepsEntries{
 		Version: "c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
 		Path:    "third_party/externals/dng_sdk",
 	},
-	"android.googlesource.com/platform/external/libmicrohttpd": {
-		Id:      "android.googlesource.com/platform/external/libmicrohttpd",
-		Version: "748945ec6f1c67b7efc934ab0808e1d32f2fb98d",
-		Path:    "third_party/externals/microhttpd",
-	},
 	"android.googlesource.com/platform/external/perfetto": {
 		Id:      "android.googlesource.com/platform/external/perfetto",
 		Version: "93885509be1c9240bc55fa515ceb34811e54a394",
@@ -29,7 +24,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/angle/angle": {
 		Id:      "chromium.googlesource.com/angle/angle",
-		Version: "2f8ad9c1042cd2280151019786f2fd5b661ca650",
+		Version: "54b6968808c9f3b239ea16a4eb0be3198e8d4fa0",
 		Path:    "third_party/externals/angle2",
 	},
 	"chromium.googlesource.com/chromium/deps/icu": {
@@ -49,12 +44,12 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/chromium/src/buildtools": {
 		Id:      "chromium.googlesource.com/chromium/src/buildtools",
-		Version: "b138e6ce86ae843c42a1a08f37903207bebcca75",
+		Version: "1760ff6d7267dd97ae1968c7bee9ce04a2a8489d",
 		Path:    "buildtools",
 	},
 	"chromium.googlesource.com/chromium/src/third_party/freetype2": {
 		Id:      "chromium.googlesource.com/chromium/src/third_party/freetype2",
-		Version: "83af801b552111e37d9466a887e1783a0fb5f196",
+		Version: "59320b2d3c2584ac01914ed0deff64bcc8fb23b2",
 		Path:    "third_party/externals/freetype",
 	},
 	"chromium.googlesource.com/chromium/src/third_party/jinja2": {
@@ -89,17 +84,17 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers": {
 		Id:      "chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers",
-		Version: "cbcad3c0587dddc768d76641ea00f5c45ab5a278",
+		Version: "e43027aa41c4f51b12d79aeae53ff608951c36ec",
 		Path:    "third_party/externals/vulkan-headers",
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools": {
 		Id:      "chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
-		Version: "e94085e2167e33b6b18474da24ff18f46bc56976",
+		Version: "7658238ddc50d7ef1fe923d95b7112597a5adc68",
 		Path:    "third_party/externals/vulkan-tools",
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries": {
 		Id:      "chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries",
-		Version: "9123b8c04b378c1b81899314e3060a80f255a24b",
+		Version: "8ec84823afa46cd054c8b094269eab958e078010",
 		Path:    "third_party/externals/vulkan-utility-libraries",
 	},
 	"chromium.googlesource.com/external/github.com/google/highway": {
@@ -144,7 +139,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/vulkan-deps": {
 		Id:      "chromium.googlesource.com/vulkan-deps",
-		Version: "ae5ea7b95745533843d0629708827b30ee9e1769",
+		Version: "d06765b40a0ba753fce6113713117e04cec02957",
 		Path:    "third_party/externals/vulkan-deps",
 	},
 	"chromium.googlesource.com/webm/libwebp": {
@@ -154,7 +149,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "2c4f822f9e78d491e3fa32dfee1add5b93c8be65",
+		Version: "363b4f1a08225b73f347e0330ba6d872139af201",
 		Path:    "third_party/externals/dawn",
 	},
 	"infra/3pp/tools/ninja": {
@@ -164,7 +159,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/buildbot": {
 		Id:      "skia.googlesource.com/buildbot",
-		Version: "064137920a75e8ac75beead23713707e2e286e8f",
+		Version: "3c369985ab80eb890610b27f5aedd82c6c06aea3",
 		Path:    "infra/skia-infra",
 	},
 	"skia.googlesource.com/external/github.com/AOMediaCodec/libavif": {
@@ -194,12 +189,12 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers": {
 		Id:      "skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers",
-		Version: "cb6b2c32dbfc3257c1e9142a116fe9ee3d9b80a2",
+		Version: "2b2e05e088841c63c0b6fd4c9fb380d8688738d3",
 		Path:    "third_party/externals/spirv-headers",
 	},
 	"skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools": {
 		Id:      "skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools",
-		Version: "9aaa2601400a29ce39ce1111aa9f790e5c9d4c1b",
+		Version: "173fe3c60a8d9c7d35d7842ae267bb9df267a127",
 		Path:    "third_party/externals/spirv-tools",
 	},
 	"skia.googlesource.com/external/github.com/abseil/abseil-cpp": {
@@ -232,6 +227,11 @@ var deps = deps_parser.DepsEntries{
 		Version: "55d35d8387c15bf0cfd71861df67af8cfbda7456",
 		Path:    "third_party/externals/imgui",
 	},
+	"skia.googlesource.com/external/github.com/skia-dev/delaunator-cpp": {
+		Id:      "skia.googlesource.com/external/github.com/skia-dev/delaunator-cpp",
+		Version: "98305ef6c4e862f7d48df9cc647b690d796fec68",
+		Path:    "third_party/externals/delaunator-cpp",
+	},
 	"skia.googlesource.com/third_party/libpng": {
 		Id:      "skia.googlesource.com/third_party/libpng",
 		Version: "ed217e3e601d8e462f7fd1e04bed43ac42212429",
@@ -244,12 +244,12 @@ var deps = deps_parser.DepsEntries{
 	},
 	"skia/tools/sk": {
 		Id:      "skia/tools/sk",
-		Version: "git_revision:064137920a75e8ac75beead23713707e2e286e8f",
+		Version: "git_revision:3c369985ab80eb890610b27f5aedd82c6c06aea3",
 		Path:    "bin",
 	},
 	"swiftshader.googlesource.com/SwiftShader": {
 		Id:      "swiftshader.googlesource.com/SwiftShader",
-		Version: "1495532f997f0256b655ca83ab15b6122a3e8847",
+		Version: "a87fa39f64462d4c3ef607d1055366370f7bddd6",
 		Path:    "third_party/externals/swiftshader",
 	},
 }

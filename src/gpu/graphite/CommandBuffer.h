@@ -18,6 +18,8 @@
 #include "src/gpu/graphite/DrawWriter.h"
 #include "src/gpu/graphite/Resource.h"
 
+#include <optional>
+
 namespace skgpu {
 class RefCntedCallback;
 class MutableTextureState;
@@ -61,6 +63,10 @@ public:
     // If any work is needed to create new resources for a fresh command buffer do that here.
     virtual bool setNewCommandBufferResources() = 0;
 
+    virtual bool startTimerQuery() { SK_ABORT("Timer query unsupported."); }
+    virtual void endTimerQuery() { SK_ABORT("Timer query unsupported."); }
+    virtual std::optional<GpuStats> gpuStats() { return {}; }
+
     void addFinishedProc(sk_sp<RefCntedCallback> finishedProc);
     void callFinishedProcs(bool success);
 
@@ -75,7 +81,7 @@ public:
     SkSpan<const sk_sp<Buffer>> buffersToAsyncMapOnSubmit() const;
 
     // If any recorded draw requires a dst texture copy for blending, that texture must be provided
-    // in `dstCopy`; otherwise it should be null. The `dstCopyBounds` are in the same coordinate
+    // in `dstCopy`; otherwise it should be null. The `dstReadBounds` are in the same coordinate
     // space of the logical viewport *before* any replay translation is applied.
     //
     // The logical viewport is always (0,0,viewportDims) and matches the "device" coordinate space
@@ -86,7 +92,7 @@ public:
                        sk_sp<Texture> resolveTexture,
                        sk_sp<Texture> depthStencilTexture,
                        const Texture* dstCopy,
-                       SkIRect dstCopyBounds,
+                       SkIRect dstReadBounds,
                        SkISize viewportDims,
                        const DrawPassList& drawPasses);
 
@@ -117,10 +123,12 @@ public:
     bool synchronizeBufferToCpu(sk_sp<Buffer>);
     bool clearBuffer(const Buffer* buffer, size_t offset, size_t size);
 
-    // This sets a translation to be applied to any subsequently added command, assuming these
-    // commands are part of a translated replay of a Graphite recording.
-    void setReplayTranslation(SkIVector translation) { fReplayTranslation = translation; }
-    void clearReplayTranslation() { fReplayTranslation = {0, 0}; }
+    // This sets a translation and clip to be applied to any subsequently added command, assuming
+    // these commands are part of a transformed replay of a Graphite recording.
+    void setReplayTranslationAndClip(const SkIVector& translation, const SkIRect& clip) {
+        fReplayTranslation = translation;
+        fReplayClip = clip.makeOffset(translation);
+    }
 
     Protected isProtected() const { return fIsProtected; }
 
@@ -130,14 +138,16 @@ protected:
     SkISize fColorAttachmentSize;
     // This is also the origin of the logical viewport relative to the target texture's (0,0) pixel
     SkIVector fReplayTranslation;
+    // This is in target texture space, having been transformed by the replay translation.
+    SkIRect fReplayClip;
 
-    // The texture to use for implementing DstReadRequirement::kTextureCopy for the current render
+    // The texture to use for implementing DstReadStrategy::kTextureCopy for the current render
     // pass. This is a bare pointer since the CopyTask that initializes the texture's contents
     // will have tracked the resource on the CommandBuffer already.
     std::pair<const Texture*, const Sampler*> fDstCopy;
     // Already includes replay translation and respects final color attachment bounds, but with
     // dimensions that equal fDstCopy's width and height.
-    SkIRect fDstCopyBounds;
+    SkIRect fDstReadBounds;
 
     Protected fIsProtected;
 
