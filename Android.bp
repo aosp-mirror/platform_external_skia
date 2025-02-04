@@ -2668,7 +2668,6 @@ cc_defaults {
         "modules/skottie/src/effects/InvertEffect.cpp",
         "modules/skottie/src/effects/LevelsEffect.cpp",
         "modules/skottie/src/effects/LinearWipeEffect.cpp",
-        "modules/skottie/src/effects/MotionBlurEffect.cpp",
         "modules/skottie/src/effects/MotionTileEffect.cpp",
         "modules/skottie/src/effects/RadialWipeEffect.cpp",
         "modules/skottie/src/effects/ShadowStyles.cpp",
