@@ -49,13 +49,18 @@ public:
 
     TextureInfo getDefaultStorageTextureInfo(SkColorType) const override;
 
-    ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy* proxy) const override;
+    ImmutableSamplerInfo getImmutableSamplerInfo(const TextureInfo&) const override;
 
     UniqueKey makeGraphicsPipelineKey(const GraphicsPipelineDesc&,
                                       const RenderPassDesc&) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override { return {}; }
 
-    GraphiteResourceKey makeSamplerKey(const SamplerDesc&) const override;
+    bool deserializeTextureInfo(SkStream*,
+                                BackendApi,
+                                Mipmapped,
+                                Protected,
+                                uint32_t sampleCount,
+                                TextureInfo* out) const override;
 
     uint32_t channelMask(const TextureInfo&) const override;
 
@@ -68,7 +73,6 @@ public:
     void buildKeyForTexture(SkISize dimensions,
                             const TextureInfo&,
                             ResourceType,
-                            Shareable,
                             GraphiteResourceKey*) const override;
 
     bool shouldAlwaysUseDedicatedImageMemory() const {

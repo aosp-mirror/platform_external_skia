@@ -71,8 +71,8 @@ struct ResourceBindingRequirements {
     int fGradientBufferBinding = -1;
 };
 
-enum class DstReadRequirement {
-    kNone,
+enum class DstReadStrategy {
+    kNoneRequired,
     kTextureCopy,
     kTextureSample,
     kFramebufferFetch,
@@ -123,23 +123,18 @@ public:
                                               const RenderPassDesc&) const = 0;
     virtual UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const = 0;
 
-    // Returns a GraphiteResourceKey based upon a SamplerDesc with any additional information that
-    // backends append within their implementation. By default, simply returns a key based upon
-    // the SamplerDesc with no extra info.
-    // TODO: Rather than going through a GraphiteResourceKey, migrate to having a cache of samplers
-    // keyed off of SamplerDesc to minimize heap allocations.
-    virtual GraphiteResourceKey makeSamplerKey(const SamplerDesc& samplerDesc) const;
-
-    // Backends can optionally override this method to return meaningful sampler conversion info.
-    // By default, simply return a default ImmutableSamplerInfo.
-    virtual ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy*) const {
-        return {};
-    }
 
     virtual bool extractGraphicsDescs(const UniqueKey&,
                                       GraphicsPipelineDesc*,
                                       RenderPassDesc*,
                                       const RendererProvider*) const { return false; }
+
+    virtual bool deserializeTextureInfo(SkStream*,
+                                        BackendApi,
+                                        Mipmapped,
+                                        Protected,
+                                        uint32_t sampleCount,
+                                        TextureInfo* out) const { return false; }
 
     bool areColorTypeAndTextureInfoCompatible(SkColorType, const TextureInfo&) const;
     virtual uint32_t channelMask(const TextureInfo&) const = 0;
@@ -156,7 +151,6 @@ public:
     virtual void buildKeyForTexture(SkISize dimensions,
                                     const TextureInfo&,
                                     ResourceType,
-                                    Shareable,
                                     GraphiteResourceKey*) const = 0;
 
     const ResourceBindingRequirements& resourceBindingRequirements() const {
@@ -177,6 +171,12 @@ public:
     // Returns the aligned rowBytes when transfering to or from a Texture
     size_t getAlignedTextureDataRowBytes(size_t rowBytes) const {
         return SkAlignTo(rowBytes, fTextureDataRowBytesAlignment);
+    }
+
+    // Backends can optionally override this method to return meaningful sampler conversion info.
+    // By default, simply return a default ImmutableSamplerInfo (e.g. no immutable sampler).
+    virtual ImmutableSamplerInfo getImmutableSamplerInfo(const TextureInfo&) const {
+        return {};
     }
 
     /**
@@ -302,8 +302,10 @@ public:
 
     skgpu::ShaderErrorHandler* shaderErrorHandler() const { return fShaderErrorHandler; }
 
-    // Returns what method of dst read is required for a draw using the dst color.
-    DstReadRequirement getDstReadRequirement() const;
+    // Returns what method of dst read a draw should use for obtaining the dst color.
+    // TODO(b/390457657): This method should take in target texture information to better inform dst
+    // read strategy selection.
+    DstReadStrategy getDstReadStrategy() const;
 
     float minDistanceFieldFontSize() const { return fMinDistanceFieldFontSize; }
     float glyphsAsPathsFontSize() const { return fGlyphsAsPathsFontSize; }

@@ -461,6 +461,10 @@ void VulkanCaps::initFormatTable(const skgpu::VulkanInterface* interface,
 
     std::fill_n(fColorTypeToFormatTable, kSkColorTypeCnt, VK_FORMAT_UNDEFINED);
 
+    // NOTE: VkFormat's naming convention orders channels from low address to high address when
+    // interpreting unpacked formats. For packed formats, the channels are ordered most significant
+    // to least significant (making them opposite of the unpacked).
+
     // Go through all the formats and init their support surface and data ColorTypes.
     // Format: VK_FORMAT_R8G8B8A8_UNORM
     {
@@ -722,6 +726,11 @@ void VulkanCaps::initFormatTable(const skgpu::VulkanInterface* interface,
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
+                // The color type is misnamed and really stores ABGR data, but there is no
+                // SkColorType that matches this actual ARGB VkFormat data. Swapping R and B when
+                // rendering into it has it match the reported transfer color type, but we have to
+                // swap R and B when sampling as well. This only works so long as we don't present
+                // textures of this format to a screen that would not know about this swap.
                 ctInfo.fReadSwizzle = skgpu::Swizzle::BGRA();
                 ctInfo.fWriteSwizzle = skgpu::Swizzle::BGRA();
             }
@@ -937,7 +946,7 @@ void VulkanCaps::initFormatTable(const skgpu::VulkanInterface* interface,
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
-            // Format: VK_FORMAT_BC1_RGBA_UNORM_BLOCK, Surface: kRGB_888x
+            // Format: VK_FORMAT_BC1_RGBA_UNORM_BLOCK, Surface: kRGBA_8888
             {
                 constexpr SkColorType ct = SkColorType::kRGBA_8888_SkColorType;
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
@@ -1513,7 +1522,7 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
 
         int idx = 0;
         // Add GraphicsPipelineDesc information
-        builder[idx++] = pipelineDesc.renderStepID();
+        builder[idx++] = static_cast<uint32_t>(pipelineDesc.renderStepID());
         builder[idx++] = pipelineDesc.paintParamsID().asUInt();
         // Add RenderPass info relevant for pipeline creation that's not captured in RenderPass keys
         builder[idx++] = renderPassDesc.fWriteSwizzle.asKey();
@@ -1526,28 +1535,38 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
     return pipelineKey;
 }
 
-GraphiteResourceKey VulkanCaps::makeSamplerKey(const SamplerDesc& samplerDesc) const {
-    GraphiteResourceKey samplerKey;
-    const SkSpan<const uint32_t>& samplerData = samplerDesc.asSpan();
-    static const ResourceType kSamplerType = GraphiteResourceKey::GenerateResourceType();
-    // Non-format ycbcr and sampler information are guaranteed to fit within one uint32, so the size
-    // of the returned span accurately captures the quantity of uint32s needed whether the sampler
-    // is immutable or not.
-    GraphiteResourceKey::Builder builder(&samplerKey, kSamplerType, samplerData.size(),
-                                         Shareable::kYes);
+// c.f. VulkanTextureInfoData::serialize
+bool VulkanCaps::deserializeTextureInfo(SkStream* stream,
+                                        BackendApi backendAPI,
+                                        Mipmapped mipmapped,
+                                        Protected isProtected,
+                                        uint32_t sampleCount,
+                                        TextureInfo* out) const {
+    SkASSERT(backendAPI == BackendApi::kVulkan);
 
-    for (size_t i = 0; i < samplerData.size(); i++) {
-        builder[i] = samplerData[i];
+    VulkanTextureSpec spec;
+    if (!VulkanTextureSpec::Deserialize(stream, &spec)) {
+        return false;
     }
 
-    builder.finish();
-    return samplerKey;
+    SkASSERT((isProtected == Protected::kYes) ==
+             SkToBool(spec.fFlags & VK_IMAGE_CREATE_PROTECTED_BIT));
+
+    *out = TextureInfos::MakeVulkan(VulkanTextureInfo(sampleCount,
+                                                      mipmapped,
+                                                      spec.fFlags,
+                                                      spec.fFormat,
+                                                      spec.fImageTiling,
+                                                      spec.fImageUsageFlags,
+                                                      spec.fSharingMode,
+                                                      spec.fAspectMask,
+                                                      spec.fYcbcrConversionInfo));
+    return true;
 }
 
 void VulkanCaps::buildKeyForTexture(SkISize dimensions,
                                     const TextureInfo& info,
                                     ResourceType type,
-                                    Shareable shareable,
                                     GraphiteResourceKey* key) const {
     SkASSERT(!dimensions.isEmpty());
 
@@ -1577,13 +1596,15 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
 
     // We need two uint32_ts for dimensions, 1 for format, and 2 for the rest of the information.
     static constexpr int kNum32DataCntNoYcbcr =  2 + 1 + 2;
+    // YCbCr conversion needs 1 int for non-format flags, and a 64-bit format (external or regular).
+    static constexpr int kNum32DataCntYcbcr = 3;
     int num32DataCnt = kNum32DataCntNoYcbcr;
 
     // If a texture w/ an external format is being used, that information must also be appended.
     const VulkanYcbcrConversionInfo& ycbcrInfo = TextureInfos::GetVulkanYcbcrConversionInfo(info);
-    num32DataCnt += ycbcrPackaging::numInt32sNeeded(ycbcrInfo);
+    num32DataCnt += ycbcrInfo.isValid() ? kNum32DataCntYcbcr : 0;
 
-    GraphiteResourceKey::Builder builder(key, type, num32DataCnt, shareable);
+    GraphiteResourceKey::Builder builder(key, type, num32DataCnt);
 
     int i = 0;
     builder[i++] = dimensions.width();
@@ -1591,14 +1612,11 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
 
     if (ycbcrInfo.isValid()) {
         SkASSERT(ycbcrInfo.fFormat != VK_FORMAT_UNDEFINED || ycbcrInfo.fExternalFormat != 0);
-        bool useExternalFormat = ycbcrInfo.fFormat == VK_FORMAT_UNDEFINED;
-        builder[i++] = ycbcrPackaging::nonFormatInfoAsUInt32(ycbcrInfo);
-        if (useExternalFormat) {
-            builder[i++] = (uint32_t)ycbcrInfo.fExternalFormat;
-            builder[i++] = (uint32_t)(ycbcrInfo.fExternalFormat >> 32);
-        } else {
-            builder[i++] =  ycbcrInfo.fFormat;
-        }
+        ImmutableSamplerInfo packedInfo = VulkanYcbcrConversion::ToImmutableSamplerInfo(ycbcrInfo);
+
+        builder[i++] = packedInfo.fNonFormatYcbcrConversionInfo;
+        builder[i++] = (uint32_t) packedInfo.fFormat;
+        builder[i++] = (uint32_t) (packedInfo.fFormat >> 32);
     } else {
         builder[i++] = format;
     }
@@ -1614,26 +1632,16 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
     SkASSERT(i == num32DataCnt);
 }
 
-ImmutableSamplerInfo VulkanCaps::getImmutableSamplerInfo(const TextureProxy* proxy) const {
-    if (proxy) {
-        const skgpu::VulkanYcbcrConversionInfo& ycbcrConversionInfo =
-                TextureInfos::GetVulkanYcbcrConversionInfo(proxy->textureInfo());
+ImmutableSamplerInfo VulkanCaps::getImmutableSamplerInfo(const TextureInfo& textureInfo) const {
+    const skgpu::VulkanYcbcrConversionInfo& ycbcrConversionInfo =
+            TextureInfos::GetVulkanYcbcrConversionInfo(textureInfo);
 
-        if (ycbcrConversionInfo.isValid()) {
-            ImmutableSamplerInfo immutableSamplerInfo;
-            // ycbcrConversionInfo's fFormat being VK_FORMAT_UNDEFINED indicates we are using an
-            // external format rather than a known VkFormat.
-            immutableSamplerInfo.fFormat = ycbcrConversionInfo.fFormat == VK_FORMAT_UNDEFINED
-                    ? ycbcrConversionInfo.fExternalFormat
-                    : ycbcrConversionInfo.fFormat;
-            immutableSamplerInfo.fNonFormatYcbcrConversionInfo =
-                    ycbcrPackaging::nonFormatInfoAsUInt32(ycbcrConversionInfo);
-            return immutableSamplerInfo;
-        }
+    if (ycbcrConversionInfo.isValid()) {
+        return VulkanYcbcrConversion::ToImmutableSamplerInfo(ycbcrConversionInfo);
     }
 
-    // If the proxy is null or the YCbCr conversion for that proxy is invalid, then return a
-    // default ImmutableSamplerInfo struct.
+    // If the YCbCr conversion for the TextureInfo is invalid, then return a default
+    // ImmutableSamplerInfo struct.
     return {};
 }
 

@@ -9,7 +9,10 @@
 
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/graphite/ContextUtils.h"
+#include "src/gpu/graphite/GraphicsPipelineDesc.h"
+#include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/Renderer.h"
+#include "src/gpu/graphite/ShaderCodeDictionary.h"
 #include "src/gpu/graphite/ShaderInfo.h"
 #include "src/utils/SkShaderUtils.h"
 
@@ -19,7 +22,6 @@ GraphicsPipeline::GraphicsPipeline(const SharedContext* sharedContext,
                                    const PipelineInfo& pipelineInfo)
         : Resource(sharedContext,
                    Ownership::kOwned,
-                   skgpu::Budgeted::kYes,
                    /*gpuMemorySize=*/0)
         , fPipelineInfo(pipelineInfo) {}
 
@@ -39,7 +41,7 @@ GraphicsPipeline::PipelineInfo::PipelineInfo(
             SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags,
             uint32_t uniqueKeyHash,
             uint32_t compilationID)
-        : fDstReadReq(shaderInfo.dstReadRequirement())
+        : fDstReadStrategy(shaderInfo.dstReadStrategy())
         , fNumFragTexturesAndSamplers(shaderInfo.numFragmentTexturesAndSamplers())
         , fHasPaintUniforms(shaderInfo.hasPaintUniforms())
         , fHasStepUniforms(shaderInfo.hasStepUniforms())
@@ -53,5 +55,20 @@ GraphicsPipeline::PipelineInfo::PipelineInfo(
     fLabel = shaderInfo.fsLabel();
 #endif
 }
+
+#if defined(GPU_TEST_UTILS)
+SkString GraphicsPipelineDesc::toString(ShaderCodeDictionary* dict) const {
+    SkString tmp;
+
+    tmp.append(RenderStep::RenderStepName(fRenderStepID));
+    tmp.append(" - ");
+
+    PaintParamsKey key = dict->lookup(fPaintID);
+
+    tmp.append(key.toString(dict, true));
+
+    return tmp;
+}
+#endif
 
 }  // namespace skgpu::graphite

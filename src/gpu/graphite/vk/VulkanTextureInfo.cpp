@@ -34,7 +34,9 @@ private:
         return VkFormatToCompressionType(fVkSpec.fFormat);
     }
 
-    bool isMemoryless() const override { return false; }
+    bool isMemoryless() const override {
+        return fVkSpec.fImageUsageFlags & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+    }
 
     SkString toString() const override {
         return SkStringPrintf("Vulkan(%s,", fVkSpec.toString().c_str());
@@ -65,6 +67,11 @@ private:
             return fVkSpec.isCompatible(otherVk->fVkSpec);
         }
         return false;
+    }
+
+    // c.f. VulkanCaps::deserializeTextureInfo
+    bool serialize(SkWStream* stream) const override {
+        return fVkSpec.serialize(stream);
     }
 };
 

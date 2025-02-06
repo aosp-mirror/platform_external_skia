@@ -450,6 +450,7 @@ func GenTasks(cfg *Config) {
 			"skia/tools",
 			// Needed for tests.
 			"skia/bench", // Needed to run benchmark tests with Bazel.
+			"skia/dm",    // Needed to run tests with Bazel.
 			"skia/gm",    // Needed to run GMs with Bazel.
 			"skia/gn",    // Some Python scripts still live here.
 			"skia/resources",
@@ -832,7 +833,6 @@ func (b *taskBuilder) swarmDimensions() {
 var androidDeviceInfos = map[string][]string{
 	"AndroidOne":      {"sprout", "MOB30Q"},
 	"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
-	"GalaxyS9":        {"starlte", "QP1A.190711.020"},     // This is Android10.
 	"GalaxyS20":       {"exynos990", "QP1A.190711.020"},
 	"GalaxyS24":       {"pineapple", "UP1A.231005.007"},
 	"JioNext":         {"msm8937", "RKQ1.210602.002"},
@@ -842,8 +842,6 @@ var androidDeviceInfos = map[string][]string{
 	"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 	"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
 	"P30":             {"HWELE", "HUAWEIELE-L29"},
-	"Pixel2XL":        {"taimen", "PPR1.180610.009"},
-	"Pixel3":          {"blueline", "PQ1A.190105.004"},
 	"Pixel3a":         {"sargo", "QP1A.190711.020"},
 	"Pixel4":          {"flame", "RPB2.200611.009"},       // R Preview
 	"Pixel4a":         {"sunfish", "AOSP.MASTER_7819821"}, // Pixel4a flashed with an Android HWASan build.
@@ -876,6 +874,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Mac11":       "Mac-11.4",
 			"Mac12":       "Mac-12",
 			"Mac13":       "Mac-13",
+			"Mac14":       "Mac-14.7", // Builds run on 14.5, tests on 14.7.
 			"Mokey":       "Android",
 			"MokeyGo32":   "Android",
 			"Ubuntu18":    "Ubuntu-18.04",
@@ -897,9 +896,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 		if os == "Win10" && b.parts["model"] == "Golo" {
 			// ChOps-owned machines have Windows 10 22H2.
 			d["os"] = "Windows-10-19045"
-		}
-		if b.parts["model"] == "iPhone11" {
-			d["os"] = "iOS-13.6"
 		}
 		if b.parts["model"] == "iPadPro" {
 			d["os"] = "iOS-13.6"
@@ -945,7 +941,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				"iPadMini4": "iPad5,1",
 				"iPhone7":   "iPhone9,1",
 				"iPhone8":   "iPhone10,1",
-				"iPhone11":  "iPhone12,1",
 				"iPadPro":   "iPad6,3",
 			}[b.parts["model"]]
 			if !ok {
@@ -971,6 +966,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"MacBookAir7.2":  "x86-64-i5-5350U",
 					"MacBookPro11.5": "x86-64-i7-4870HQ",
 					"MacMini7.1":     "x86-64-i5-4278U",
+					"MacMini8.1":     "x86-64-i7-8700B",
 					"NUC5i7RYH":      "x86-64-i7-5557U",
 					"NUC9i7QN":       "x86-64-i7-9750H",
 					"NUC11TZi5":      "x86-64-i5-1135G7",
@@ -1004,10 +1000,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			// It's a GPU job.
 			if b.matchOs("Win") {
 				gpu, ok := map[string]string{
-					// At some point this might use the device ID, but for now it's like Chromebooks.
 					"GTX1660":       "10de:2184-31.0.15.4601",
-					"GTX660":        "10de:11c0-26.21.14.4120",
-					"GTX960":        "10de:1401-32.0.15.6094",
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
 					"IntelIris540":  "8086:1926-31.0.101.2115",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
@@ -1053,13 +1046,14 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				}
 			} else if b.matchOs("Mac") {
 				gpu, ok := map[string]string{
-					"AppleM1":       "AppleM1",
-					"AppleM3":       "apple:m3",
-					"IntelHD6000":   "8086:1626",
-					"IntelHD615":    "8086:591e",
-					"IntelIris5100": "8086:0a2e",
-					"IntelIrisPlus": "8086:8a53",
-					"RadeonHD8870M": "1002:6821-4.0.20-3.2.8",
+					"AppleM1":             "AppleM1",
+					"AppleM3":             "apple:m3",
+					"IntelHD6000":         "8086:1626",
+					"IntelHD615":          "8086:591e",
+					"IntelIris5100":       "8086:0a2e",
+					"IntelIrisPlus":       "8086:8a53",
+					"IntelUHDGraphics630": "8086:3e9b",
+					"RadeonHD8870M":       "1002:6821-4.0.20-3.2.8",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in Mac GPU mapping.", b.parts["cpu_or_gpu_value"])
@@ -1409,7 +1403,7 @@ func (b *jobBuilder) recreateSKPs() {
 		)
 		b.usesGo()
 		b.cache(CACHES_WORKDIR...)
-		b.timeout(6 * time.Hour)
+		b.timeout(8 * time.Hour)
 		b.usesPython()
 		b.attempts(2)
 	})
@@ -2170,6 +2164,7 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"core":                       {"//:core", ""},
 	"cpu_8888_benchmark_test":    {"//bench:cpu_8888_test", ""},
 	"cpu_gms":                    {"//gm:cpu_gm_tests", ""},
+	"dm":                         {"//dm", ""},
 	"full_library":               {"//tools:full_build", ""},
 	"ganesh_gl":                  {"//:ganesh_gl", ""},
 	"hello_bazel_world_test":     {"//gm:hello_bazel_world_test", ""},

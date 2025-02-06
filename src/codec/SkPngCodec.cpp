@@ -7,6 +7,7 @@
 
 #include "src/codec/SkPngCodec.h"
 
+#include "include/codec/SkEncodedOrigin.h"
 #include "include/codec/SkPngChunkReader.h"
 #include "include/codec/SkPngDecoder.h"
 #include "include/core/SkData.h"
@@ -17,6 +18,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkEncodedInfo.h"
+#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkNoncopyable.h"
 #include "include/private/base/SkTemplates.h"
 #include "modules/skcms/skcms.h"
@@ -89,12 +91,12 @@ public:
      */
     AutoCleanPng(png_structp png_ptr,
                  SkStream* stream,
-                 SkPngCompositeChunkReader* reader,
+                 sk_sp<SkPngCompositeChunkReader> reader,
                  SkCodec** codecPtr)
             : fPng_ptr(png_ptr)
             , fInfo_ptr(nullptr)
             , fStream(stream)
-            , fChunkReader(reader)
+            , fChunkReader(std::move(reader))
             , fOutCodec(codecPtr) {}
 
     ~AutoCleanPng() {
@@ -128,7 +130,7 @@ private:
     png_structp         fPng_ptr;
     png_infop           fInfo_ptr;
     SkStream*           fStream;
-    SkPngCompositeChunkReader* fChunkReader;
+    sk_sp<SkPngCompositeChunkReader> fChunkReader;
     SkCodec**           fOutCodec;
 
     void infoCallback(size_t idatLength);
@@ -398,14 +400,14 @@ class SkPngNormalDecoder : public SkPngCodec {
 public:
     SkPngNormalDecoder(SkEncodedInfo&& info,
                        std::unique_ptr<SkStream> stream,
-                       SkPngChunkReader* reader,
+                       sk_sp<SkPngCompositeChunkReader> reader,
                        png_structp png_ptr,
                        png_infop info_ptr,
                        std::unique_ptr<SkStream> gainmapStream,
                        std::optional<SkGainmapInfo> gainmapInfo)
             : SkPngCodec(std::move(info),
                          std::move(stream),
-                         reader,
+                         std::move(reader),
                          png_ptr,
                          info_ptr,
                          std::move(gainmapStream),
@@ -467,7 +469,7 @@ private:
         fDst = SkTAddOffset<void>(fDst, fRowBytes);
     }
 
-    void setRange(int firstRow, int lastRow, void* dst, size_t rowBytes) override {
+    Result setRange(int firstRow, int lastRow, void* dst, size_t rowBytes) override {
         png_set_progressive_read_fn(this->png_ptr(), this, nullptr, RowCallback, nullptr);
         fFirstRow = firstRow;
         fLastRow = lastRow;
@@ -475,6 +477,7 @@ private:
         fRowBytes = rowBytes;
         fRowsWrittenToOutput = 0;
         fRowsNeeded = fLastRow - fFirstRow + 1;
+        return kSuccess;
     }
 
     Result decode(int* rowsDecoded) override {
@@ -522,7 +525,7 @@ class SkPngInterlacedDecoder : public SkPngCodec {
 public:
     SkPngInterlacedDecoder(SkEncodedInfo&& info,
                            std::unique_ptr<SkStream> stream,
-                           SkPngChunkReader* reader,
+                           sk_sp<SkPngCompositeChunkReader> reader,
                            png_structp png_ptr,
                            png_infop info_ptr,
                            int numberPasses,
@@ -530,7 +533,7 @@ public:
                            std::optional<SkGainmapInfo> gainmapInfo)
             : SkPngCodec(std::move(info),
                          std::move(stream),
-                         reader,
+                         std::move(reader),
                          png_ptr,
                          info_ptr,
                          std::move(gainmapStream),
@@ -540,7 +543,8 @@ public:
             , fLastRow(0)
             , fLinesDecoded(0)
             , fInterlacedComplete(false)
-            , fPng_rowbytes(0) {}
+            , fPng_rowbytes(0)
+            , fInterlaceBuffer(nullptr, &sk_free) {}
 
     static void InterlacedRowCallback(png_structp png_ptr, png_bytep row, png_uint_32 rowNum, int pass) {
         auto decoder = static_cast<SkPngInterlacedDecoder*>(png_get_progressive_ptr(png_ptr));
@@ -556,7 +560,7 @@ private:
     int                     fLinesDecoded;
     bool                    fInterlacedComplete;
     size_t                  fPng_rowbytes;
-    AutoTMalloc<png_byte> fInterlaceBuffer;
+    std::unique_ptr<png_byte, decltype(&sk_free)> fInterlaceBuffer;
 
     // FIXME: Currently sharing interlaced callback for all rows and subset. It's not
     // as expensive as the subset version of non-interlaced, but it still does extra
@@ -621,15 +625,19 @@ private:
         return log_and_return_error(success);
     }
 
-    void setRange(int firstRow, int lastRow, void* dst, size_t rowBytes) override {
+    Result setRange(int firstRow, int lastRow, void* dst, size_t rowBytes) override {
         // FIXME: We could skip rows in the interlace buffer that we won't put in the output.
-        this->setUpInterlaceBuffer(lastRow - firstRow + 1);
+        Result res = this->setUpInterlaceBuffer(lastRow - firstRow + 1);
+        if (res != kSuccess) {
+          return res;
+        }
         png_set_progressive_read_fn(this->png_ptr(), this, nullptr, InterlacedRowCallback, nullptr);
         fFirstRow = firstRow;
         fLastRow = lastRow;
         fDst = dst;
         fRowBytes = rowBytes;
         fLinesDecoded = 0;
+        return kSuccess;
     }
 
     Result decode(int* rowsDecoded) override {
@@ -673,10 +681,18 @@ private:
         return log_and_return_error(success);
     }
 
-    void setUpInterlaceBuffer(int height) {
+    Result setUpInterlaceBuffer(int height) {
         fPng_rowbytes = png_get_rowbytes(this->png_ptr(), this->info_ptr());
-        fInterlaceBuffer.reset(fPng_rowbytes * height);
+        void* interlaceBufferRaw = nullptr;
+        if (fPng_rowbytes) {
+           interlaceBufferRaw = sk_malloc_canfail(fPng_rowbytes * height);
+           if (!interlaceBufferRaw) {
+             return kInternalError;
+           }
+        }
+        fInterlaceBuffer.reset(reinterpret_cast<png_byte*>(interlaceBufferRaw));
         fInterlacedComplete = false;
+        return kSuccess;
     }
 };
 
@@ -696,7 +712,7 @@ private:
 // @return if kSuccess, the caller is responsible for calling
 //      png_destroy_read_struct(png_ptrp, info_ptrp).
 //      Otherwise, the passed in fields (except stream) are unchanged.
-static SkCodec::Result read_header(SkStream* stream, SkPngChunkReader* chunkReader,
+static SkCodec::Result read_header(SkStream* stream, const sk_sp<SkPngCompositeChunkReader>& chunkReader,
                                    SkCodec** outCodec,
                                    png_structp* png_ptrp, png_infop* info_ptrp) {
     // The image is known to be a PNG. Decode enough to know the SkImageInfo.
@@ -712,9 +728,7 @@ static SkCodec::Result read_header(SkStream* stream, SkPngChunkReader* chunkRead
     png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_ON);
 #endif
 
-    auto compositeReader = sk_make_sp<SkPngCompositeChunkReader>(chunkReader);
-
-    AutoCleanPng autoClean(png_ptr, stream, compositeReader.get(), outCodec);
+    AutoCleanPng autoClean(png_ptr, stream, chunkReader, outCodec);
 
     png_infop info_ptr = png_create_info_struct(png_ptr);
     if (info_ptr == nullptr) {
@@ -733,7 +747,7 @@ static SkCodec::Result read_header(SkStream* stream, SkPngChunkReader* chunkRead
     // chunks in the header.
     if (chunkReader) {
         png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_ALWAYS, (png_const_bytep)"", 0);
-        png_set_read_user_chunk_fn(png_ptr, (png_voidp)compositeReader.get(), sk_read_user_chunk);
+        png_set_read_user_chunk_fn(png_ptr, (png_voidp)chunkReader.get(), sk_read_user_chunk);
     }
 #endif
 
@@ -906,15 +920,19 @@ void AutoCleanPng::infoCallback(size_t idatLength) {
     this->releasePngPtrs();
 }
 
+// TODO(https://crbug.com/390707316): Consider adding handling of eXIF chunks
+// for parity with Blink.
+constexpr SkEncodedOrigin kDefaultEncodedOrigin = kTopLeft_SkEncodedOrigin;
+
 SkPngCodec::SkPngCodec(SkEncodedInfo&& encodedInfo,
                        std::unique_ptr<SkStream> stream,
-                       SkPngChunkReader* chunkReader,
+                       sk_sp<SkPngCompositeChunkReader> chunkReader,
                        void* png_ptr,
                        void* info_ptr,
                        std::unique_ptr<SkStream> gainmapStream,
                        std::optional<SkGainmapInfo> gainmapInfo)
-        : SkPngCodecBase(std::move(encodedInfo), std::move(stream))
-        , fPngChunkReader(SkSafeRef(chunkReader))
+        : SkPngCodecBase(std::move(encodedInfo), std::move(stream), kDefaultEncodedOrigin)
+        , fPngChunkReader(std::move(chunkReader))
         , fPng_ptr(png_ptr)
         , fInfo_ptr(info_ptr)
         , fIdatLength(0)
@@ -964,7 +982,7 @@ bool SkPngCodec::onRewind() {
 
     png_structp png_ptr;
     png_infop info_ptr;
-    if (kSuccess != read_header(this->stream(), fPngChunkReader.get(), nullptr,
+    if (kSuccess != read_header(this->stream(), fPngChunkReader, nullptr,
                                 &png_ptr, &info_ptr)) {
         return false;
     }
@@ -1006,8 +1024,7 @@ SkCodec::Result SkPngCodec::onStartIncrementalDecode(const SkImageInfo& dstInfo,
         firstRow = 0;
         lastRow = dstInfo.height() - 1;
     }
-    this->setRange(firstRow, lastRow, dst, rowBytes);
-    return kSuccess;
+    return this->setRange(firstRow, lastRow, dst, rowBytes);
 }
 
 SkCodec::Result SkPngCodec::onIncrementalDecode(int* rowsDecoded) {
@@ -1025,7 +1042,8 @@ std::unique_ptr<SkCodec> SkPngCodec::MakeFromStream(std::unique_ptr<SkStream> st
         return nullptr;
     }
     SkCodec* outCodec = nullptr;
-    *result = read_header(stream.get(), chunkReader, &outCodec, nullptr, nullptr);
+    auto compositeReader = sk_make_sp<SkPngCompositeChunkReader>(chunkReader);
+    *result = read_header(stream.get(), compositeReader, &outCodec, nullptr, nullptr);
     if (kSuccess == *result) {
         // Codec has taken ownership of the stream.
         SkASSERT(outCodec);
