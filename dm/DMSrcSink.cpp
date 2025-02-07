@@ -114,7 +114,6 @@
 #include "tools/graphite/GraphiteToolUtils.h"
 
 #if defined(SK_ENABLE_PRECOMPILE)
-#include "src/gpu/graphite/AndroidSpecificPrecompile.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/GraphicsPipeline.h"
@@ -2302,43 +2301,26 @@ Result GraphitePrecompileTestingSink::resetAndRecreatePipelines(
 
     SkASSERT(globalCache->numGraphicsPipelines() == 0);
 
-#if 1
     for (sk_sp<SkData>& d : androidStyleKeys) {
         bool result = precompileContext->precompile(d);
         SkAssertResult(result);
     }
-#else
-    for (const skgpu::UniqueKey& k : origKeys) {
-        // TODO: add a separate path that decomposes the keys into PaintOptions
-        //  and uses them to Precompile
-        GraphicsPipelineDesc pipelineDesc;
-        RenderPassDesc renderPassDesc;
-
-        if (!UniqueKeyUtils::ExtractKeyDescs(precompileContext, k,
-                                             &pipelineDesc, &renderPassDesc)) {
-            continue;
-        }
-
-        AndroidSpecificPrecompile(precompileContext, nullptr,
-                                  pipelineDesc, renderPassDesc);
-    }
-#endif
 
     SkDEBUGCODE(int postRecreate = globalCache->numGraphicsPipelines();)
 
     SkASSERT(numBeforeReset == postRecreate);
 
+#ifdef SK_DEBUG
     {
         std::vector<skgpu::UniqueKey> recreatedKeys;
 
         UniqueKeyUtils::FetchUniqueKeys(precompileContext, &recreatedKeys);
 
-#ifdef SK_DEBUG
         CompareKeys(precompileContext,
                     origKeys, "original",
                     recreatedKeys, "recreated");
-#endif
     }
+#endif
 
     return Result::Ok();
 }
@@ -2356,15 +2338,17 @@ void GraphitePrecompileTestingSink::LogMissingKey(
     {
         GraphicsPipelineDesc originalPipelineDesc;
         RenderPassDesc originalRenderPassDesc;
-        UniqueKeyUtils::ExtractKeyDescs(precompileContext, missingKey,
-                                        &originalPipelineDesc,
-                                        &originalRenderPassDesc);
+        bool extracted = UniqueKeyUtils::ExtractKeyDescs(precompileContext, missingKey,
+                                                         &originalPipelineDesc,
+                                                         &originalRenderPassDesc);
 
         SkDebugf("------- Key missing from %s keys:\n", poolName);
         missingKey.dump(missingKeyName);
-        UniqueKeyUtils::DumpDescs(precompileContext,
-                                  originalPipelineDesc,
-                                  originalRenderPassDesc);
+        if (extracted) {
+            UniqueKeyUtils::DumpDescs(precompileContext,
+                                      originalPipelineDesc,
+                                      originalRenderPassDesc);
+        }
     }
 
     SkDebugf("Have %d %s keys -----------------\n", (int) pool.size(), poolName);
@@ -2373,15 +2357,17 @@ void GraphitePrecompileTestingSink::LogMissingKey(
 
         GraphicsPipelineDesc recreatedPipelineDesc;
         RenderPassDesc recreatedRenderPassDesc;
-        UniqueKeyUtils::ExtractKeyDescs(precompileContext, b,
-                                        &recreatedPipelineDesc,
-                                        &recreatedRenderPassDesc);
+        bool extracted = UniqueKeyUtils::ExtractKeyDescs(precompileContext, b,
+                                                         &recreatedPipelineDesc,
+                                                         &recreatedRenderPassDesc);
 
         SkDebugf("%d: ----\n", count++);
         b.dump("recreated key:");
-        UniqueKeyUtils::DumpDescs(precompileContext,
-                                  recreatedPipelineDesc,
-                                  recreatedRenderPassDesc);
+        if (extracted) {
+            UniqueKeyUtils::DumpDescs(precompileContext,
+                                      recreatedPipelineDesc,
+                                      recreatedRenderPassDesc);
+        }
     }
 }
 #endif
