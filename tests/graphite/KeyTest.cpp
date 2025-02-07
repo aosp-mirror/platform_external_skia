@@ -50,7 +50,7 @@ bool coeff_equal(SkBlendModeCoeff skCoeff, skgpu::BlendCoeff gpuCoeff) {
 
 // These are intended to be unit tests of the PaintParamsKeyBuilder and PaintParamsKey.
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(KeyWithInvalidCodeSnippetIDTest, reporter, context,
-                                   CtsEnforcement::kApiLevel_V) {
+                                   CtsEnforcement::kApiLevel_202404) {
     SkArenaAlloc arena{256};
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
@@ -79,7 +79,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(KeyWithInvalidCodeSnippetIDTest, reporter, co
 }
 
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(KeyEqualityChecksSnippetID, reporter, context,
-                                   CtsEnforcement::kApiLevel_V) {
+                                   CtsEnforcement::kApiLevel_202404) {
     SkArenaAlloc arena{256};
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
@@ -95,7 +95,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(KeyEqualityChecksSnippetID, reporter, context
 }
 
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ShaderInfoDetectsFixedFunctionBlend, reporter, context,
-                                   CtsEnforcement::kApiLevel_V) {
+                                   CtsEnforcement::kApiLevel_202404) {
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
     for (int bm = 0; bm <= (int) SkBlendMode::kLastCoeffMode; ++bm) {
