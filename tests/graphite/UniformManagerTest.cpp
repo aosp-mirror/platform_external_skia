@@ -50,7 +50,7 @@ static size_t element_size(Layout layout, SkSLType type) {
     return (layout == Layout::kMetal && !SkSLTypeIsFullPrecisionNumericType(type)) ? 2 : 4;
 }
 
-DEF_GRAPHITE_TEST(UniformManagerCheckSingleUniform, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerCheckSingleUniform, r, CtsEnforcement::kApiLevel_202404) {
     // Verify that the uniform manager can hold all the basic uniform types, in every layout.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -67,7 +67,7 @@ DEF_GRAPHITE_TEST(UniformManagerCheckSingleUniform, r, CtsEnforcement::kApiLevel
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerCheckFloatEncoding, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerCheckFloatEncoding, r, CtsEnforcement::kApiLevel_202404) {
     // Verify that the uniform manager encodes float data properly.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -98,7 +98,7 @@ DEF_GRAPHITE_TEST(UniformManagerCheckFloatEncoding, r, CtsEnforcement::kApiLevel
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerCheckIntEncoding, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerCheckIntEncoding, r, CtsEnforcement::kApiLevel_202404) {
     // Verify that the uniform manager encodes int data properly.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -127,7 +127,7 @@ DEF_GRAPHITE_TEST(UniformManagerCheckIntEncoding, r, CtsEnforcement::kApiLevel_V
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerCheckScalarVectorPacking, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerCheckScalarVectorPacking, r, CtsEnforcement::kApiLevel_202404) {
     // Verify that the uniform manager can pack scalars and vectors of identical type correctly.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -159,7 +159,7 @@ DEF_GRAPHITE_TEST(UniformManagerCheckScalarVectorPacking, r, CtsEnforcement::kAp
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerCheckMatrixPacking, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerCheckMatrixPacking, r, CtsEnforcement::kApiLevel_202404) {
     // Verify that the uniform manager can pack matrices correctly.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -199,7 +199,7 @@ DEF_GRAPHITE_TEST(UniformManagerCheckMatrixPacking, r, CtsEnforcement::kApiLevel
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerCheckPaddingScalarVector, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerCheckPaddingScalarVector, r, CtsEnforcement::kApiLevel_202404) {
     // Verify that the uniform manager properly adds padding between pairs of scalar/vector.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -309,7 +309,7 @@ DEF_GRAPHITE_TEST(UniformManagerCheckPaddingScalarVector, r, CtsEnforcement::kAp
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerCheckPaddingVectorMatrix, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerCheckPaddingVectorMatrix, r, CtsEnforcement::kApiLevel_202404) {
     // Verify that the uniform manager properly adds padding between vectors and matrices.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -431,7 +431,7 @@ DEF_GRAPHITE_TEST(UniformManagerCheckPaddingVectorMatrix, r, CtsEnforcement::kAp
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerCheckPaddingMatrixVector, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerCheckPaddingMatrixVector, r, CtsEnforcement::kApiLevel_202404) {
     // Verify that the uniform manager properly adds padding between matrices and vectors.
     for (Layout layout : kLayouts) {
         UniformManager mgr(layout);
@@ -567,7 +567,7 @@ DEF_GRAPHITE_TEST(UniformManagerCheckPaddingMatrixVector, r, CtsEnforcement::kAp
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerMetalArrayLayout, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerMetalArrayLayout, r, CtsEnforcement::kApiLevel_202404) {
     UniformManager mgr(Layout::kMetal);
 
     // Tests set up a uniform block with a single half (to force alignment) and an array of 3
@@ -635,7 +635,7 @@ DEF_GRAPHITE_TEST(UniformManagerMetalArrayLayout, r, CtsEnforcement::kApiLevel_V
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerStd430ArrayLayout, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerStd430ArrayLayout, r, CtsEnforcement::kApiLevel_202404) {
     UniformManager mgr(Layout::kStd430);
 
     // Tests set up a uniform block with a single half (to force alignment) and an array of 3
@@ -703,7 +703,7 @@ DEF_GRAPHITE_TEST(UniformManagerStd430ArrayLayout, r, CtsEnforcement::kApiLevel_
     }
 }
 
-DEF_GRAPHITE_TEST(UniformManagerStd140ArrayLayout, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerStd140ArrayLayout, r, CtsEnforcement::kApiLevel_202404) {
     UniformManager mgr(Layout::kStd140);
 
     // Tests set up a uniform block with a single half (to force alignment) and an array of 3
@@ -779,7 +779,7 @@ DEF_GRAPHITE_TEST(UniformManagerStd140ArrayLayout, r, CtsEnforcement::kApiLevel_
 
 // This test validates that the uniform data for matrix types get written out according to the
 // layout expectations.
-DEF_GRAPHITE_TEST(UniformManagerStd140MatrixLayoutContents, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerStd140MatrixLayoutContents, r, CtsEnforcement::kApiLevel_202404) {
     UniformManager mgr(Layout::kStd140);
 
     // float2x2, half2x2
@@ -833,7 +833,7 @@ DEF_GRAPHITE_TEST(UniformManagerStd140MatrixLayoutContents, r, CtsEnforcement::k
 
 // This test validates that the uniform data for matrix types get written out according to the
 // layout expectations.
-DEF_GRAPHITE_TEST(UniformManagerStd430MatrixLayoutContents, r, CtsEnforcement::kApiLevel_V) {
+DEF_GRAPHITE_TEST(UniformManagerStd430MatrixLayoutContents, r, CtsEnforcement::kApiLevel_202404) {
     UniformManager mgr(Layout::kStd430);
 
     // float2x2, half2x2
