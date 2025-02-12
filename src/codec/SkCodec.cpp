@@ -110,7 +110,14 @@ static std::vector<Decoder>* get_decoders_for_editing() {
             decoders->push_back(SkWbmpDecoder::Decoder());
 #endif
 #if defined(SK_CODEC_DECODES_AVIF)
-            decoders->push_back(SkAvifDecoder::Decoder());
+#if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
+            // Register CrabbyAvif based SkAvifDecoder on the Android framework.
+            // TODO: Codec registration for the Android framework has to be
+            // moved outside of skia and this logic has to be moved there.
+            decoders->push_back(SkAvifDecoder::CrabbyAvif::Decoder());
+#else
+            decoders->push_back(SkAvifDecoder::LibAvif::Decoder());
+#endif
 #endif
 #if defined(SK_CODEC_DECODES_JPEGXL)
             decoders->push_back(SkJpegxlDecoder::Decoder());
