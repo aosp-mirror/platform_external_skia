@@ -19,7 +19,7 @@ namespace skgpu::graphite {
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(DrawPassTestFailedDstCopy,
                                    reporter,
                                    context,
-                                   CtsEnforcement::kApiLevel_V) {
+                                   CtsEnforcement::kApiLevel_202404) {
     const Caps* caps = context->priv().caps();
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
 
