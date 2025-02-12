@@ -22,16 +22,9 @@
   #define GR_GL_CHECK_ALLOC_WITH_GET_ERROR 0
 
   // Staging flags
-  #define SK_SUPPORT_STROKEANDFILL
-  #define SK_DISABLE_LEGACY_SKSURFACE_FLUSH
-  #define SK_DISABLE_LEGACY_CANVAS_FLUSH
-  #define SK_LEGACY_GPU_GETTERS_CONST
   #define SK_USE_LEGACY_BLUR_GANESH
 
-  // Needed until we fix https://bug.skia.org/2440
-  #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
   #define SK_SUPPORT_LEGACY_EMBOSSMASKFILTER
-  #define SK_FORCE_AAA
 
   // Logging settings
   #define SKGPU_GRAPHITE_LOWEST_ACTIVE_LOG_PRIORITY skgpu::graphite::LogPriority::kWarning
