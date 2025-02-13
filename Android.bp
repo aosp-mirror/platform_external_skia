@@ -5336,6 +5336,7 @@ cc_library_shared {
         "tools/graphite/GraphiteToolUtils.cpp",
         "tools/graphite/ProtectedUtils_Graphite.cpp",
         "tools/graphite/UniqueKeyUtils.cpp",
+        "tools/graphite/precompile/PrecompileEffectFactories.cpp",
         "tools/graphite/vk/GraphiteVulkanTestContext.cpp",
         "tools/library/LoadDynamicLibrary_posix.cpp",
         "tools/skqp/src/jni_skqp.cpp",
