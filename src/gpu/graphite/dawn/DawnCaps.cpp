@@ -23,9 +23,7 @@
 #include "src/gpu/graphite/ResourceTypes.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/gpu/graphite/dawn/DawnGraphicsPipeline.h"
-#include "src/gpu/graphite/dawn/DawnGraphiteTypesPriv.h"
-#include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
-#include "src/gpu/graphite/dawn/DawnUtilsPriv.h"
+#include "src/gpu/graphite/dawn/DawnGraphiteUtils.h"
 #include "src/sksl/SkSLUtil.h"
 
 #if defined(__EMSCRIPTEN__)
@@ -1113,15 +1111,16 @@ bool DawnCaps::extractGraphicsDescs(const UniqueKey& key,
     }
 
     Swizzle writeSwizzle = SwizzleCtorAccessor::Make(rawKeyData[3]);
-
+    TextureInfo targetTexInfo = TextureInfos::MakeDawn(dawnInfo);
     *renderPassDesc = RenderPassDesc::Make(this,
-                                           TextureInfos::MakeDawn(dawnInfo),
+                                           targetTexInfo,
                                            loadOp,
                                            StoreOp::kStore,
                                            dsFlags,
                                            /* clearColor= */ { .0f, .0f, .0f, .0f },
                                            requiresMSAA,
-                                           writeSwizzle);
+                                           writeSwizzle,
+                                           this->getDstReadStrategy(targetTexInfo));
 
     return true;
 }

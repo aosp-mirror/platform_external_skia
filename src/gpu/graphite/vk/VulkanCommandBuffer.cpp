@@ -24,7 +24,7 @@
 #include "src/gpu/graphite/vk/VulkanCaps.h"
 #include "src/gpu/graphite/vk/VulkanDescriptorSet.h"
 #include "src/gpu/graphite/vk/VulkanFramebuffer.h"
-#include "src/gpu/graphite/vk/VulkanGraphiteUtilsPriv.h"
+#include "src/gpu/graphite/vk/VulkanGraphiteUtils.h"
 #include "src/gpu/graphite/vk/VulkanRenderPass.h"
 #include "src/gpu/graphite/vk/VulkanSampler.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
@@ -627,29 +627,6 @@ void setup_texture_layouts(VulkanCommandBuffer* cmdBuf,
     }
 }
 
-void gather_attachment_views(skia_private::TArray<VkImageView>& attachmentViews,
-                             VulkanTexture* colorTexture,
-                             VulkanTexture* resolveTexture,
-                             VulkanTexture* depthStencilTexture) {
-    if (colorTexture) {
-        VkImageView& colorAttachmentView = attachmentViews.push_back();
-        colorAttachmentView =
-                colorTexture->getImageView(VulkanImageView::Usage::kAttachment)->imageView();
-
-        if (resolveTexture) {
-            VkImageView& resolveView = attachmentViews.push_back();
-            resolveView =
-                    resolveTexture->getImageView(VulkanImageView::Usage::kAttachment)->imageView();
-        }
-    }
-
-    if (depthStencilTexture) {
-        VkImageView& stencilView = attachmentViews.push_back();
-        stencilView =
-                depthStencilTexture->getImageView(VulkanImageView::Usage::kAttachment)->imageView();
-    }
-}
-
 void gather_clear_values(
         STArray<VulkanRenderPass::kMaxExpectedAttachmentCount, VkClearValue>& clearValues,
         const RenderPassDesc& renderPassDesc,
@@ -764,10 +741,6 @@ bool VulkanCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
                           loadMSAAFromResolve);
 
     static constexpr int kMaxNumAttachments = 3;
-    // Gather attachment views neeeded for frame buffer creation.
-    skia_private::TArray<VkImageView> attachmentViews;
-    gather_attachment_views(
-            attachmentViews, vulkanColorTexture, vulkanResolveTexture, vulkanDepthStencilTexture);
 
     // Gather clear values needed for RenderPassBeginInfo. Indexed by attachment number.
     STArray<kMaxNumAttachments, VkClearValue> clearValues;
@@ -798,11 +771,15 @@ bool VulkanCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
         frameBufferWidth = depthStencilTexture->dimensions().width();
         frameBufferHeight = depthStencilTexture->dimensions().height();
     }
-    sk_sp<VulkanFramebuffer> framebuffer = fResourceProvider->createFramebuffer(fSharedContext,
-                                                                                attachmentViews,
-                                                                                *vulkanRenderPass,
-                                                                                frameBufferWidth,
-                                                                                frameBufferHeight);
+    sk_sp<VulkanFramebuffer> framebuffer =
+            fResourceProvider->createFramebuffer(fSharedContext,
+                                                 vulkanColorTexture,
+                                                 vulkanResolveTexture,
+                                                 vulkanDepthStencilTexture,
+                                                 renderPassDesc,
+                                                 *vulkanRenderPass,
+                                                 frameBufferWidth,
+                                                 frameBufferHeight);
     if (!framebuffer) {
         SKGPU_LOG_W("Could not create Vulkan Framebuffer");
         return false;
@@ -944,6 +921,11 @@ void VulkanCommandBuffer::addDrawPass(const DrawPass* drawPass) {
                 this->drawIndexedIndirect(draw->fType);
                 break;
             }
+            case DrawPassCommands::Type::kAddBarrier: {
+                auto barrierCmd = static_cast<DrawPassCommands::AddBarrier*>(cmdPtr);
+                this->addBarrier(barrierCmd->fType);
+                break;
+            }
         }
     }
 }
@@ -976,6 +958,10 @@ void VulkanCommandBuffer::setBlendConstants(float* blendConstants) {
                     CmdSetBlendConstants(fPrimaryCommandBuffer, blendConstants));
         memcpy(fCachedBlendConstant, blendConstants, 4 * sizeof(float));
     }
+}
+
+void VulkanCommandBuffer::addBarrier(BarrierType type) {
+    // TODO(b/383769988): Implement.
 }
 
 void VulkanCommandBuffer::recordBufferBindingInfo(const BindBufferInfo& info, UniformSlot slot) {
@@ -1690,7 +1676,7 @@ void VulkanCommandBuffer::pipelineBarrier(const Resource* resource,
                                           VkPipelineStageFlags srcStageMask,
                                           VkPipelineStageFlags dstStageMask,
                                           bool byRegion,
-                                          BarrierType barrierType,
+                                          PipelineBarrierType barrierType,
                                           void* barrier) {
     // TODO: Do we need to handle wrapped command buffers?
     // SkASSERT(!this->isWrapped());

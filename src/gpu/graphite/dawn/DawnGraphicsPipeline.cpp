@@ -22,11 +22,9 @@
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/gpu/graphite/dawn/DawnCaps.h"
 #include "src/gpu/graphite/dawn/DawnErrorChecker.h"
-#include "src/gpu/graphite/dawn/DawnGraphiteTypesPriv.h"
-#include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
+#include "src/gpu/graphite/dawn/DawnGraphiteUtils.h"
 #include "src/gpu/graphite/dawn/DawnResourceProvider.h"
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
-#include "src/gpu/graphite/dawn/DawnUtilsPriv.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLProgram.h"
@@ -356,14 +354,16 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
     samplerDescArrPtr = &samplerDescArr;
 #endif
 
-    std::unique_ptr<ShaderInfo> shaderInfo = ShaderInfo::Make(&caps,
-                                                              sharedContext->shaderCodeDictionary(),
-                                                              runtimeDict,
-                                                              step,
-                                                              paintID,
-                                                              useStorageBuffers,
-                                                              renderPassDesc.fWriteSwizzle,
-                                                              samplerDescArrPtr);
+    std::unique_ptr<ShaderInfo> shaderInfo =
+            ShaderInfo::Make(&caps,
+                             sharedContext->shaderCodeDictionary(),
+                             runtimeDict,
+                             step,
+                             paintID,
+                             useStorageBuffers,
+                             renderPassDesc.fWriteSwizzle,
+                             renderPassDesc.fDstReadStrategyIfRequired,
+                             samplerDescArrPtr);
 
     const std::string& fsSkSL = shaderInfo->fragmentSkSL();
     const BlendInfo& blendInfo = shaderInfo->blendInfo();
