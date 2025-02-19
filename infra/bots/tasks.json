@@ -29190,7 +29190,7 @@
         {
           "name": "skia/bots/go",
           "path": "go",
-          "version": "version:17"
+          "version": "version:18"
         }
       ],
       "command": [
@@ -29819,7 +29819,7 @@
         {
           "name": "skia/bots/go",
           "path": "go",
-          "version": "version:17"
+          "version": "version:18"
         },
         {
           "name": "skia/bots/gsutil",
@@ -30114,7 +30114,7 @@
         {
           "name": "skia/bots/go",
           "path": "go",
-          "version": "version:17"
+          "version": "version:18"
         }
       ],
       "command": [
