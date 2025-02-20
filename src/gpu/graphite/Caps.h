@@ -30,6 +30,8 @@
 enum class SkBlendMode;
 enum class SkTextureCompressionType;
 class SkCapabilities;
+class SkStream;
+class SkWStream;
 
 namespace SkSL { struct ShaderCaps; }
 
@@ -58,17 +60,24 @@ struct ResourceBindingRequirements {
     // separately and their binding indices explicitly specified in the shader text.
     bool fSeparateTextureAndSamplerBinding = false;
 
-    // Whether buffer, texture, and sampler resource bindings use distinct index ranges.
-    bool fDistinctIndexRanges = false;
-
     // Whether intrinsic constant information is stored as push constants (rather than normal UBO).
     // Currently only relevant or possibly true for Vulkan.
     bool fUseVulkanPushConstantsForIntrinsicConstants = false;
 
-    int fIntrinsicBufferBinding = -1;
-    int fRenderStepBufferBinding = -1;
-    int fPaintParamsBufferBinding = -1;
-    int fGradientBufferBinding = -1;
+    // Whether compute shader textures use separate index ranges from other resources (i.e. buffers)
+    bool fComputeUsesDistinctIdxRangesForTextures = false;
+
+    // Define set indices. We assume that even if textures and samplers must be bound separately,
+    // they will still be contained within the same set/group.
+    static constexpr int kUnassigned = -1;
+    int fUniformsSetIdx              = kUnassigned;
+    int fTextureSamplerSetIdx        = kUnassigned;
+    int fInputAttachmentSetIdx       = kUnassigned;
+    // Define uniform buffer bindings
+    int fIntrinsicBufferBinding      = kUnassigned;
+    int fRenderStepBufferBinding     = kUnassigned;
+    int fPaintParamsBufferBinding    = kUnassigned;
+    int fGradientBufferBinding       = kUnassigned;
 };
 
 enum class DstReadStrategy {
@@ -137,12 +146,8 @@ public:
                                       RenderPassDesc*,
                                       const RendererProvider*) const { return false; }
 
-    virtual bool deserializeTextureInfo(SkStream*,
-                                        BackendApi,
-                                        Mipmapped,
-                                        Protected,
-                                        uint32_t sampleCount,
-                                        TextureInfo* out) const { return false; }
+    virtual bool serializeTextureInfo(const TextureInfo&, SkWStream*) const { return false; }
+    virtual bool deserializeTextureInfo(SkStream*, TextureInfo*) const { return false; }
 
     bool areColorTypeAndTextureInfoCompatible(SkColorType, const TextureInfo&) const;
     virtual uint32_t channelMask(const TextureInfo&) const = 0;
