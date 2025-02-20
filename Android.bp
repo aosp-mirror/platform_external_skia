@@ -3323,8 +3323,8 @@ cc_defaults {
     ],
 }
 
-cc_library_shared {
-    name: "libskqp_jni",
+cc_defaults {
+    name: "skqp_jni_defaults",
     sdk_version: "26",
     stl: "libc++_static",
     compile_multilib: "both",
@@ -5336,6 +5336,7 @@ cc_library_shared {
         "tools/graphite/GraphiteToolUtils.cpp",
         "tools/graphite/ProtectedUtils_Graphite.cpp",
         "tools/graphite/UniqueKeyUtils.cpp",
+        "tools/graphite/precompile/PipelineCallbackHandler.cpp",
         "tools/graphite/precompile/PrecompileEffectFactories.cpp",
         "tools/graphite/vk/GraphiteVulkanTestContext.cpp",
         "tools/library/LoadDynamicLibrary_posix.cpp",
@@ -5368,7 +5369,20 @@ cc_library_shared {
     ]
 }
 
+cc_library_shared {
+    // Note: this must be included in the list of libraries that SkQP attempts
+    // to load in
+    // platform_tools/android/apps/skqp/src/main/java/org/skia/skqp/SkQP.java
+    name: "libskqp_jni",
+    defaults: ["skqp_jni_defaults"],
+    // Appended to the list of cflags set in skqp_jni_defaults
+    cflags: [
+        
+    ],
+}
+
 android_test {
+    // Module (and APK) name
     name: "CtsSkQPTestCases",
     team: "trendy_team_android_core_graphics_stack",
     defaults: ["cts_defaults"],
@@ -5376,6 +5390,11 @@ android_test {
         "general-tests",
         "cts",
     ],
+
+    // These both override the package names set in AndroidManifest.xml (which
+    // remain there to allow building/running SkQP outside of Android framework)
+    package_name: "org.skia.skqp",
+    instrumentation_target_package: "org.skia.skqp",
 
     libs: ["android.test.runner.stubs"],
     jni_libs: ["libskqp_jni"],
@@ -5386,13 +5405,56 @@ android_test {
         "ctstestrunner-axt",
     ],
     manifest: "platform_tools/android/apps/skqp/src/main/AndroidManifest.xml",
-    test_config: "platform_tools/android/apps/skqp/src/main/AndroidTest.xml",
+    test_config_template: "platform_tools/android/apps/skqp/src/main/AndroidTestTemplate.xml",
 
     asset_dirs: ["platform_tools/android/apps/skqp/src/main/assets", "resources"],
     resource_dirs: ["platform_tools/android/apps/skqp/src/main/res"],
     srcs: ["platform_tools/android/apps/skqp/src/main/java/**/*.java"],
 
     sdk_version: "test_current",
+}
 
+cc_library_shared {
+    // Note: this must be included in the list of libraries that SkQP attempts
+    // to load in
+    // platform_tools/android/apps/skqp/src/main/java/org/skia/skqp/SkQP.java
+    name: "libskqp_jni_alltests",
+    defaults: ["skqp_jni_defaults"],
+    // Appended to the list of cflags set in skqp_jni_defaults
+    cflags: [
+        "-DSKQP_ENFORCE_ALL_INCLUDED_TESTS",
+    ],
+}
+
+android_test {
+    // Module (and APK) name
+    name: "AllSkQPTestCases",
+    team: "trendy_team_android_core_graphics_stack",
+    defaults: ["cts_defaults"],
+    test_suites: [
+        "general-tests",
+    ],
+
+    // These both override the package names set in AndroidManifest.xml (which
+    // remain there to allow building/running SkQP outside of Android framework)
+    package_name: "org.skia.skqp_alltests",
+    instrumentation_target_package: "org.skia.skqp_alltests",
+
+    libs: ["android.test.runner.stubs"],
+    jni_libs: ["libskqp_jni_alltests"],
+    compile_multilib: "both",
+
+    static_libs: [
+        "android-support-design",
+        "ctstestrunner-axt",
+    ],
+    manifest: "platform_tools/android/apps/skqp/src/main/AndroidManifest.xml",
+    test_config_template: "platform_tools/android/apps/skqp/src/main/AndroidTestTemplate.xml",
+
+    asset_dirs: ["platform_tools/android/apps/skqp/src/main/assets", "resources"],
+    resource_dirs: ["platform_tools/android/apps/skqp/src/main/res"],
+    srcs: ["platform_tools/android/apps/skqp/src/main/java/**/*.java"],
+
+    sdk_version: "test_current",
 }
 
