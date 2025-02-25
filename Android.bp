@@ -3320,6 +3320,7 @@ cc_defaults {
         "tests/graphite/precompile/CombinationBuilderTest.cpp",
         "tests/graphite/precompile/PaintParamsKeyTest.cpp",
         "tests/graphite/precompile/ThreadedPrecompileTest.cpp",
+        "tests/graphite/precompile/UserdefinedStableKeyTest.cpp",
     ],
 }
 
@@ -5279,6 +5280,7 @@ cc_defaults {
         "tests/graphite/precompile/CombinationBuilderTest.cpp",
         "tests/graphite/precompile/PaintParamsKeyTest.cpp",
         "tests/graphite/precompile/ThreadedPrecompileTest.cpp",
+        "tests/graphite/precompile/UserdefinedStableKeyTest.cpp",
         "third_party/etc1/etc1.cpp",
         "tools/AndroidSkDebugToStdOut.cpp",
         "tools/CrashHandler.cpp",
