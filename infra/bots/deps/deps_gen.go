@@ -24,7 +24,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/angle/angle": {
 		Id:      "chromium.googlesource.com/angle/angle",
-		Version: "be98f841ec88f4bede6eff8a64ee2c3d9eeadb9d",
+		Version: "f09a19cebdaf04bddcd3101e9783207cb5cf3e13",
 		Path:    "third_party/externals/angle2",
 	},
 	"chromium.googlesource.com/chromium/deps/icu": {
@@ -139,7 +139,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/vulkan-deps": {
 		Id:      "chromium.googlesource.com/vulkan-deps",
-		Version: "02cb40cbb578fdc615d10da7ea0f7369c7843927",
+		Version: "90cce021a3ec7d77cf75a274294232c92683c4ce",
 		Path:    "third_party/externals/vulkan-deps",
 	},
 	"chromium.googlesource.com/webm/libwebp": {
@@ -149,7 +149,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "5070f7af1ee96f5318f61d81ef39a26e106ad5b7",
+		Version: "d20125b786b14eb85894e593566705fc19461b17",
 		Path:    "third_party/externals/dawn",
 	},
 	"infra/3pp/tools/ninja": {
