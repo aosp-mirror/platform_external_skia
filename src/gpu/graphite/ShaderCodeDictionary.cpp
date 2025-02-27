@@ -767,7 +767,11 @@ int ShaderCodeDictionary::findOrCreateRuntimeEffectSnippet(const SkRuntimeEffect
     // TODO: the memory for user-defined entries could go in the dictionary's arena but that
     // would have to be a thread safe allocation since the arena also stores entries for
     // 'fHash' and 'fEntryVector'
-    fUserDefinedCodeSnippets.push_back(this->convertRuntimeEffect(effect, "RuntimeEffect"));
+    static const char* kDefaultName = "RuntimeEffect";
+    fUserDefinedCodeSnippets.push_back(this->convertRuntimeEffect(
+                effect,
+                SkRuntimeEffectPriv::HasName(*effect) ? SkRuntimeEffectPriv::GetName(*effect)
+                                                      : kDefaultName));
     int newCodeSnippetID = kUnknownRuntimeEffectIDStart + fUserDefinedCodeSnippets.size() - 1;
 
     fRuntimeEffectMap.set(key, newCodeSnippetID);
@@ -803,8 +807,11 @@ void ShaderCodeDictionary::registerUserDefinedKnownRuntimeEffects(
             continue;           // This is a duplicate
         }
 
-        const char* kName = "UserDefinedKnownRuntimeEffect";
-        fUserDefinedKnownCodeSnippets.push_back(this->convertRuntimeEffect(u.get(), kName));
+        static const char* kDefaultName = "UserDefinedKnownRuntimeEffect";
+        fUserDefinedKnownCodeSnippets.push_back(this->convertRuntimeEffect(
+                    u.get(),
+                    SkRuntimeEffectPriv::HasName(*u) ? SkRuntimeEffectPriv::GetName(*u)
+                                                     : kDefaultName));
         int stableID = kUserDefinedKnownRuntimeEffectsStart +
                        fUserDefinedKnownCodeSnippets.size() - 1;
 
@@ -861,7 +868,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
             /*uniforms=*/{}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPriorOutput] = {
-            /*name=*/"PassthroughShader",
+            /*name=*/"Passthrough",
             /*staticFn=*/"sk_passthrough",
             SnippetRequirementFlags::kPriorStageOutput,
             /*uniforms=*/{}
@@ -1073,7 +1080,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
     // not mask off the child's local coord requirement), but does nothing if the child does not
     // actually use coordinates.
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kLocalMatrixShader] = {
-            /*name=*/"LocalMatrixShader",
+            /*name=*/"LocalMatrix",
             /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
             /*uniforms=*/{ { "localMatrix", SkSLType::kFloat4x4 } },
@@ -1092,7 +1099,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kImageShader] = {
-            /*name=*/"ImageShader",
+            /*name=*/"Image",
             /*staticFn=*/"sk_image_shader",
             SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresSamplerDescData,
             /*uniforms=*/{ { "invImgSize",            SkSLType::kFloat2 },
@@ -1103,7 +1110,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
             /*texturesAndSamplers=*/{"image"}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCubicImageShader] = {
-            /*name=*/"CubicImageShader",
+            /*name=*/"CubicImage",
             /*staticFn=*/"sk_cubic_image_shader",
             SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresSamplerDescData,
             /*uniforms=*/{ { "invImgSize",            SkSLType::kFloat2 },
@@ -1114,7 +1121,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
             /*texturesAndSamplers=*/{"image"}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWImageShader] = {
-            /*name=*/"HardwareImageShader",
+            /*name=*/"HardwareImage",
             /*staticFn=*/"sk_hw_image_shader",
             SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresSamplerDescData,
             /*uniforms=*/{ { "invImgSize",            SkSLType::kFloat2 } },
@@ -1122,7 +1129,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kYUVImageShader] = {
-            /*name=*/"YUVImageShader",
+            /*name=*/"YUVImage",
             /*staticFn=*/"sk_yuv_image_shader",
             SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{ { "invImgSizeY",         SkSLType::kFloat2 },
@@ -1145,7 +1152,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
                                       { "samplerA" }}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCubicYUVImageShader] = {
-            /*name=*/"CubicYUVImageShader",
+            /*name=*/"CubicYUVImage",
             /*staticFn=*/"sk_cubic_yuv_image_shader",
             SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{ { "invImgSizeY",       SkSLType::kFloat2 },
@@ -1166,7 +1173,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
                                       { "samplerA" }}
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWYUVImageShader] = {
-            /*name=*/"HWYUVImageShader",
+            /*name=*/"HWYUVImage",
             /*staticFn=*/"sk_hw_yuv_image_shader",
             SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{ { "invImgSizeY",           SkSLType::kFloat2 },
@@ -1184,7 +1191,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWYUVNoSwizzleImageShader] = {
-            /*name=*/"HWYUVImageShader",
+            /*name=*/"HWYUVImage",
             /*staticFn=*/"sk_hw_yuv_no_swizzle_image_shader",
             SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{ { "invImgSizeY",              SkSLType::kFloat2 },
@@ -1199,7 +1206,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
 
     // Like the local matrix shader, this is a no-op if the child doesn't need coords
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCoordClampShader] = {
-            /*name=*/"CoordClampShader",
+            /*name=*/"CoordClamp",
             /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
             /*uniforms=*/{ { "subset", SkSLType::kFloat4 } },
@@ -1217,7 +1224,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPerlinNoiseShader] = {
-            /*name=*/"PerlinNoiseShader",
+            /*name=*/"PerlinNoise",
             /*staticFn=*/"sk_perlin_noise_shader",
             SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{ { "baseFrequency", SkSLType::kFloat2 },
