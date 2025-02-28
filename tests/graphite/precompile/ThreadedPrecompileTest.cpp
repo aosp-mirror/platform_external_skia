@@ -159,12 +159,10 @@ void precompile_gradients(std::unique_ptr<PrecompileContext> precompileContext,
         std::shuffle(combos.begin(), combos.end(), g);
     }
 
-    static const RenderPassProperties kProps = { DepthStencilFlags::kDepth,
-                                                 kBGRA_8888_SkColorType,
-#if !defined(SK_IGNORE_RENDER_PASS_PROPERTIES_COLOR_SPACE)
-                                                 /* dstColorSpace= */ nullptr,
-#endif
-                                                 /* requiresMSAA= */ false };
+    const RenderPassProperties kProps = { DepthStencilFlags::kDepth,
+                                          kBGRA_8888_SkColorType,
+                                          /* dstColorSpace= */ nullptr,
+                                          /* requiresMSAA= */ false };
 
     for (auto c : combos) {
         auto [_, paintOptions] = c.fCreateOptionsMtd(c.fNumStops);

@@ -1094,9 +1094,10 @@ std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_matrix_colo
 
 std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_color_space_colorfilter(
         SkRandom* rand) {
-    return { SkColorFilterPriv::MakeColorSpaceXform(random_colorspace(rand),
-                                                    random_colorspace(rand)),
-             PrecompileColorFiltersPriv::ColorSpaceXform() };
+    sk_sp<SkColorSpace> src = random_colorspace(rand);
+    sk_sp<SkColorSpace> dst = random_colorspace(rand);
+    return { SkColorFilterPriv::MakeColorSpaceXform(src, dst),
+             PrecompileColorFiltersPriv::ColorSpaceXform({ src }, { dst }) };
 }
 
 std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_linear_to_srgb_colorfilter() {
@@ -1163,14 +1164,15 @@ std::pair<sk_sp<SkColorFilter>, sk_sp<PrecompileColorFilter>> create_workingform
 
     SkASSERT(childCF && childO);
 
-    SkAlphaType unpremul = kUnpremul_SkAlphaType;
-    sk_sp<SkColorFilter> cf = SkColorFilterPriv::WithWorkingFormat(std::move(childCF),
-                                                                   &random_xfer_function(rand),
-                                                                   &random_gamut(rand),
-                                                                   &unpremul);
+    const skcms_TransferFunction* tf = rand->nextBool() ? &random_xfer_function(rand) : nullptr;
+    const skcms_Matrix3x3* gamut = rand->nextBool() ? &random_gamut(rand) : nullptr;
+    const SkAlphaType unpremul = kUnpremul_SkAlphaType;
+
+    sk_sp<SkColorFilter> cf =
+            SkColorFilterPriv::WithWorkingFormat(std::move(childCF), tf, gamut, &unpremul);
 
     sk_sp<PrecompileColorFilter> o = PrecompileColorFiltersPriv::WithWorkingFormat(
-            { std::move(childO) });
+            { std::move(childO) }, tf, gamut, &unpremul);
 
     return { std::move(cf), std::move(o) };
 }
@@ -2009,15 +2011,11 @@ void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
 
     static const RenderPassProperties kDepth_Stencil_4 { DepthStencilFlags::kDepthStencil,
                                                          kColorType,
-#if !defined(SK_IGNORE_RENDER_PASS_PROPERTIES_COLOR_SPACE)
                                                          /* dstColorSpace= */ nullptr,
-#endif
                                                          /* requiresMSAA= */ true };
     static const RenderPassProperties kDepth_1 { DepthStencilFlags::kDepth,
                                                  kColorType,
-#if !defined(SK_IGNORE_RENDER_PASS_PROPERTIES_COLOR_SPACE)
                                                  /* dstColorSpace= */ nullptr,
-#endif
                                                  /* requiresMSAA= */ false };
 
     TextureInfo textureInfo = caps->getDefaultSampledTextureInfo(kColorType,
@@ -2045,10 +2043,7 @@ void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
         // The skp draws a rect w/ a default SkPaint and RGBA dst color type
         PaintOptions skpPaintOptions;
         Precompile(precompileContext, skpPaintOptions, DrawTypeFlags::kSimpleShape,
-                   { { kDepth_1.fDSFlags, kRGBA_8888_SkColorType,
-#if !defined(SK_IGNORE_RENDER_PASS_PROPERTIES_COLOR_SPACE)
-                       kDepth_1.fDstCS,
-#endif
+                   { { kDepth_1.fDSFlags, kRGBA_8888_SkColorType, kDepth_1.fDstCS,
                        kDepth_1.fRequiresMSAA } });
     }
     int after = globalCache->numGraphicsPipelines();
