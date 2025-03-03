@@ -564,7 +564,7 @@ void SkPngRustCodec::expandDecodedInterlacedRow(SkSpan<uint8_t> dstFrame,
     // `applyXformRow` requires full-width rows as input (can't change
     // `SkSwizzler::fSrcWidth` after `initializeXforms`).
     //
-    // TODO(https://crbug.com/357876243): Having `Reader.read_row` API (see
+    // TODO(https://crbug.com/399891492): Having `Reader.read_row` API (see
     // https://github.com/image-rs/image-png/pull/493) would help avoid
     // an extra copy here.
     decodedInterlacedFullWidthRow.resize(this->getEncodedRowBytes(), 0x00);
@@ -756,6 +756,13 @@ int SkPngRustCodec::onGetRepetitionCount() {
     // For example, a repetition count of 4 means that each frame is played 5
     // times and then the animation stops."
     return numPlays - 1;
+}
+
+SkCodec::IsAnimated SkPngRustCodec::onIsAnimated() {
+    if (fReader->has_actl_chunk() && fReader->get_actl_num_frames() > 1) {
+        return IsAnimated::kYes;
+    }
+    return IsAnimated::kNo;
 }
 
 std::optional<SkSpan<const SkPngCodecBase::PaletteColorEntry>> SkPngRustCodec::onTryGetPlteChunk() {

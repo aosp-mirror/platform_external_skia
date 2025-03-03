@@ -464,23 +464,24 @@ bool VulkanCommandBuffer::onAddRenderPass(const RenderPassDesc& renderPassDesc,
     return true;
 }
 
-bool VulkanCommandBuffer::updateAndBindLoadMSAAInputAttachment(const VulkanTexture& resolveTexture)
-{
-    // Fetch a descriptor set that contains one input attachment
-    STArray<1, DescriptorData> inputDescriptors =
-            {VulkanGraphicsPipeline::kInputAttachmentDescriptor};
+bool VulkanCommandBuffer::updateAndBindInputAttachment(const VulkanTexture& texture,
+                                                       const int setIdx) {
+    // Fetch a descriptor set that contains one input attachment (we do not support using more than
+    // one per set at this time).
+    STArray<1, DescriptorData> inputDesc = {VulkanGraphicsPipeline::kInputAttachmentDescriptor};
     sk_sp<VulkanDescriptorSet> set = fResourceProvider->findOrCreateDescriptorSet(
-            SkSpan<DescriptorData>{&inputDescriptors.front(), inputDescriptors.size()});
+            SkSpan<DescriptorData>{&inputDesc.front(), inputDesc.size()});
     if (!set) {
         return false;
     }
 
+    // Update and write to the descriptor given the provided texture, binding it afterwards.
     VkDescriptorImageInfo textureInfo;
     memset(&textureInfo, 0, sizeof(VkDescriptorImageInfo));
     textureInfo.sampler = VK_NULL_HANDLE;
     textureInfo.imageView =
-            resolveTexture.getImageView(VulkanImageView::Usage::kAttachment)->imageView();
-    textureInfo.imageLayout = resolveTexture.currentLayout();
+            texture.getImageView(VulkanImageView::Usage::kAttachment)->imageView();
+    textureInfo.imageLayout = texture.currentLayout();
 
     VkWriteDescriptorSet writeInfo;
     memset(&writeInfo, 0, sizeof(VkWriteDescriptorSet));
@@ -506,7 +507,7 @@ bool VulkanCommandBuffer::updateAndBindLoadMSAAInputAttachment(const VulkanTextu
                 CmdBindDescriptorSets(fPrimaryCommandBuffer,
                                       VK_PIPELINE_BIND_POINT_GRAPHICS,
                                       fActiveGraphicsPipeline->layout(),
-                                      VulkanGraphicsPipeline::kInputAttachmentDescSetIndex,
+                                      setIdx,
                                       /*setCount=*/1,
                                       set->descriptorSet(),
                                       /*dynamicOffsetCount=*/0,
@@ -558,7 +559,8 @@ bool VulkanCommandBuffer::loadMSAAFromResolve(const RenderPassDesc& renderPassDe
 
     this->setScissor(SkIRect::MakeXYWH(0, 0, dstDimensions.width(), dstDimensions.height()));
 
-    if (!this->updateAndBindLoadMSAAInputAttachment(resolveTexture)) {
+    if (!this->updateAndBindInputAttachment(
+                resolveTexture, VulkanGraphicsPipeline::kLoadMsaaFromResolveInputDescSetIndex)) {
         SKGPU_LOG_E("Unable to update and bind an input attachment descriptor for loading MSAA "
                     "from resolve");
         return false;
@@ -1481,10 +1483,7 @@ bool VulkanCommandBuffer::onCopyTextureToBuffer(const Texture* texture,
     auto dstBuffer = static_cast<const VulkanBuffer*>(buffer);
     SkASSERT(dstBuffer->bufferUsageFlags() & VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-    // Obtain the VkFormat of the source texture so we can determine bytes per block.
-    VulkanTextureInfo srcTextureInfo;
-    SkAssertResult(TextureInfos::GetVulkanTextureInfo(texture->textureInfo(), &srcTextureInfo));
-    size_t bytesPerBlock = VkFormatBytesPerBlock(srcTextureInfo.fFormat);
+    size_t bytesPerBlock = VkFormatBytesPerBlock(srcTexture->vulkanTextureInfo().fFormat);
 
     // Set up copy region
     VkBufferImageCopy region;
@@ -1528,12 +1527,9 @@ bool VulkanCommandBuffer::onCopyBufferToTexture(const Buffer* buffer,
     SkASSERT(srcBuffer->bufferUsageFlags() & VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     const VulkanTexture* dstTexture = static_cast<const VulkanTexture*>(texture);
 
-    // Obtain the VkFormat of the destination texture so we can determine bytes per block.
-    VulkanTextureInfo dstTextureInfo;
-    SkAssertResult(TextureInfos::GetVulkanTextureInfo(dstTexture->textureInfo(), &dstTextureInfo));
-    size_t bytesPerBlock = VkFormatBytesPerBlock(dstTextureInfo.fFormat);
-    SkISize oneBlockDims = CompressedDimensions(dstTexture->textureInfo().compressionType(),
-                                                {1, 1});
+    size_t bytesPerBlock = VkFormatBytesPerBlock(dstTexture->vulkanTextureInfo().fFormat);
+    SkISize oneBlockDims = CompressedDimensions(
+            TextureInfoPriv::CompressionType(dstTexture->textureInfo()), {1, 1});
 
     // Set up copy regions.
     TArray<VkBufferImageCopy> regions(count);

@@ -206,7 +206,9 @@ var (
 			Path: "mac_toolchain",
 			// When this is updated, also update
 			// https://skia.googlesource.com/skcms.git/+/f1e2b45d18facbae2dece3aca673fe1603077846/infra/bots/gen_tasks.go#56
-			Version: "git_revision:e6f45bde6c5ee56924b1f905159b6a1a48ef25dd",
+			// and
+			// https://skia.googlesource.com/skia.git/+/main/infra/bots/recipe_modules/xcode/api.py#38
+			Version: "git_revision:0cb1e51344de158f72524c384f324465aebbcef2",
 		},
 	}
 
@@ -897,6 +899,9 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			// ChOps-owned machines have Windows 10 22H2.
 			d["os"] = "Windows-10-19045"
 		}
+		if strings.Contains(os, "iOS") {
+			d["pool"] = "SkiaIOS"
+		}
 		if b.parts["model"] == "iPadPro" {
 			d["os"] = "iOS-13.6"
 		}
@@ -946,7 +951,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			if !ok {
 				log.Fatalf("Entry %q not found in iOS mapping.", b.parts["model"])
 			}
-			d["device_type"] = device
+			d["device"] = device
 		} else if b.cpu() || b.extraConfig("CanvasKit", "Docker", "SwiftShader") {
 			modelMapping, ok := map[string]map[string]string{
 				"AppleM1": {
@@ -1743,6 +1748,12 @@ func (b *jobBuilder) dm() {
 				b.directUpload(b.cfg.GsBucketGm, b.cfg.ServiceAccountUploadGM)
 				directUpload = true
 			}
+			if b.matchOs("iOS") {
+				b.Spec.Caches = append(b.Spec.Caches, &specs.Cache{
+					Name: "xcode",
+					Path: "cache/Xcode.app",
+				})
+			}
 		}
 		b.recipeProp("gold_hashes_url", b.cfg.GoldHashesURL)
 		b.recipeProps(EXTRA_PROPS)
@@ -1970,6 +1981,14 @@ func (b *jobBuilder) perf() {
 		} else if b.extraConfig("LottieWeb") {
 			recipe = "perf_skottiewasm_lottieweb"
 			cas = CAS_LOTTIE_WEB
+		} else if b.matchOs("iOS") {
+			// We need a service account in order to download the xcode CIPD
+			// packages.
+			b.serviceAccount(b.cfg.ServiceAccountUploadNano)
+			b.Spec.Caches = append(b.Spec.Caches, &specs.Cache{
+				Name: "xcode",
+				Path: "cache/Xcode.app",
+			})
 		}
 		b.recipeProps(EXTRA_PROPS)
 		if recipe == "perf" {

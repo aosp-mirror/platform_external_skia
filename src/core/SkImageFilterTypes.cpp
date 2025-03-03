@@ -1073,6 +1073,10 @@ FilterResult FilterResult::applyTransform(const Context& ctx,
         return {};
     }
 
+    if (!transform.invert(nullptr)) {
+        return {};
+    }
+
     // Extract the sampling options that matter based on the current and next transforms.
     // We make sure the new sampling is bilerp (default) if the new transform doesn't matter
     // (and assert that the current is bilerp if its transform didn't matter). Bilerp can be
@@ -2192,9 +2196,15 @@ FilterResult FilterResult::Builder::blur(const LayerSpace<SkSize>& sigma) {
                                                    3.f * lowResSigma.height()}).ceil());
         srcRelativeOutput = lowResMaxOutput.relevantSubset(srcRelativeOutput,
                                                            lowResImage.tileMode());
+
         // Clamp won't return empty from relevantSubset() and a non-intersecting decal should have
         // been caught earlier.
-        SkASSERT(!srcRelativeOutput.isEmpty());
+        // TODO(40042624): However, with some pathological inputs and the current mix of float vs.
+        // int representations, the definition of emptiness can change. Once everything is floating
+        // point, this check can be removed.
+        if (srcRelativeOutput.isEmpty()) {
+            return {};
+        }
 
         // Include 1px of blur output so that it can be sampled during the upscale, which is needed
         // to correctly seam large blurs across crop/raster tiles (crbug.com/1500021).

@@ -52,14 +52,14 @@ private:
     struct MaskHashEntry {
         SkIRect fBounds;
         AtlasLocator fLocator;
-        SK_DECLARE_INTERNAL_LLIST_INTERFACE(MaskHashEntry);
+        MaskHashEntry* fNext = nullptr;
     };
-    using MaskHashArray = SkTDArray<MaskHashEntry>;
     struct UniqueKeyHash {
         uint32_t operator()(const skgpu::UniqueKey& key) const { return key.hash(); }
     };
-    using MaskCache = skia_private::THashMap<skgpu::UniqueKey, MaskHashArray, UniqueKeyHash>;
+    using MaskCache = skia_private::THashMap<skgpu::UniqueKey, MaskHashEntry, UniqueKeyHash>;
     MaskCache fMaskCache;
+    int fHashEntryCount = 0;
 
     // List of stored keys per Plot, used to invalidate cache entries.
     // When a Plot is invalidated via evict(), we'll get its index and Page index from the
@@ -72,6 +72,7 @@ private:
     };
     using MaskKeyList = SkTInternalLList<MaskKeyEntry>;
     SkTDArray<MaskKeyList> fKeyLists;
+    int fListEntryCount = 0;
 };
 
 }  // namespace skgpu::graphite

@@ -42,7 +42,7 @@ ClipAtlasManager::ClipAtlasManager(Recorder* recorder) : fRecorder(recorder) {
 }
 
 namespace {
-// TODO: is this necessary for clips?
+// Needed to ensure that we have surrounding context, e.g. for inverse clips this would be solid.
 constexpr int kEntryPadding = 1;
 }  // namespace
 
@@ -51,23 +51,23 @@ const TextureProxy* ClipAtlasManager::findOrCreateEntry(uint32_t stackRecordID,
                                                         SkIRect iBounds,
                                                         SkIPoint* outPos) {
     skgpu::UniqueKey maskKey = GenerateClipMaskKey(stackRecordID, elementList);
-
-    MaskHashArray* cachedArray = fMaskCache.find(maskKey);
-    if (cachedArray) {
-        for (int i = 0; i < cachedArray->size(); ++i) {
-            MaskHashEntry& entry = (*cachedArray)[i];
-            // We can reuse a clip mask if has the same key and our bounds is contained in it
-            if (entry.fBounds.contains(iBounds)) {
-                SkIPoint topLeft = entry.fLocator.topLeft();
+    MaskHashEntry* entryList = fMaskCache.find(maskKey);
+    if (entryList) {
+        MaskHashEntry* entry = entryList;
+        do {
+            // If this entry is large enough to contain the clip, use it
+            if (entry->fBounds.contains(iBounds)) {
+                SkIPoint topLeft = entry->fLocator.topLeft();
                 // We need to adjust the returned outPos to reflect the subset we're using
-                SkIPoint subsetRelativePos = iBounds.topLeft() - entry.fBounds.topLeft();
+                SkIPoint subsetRelativePos = iBounds.topLeft() - entry->fBounds.topLeft();
                 *outPos = SkIPoint::Make(topLeft.x() + kEntryPadding + subsetRelativePos.x(),
                                          topLeft.y() + kEntryPadding + subsetRelativePos.y());
-                fDrawAtlas->setLastUseToken(entry.fLocator,
+                fDrawAtlas->setLastUseToken(entry->fLocator,
                                             fRecorder->priv().tokenTracker()->nextFlushToken());
-                return fDrawAtlas->getProxies()[entry.fLocator.pageIndex()].get();
+                return fDrawAtlas->getProxies()[entry->fLocator.pageIndex()].get();
             }
-        }
+            entry = entry->fNext;
+        } while (entry);
     }
 
     AtlasLocator locator;
@@ -76,20 +76,37 @@ const TextureProxy* ClipAtlasManager::findOrCreateEntry(uint32_t stackRecordID,
         return nullptr;
     }
 
+    // Look up again (in case this entry got purged)
+    entryList = fMaskCache.find(maskKey);
+
     // Add locator and bounds to MaskCache.
-    if (cachedArray) {
-        cachedArray->push_back({iBounds, locator});
+    if (entryList) {
+        // Add new list entry to the end. This will sort them from smallest bounds to largest,
+        // so that when we search above we'll pick the one with the smallest bounds that contains
+        // the clip.
+        MaskHashEntry* entry = entryList;
+        while (entry->fNext) {
+            entry = entry->fNext;
+        }
+        SkASSERT(entry);
+        SkASSERT(entry->fNext == nullptr); // Should be at the end
+        entry->fNext = new MaskHashEntry{iBounds, locator, nullptr};
+        ++fHashEntryCount;
     } else {
-        MaskHashArray initialArray;
-        initialArray.push_back({iBounds, locator});
-        fMaskCache.set(maskKey, initialArray);
+        MaskHashEntry newEntry{iBounds, locator, nullptr};
+        fMaskCache.set(maskKey, newEntry);
+        ++fHashEntryCount;
     }
+
     // Add key to Plot's MaskKeyList.
     uint32_t index = fDrawAtlas->getListIndex(locator.plotLocator());
-    MaskKeyEntry* keyEntry = new MaskKeyEntry();
-    keyEntry->fKey = maskKey;
-    keyEntry->fBounds = iBounds;
+    MaskKeyEntry* keyEntry = new MaskKeyEntry{maskKey, iBounds};
     fKeyLists[index].addToTail(keyEntry);
+    ++fListEntryCount;
+
+    SkASSERTF_RELEASE(fHashEntryCount == fListEntryCount,
+                      "=ClipAtlas=: Entry counts don't match after add: %d %d",
+                      fHashEntryCount, fListEntryCount);
 
     return proxy;
 }
@@ -204,24 +221,44 @@ void ClipAtlasManager::evict(PlotLocator plotLocator) {
     uint32_t index = fDrawAtlas->getListIndex(plotLocator);
     MaskKeyList::Iter iter;
     iter.init(fKeyLists[index], MaskKeyList::Iter::kHead_IterStart);
-    MaskKeyEntry* currEntry;
-    while ((currEntry = iter.get())) {
+    MaskKeyEntry* currKeyEntry;
+    while ((currKeyEntry = iter.get())) {
         iter.next();
-        MaskHashArray* cachedArray = fMaskCache.find(currEntry->fKey);
-        // Remove this entry from the hashed array
-        for (int i = cachedArray->size()-1; i >=0 ; --i) {
-            MaskHashEntry& entry = (*cachedArray)[i];
-            if (entry.fBounds == currEntry->fBounds) {
-                (*cachedArray).removeShuffle(i);
-                break;
+        MaskHashEntry* currHashEntry = fMaskCache.find(currKeyEntry->fKey);
+        SkASSERT(currHashEntry);
+        MaskHashEntry* prevHashEntry = nullptr;
+        bool found = false;
+        while (currHashEntry && !found) {
+            if (currHashEntry->fBounds == currKeyEntry->fBounds) {
+                found = true;
+                // Remove entry from hash list
+                if (prevHashEntry) {
+                    prevHashEntry->fNext = currHashEntry->fNext;
+                    delete currHashEntry;
+                    --fHashEntryCount;
+                } else if (currHashEntry->fNext) {
+                    MaskHashEntry* next = currHashEntry->fNext;
+                    currHashEntry->fBounds = next->fBounds;
+                    currHashEntry->fLocator = next->fLocator;
+                    currHashEntry->fNext = next->fNext;
+                    delete next;
+                    --fHashEntryCount;
+                } else {
+                    // Remove hash entry itself
+                    fMaskCache.remove(currKeyEntry->fKey);
+                    --fHashEntryCount;
+                }
             }
+            prevHashEntry = currHashEntry;
+            currHashEntry = currHashEntry->fNext;
         }
-        // If we removed the last one, remove the hash entry
-        if (cachedArray->empty()) {
-            fMaskCache.remove(currEntry->fKey);
-        }
-        fKeyLists[index].remove(currEntry);
-        delete currEntry;
+
+        fKeyLists[index].remove(currKeyEntry);
+        delete currKeyEntry;
+        --fListEntryCount;
+        SkASSERTF_RELEASE(fHashEntryCount == fListEntryCount,
+                          "=ClipAtlas=: Entry counts don't match after delete: %d %d",
+                          fHashEntryCount, fListEntryCount);
     }
 }
 

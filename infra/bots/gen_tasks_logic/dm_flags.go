@@ -373,6 +373,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "ProcessorOptimizationValidationTest")
 			skip(ALL, "test", ALL, "TextBlobAbnormal")
 			skip(ALL, "test", ALL, "TextBlobStressAbnormal")
+
+			// b/399342221
+			skip(ALL, "test", ALL, "UserDefinedStableKeyTest")
 		}
 
 		// The Tegra3 doesn't support MSAA
@@ -522,50 +525,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					skip(ALL, "test", ALL, "ThreadedPipelinePrecompileCompileTest")
 					skip(ALL, "test", ALL, "ThreadedPipelinePrecompileCompilePurgingTest")
 					skip(ALL, "test", ALL, "ThreadedPipelinePrecompilePurgingTest")
-				}
-				if b.extraConfig("TestPrecompile") {
-					// All these gms have "un-known" runtime effects and, thus, won't pass a gr*testprecompile run
-					skip(ALL, "gm", ALL, "alpha_image_shader_rt")
-					skip(ALL, "gm", ALL, "AlternateLuma")
-					skip(ALL, "gm", ALL, "arithmode_blender")
-					skip(ALL, "gm", ALL, "child_sampling_rt")
-					skip(ALL, "gm", ALL, "clip_super_rrect_pow3")
-					skip(ALL, "gm", ALL, "color_cube_cf_rt")
-					skip(ALL, "gm", ALL, "color_cube_rt")
-					skip(ALL, "gm", ALL, "composeCF")
-					skip(ALL, "gm", ALL, "deferred_shader_rt")
-					skip(ALL, "gm", ALL, "destcolor")
-					skip(ALL, "gm", ALL, "image_dither")
-					skip(ALL, "gm", ALL, "kawase_blur_rt")
-					skip(ALL, "gm", ALL, "linear_gradient_rt")
-					skip(ALL, "gm", ALL, "lit_shader_linear_rt")
-					skip(ALL, "gm", ALL, "local_matrix_shader_rt")
-					skip(ALL, "gm", ALL, "null_child_rt")
-					skip(ALL, "gm", ALL, "paint_alpha_normals_rt")
-					skip(ALL, "gm", ALL, "raw_image_shader_normals_rt")
-					skip(ALL, "gm", ALL, "rippleshader")
-					skip(ALL, "gm", ALL, "rtif_distort")
-					skip(ALL, "gm", ALL, "rtif_unsharp")
-					skip(ALL, "gm", ALL, "runtimecolorfilter")
-					skip(ALL, "gm", ALL, "runtimecolorfilter_vertices_atlas_and_patch")
-					skip(ALL, "gm", ALL, "runtimefunctions")
-					skip(ALL, "gm", ALL, "runtime_intrinsics_common")
-					skip(ALL, "gm", ALL, "runtime_intrinsics_exponential")
-					skip(ALL, "gm", ALL, "runtime_intrinsics_geometric")
-					skip(ALL, "gm", ALL, "runtime_intrinsics_matrix")
-					skip(ALL, "gm", ALL, "runtime_intrinsics_relational")
-					skip(ALL, "gm", ALL, "runtime_intrinsics_trig")
-					skip(ALL, "gm", ALL, "runtime_shader")
-					skip(ALL, "gm", ALL, "spiral_rt")
-					skip(ALL, "gm", ALL, "threshold_rt")
-					skip(ALL, "gm", ALL, "unsharp_rt")
-					skip(ALL, "gm", ALL, "workingspace")
-
-					// These skps contain raw SkSL that should be stably-keyed (b/394827799)
-					skip(ALL, "skp", ALL, "desk_googlespreadsheet.skp")
-					skip(ALL, "skp", ALL, "desk_googledocs.skp")
-					skip(ALL, "skp", ALL, "desk_weather.skp")
-					skip(ALL, "skp", ALL, "mobi_cnnarticle.skp")
 				}
 			}
 		}
@@ -1261,15 +1220,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		"async_rescale_and_read_dog_down",
 		"async_rescale_and_read_rose",
 		"async_rescale_and_read_no_bleed",
-		"async_rescale_and_read_alpha_type"} {
+		"async_rescale_and_read_alpha_type",
+		"blurrect_compare", // GM requires canvas->makeSurface() to return a valid surface.
+		"rrect_blurs"} {
 		skip("pic-8888", "gm", ALL, test)
 		skip("serialize-8888", "gm", ALL, test)
-
-		// GM requires canvas->makeSurface() to return a valid surface.
-		// TODO(borenet): These should be just outside of this block but are
-		// left here to match the recipe which has an indentation bug.
-		skip("pic-8888", "gm", ALL, "blurrect_compare")
-		skip("serialize-8888", "gm", ALL, "blurrect_compare")
 	}
 
 	// Extensions for RAW images

@@ -31,19 +31,15 @@ namespace {
 }
 
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(BackendTextureTest, reporter, context,
-                                   CtsEnforcement::kNextRelease) {
-    // TODO: Remove this check once Vulkan supports creating default TexutreInfo from caps and we
-    // implement createBackendTexture.
-    if (context->backend() == BackendApi::kVulkan) {
-        return;
-    }
-
+                                   CtsEnforcement::kApiLevel_202504) {
     auto caps = context->priv().caps();
     auto recorder = context->makeRecorder();
 
+    Protected isProtected = Protected(context->supportsProtectedContent());
+
     TextureInfo info = caps->getDefaultSampledTextureInfo(kRGBA_8888_SkColorType,
                                                           /*mipmapped=*/Mipmapped::kNo,
-                                                          Protected::kNo,
+                                                          isProtected,
                                                           Renderable::kNo);
     REPORTER_ASSERT(reporter, info.isValid());
 

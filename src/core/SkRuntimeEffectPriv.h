@@ -80,8 +80,34 @@ public:
         return effect.hash();
     }
 
+    static bool HasName(const SkRuntimeEffect& effect) {
+        return !effect.fName.isEmpty();
+    }
+
+    static const char* GetName(const SkRuntimeEffect& effect) {
+        return effect.fName.c_str();
+    }
+
     static uint32_t StableKey(const SkRuntimeEffect& effect) {
         return effect.fStableKey;
+    }
+
+    // This method is only used on user-defined known runtime effects
+    static void SetStableKey(SkRuntimeEffect* effect, uint32_t stableKey) {
+        SkASSERT(!effect->fStableKey);
+        SkASSERT(SkKnownRuntimeEffects::IsViableUserDefinedKnownRuntimeEffect(stableKey));
+        effect->fStableKey = stableKey;
+    }
+
+    // This method is only used for Skia-internal known runtime effects
+    static void SetStableKeyOnOptions(SkRuntimeEffect::Options* options, uint32_t stableKey) {
+        SkASSERT(!options->fStableKey);
+        SkASSERT(SkKnownRuntimeEffects::IsSkiaKnownRuntimeEffect(stableKey));
+        options->fStableKey = stableKey;
+    }
+
+    static void ResetStableKey(SkRuntimeEffect* effect) {
+        effect->fStableKey = 0;
     }
 
     static const SkSL::Program& Program(const SkRuntimeEffect& effect) {
@@ -96,13 +122,6 @@ public:
 
     static void AllowPrivateAccess(SkRuntimeEffect::Options* options) {
         options->allowPrivateAccess = true;
-    }
-
-    static void SetStableKey(SkRuntimeEffect::Options* options, uint32_t stableKey) {
-        // TODO(robertphillips): This assert will need to be loosened when first party
-        // stable keys are allowed.
-        SkASSERT(SkKnownRuntimeEffects::IsSkiaKnownRuntimeEffect(stableKey));
-        options->fStableKey = stableKey;
     }
 
     static SkRuntimeEffect::Uniform VarAsUniform(const SkSL::Variable&,
@@ -163,7 +182,7 @@ inline sk_sp<SkRuntimeEffect> SkMakeCachedRuntimeEffect(
 
 // Internal API that assumes (and asserts) that the shader code is valid, but does no internal
 // caching. Used when the caller will cache the result in a static variable. Ownership is passed to
-// the caller; the effect will be leaked if it the pointer is not stored or explicitly deleted.
+// the caller; the effect will be leaked if the pointer is not stored or explicitly deleted.
 inline SkRuntimeEffect* SkMakeRuntimeEffect(
         SkRuntimeEffect::Result (*make)(SkString, const SkRuntimeEffect::Options&),
         const char* sksl,
