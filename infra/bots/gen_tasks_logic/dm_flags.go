@@ -318,9 +318,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "OverdrawSurface_Gpu")
 			skip(ALL, "test", ALL, "PinnedImageTest")
 			skip(ALL, "test", ALL, "RecordingOrderTest_Graphite")
-			skip(ALL, "test", ALL, "RecordingSurfacesTestClear")
-			skip(ALL, "test", ALL, "RecordingSurfacesTestWritePixels")
-			skip(ALL, "test", ALL, "RecordingSurfacesTestWritePixelsOffscreen")
+			skip(ALL, "test", ALL, "RecordingSurfacesTest")
 			skip(ALL, "test", ALL, "ReimportImageTextureWithMipLevels")
 			skip(ALL, "test", ALL, "ReplaceSurfaceBackendTexture")
 			skip(ALL, "test", ALL, "ResourceCacheCache")
@@ -438,7 +436,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				// https://skbug.com/14105
 				skip(ALL, "test", ALL, "BackendTextureTest")
 
-				if b.matchOs("Win10") || b.matchGpu("MaliG78", "Adreno620", "QuadroP400") {
+				if b.matchOs("Win10") || b.matchGpu("Adreno620", "MaliG78", "QuadroP400") {
 					// The Dawn Win10 and some Android/Linux device jobs OOMs (skbug.com/14410, b/318725123)
 					skip(ALL, "test", ALL, "BigImageTest_Graphite")
 				}
@@ -449,60 +447,28 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 				if b.extraConfig("GL") || b.extraConfig("GLES") {
 					// These GMs currently have rendering issues in Dawn compat.
-					skip(ALL, "gm", ALL, "aaclip")
-					skip(ALL, "gm", ALL, "backdrop_imagefilter_croprect_persp")
-					skip(ALL, "gm", ALL, "bigblurs")
-					skip(ALL, "gm", ALL, "blur2rectsnonninepatch")
-					skip(ALL, "gm", ALL, "blurredclippedcircle")
-					skip(ALL, "gm", ALL, "bug9331")
-					skip(ALL, "gm", ALL, "circular-clips")
-					skip(ALL, "gm", ALL, "clip_shader_persp")
-					skip(ALL, "gm", ALL, "clipcubic")
-					skip(ALL, "gm", ALL, "clippedcubic")
-					skip(ALL, "gm", ALL, "clippedcubic2")
-					skip(ALL, "gm", ALL, "complexclip_aa")
-					skip(ALL, "gm", ALL, "complexclip_aa_invert")
-					skip(ALL, "gm", ALL, "complexclip_aa_layer")
-					skip(ALL, "gm", ALL, "complexclip_aa_layer_invert")
-					skip(ALL, "gm", ALL, "complexclip_blur_tiled")
-					skip(ALL, "gm", ALL, "complexclip_bw")
-					skip(ALL, "gm", ALL, "complexclip_bw_invert")
-					skip(ALL, "gm", ALL, "complexclip_bw_layer")
-					skip(ALL, "gm", ALL, "complexclip_bw_layer_invert")
-					skip(ALL, "gm", ALL, "complexclip2")
-					skip(ALL, "gm", ALL, "complexclip2_path_aa")
-					skip(ALL, "gm", ALL, "complexclip2_path_bw")
-					skip(ALL, "gm", ALL, "complexclip2_rect_aa")
-					skip(ALL, "gm", ALL, "complexclip2_rrect_aa")
-					skip(ALL, "gm", ALL, "complexclip2_rrect_bw")
-					skip(ALL, "gm", ALL, "complexclip3_complex")
-					skip(ALL, "gm", ALL, "complexclip3_simple")
-					skip(ALL, "gm", ALL, "complexclip4_aa")
-					skip(ALL, "gm", ALL, "complexclip4_bw")
-					skip(ALL, "gm", ALL, "croppedrects")
-					skip(ALL, "gm", ALL, "filltypes")
-					skip(ALL, "gm", ALL, "filltypespersp")
 					skip(ALL, "gm", ALL, "glyph_pos_n_s")
-					skip(ALL, "gm", ALL, "mixedtextblobs")
-					skip(ALL, "gm", ALL, "parsedpaths")
-					skip(ALL, "gm", ALL, "pathinvfill")
 					skip(ALL, "gm", ALL, "persptext")
 					skip(ALL, "gm", ALL, "persptext_minimal")
 					skip(ALL, "gm", ALL, "pictureshader_persp")
-					skip(ALL, "gm", ALL, "rrect_clip_aa")
-					skip(ALL, "gm", ALL, "rrect_clip_bw")
-					skip(ALL, "gm", ALL, "simpleaaclip_path")
-					skip(ALL, "gm", ALL, "simpleaaclip_rect")
-					skip(ALL, "gm", ALL, "skbug_9319")
-					skip(ALL, "gm", ALL, "strokes_poly")
-					skip(ALL, "gm", ALL, "tall_stretched_bitmaps")
 					skip(ALL, "gm", ALL, "wacky_yuv_formats_frompixmaps")
-					skip(ALL, "gm", ALL, "windowrectangles")
 
 					// This GM is larger than Dawn compat's max texture size.
 					skip(ALL, "gm", ALL, "wacky_yuv_formats_domain")
 				}
 
+				// b/373845830 - Precompile isn't thread-safe on either Dawn Metal
+				// or Dawn Vulkan
+				skip(ALL, "test", ALL, "ThreadedPrecompileTest")
+				// b/380039123 getting both ASAN and TSAN failures for this test on Dawn
+				skip(ALL, "test", ALL, "ThreadedCompilePrecompileTest")
+
+				if b.extraConfig("Vulkan") {
+					if b.extraConfig("TSAN") {
+						// The TSAN_Graphite_Dawn_Vulkan job goes off into space on this test
+						skip(ALL, "test", ALL, "BigImageTest_Graphite")
+					}
+				}
 			} else if b.extraConfig("Native") {
 				if b.extraConfig("Metal") {
 					configs = []string{"grmtl"}
@@ -526,6 +492,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 						skip(ALL, "test", ALL, "ImageAsyncReadPixelsGraphite")
 						skip(ALL, "test", ALL, "SurfaceAsyncReadPixelsGraphite")
 					}
+
+					// b/380049954 Graphite Native Vulkan has a thread race issue
+					skip(ALL, "test", ALL, "ThreadedCompilePrecompileTest")
 				}
 			}
 		}
@@ -1535,13 +1504,14 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	} else {
 		args = append(args, "--nonativeFonts")
 	}
-
 	if b.extraConfig("GDI") {
 		args = append(args, "--gdi")
 	}
-
 	if b.extraConfig("Fontations") {
 		args = append(args, "--fontations")
+	}
+	if b.extraConfig("AndroidNDKFonts") {
+		args = append(args, "--androidndkfonts")
 	}
 
 	// Let's make all tasks produce verbose output by default.
