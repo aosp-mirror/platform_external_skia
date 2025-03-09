@@ -24,7 +24,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/angle/angle": {
 		Id:      "chromium.googlesource.com/angle/angle",
-		Version: "421109ac5be0ffe422bf1ab0c7a688d8c1abbade",
+		Version: "0cdbc7814e59de19b7ea731bfd7b70b8d9b86eff",
 		Path:    "third_party/externals/angle2",
 	},
 	"chromium.googlesource.com/chromium/deps/icu": {
@@ -49,7 +49,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/chromium/src/third_party/freetype2": {
 		Id:      "chromium.googlesource.com/chromium/src/third_party/freetype2",
-		Version: "59320b2d3c2584ac01914ed0deff64bcc8fb23b2",
+		Version: "5d4e649f740c675426fbe4cdaffc53ee2a4cb954",
 		Path:    "third_party/externals/freetype",
 	},
 	"chromium.googlesource.com/chromium/src/third_party/jinja2": {
@@ -109,7 +109,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz": {
 		Id:      "chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz",
-		Version: "a070f9ebbe88dc71b248af9731dd49ec93f4e6e6",
+		Version: "ca3cd48fa3e06fa81d7c8a3f716cca44ed2de26a",
 		Path:    "third_party/externals/harfbuzz",
 	},
 	"chromium.googlesource.com/external/github.com/libexpat/libexpat": {
@@ -149,7 +149,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "922ff58ecda388dff1971d59c764b6817d9a7fef",
+		Version: "82fb5f1d212323cadbb4244dc5c9c29f470d3c88",
 		Path:    "third_party/externals/dawn",
 	},
 	"infra/3pp/tools/ninja": {

@@ -82,7 +82,7 @@ PaintOptions lineargrad_srcover_dithered() {
     return paintOptions;
 }
 
-// "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba)"
+// "RP(color: Dawn(f=BGRA8,s=1), resolve: {}, ds: Dawn(f=D16,s=1), samples: 1, swizzle: rgba)"
 // Single sampled BGRA w/ just depth
 RenderPassProperties bgra_1_depth() {
     return { DepthStencilFlags::kDepth,
@@ -91,7 +91,7 @@ RenderPassProperties bgra_1_depth() {
              /* requiresMSAA= */ false };
 }
 
-// "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=39,s=4), samples: 4, swizzle: rgba)"
+// "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D16,s=4), samples: 4, swizzle: rgba)"
 // MSAA BGRA w/ just depth
 RenderPassProperties bgra_4_depth() {
     return { DepthStencilFlags::kDepth,
@@ -100,7 +100,7 @@ RenderPassProperties bgra_4_depth() {
              /* requiresMSAA= */ true };
 }
 
-// "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba)"
+// "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba)"
 // MSAA BGRA w/ depth and stencil
 RenderPassProperties bgra_4_depth_stencil() {
     return { DepthStencilFlags::kDepthStencil,
@@ -214,74 +214,68 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
     }
 #endif
 
-    // In the following, here is the Dawn mapping from surface type to ID
-    //    RGBA8Unorm = 18
-    //    BGRA8Unorm = 23
-    //    Depth16Unorm = 39
-    //    Depth24PlusStencil8 = 41
-
     const char* kCases[] = {
         // Wikipedia 2018 - these are reordered from the spreadsheet
-        /*  0 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+        /*  0 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "TessellateWedgesRenderStep[Winding] + "
                  "(empty)",
-        /*  1 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+        /*  1 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "TessellateWedgesRenderStep[EvenOdd] + "
                  "(empty)",
-        /*  2 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+        /*  2 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "CoverBoundsRenderStep[NonAAFill] + "
                  "SolidColor SrcOver",
-        /*  3 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+        /*  3 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "CoverBoundsRenderStep[NonAAFill] + "
                  "SolidColor Src",
-        /*  4 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+        /*  4 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "PerEdgeAAQuadRenderStep + "
                  "LocalMatrix [ Compose [ Image(0) ColorSpaceTransform ] ] SrcOver",
-        /*  5 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+        /*  5 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "PerEdgeAAQuadRenderStep + "
                  "LocalMatrix [ Compose [ HardwareImage(0) ColorSpaceTransform ] ] SrcOver",
-        /*  6 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+        /*  6 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "CoverBoundsRenderStep[NonAAFill] + "
                  "LocalMatrix [ Compose [ HardwareImage(0) ColorSpaceTransform ] ] SrcOver",
-        /*  7 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+        /*  7 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "AnalyticRRectRenderStep + "
-                 "Compose [ LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransform ] ] Dither ] SrcOver",
-        /*  8 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+                 "Compose [ LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransformPremul ] ] Dither ] SrcOver",
+        /*  8 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "CoverBoundsRenderStep[NonAAFill] + "
-                 "Compose [ LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransform ] ] Dither ] SrcOver",
-        /*  9 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+                 "Compose [ LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransformPremul ] ] Dither ] SrcOver",
+        /*  9 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "BitmapTextRenderStep[Mask] + "
-                 "LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransform ] ] SrcOver",
-        /* 10 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
+                 "LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransformPremul ] ] SrcOver",
+        /* 10 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D24_S8,s=4), samples: 4, swizzle: rgba) + "
                  "BitmapTextRenderStep[Mask] + "
                  "SolidColor SrcOver",
-        /* 11 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
+        /* 11 */ "RP(color: Dawn(f=BGRA8,s=1), resolve: {}, ds: Dawn(f=D16,s=1), samples: 1, swizzle: rgba) + "
                  "AnalyticRRectRenderStep + "
                  "SolidColor SrcOver",
-        /* 12 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
+        /* 12 */ "RP(color: Dawn(f=BGRA8,s=1), resolve: {}, ds: Dawn(f=D16,s=1), samples: 1, swizzle: rgba) + "
                  "CoverBoundsRenderStep[NonAAFill] + "
                  "SolidColor SrcOver",
-        /* 13 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
+        /* 13 */ "RP(color: Dawn(f=BGRA8,s=1), resolve: {}, ds: Dawn(f=D16,s=1), samples: 1, swizzle: rgba) + "
                  "PerEdgeAAQuadRenderStep + "
                  "LocalMatrix [ Compose [ HardwareImage(0) ColorSpaceTransform ] ] Src",
-        /* 14 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
+        /* 14 */ "RP(color: Dawn(f=BGRA8,s=1), resolve: {}, ds: Dawn(f=D16,s=1), samples: 1, swizzle: rgba) + "
                  "CoverBoundsRenderStep[NonAAFill] + "
                  "LocalMatrix [ Compose [ HardwareImage(0) ColorSpaceTransform ] ] SrcOver",
-        /* 15 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=39,s=4), samples: 4, swizzle: rgba) + "
+        /* 15 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D16,s=4), samples: 4, swizzle: rgba) + "
                  "TessellateWedgesRenderStep[Convex] + "
                  "SolidColor SrcOver",
-        /* 16 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=39,s=4), samples: 4, swizzle: rgba) + "
+        /* 16 */ "RP(color: Dawn(f=BGRA8,s=4), resolve: Dawn(f=BGRA8,s=1), ds: Dawn(f=D16,s=4), samples: 4, swizzle: rgba) + "
                  "TessellateStrokesRenderStep + "
                  "SolidColor SrcOver",
-        /* 17 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
+        /* 17 */ "RP(color: Dawn(f=BGRA8,s=1), resolve: {}, ds: Dawn(f=D16,s=1), samples: 1, swizzle: rgba) + "
                  "AnalyticBlurRenderStep + "
                  "Compose [ SolidColor Blend [ SolidColor Passthrough BlendModeBlender ] ] SrcOver",
-        /* 18 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
+        /* 18 */ "RP(color: Dawn(f=BGRA8,s=1), resolve: {}, ds: Dawn(f=D16,s=1), samples: 1, swizzle: rgba) + "
                  "CoverBoundsRenderStep[NonAAFill] + "
                  "SolidColor Src",
-        /* 19 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
+        /* 19 */ "RP(color: Dawn(f=BGRA8,s=1), resolve: {}, ds: Dawn(f=D16,s=1), samples: 1, swizzle: rgba) + "
                  "CoverBoundsRenderStep[NonAAFill] + "
-                 "Compose [ LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransform ] ] Dither ] SrcOver",
+                 "Compose [ LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransformPremul ] ] Dither ] SrcOver",
     };
 
     for (size_t i = 0; i < std::size(kCases); ++i) {
@@ -316,22 +310,20 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
                 paintOptions = image_srcover();
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_4_depth_stencil();
-                allowedOvergeneration = 90;
+                allowedOvergeneration = 80;
                 break;
             case 7: // 7 & 8 are combined pair
             case 8:
                 paintOptions = lineargrad_srcover_dithered();
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_4_depth_stencil();
-                allowedOvergeneration = 45; // 3x from gradient, 12x from RenderSteps,
-                                            // all x3 color space options
+                allowedOvergeneration = 15; // 3x from gradient, 12x from RenderSteps
                 break;
             case 9:
                 paintOptions = lineargrad_srcover();
                 drawTypeFlags = DrawTypeFlags::kBitmapText_Mask;
                 renderPassSettings = bgra_4_depth_stencil();
-                allowedOvergeneration = 9; // from the 3 internal gradient alternatives,
-                                           // x3 color space options
+                allowedOvergeneration = 3; // from the 3 internal gradient alternatives
                 break;
             case 10:
                 paintOptions = solid_srcover();
@@ -351,14 +343,14 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_1_depth();
                 // This is a lot for a kSrc image draw:
-                allowedOvergeneration = 90; // 9x of this are the paint combos,
+                allowedOvergeneration = 80; // 8x of this are the paint combos,
                                             // the rest are the RenderSteps!!
                 break;
             case 14:
                 paintOptions = image_srcover();
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_1_depth();
-                allowedOvergeneration = 90; // !!!! - a lot for just a non-aa image rect draw
+                allowedOvergeneration = 80; // !!!! - a lot for just a non-aa image rect draw
                 break;
             case 15:
             case 16:
@@ -386,7 +378,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
                 paintOptions = lineargrad_srcover_dithered();
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_1_depth();
-                allowedOvergeneration = 45; // 9x from gradient, rest from RenderSteps
+                allowedOvergeneration = 15; // 3x from gradient, rest from RenderSteps
                 break;
             default:
                 continue;

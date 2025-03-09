@@ -21,11 +21,7 @@ class SkWStream;
 namespace skgpu::graphite {
 class BackendTexture;
 
-#if defined(SK_DAWN_TEXTURE_INFO_IS_STRUCT)
-struct SK_API DawnTextureInfo final : public TextureInfo::Data {
-#else
 class SK_API DawnTextureInfo final : public TextureInfo::Data {
-#endif
 public:
     // wgpu::TextureDescriptor properties
     wgpu::TextureFormat fFormat = wgpu::TextureFormat::Undefined;
@@ -105,14 +101,12 @@ private:
     static constexpr skgpu::BackendApi kBackend = skgpu::BackendApi::kDawn;
 
     Protected isProtected() const { return Protected::kNo; }
+    TextureFormat viewFormat() const;
+
     bool serialize(SkWStream*) const;
     bool deserialize(SkStream*);
 
     // Virtual API when the specific backend type is not available.
-    uint32_t viewFormat() const override { return (uint32_t) this->getViewFormat(); }
-
-    size_t bytesPerPixel() const override;
-    SkTextureCompressionType compressionType() const override;
     SkString toBackendString() const override;
 
     void copyTo(TextureInfo::AnyTextureInfoData& dstData) const override {

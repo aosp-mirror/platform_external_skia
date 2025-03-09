@@ -310,13 +310,13 @@ crate_universe_dependencies()
 http_archive(
     name = "cxxbridge_cmd",
     build_file = "//bazel/external/cxxbridge_cmd:BUILD.bazel.skia",
-    sha256 = "4717c9c806a9e07fdcb34c84965a414ea40fafe57667187052cf1eb7f5e8a8a9",
-    strip_prefix = "cxxbridge-cmd-1.0.135",
+    sha256 = "19c3062da294104183e1c34ea9887941d4d8c74f6195ce9fbb430ac4b5290ede",
+    strip_prefix = "cxxbridge-cmd-1.0.143",
     type = "tar.gz",
     urls = gcs_mirror_url(
         ext = ".tar.gz",
-        sha256 = "4717c9c806a9e07fdcb34c84965a414ea40fafe57667187052cf1eb7f5e8a8a9",
-        url = "https://crates.io/api/v1/crates/cxxbridge-cmd/1.0.135/download",
+        sha256 = "19c3062da294104183e1c34ea9887941d4d8c74f6195ce9fbb430ac4b5290ede",
+        url = "https://crates.io/api/v1/crates/cxxbridge-cmd/1.0.143/download",
     ),
 )
 
@@ -340,13 +340,13 @@ cxxbridge_cmd_deps()
 http_archive(
     name = "cxx",
     build_file = "//bazel/external/cxx:BUILD.bazel.skia",
-    sha256 = "4d44ff199ff93242c3afe480ab588d544dd08d72e92885e152ffebc670f076ad",
-    strip_prefix = "cxx-1.0.135",
+    sha256 = "050906babad73f9b32a91cecc3063ff1e2235226dd2367dd839fd6fbc941c68a",
+    strip_prefix = "cxx-1.0.143",
     type = "tar.gz",
     urls = gcs_mirror_url(
         ext = ".tar.gz",
-        sha256 = "4d44ff199ff93242c3afe480ab588d544dd08d72e92885e152ffebc670f076ad",
-        url = "https://crates.io/api/v1/crates/cxx/1.0.135/download",
+        sha256 = "050906babad73f9b32a91cecc3063ff1e2235226dd2367dd839fd6fbc941c68a",
+        url = "https://crates.io/api/v1/crates/cxx/1.0.143/download",
     ),
 )
 
@@ -399,9 +399,7 @@ crates_repository(
     cargo_lockfile = "//experimental/rust_png/ffi:Cargo.lock",
     packages = {
         "png": crate.spec(
-            # Note: for additional performance gains `features = ["unstable"]`
-            # can be enabled, but this requires the nightly, unstable `rustc`.
-            version = "0.17.15",
+            version = "0.18.0-rc",
         ),
     },
 )
@@ -672,7 +670,7 @@ load(
 # Pulls the gcr.io/skia-public/debugger-app-base container.
 container_pull(
     name = "debugger-app-base",
-    digest = "sha256:cc91ae26ecef8f4b2e6a34e90d525556329db67f26c46dd36a22a1992bf6e175",
+    digest = "sha256:bfb2f80c04822b42cab1ae64d42e41081c3cbc713a5a94b89e427c63f517304c",
     registry = "gcr.io",
     repository = "skia-public/debugger-app-base",
 )
@@ -680,7 +678,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/jsfiddle-base container.
 container_pull(
     name = "jsfiddle-base",
-    digest = "sha256:18808c894e652fbfb5959c616fe6f78b0822763b704c839205d7dadaedead8e5",
+    digest = "sha256:b07c254904bcd68ee2d4a392c1123ec86ab8f802dc8736a22760227aff549e2a",
     registry = "gcr.io",
     repository = "skia-public/jsfiddle-base",
 )
@@ -688,7 +686,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/shaders-base container.
 container_pull(
     name = "shaders-base",
-    digest = "sha256:81fa6c51b85be79bdfc071f6d35a06f8bf822b8abd3e427673a48e5c599aadba",
+    digest = "sha256:536def9c5709a51d5175267033bb26850779359e92f09739d29bad58d37abf93",
     registry = "gcr.io",
     repository = "skia-public/shaders-base",
 )
@@ -696,7 +694,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:7b44b80c0facc11ec471a3b1b6aeaff1f579b85a0e1cb0d98f6fb9d3da42f802",
+    digest = "sha256:9ee87e7f230fb76669886c2810fee6b279cad5fc074700ea74dda7f840480e99",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )

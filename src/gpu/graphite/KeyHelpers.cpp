@@ -601,6 +601,28 @@ void add_image_uniform_data(const ShaderCodeDictionary* dict,
     gatherer->write(SkTo<int>(imgData.fSampling.filter));
 }
 
+void add_clamp_image_uniform_data(const ShaderCodeDictionary* dict,
+                                  const ImageShaderBlock::ImageData& imgData,
+                                  PipelineDataGatherer* gatherer) {
+    SkASSERT(!imgData.fSampling.useCubic);
+    BEGIN_WRITE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kImageShaderClamp)
+
+    gatherer->write(SkSize::Make(1.f/imgData.fImgSize.width(), 1.f/imgData.fImgSize.height()));
+
+    // Matches GrTextureEffect::kLinearInset, to make sure we don't touch an outer row or column
+    // with a weight of 0 when linear filtering.
+    const float kLinearInset = 0.5f + 0.00001f;
+
+    // The subset should clamp texel coordinates to an inset subset to prevent sampling neighboring
+    // texels when coords fall exactly at texel boundaries.
+    SkRect subsetInsetClamp = imgData.fSubset;
+    if (imgData.fSampling.filter == SkFilterMode::kNearest) {
+        subsetInsetClamp.roundOut(&subsetInsetClamp);
+    }
+    subsetInsetClamp.inset(kLinearInset, kLinearInset);
+    gatherer->write(subsetInsetClamp);
+}
+
 void add_cubic_image_uniform_data(const ShaderCodeDictionary* dict,
                                   const ImageShaderBlock::ImageData& imgData,
                                   PipelineDataGatherer* gatherer) {
@@ -674,6 +696,10 @@ void ImageShaderBlock::AddBlock(const KeyContext& keyContext,
     } else if (imgData.fSampling.useCubic) {
         add_cubic_image_uniform_data(keyContext.dict(), imgData, gatherer);
         builder->beginBlock(BuiltInCodeSnippetID::kCubicImageShader);
+    } else if (imgData.fTileModes.first == SkTileMode::kClamp &&
+               imgData.fTileModes.second == SkTileMode::kClamp) {
+        add_clamp_image_uniform_data(keyContext.dict(), imgData, gatherer);
+        builder->beginBlock(BuiltInCodeSnippetID::kImageShaderClamp);
     } else {
         add_image_uniform_data(keyContext.dict(), imgData, gatherer);
         builder->beginBlock(BuiltInCodeSnippetID::kImageShader);
@@ -1956,24 +1982,6 @@ static void add_yuv_image_to_key(const KeyContext& keyContext,
             });
 }
 
-static skgpu::graphite::ReadSwizzle swizzle_class_to_read_enum(const skgpu::Swizzle& swizzle) {
-    if (swizzle == skgpu::Swizzle::RGBA()) {
-        return skgpu::graphite::ReadSwizzle::kRGBA;
-    } else if (swizzle == skgpu::Swizzle::RGB1()) {
-        return skgpu::graphite::ReadSwizzle::kRGB1;
-    } else if (swizzle == skgpu::Swizzle("rrr1")) {
-        return skgpu::graphite::ReadSwizzle::kRRR1;
-    } else if (swizzle == skgpu::Swizzle::BGRA()) {
-        return skgpu::graphite::ReadSwizzle::kBGRA;
-    } else if (swizzle == skgpu::Swizzle("000r")) {
-        return skgpu::graphite::ReadSwizzle::k000R;
-    } else {
-        SKGPU_LOG_W("%s is an unsupported read swizzle. Defaulting to RGBA.\n",
-                    swizzle.asString().data());
-        return skgpu::graphite::ReadSwizzle::kRGBA;
-    }
-}
-
 static void add_to_key(const KeyContext& keyContext,
                        PaintParamsKeyBuilder* builder,
                        PipelineDataGatherer* gatherer,
@@ -2050,7 +2058,7 @@ static void add_to_key(const KeyContext& keyContext,
         readSwizzle = skgpu::Swizzle::Concat(readSwizzle, skgpu::Swizzle("000a"));
     }
     ColorSpaceTransformBlock::ColorSpaceTransformData colorXformData(
-            swizzle_class_to_read_enum(readSwizzle));
+            SwizzleClassToReadEnum(readSwizzle));
 
     if (!shader->isRaw()) {
         colorXformData.fSteps = SkColorSpaceXformSteps(imageToDraw->colorSpace(),
