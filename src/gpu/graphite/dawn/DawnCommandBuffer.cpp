@@ -25,82 +25,23 @@
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
 #include "src/gpu/graphite/dawn/DawnTexture.h"
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/version.h>
+#endif
+
 namespace skgpu::graphite {
 
-// DawnCommandBuffer::IntrinsicConstantsManager
-// ----------------------------------------------------------------------------
-
-/**
- * Since Dawn does not currently provide push constants, this helper class manages rotating through
- * buffers and writing each new occurrence of a set of intrinsic uniforms into the current buffer.
- */
-class DawnCommandBuffer::IntrinsicConstantsManager {
-public:
-
-    BindBufferInfo add(DawnCommandBuffer* cb, UniformDataBlock intrinsicValues) {
-        static constexpr int kNumSlots = 8;
-
-        BindBufferInfo* existing = fCachedIntrinsicValues.find(intrinsicValues);
-        if (existing) {
-            return *existing;
-        }
-
-        // TODO: https://b.corp.google.com/issues/259267703
-        // Make updating intrinsic constants faster. Metal has setVertexBytes method
-        // to quickly send intrinsic constants to vertex shader without any buffer. But Dawn
-        // doesn't have similar capability. So we have to use WriteBuffer(), and this method is not
-        // allowed to be called when there is an active render pass.
-        SkASSERT(!cb->fActiveRenderPassEncoder);
-        SkASSERT(!cb->fActiveComputePassEncoder);
-
-        const Caps* caps = cb->fSharedContext->caps();
-        const uint32_t stride = SkAlignTo(intrinsicValues.size(),
-                                          caps->requiredUniformBufferAlignment());
-        if (!fCurrentBuffer || fSlotsUsed == kNumSlots) {
-            // We can just replace the current buffer; any prior buffer was already tracked on the
-            // CommandBuffer and the intrinsic constants were written directly to the Dawn queue.
-            DawnResourceProvider* resourceProvider = cb->fResourceProvider;
-            fCurrentBuffer = resourceProvider->findOrCreateDawnBuffer(stride * kNumSlots,
-                                                                      BufferType::kUniform,
-                                                                      AccessPattern::kGpuOnly,
-                                                                      "IntrinsicConstantBuffer");
-            fSlotsUsed = 0;
-
-            if (!fCurrentBuffer) {
-                // If we failed to create a GPU buffer to hold the intrinsic uniforms, we will fail
-                // the Recording being inserted, so return an empty bind info.
-                return {};
-            }
-            cb->trackResource(fCurrentBuffer);
-        }
-
-        SkASSERT(fCurrentBuffer && fSlotsUsed < kNumSlots);
-        uint32_t offset = (fSlotsUsed++) * stride;
-        cb->fSharedContext->queue().WriteBuffer(fCurrentBuffer->dawnBuffer(),
-                                                offset,
-                                                intrinsicValues.data(),
-                                                intrinsicValues.size());
-
-        BindBufferInfo binding{fCurrentBuffer.get(),
-                               offset,
-                               SkTo<uint32_t>(intrinsicValues.size())};
-        fCachedIntrinsicValues.set(UniformDataBlock::Make(intrinsicValues, &fUniformData), binding);
-        return binding;
-    }
-
-private:
-    // The current buffer being filled up, as well as the how much of it has been written to.
-    sk_sp<DawnBuffer> fCurrentBuffer;
-    int fSlotsUsed = 0; // in multiples of the intrinsic uniform size and UBO binding requirement
-
-    // All uploaded intrinsic uniform sets and where they are on the GPU. All uniform sets are
-    // cached for the duration of a CommandBuffer since the maximum number of elements in this
-    // collection will equal the number of render passes and the intrinsic constants aren't that
-    // large. This maximizes the chance for reuse between passes.
-    skia_private::THashMap<UniformDataBlock, BindBufferInfo, UniformDataBlock::Hash>
-            fCachedIntrinsicValues;
-    SkArenaAlloc fUniformData{0};
-};
+// On emsdk before 3.1.48 the API for RenderPass and ComputePass timestamps was different
+// and does not map to current webgpu. We check this in DawnCaps but we also must avoid
+// naming the types from the new API because they aren't defined.
+#if defined(__EMSCRIPTEN__)                                                                  \
+        && ((__EMSCRIPTEN_major__ < 3)                                                       \
+         || (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ < 1)                          \
+         || (__EMSCRIPTEN_major__ == 3 && __EMSCRIPTEN_minor__ == 1 && __EMSCRIPTEN_tiny__ < 48))
+    #define WGPU_TIMESTAMP_WRITES_DEFINED 0
+#else
+    #define WGPU_TIMESTAMP_WRITES_DEFINED 1
+#endif
 
 // DawnCommandBuffer
 // ----------------------------------------------------------------------------
@@ -116,10 +57,120 @@ std::unique_ptr<DawnCommandBuffer> DawnCommandBuffer::Make(const DawnSharedConte
 
 DawnCommandBuffer::DawnCommandBuffer(const DawnSharedContext* sharedContext,
                                      DawnResourceProvider* resourceProvider)
-        : fSharedContext(sharedContext)
+        : CommandBuffer(Protected::kNo)  // Dawn doesn't support protected memory
+        , fSharedContext(sharedContext)
         , fResourceProvider(resourceProvider) {}
 
 DawnCommandBuffer::~DawnCommandBuffer() {}
+
+bool DawnCommandBuffer::startTimerQuery() {
+    wgpu::QuerySet querySet = std::move(fTimestampQuerySet);
+
+    auto buffer = fResourceProvider->findOrCreateDawnBuffer(2 * sizeof(uint64_t),
+                                                            BufferType::kQuery,
+                                                            AccessPattern::kHostVisible,
+                                                            "TimerQuery");
+    if (!buffer) {
+        SKGPU_LOG_W("Failed to create buffer for resolving results, timer query will "
+                    "not be reported.");
+        return false;
+    }
+    sk_sp<DawnBuffer> xferBuffer;
+    if (!fSharedContext->caps()->drawBufferCanBeMapped()) {
+        xferBuffer = fResourceProvider->findOrCreateDawnBuffer(2 * sizeof(uint64_t),
+                                                               BufferType::kXferGpuToCpu,
+                                                               AccessPattern::kHostVisible,
+                                                               "TimerQueryXfer");
+        if (!xferBuffer) {
+            SKGPU_LOG_W("Failed to create buffer for transferring timestamp results, timer "
+                        "query will not be reported.");
+            return false;
+        }
+    }
+    if (!querySet) {
+        wgpu::QuerySetDescriptor descriptor;
+        descriptor.count = 2;
+        descriptor.label = "Command Buffer Timer Query";
+        descriptor.type = wgpu::QueryType::Timestamp;
+        descriptor.nextInChain = nullptr;
+        querySet = fSharedContext->device().CreateQuerySet(&descriptor);
+        if (!querySet) {
+            SKGPU_LOG_W("Failed to create query set, timer query will not be reported.");
+            return false;
+        }
+    }
+
+    fTimestampQuerySet = std::move(querySet);
+    fTimestampQueryBuffer = std::move(buffer);
+    fTimestampQueryXferBuffer = std::move(xferBuffer);
+
+    if (fSharedContext->dawnCaps()->supportsCommandBufferTimestamps()) {
+        // In native Dawn we use the writeTimeStamp method on CommandBuffer to bracket
+        // the whole command buffer.
+        fCommandEncoder.WriteTimestamp(fTimestampQuerySet, 0);
+    } else {
+        // On WebGPU the best we can do is add timestamps to each render/compute pass as we record
+        // them. Since we don't know a priori how many passes there will be we write a begin
+        // timestamp on the first pass and an end on every pass, overwriting the second query in the
+        // set.
+        fWroteFirstPassTimestamps = false;
+    }
+
+    return true;
+}
+
+void DawnCommandBuffer::endTimerQuery() {
+    SkASSERT(fTimestampQuerySet);
+    SkASSERT(fTimestampQueryBuffer);
+    if (fSharedContext->dawnCaps()->supportsCommandBufferTimestamps()) {
+        fCommandEncoder.WriteTimestamp(fTimestampQuerySet, 1);
+    } else if (!fWroteFirstPassTimestamps) {
+        // If we didn't have any passes then we can't report anything.
+        fTimestampQueryBuffer = nullptr;
+        fTimestampQueryXferBuffer = nullptr;
+        return;
+    }
+    // This resolve covers both timestamp code paths (command encoder and render/compute pass).
+    fCommandEncoder.ResolveQuerySet(
+            fTimestampQuerySet, 0, 2, fTimestampQueryBuffer->dawnBuffer(), 0);
+    if (fTimestampQueryXferBuffer) {
+        SkASSERT(fTimestampQueryBuffer->size() == fTimestampQueryBuffer->size());
+        fCommandEncoder.CopyBufferToBuffer(fTimestampQueryBuffer->dawnBuffer(),
+                                           /*sourceOffset=*/0,
+                                           fTimestampQueryXferBuffer->dawnBuffer(),
+                                           /*destinationOffset=*/0,
+                                           /*size=*/fTimestampQueryBuffer->size());
+        fTimestampQueryBuffer.reset();
+    }
+    if (fSharedContext->caps()->bufferMapsAreAsync()) {
+        sk_sp<Buffer> buffer =
+                fTimestampQueryXferBuffer ? fTimestampQueryXferBuffer : fTimestampQueryBuffer;
+        this->addBuffersToAsyncMapOnSubmit({&buffer, 1});
+    }
+}
+
+std::optional<GpuStats> DawnCommandBuffer::gpuStats() {
+    auto& buffer = fTimestampQueryXferBuffer ? fTimestampQueryXferBuffer : fTimestampQueryBuffer;
+    if (!buffer) {
+        return {};
+    }
+    if (fSharedContext->caps()->bufferMapsAreAsync()) {
+        if (!buffer->isMapped()) {
+            return {};
+        }
+    }
+    uint64_t* results = static_cast<uint64_t*>(buffer->map());
+    if (!results) {
+        SKGPU_LOG_W("Failed to get timer query results because buffer couldn't be mapped.");
+        return {};
+    }
+    if (results[1] < results[0]) {
+        return {};
+    }
+    GpuStats stats;
+    stats.elapsedTime = results[1] - results[0];
+    return stats;
+}
 
 wgpu::CommandBuffer DawnCommandBuffer::finishEncoding() {
     SkASSERT(fCommandEncoder);
@@ -131,8 +182,6 @@ wgpu::CommandBuffer DawnCommandBuffer::finishEncoding() {
 }
 
 void DawnCommandBuffer::onResetCommandBuffer() {
-    fIntrinsicConstants = nullptr;
-
     fActiveGraphicsPipeline = nullptr;
     fActiveRenderPassEncoder = nullptr;
     fActiveComputePassEncoder = nullptr;
@@ -142,6 +191,15 @@ void DawnCommandBuffer::onResetCommandBuffer() {
         bufferSlot = {};
     }
     fBoundUniformBuffersDirty = true;
+    if (fTimestampQueryBuffer && fTimestampQueryBuffer->isUnmappable()) {
+        fTimestampQueryBuffer->unmap();
+    }
+    if (fTimestampQueryXferBuffer && fTimestampQueryXferBuffer->isUnmappable()) {
+        fTimestampQueryXferBuffer->unmap();
+    }
+    fTimestampQueryBuffer = {};
+    fTimestampQueryXferBuffer = {};
+    fWroteFirstPassTimestamps = false;
 }
 
 bool DawnCommandBuffer::setNewCommandBufferResources() {
@@ -149,7 +207,6 @@ bool DawnCommandBuffer::setNewCommandBufferResources() {
     fCommandEncoder = fSharedContext->device().CreateCommandEncoder();
     SkASSERT(fCommandEncoder);
 
-    fIntrinsicConstants = std::make_unique<IntrinsicConstantsManager>();
     return true;
 }
 
@@ -254,6 +311,22 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
 #if !defined(__EMSCRIPTEN__)
     wgpu::DawnRenderPassColorAttachmentRenderToSingleSampled mssaRenderToSingleSampledDesc;
     wgpu::RenderPassDescriptorExpandResolveRect wgpuPartialRect = {};
+#endif
+
+#if WGPU_TIMESTAMP_WRITES_DEFINED
+    wgpu::RenderPassTimestampWrites wgpuTimestampWrites;
+    if (!fSharedContext->dawnCaps()->supportsCommandBufferTimestamps() && fTimestampQueryBuffer) {
+        SkASSERT(fTimestampQuerySet);
+        wgpuTimestampWrites.querySet = fTimestampQuerySet;
+        if (!fWroteFirstPassTimestamps) {
+            wgpuTimestampWrites.beginningOfPassWriteIndex = 0;
+            fWroteFirstPassTimestamps = true;
+        }
+        wgpuTimestampWrites.endOfPassWriteIndex = 1;
+        wgpuRenderPass.timestampWrites = &wgpuTimestampWrites;
+    }
+#else
+    SkASSERT(!fTimestampQueryBuffer);
 #endif
 
     auto& colorInfo = renderPassDesc.fColorAttachment;
@@ -529,8 +602,7 @@ bool DawnCommandBuffer::addDrawPass(const DrawPass* drawPass) {
             }
             case DrawPassCommands::Type::kSetScissor: {
                 auto ss = static_cast<DrawPassCommands::SetScissor*>(cmdPtr);
-                const SkIRect& rect = ss->fScissor;
-                this->setScissor(rect.fLeft, rect.fTop, rect.width(), rect.height());
+                this->setScissor(ss->fScissor);
                 break;
             }
             case DrawPassCommands::Type::kDraw: {
@@ -807,26 +879,18 @@ void DawnCommandBuffer::syncUniformBuffers() {
     }
 }
 
-void DawnCommandBuffer::setScissor(unsigned int left,
-                                   unsigned int top,
-                                   unsigned int width,
-                                   unsigned int height) {
+void DawnCommandBuffer::setScissor(const Scissor& scissor) {
     SkASSERT(fActiveRenderPassEncoder);
-    SkIRect scissor = SkIRect::MakeXYWH(
-            left + fReplayTranslation.x(), top + fReplayTranslation.y(), width, height);
-    if (!scissor.intersect(SkIRect::MakeSize(fColorAttachmentSize))) {
-        scissor.setEmpty();
-    }
-    fActiveRenderPassEncoder.SetScissorRect(
-            scissor.x(), scissor.y(), scissor.width(), scissor.height());
+    SkIRect rect = scissor.getRect(fReplayTranslation, fReplayClip);
+    fActiveRenderPassEncoder.SetScissorRect(rect.x(), rect.y(), rect.width(), rect.height());
 }
 
 bool DawnCommandBuffer::updateIntrinsicUniforms(SkIRect viewport) {
     UniformManager intrinsicValues{Layout::kStd140};
     CollectIntrinsicUniforms(fSharedContext->caps(), viewport, fDstCopyBounds, &intrinsicValues);
 
-    BindBufferInfo binding =
-            fIntrinsicConstants->add(this, UniformDataBlock::Wrap(&intrinsicValues));
+    BindBufferInfo binding = fResourceProvider->findOrCreateIntrinsicBindBufferInfo(
+            this, UniformDataBlock::Wrap(&intrinsicValues));
     if (!binding) {
         return false;
     } else if (binding == fBoundUniforms[DawnGraphicsPipeline::kIntrinsicUniformBufferIndex]) {
@@ -926,7 +990,23 @@ void DawnCommandBuffer::drawIndexedIndirect(PrimitiveType type) {
 void DawnCommandBuffer::beginComputePass() {
     SkASSERT(!fActiveRenderPassEncoder);
     SkASSERT(!fActiveComputePassEncoder);
-    fActiveComputePassEncoder = fCommandEncoder.BeginComputePass();
+    wgpu::ComputePassDescriptor wgpuComputePassDescriptor = {};
+#if WGPU_TIMESTAMP_WRITES_DEFINED
+    wgpu::ComputePassTimestampWrites wgpuTimestampWrites;
+    if (!fSharedContext->dawnCaps()->supportsCommandBufferTimestamps() && fTimestampQueryBuffer) {
+        SkASSERT(fTimestampQuerySet);
+        wgpuTimestampWrites.querySet = fTimestampQuerySet;
+        if (!fWroteFirstPassTimestamps) {
+            wgpuTimestampWrites.beginningOfPassWriteIndex = 0;
+            fWroteFirstPassTimestamps = true;
+        }
+        wgpuTimestampWrites.endOfPassWriteIndex = 1;
+        wgpuComputePassDescriptor.timestampWrites = &wgpuTimestampWrites;
+    }
+#else
+    SkASSERT(!fTimestampQueryBuffer);
+#endif
+    fActiveComputePassEncoder = fCommandEncoder.BeginComputePass(&wgpuComputePassDescriptor);
 }
 
 void DawnCommandBuffer::bindComputePipeline(const ComputePipeline* computePipeline) {
@@ -1036,9 +1116,6 @@ bool DawnCommandBuffer::onCopyTextureToBuffer(const Texture* texture,
     wgpu::ImageCopyBuffer dst;
     dst.buffer = wgpuBuffer;
     dst.layout.offset = bufferOffset;
-    // Dawn requires buffer's alignment to be multiples of 256.
-    // https://b.corp.google.com/issues/259264489
-    SkASSERT((bufferRowBytes & 0xFF) == 0);
     dst.layout.bytesPerRow = bufferRowBytes;
 
     wgpu::Extent3D copySize = {
@@ -1066,9 +1143,6 @@ bool DawnCommandBuffer::onCopyBufferToTexture(const Buffer* buffer,
 
     for (int i = 0; i < count; ++i) {
         src.layout.offset = copyData[i].fBufferOffset;
-        // Dawn requires buffer's alignment to be multiples of 256.
-        // https://b.corp.google.com/issues/259264489
-        SkASSERT((copyData[i].fBufferRowBytes & 0xFF) == 0);
         src.layout.bytesPerRow = copyData[i].fBufferRowBytes;
 
         dst.origin.x = copyData[i].fRect.x();
