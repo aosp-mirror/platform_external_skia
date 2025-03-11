@@ -486,10 +486,11 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
     // this case. There is a bug in D3D11's backend where it sets number of SSBOs in vertex shader
     // to non-zero in compat mode. Once that bug is fixed, and a new limit is used for readonly
     // SSBOs, we can enable this again.
-    fStorageBufferSupport = info.backendType != wgpu::BackendType::OpenGL &&
-                            info.backendType != wgpu::BackendType::OpenGLES &&
-                            info.backendType != wgpu::BackendType::Vulkan &&
-                            info.compatibilityMode == false;
+    fStorageBufferSupport =
+            info.backendType != wgpu::BackendType::OpenGL &&
+            info.backendType != wgpu::BackendType::OpenGLES &&
+            info.backendType != wgpu::BackendType::Vulkan &&
+            backendContext.fDevice.HasFeature(wgpu::FeatureName::CoreFeaturesAndLimits);
 #else
     // WASM doesn't provide a way to query the backend, so can't tell if we are on a backend that
     // needs to have SSBOs disabled. Pessimistically assume we could be. Once the above conditions
@@ -1015,7 +1016,7 @@ uint32_t DawnCaps::getRenderPassDescKeyForPipeline(const RenderPassDesc& renderP
     // So we need to include a bit flag to differentiate the two kinds of pipelines.
     // Also avoid returning a cached pipeline that is not compatible with the render pass using
     // ExpandResolveTexture load op and vice versa.
-    const bool shouldIncludeLoadResolveAttachmentBit = this->resolveTextureLoadOp().has_value();
+    const bool shouldIncludeLoadResolveAttachmentBit = this->loadOpAffectsMSAAPipelines();
     uint32_t loadResolveAttachmentKey = 0;
     if (shouldIncludeLoadResolveAttachmentBit &&
         renderPassDesc.fColorResolveAttachment.fTextureInfo.isValid() &&
@@ -1110,7 +1111,7 @@ bool DawnCaps::extractGraphicsDescs(const UniqueKey& key,
     LoadOp loadOp = LoadOp::kClear;
     if (renderpassDescBits & kResolveMask) {
         // This bit should only be set if Dawn supports ExpandResolveTexture load op
-        SkASSERT(this->resolveTextureLoadOp().has_value());
+        SkASSERT(this->loadOpAffectsMSAAPipelines());
         loadOp = LoadOp::kLoad;
     }
 
