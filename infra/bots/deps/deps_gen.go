@@ -24,7 +24,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/angle/angle": {
 		Id:      "chromium.googlesource.com/angle/angle",
-		Version: "f38a081cdea49a85c592a7261fcb3e754c039418",
+		Version: "bdff6ade3987a6c2d6ef595fed0222dbbe9c66a1",
 		Path:    "third_party/externals/angle2",
 	},
 	"chromium.googlesource.com/chromium/deps/icu": {
@@ -34,7 +34,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/chromium/deps/libjpeg_turbo": {
 		Id:      "chromium.googlesource.com/chromium/deps/libjpeg_turbo",
-		Version: "ccfbe1c82a3b6dbe8647ceb36a3f9ee711fba3cf",
+		Version: "e14cbfaa85529d47f9f55b0f104a579c1061f9ad",
 		Path:    "third_party/externals/libjpeg-turbo",
 	},
 	"chromium.googlesource.com/chromium/src/base/allocator/partition_allocator": {
@@ -149,7 +149,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "06dd9ef55ce2a441c282b7192906fb45f9fb51a4",
+		Version: "837abc09427fc606eaa9dd13636eff68b146a9ae",
 		Path:    "third_party/externals/dawn",
 	},
 	"infra/3pp/tools/ninja": {
@@ -249,7 +249,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"swiftshader.googlesource.com/SwiftShader": {
 		Id:      "swiftshader.googlesource.com/SwiftShader",
-		Version: "c12c13839d689f411911326b1f72e96eb525686c",
+		Version: "5d97d5be883b757fc8a67f30e8027a4c10217b30",
 		Path:    "third_party/externals/swiftshader",
 	},
 }

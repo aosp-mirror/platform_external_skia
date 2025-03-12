@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "06dd9ef55ce2a441c282b7192906fb45f9fb51a4",
+        commit = "837abc09427fc606eaa9dd13636eff68b146a9ae",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -129,7 +129,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "libjpeg_turbo",
         build_file = ws + "//bazel/external/libjpeg_turbo:BUILD.bazel",
-        commit = "ccfbe1c82a3b6dbe8647ceb36a3f9ee711fba3cf",
+        commit = "e14cbfaa85529d47f9f55b0f104a579c1061f9ad",
         remote = "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git",
     )
 
