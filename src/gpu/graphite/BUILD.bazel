@@ -72,6 +72,7 @@ GRAPHITE_FILES = [
     "Image_Graphite.h",
     "Image_YUVA_Graphite.cpp",
     "Image_YUVA_Graphite.h",
+    "InternalDrawTypeFlags.h",
     "KeyContext.cpp",
     "KeyContext.h",
     "KeyHelpers.cpp",
@@ -118,6 +119,8 @@ GRAPHITE_FILES = [
     "ScratchResourceManager.h",
     "ShaderCodeDictionary.cpp",
     "ShaderCodeDictionary.h",
+    "ShaderInfo.cpp",
+    "ShaderInfo.h",
     "SharedContext.cpp",
     "SharedContext.h",
     "SpecialImage_Graphite.cpp",
@@ -133,6 +136,8 @@ GRAPHITE_FILES = [
     "TextureProxyView.h",
     "TextureUtils.cpp",
     "TextureUtils.h",
+    "PrecompileContext.cpp",
+    "PrecompileContextPriv.h",
     "Uniform.h",
     "UniformManager.cpp",
     "UniformManager.h",
@@ -152,7 +157,7 @@ PRECOMPILE_FILES = [
     "FactoryFunctions.h",
     "PrecompileInternal.h",
     "PublicPrecompile.cpp",
-    "PublicPrecompile.h",
+    "AndroidSpecificPrecompile.h",
 ]
 
 split_srcs_and_hdrs(

@@ -62,9 +62,7 @@ namespace skgpu::graphite {
  */
 class DefaultImageProvider final : public ImageProvider {
 public:
-    static sk_sp<DefaultImageProvider> Make() {
-        return sk_ref_sp(new DefaultImageProvider);
-    }
+    static sk_sp<DefaultImageProvider> Make() { return sk_sp(new DefaultImageProvider); }
 
     sk_sp<SkImage> findOrCreate(Recorder* recorder,
                                 const SkImage* image,
@@ -100,7 +98,6 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext,
         , fRuntimeEffectDict(std::make_unique<RuntimeEffectDictionary>())
         , fRootTaskList(new TaskList)
         , fRootUploads(new UploadList)
-        , fUniformDataCache(new UniformDataCache)
         , fTextureDataCache(new TextureDataCache)
         , fProxyReadCounts(new ProxyReadCountMap)
         , fUniqueID(next_id())
@@ -117,9 +114,11 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext,
         fOwnedResourceProvider = nullptr;
         fResourceProvider = context->priv().resourceProvider();
     } else {
-        fOwnedResourceProvider = fSharedContext->makeResourceProvider(this->singleOwner(),
-                                                                    fUniqueID,
-                                                                    options.fGpuBudgetInBytes);
+        fOwnedResourceProvider = fSharedContext->makeResourceProvider(
+                this->singleOwner(),
+                fUniqueID,
+                options.fGpuBudgetInBytes,
+                /* avoidBufferAlloc= */ false);
         fResourceProvider = fOwnedResourceProvider.get();
     }
     fUploadBufferManager = std::make_unique<UploadBufferManager>(fResourceProvider,
@@ -224,7 +223,6 @@ std::unique_ptr<Recording> Recorder::snap() {
     fRuntimeEffectDict->reset();
     fProxyReadCounts = std::make_unique<ProxyReadCountMap>();
     fTextureDataCache = std::make_unique<TextureDataCache>();
-    fUniformDataCache = std::make_unique<UniformDataCache>();
     if (!this->priv().caps()->requireOrderedRecordings()) {
         fAtlasProvider->textAtlasManager()->evictAtlases();
     }
@@ -234,19 +232,14 @@ std::unique_ptr<Recording> Recorder::snap() {
 
 SkCanvas* Recorder::makeDeferredCanvas(const SkImageInfo& imageInfo,
                                        const TextureInfo& textureInfo) {
-    // Mipmaps can't reasonably be kept valid on a deferred surface with no actual texture.
-    if (textureInfo.mipmapped() == Mipmapped::kYes) {
-        SKGPU_LOG_W("Requested a deferred canvas with mipmapping; this is not supported");
-        return nullptr;
-    }
-
     if (fTargetProxyCanvas) {
         // Require snapping before requesting another canvas.
         SKGPU_LOG_W("Requested a new deferred canvas before snapping the previous one");
         return nullptr;
     }
 
-    fTargetProxyData = std::make_unique<Recording::LazyProxyData>(textureInfo);
+    fTargetProxyData = std::make_unique<Recording::LazyProxyData>(
+            this->priv().caps(), imageInfo.dimensions(), textureInfo);
     // Use kLoad for the initial load op since the purpose of a deferred canvas is to draw on top
     // of an existing, late-bound texture.
     fTargetProxyDevice = Device::Make(this,
