@@ -144,7 +144,6 @@ skia_core_public = [
 #  //src/text:text_hdrs
 #  //src/text:text_srcs
 skia_core_sources = [
-  "$_include/private/SkColorData.h",
   "$_include/private/SkGainmapInfo.h",
   "$_include/private/SkGainmapShader.h",
   "$_include/private/SkIDChangeListener.h",
@@ -187,6 +186,7 @@ skia_core_sources = [
   "$_include/private/base/SkTypeTraits.h",
   "$_include/private/chromium/SkChromeRemoteGlyphCache.h",
   "$_include/private/chromium/SkDiscardableMemory.h",
+  "$_include/private/chromium/SkPMColor.h",
   "$_include/private/chromium/Slug.h",
   "$_src/base/SkArenaAlloc.cpp",
   "$_src/base/SkArenaAlloc.h",
@@ -318,6 +318,7 @@ skia_core_sources = [
   "$_src/core/SkClipStackDevice.cpp",
   "$_src/core/SkClipStackDevice.h",
   "$_src/core/SkColor.cpp",
+  "$_src/core/SkColorData.h",
   "$_src/core/SkColorFilter.cpp",
   "$_src/core/SkColorFilterPriv.h",
   "$_src/core/SkColorSpace.cpp",
@@ -421,6 +422,7 @@ skia_core_sources = [
   "$_src/core/SkMaskCache.cpp",
   "$_src/core/SkMaskCache.h",
   "$_src/core/SkMaskFilter.cpp",
+  "$_src/core/SkMaskFilterBase.cpp",
   "$_src/core/SkMaskFilterBase.h",
   "$_src/core/SkMaskGamma.cpp",
   "$_src/core/SkMaskGamma.h",

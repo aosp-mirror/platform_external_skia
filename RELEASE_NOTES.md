@@ -2,6 +2,43 @@ Skia Graphics Release Notes
 
 This file includes a list of high level updates for each milestone release.
 
+Milestone 135
+-------------
+  * The `SkCodec` class has a new `isAnimated` method which helps to disambiguate
+    the meaning of `codec->getRepetitionCount()` returning `0`.
+  * The `PrecompileContext` now has a `getPipelineLabel` method that will return a human-readable version of a serialized Pipeline key. Relatedly, `SkRuntimeEffect::Options` now has an `fName` member variable
+    which allows clients to provide names for their created runtime effects. The latter API addition is particularly appropriate for user-defined known runtime effects.
+  * Graphite's backend specific headers are being renamed to be more consistent between backends:
+       * DawnTypes.h -> DawnGraphiteTypes.h
+       * DawnUtils.h's content moved to DawnBackendContext.h
+       * MtlGraphiteTypesUtils.h -> DwnGraphiteTypes_cpp.h (the non-Obj-C portion of
+         MtlGraphiteTypes.h).
+       * MtlGraphiteUtils.h's content moved to MtlBackendContext.h
+       * VulkanGraphiteUtils.h -> VulkanGraphiteContext.h (there is a shared
+         VulkanBackendContext.h header for both Ganesh and Graphite already).
+
+    The deprecated headers now just forward to the new header names and will be removed in a future
+    release.
+  * `SkPDF::MakeDocument(SkWStream*)` [one argument] has been deprecated and will be removed. This is because SkPDFMetdata has added 2 required fields `jpegDecoder` and `jpegEncoder`. In order to make a reasonable PDF, those must be supplied (using the two argument factory). To make these easier to supply `include/docs/SkPDFJpegHelpers.h` has been added, which will use Skia's built-in jpeg encoder and decoder.
+  * The `PrecompileContext` now allows clients to precompile previously serialized Pipelines via the `PrecompileContext::precompile` entry point. Serialized keys can be obtained by implementing a `ContextOptions::PipelineCallback` handler.
+  * `ContextOptions` now contains an `fUserDefinedKnownRuntimeEffects` member variable.
+    Clients can add `SkRuntimeEffects` to this `SkSpan` and have them be registered as *known*
+    runtime effects. Such runtime effects can then be represented in the serialized Pipeline keys.
+
+* * *
+
+Milestone 134
+-------------
+  * `SkShaders::Color(SkColor4f, sk_sp<SkColorSpace>)` now always applies the color
+    space to the color, even if rendering to a legacy `SkSurface` that is not
+    color managed. In this case, the target color space is assumed to be sRGB.
+  * The A98 RGB, ProPhoto RGB, Display P3 and Rec2020 color spaces can now be used
+    for gradient interpolation.
+  * The `PrecompileContext` now allows client timed-based purging of Pipelines via
+    the new `PrecompileContext::purgePipelinesNotUsedInMs` call.
+
+* * *
+
 Milestone 133
 -------------
   * Graphite's `Context` now provides an interface to report the GPU time spent processing a recording. The client provides

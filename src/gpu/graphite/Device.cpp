@@ -40,7 +40,7 @@
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/geom/IntersectionTree.h"
 #include "src/gpu/graphite/geom/Shape.h"
-#include "src/gpu/graphite/geom/Transform_graphite.h"
+#include "src/gpu/graphite/geom/Transform.h"
 #include "src/gpu/graphite/text/TextAtlasManager.h"
 
 #include "include/core/SkColorSpace.h"
@@ -898,7 +898,7 @@ void Device::drawArc(const SkArc& arc, const SkPaint& paint) {
          (paint.getStyle() == SkPaint::kStroke_Style &&
           // square caps can stick out from the shape so we can't do this with an rrect draw
           paint.getStrokeCap() != SkPaint::kSquare_Cap &&
-          // non-wedge cases with strokes will draw lines to the center
+          // wedge cases with strokes will draw lines to the center
           !arc.isWedge()))) {
         this->drawRRect(SkRRect::MakeOval(arc.oval()), paint);
     } else {
@@ -1272,7 +1272,7 @@ void Device::drawGeometry(const Transform& localToDevice,
     ClipStack::ElementList clipElements;
     const Clip clip =
             fClip.visitClipStackForDraw(localToDevice, geometry, style, outsetBoundsForAA,
-                                        &clipElements);
+                                        fMSAASupported, &clipElements);
     if (clip.isClippedOut()) {
         // Clipped out, so don't record anything.
         return;
@@ -1284,8 +1284,8 @@ void Device::drawGeometry(const Transform& localToDevice,
                                                          : SkBlendMode::kSrcOver;
     Coverage rendererCoverage = renderer ? renderer->coverage()
                                          : Coverage::kSingleChannel;
-    if ((clip.shader() || !clip.analyticClip().isEmpty()) && rendererCoverage == Coverage::kNone) {
-        // Must upgrade to single channel coverage if there is a clip shader or analytic clip;
+    if (clip.needsCoverage() && rendererCoverage == Coverage::kNone) {
+        // Must upgrade to single channel coverage if the clip requires coverage;
         // but preserve LCD coverage if the Renderer uses that.
         rendererCoverage = Coverage::kSingleChannel;
     }
@@ -1302,12 +1302,12 @@ void Device::drawGeometry(const Transform& localToDevice,
 
     PaintParams shading{paint,
                         std::move(primitiveBlender),
-                        clip.analyticClip(),
+                        clip.nonMSAAClip(),
                         sk_ref_sp(clip.shader()),
                         dstReadRequired,
                         skipColorXform};
     const bool dependsOnDst = paint_depends_on_dst(shading) ||
-                              clip.shader() || !clip.analyticClip().isEmpty();
+                              clip.shader() || !clip.nonMSAAClip().isEmpty();
 
     // Some shapes and styles combine multiple draws so the total render step count is split between
     // the main renderer and possibly a secondaryRenderer.

@@ -15,7 +15,7 @@
 
 namespace skgpu::graphite {
 struct ContextOptions;
-struct VulkanTextureInfo;
+class VulkanTextureInfo;
 
 class VulkanCaps final : public Caps {
 public:
@@ -45,17 +45,22 @@ public:
 
     TextureInfo getDefaultDepthStencilTextureInfo(SkEnumBitMask<DepthStencilFlags>,
                                                   uint32_t sampleCount,
-                                                  Protected) const override;
+                                                  Protected,
+                                                  Discardable discardable) const override;
 
     TextureInfo getDefaultStorageTextureInfo(SkColorType) const override;
 
-    ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy* proxy) const override;
+    // Override Caps's implementation in order to consult Vulkan-specific texture properties.
+    DstReadStrategy getDstReadStrategy(const TextureInfo& info) const override;
+
+    ImmutableSamplerInfo getImmutableSamplerInfo(const TextureInfo&) const override;
 
     UniqueKey makeGraphicsPipelineKey(const GraphicsPipelineDesc&,
                                       const RenderPassDesc&) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override { return {}; }
 
-    uint32_t channelMask(const TextureInfo&) const override;
+    bool serializeTextureInfo(const TextureInfo&, SkWStream*) const override;
+    bool deserializeTextureInfo(SkStream*, TextureInfo* out) const override;
 
     bool isTexturable(const VulkanTextureInfo&) const;
 

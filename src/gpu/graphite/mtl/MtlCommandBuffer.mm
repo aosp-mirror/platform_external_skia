@@ -8,7 +8,7 @@
 #include "src/gpu/graphite/mtl/MtlCommandBuffer.h"
 
 #include "include/gpu/graphite/BackendSemaphore.h"
-#include "include/gpu/graphite/mtl/MtlGraphiteTypesUtils.h"
+#include "include/gpu/graphite/mtl/MtlGraphiteTypes.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
@@ -442,6 +442,10 @@ void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
             case DrawPassCommands::Type::kDrawIndexedIndirect: {
                 auto draw = static_cast<DrawPassCommands::DrawIndexedIndirect*>(cmdPtr);
                 this->drawIndexedIndirect(draw->fType);
+                break;
+            }
+            case DrawPassCommands::Type::kAddBarrier: {
+                SKGPU_LOG_E("MtlCommandBuffer does not support the addition of barriers.");
                 break;
             }
         }

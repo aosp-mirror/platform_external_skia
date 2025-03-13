@@ -12,7 +12,14 @@
 #include "src/gpu/graphite/ComputePipeline.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipeline.h"
+#include "src/gpu/graphite/GraphicsPipelineDesc.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Resource.h"
+#include "src/gpu/graphite/SharedContext.h"
+
+#if defined(SK_ENABLE_PRECOMPILE)
+#include "src/gpu/graphite/precompile/SerializationUtils.h"
+#endif
 
 namespace {
 
@@ -49,6 +56,66 @@ GlobalCache::~GlobalCache() {
     SkASSERT(fGraphicsPipelineCache.count() == 0);
     SkASSERT(fComputePipelineCache.count() == 0);
     SkASSERT(fStaticResource.empty());
+}
+
+void GlobalCache::setPipelineCallback(PipelineCallback callback, PipelineCallbackContext context) {
+    SkAutoSpinlock lock{fSpinLock};
+
+    fPipelineCallback = callback;
+    fPipelineCallbackContext = context;
+}
+
+void GlobalCache::invokePipelineCallback(SharedContext* sharedContext,
+                                         const GraphicsPipelineDesc& pipelineDesc,
+                                         const RenderPassDesc& renderPassDesc) {
+#if defined(SK_ENABLE_PRECOMPILE)
+    PipelineCallback tmpCB = nullptr;
+    PipelineCallbackContext tmpContext = nullptr;
+
+    {
+        // We want to get a consistent callback/context pair but not invoke the callback
+        // w/in our lock.
+        SkAutoSpinlock lock{fSpinLock};
+
+        tmpCB = fPipelineCallback;
+        tmpContext = fPipelineCallbackContext;
+    }
+
+    if (tmpCB) {
+        sk_sp<SkData> data = PipelineDescToData(sharedContext->caps(),
+                                                sharedContext->shaderCodeDictionary(),
+                                                pipelineDesc,
+                                                renderPassDesc);
+
+        // Enable this to thoroughly test Pipeline serialization
+#if 0
+        {
+            // Check that the PipelineDesc round trips through serialization
+            GraphicsPipelineDesc readBackPipelineDesc;
+            RenderPassDesc readBackRenderPassDesc;
+
+            SkAssertResult(DataToPipelineDesc(sharedContext->caps(),
+                                              sharedContext->shaderCodeDictionary(),
+                                              data.get(),
+                                              &readBackPipelineDesc,
+                                              &readBackRenderPassDesc));
+
+            DumpPipelineDesc("invokeCallback - original", sharedContext->shaderCodeDictionary(),
+                             pipelineDesc, renderPassDesc);
+
+            DumpPipelineDesc("invokeCallback - readback", sharedContext->shaderCodeDictionary(),
+                  readBackPipelineDesc, readBackRenderPassDesc);
+
+            SkASSERT(ComparePipelineDescs(pipelineDesc, renderPassDesc,
+                                          readBackPipelineDesc, readBackRenderPassDesc));
+        }
+#endif
+
+        if (data) {
+            tmpCB(tmpContext, std::move(data));
+        }
+    }
+#endif
 }
 
 void GlobalCache::deleteResources() {

@@ -43,7 +43,7 @@ DEF_TEST(FontMgr_Font, reporter) {
     REPORTER_ASSERT(reporter, 1 == font.getScaleX());
     REPORTER_ASSERT(reporter, 0 == font.getSkewX());
 
-    uint16_t glyphs[5];
+    SkGlyphID glyphs[5];
     sk_bzero(glyphs, sizeof(glyphs));
 
     // Check that no glyphs are copied with insufficient storage.
@@ -194,8 +194,7 @@ DEF_TEST(FontMgr_MatchStyleCSS3, reporter) {
         std::unique_ptr<SkScalerContext> onCreateScalerContext(
             const SkScalerContextEffects& effects, const SkDescriptor* desc) const override
         {
-            return SkScalerContext::MakeEmpty(
-                    sk_ref_sp(const_cast<TestTypeface*>(this)), effects, desc);
+            return SkScalerContext::MakeEmpty(*const_cast<TestTypeface*>(this), effects, desc);
         }
         void onFilterRec(SkScalerContextRec*) const override { }
         std::unique_ptr<SkAdvancedTypefaceMetrics> onGetAdvancedMetrics() const override {

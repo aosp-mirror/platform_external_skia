@@ -12,11 +12,11 @@
 #include "src/base/SkFloatBits.h"
 #include "src/core/SkBlitter_A8.h"
 #include "src/gpu/graphite/geom/Shape.h"
-#include "src/gpu/graphite/geom/Transform_graphite.h"
+#include "src/gpu/graphite/geom/Transform.h"
 
 namespace skgpu::graphite {
 
-bool RasterMaskHelper::init(SkISize pixmapSize, skvx::float2 transformedMaskOffset) {
+bool RasterMaskHelper::init(SkISize pixmapSize, SkIVector transformedMaskOffset) {
     if (!fPixels) {
         return false;
     }
@@ -33,17 +33,21 @@ bool RasterMaskHelper::init(SkISize pixmapSize, skvx::float2 transformedMaskOffs
     }
 
     fDraw.fBlitterChooser = SkA8Blitter_Choose;
-    fDraw.fDst      = *fPixels;
-    fDraw.fRC       = &fRasterClip;
+    fDraw.fDst = *fPixels;
+    fDraw.fRC = &fRasterClip;
     fTransformedMaskOffset = transformedMaskOffset;
     return true;
+}
+
+void RasterMaskHelper::clear(uint8_t alpha, const SkIRect& shapeBounds) {
+    fPixels->erase(SkColorSetARGB(alpha, 0xFF, 0xFF, 0xFF), shapeBounds);
 }
 
 void RasterMaskHelper::drawShape(const Shape& shape,
                                  const Transform& localToDevice,
                                  const SkStrokeRec& strokeRec,
-                                 const SkIRect& resultBounds) {
-    fRasterClip.setRect(resultBounds);
+                                 const SkIRect& shapeBounds) {
+    fRasterClip.setRect(shapeBounds);
 
     SkPaint paint;
     paint.setBlendMode(SkBlendMode::kSrc);  // "Replace" mode
@@ -56,8 +60,8 @@ void RasterMaskHelper::drawShape(const Shape& shape,
     // The atlas transform of the shape is `localToDevice` translated by the top-left offset of the
     // resultBounds and the inverse of the base mask transform offset for the current set of shapes.
     // We will need to translate draws so the bound's UL corner is at the origin
-    translatedMatrix.postTranslate(resultBounds.x() - fTransformedMaskOffset.x(),
-                                   resultBounds.y() - fTransformedMaskOffset.y());
+    translatedMatrix.postTranslate(shapeBounds.x() - fTransformedMaskOffset.x(),
+                                   shapeBounds.y() - fTransformedMaskOffset.y());
 
     fDraw.fCTM = &translatedMatrix;
     // TODO: use drawRect, drawRRect, drawArc
@@ -182,37 +186,50 @@ skgpu::UniqueKey GenerateClipMaskKey(uint32_t stackRecordID,
 
         static const skgpu::UniqueKey::Domain kDomain = skgpu::UniqueKey::GenerateDomain();
         // if the element list is too large we just use the stackRecordID
-        if (elementsForMask->size() > kMaxShapeCountForKey) {
-            skgpu::UniqueKey::Builder builder(&maskKey, kDomain, 1, "Clip Path Mask");
-            builder[0] = stackRecordID;
-        } else {
-            int xformKeySize = 5;
+        if (elementsForMask->size() <= kMaxShapeCountForKey) {
+            constexpr int kXformKeySize = 5;
             int keySize = 0;
+            bool canCreateKey = true;
+            // Iterate through to get key size and see if we can create a key at all
             for (int i = 0; i < elementsForMask->size(); ++i) {
-                keySize += xformKeySize + (*elementsForMask)[i]->fShape.keySize();
+                int shapeKeySize = (*elementsForMask)[i]->fShape.keySize();
+                if (shapeKeySize < 0) {
+                    canCreateKey = false;
+                    break;
+                }
+                keySize += kXformKeySize + shapeKeySize;
             }
-            skgpu::UniqueKey::Builder builder(&maskKey, kDomain, keySize,
-                                              "Clip Path Mask");
-            int elementKeyIndex = 0;
-            for (int i = 0; i < elementsForMask->size(); ++i) {
-                // Add transform key and get packed fractional translation bits
-                uint32_t fracBits = add_transform_key(&builder,
-                                                      elementKeyIndex,
-                                                      (*elementsForMask)[i]->fLocalToDevice);
-                uint32_t opBits = static_cast<uint32_t>((*elementsForMask)[i]->fOp);
-                builder[elementKeyIndex + 4] = fracBits | (opBits << 16);
+            if (canCreateKey) {
+                skgpu::UniqueKey::Builder builder(&maskKey, kDomain, keySize,
+                                                  "Clip Path Mask");
+                int elementKeyIndex = 0;
+                for (int i = 0; i < elementsForMask->size(); ++i) {
+                    const ClipStack::Element* element = (*elementsForMask)[i];
 
-                const Shape& shape = (*elementsForMask)[i]->fShape;
-                shape.writeKey(&builder[elementKeyIndex + xformKeySize], /*includeInverted=*/true);
+                    // Add transform key and get packed fractional translation bits
+                    uint32_t fracBits = add_transform_key(&builder,
+                                                          elementKeyIndex,
+                                                          element->fLocalToDevice);
+                    uint32_t opBits = static_cast<uint32_t>(element->fOp);
+                    builder[elementKeyIndex + 4] = fracBits | (opBits << 16);
 
-                elementKeyIndex += xformKeySize + shape.keySize();
+                    const Shape& shape = element->fShape;
+                    shape.writeKey(&builder[elementKeyIndex + kXformKeySize],
+                                   /*includeInverted=*/true);
+
+                    elementKeyIndex += kXformKeySize + shape.keySize();
+                }
+
+                return maskKey;
             }
         }
 
+        // Either we have too many elements or at least one shape can't create a key
+        skgpu::UniqueKey::Builder builder(&maskKey, kDomain, 1, "Clip Path Mask");
+        builder[0] = stackRecordID;
     }
 
     return maskKey;
-
 }
 
 }  // namespace skgpu::graphite

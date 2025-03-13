@@ -373,6 +373,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "ProcessorOptimizationValidationTest")
 			skip(ALL, "test", ALL, "TextBlobAbnormal")
 			skip(ALL, "test", ALL, "TextBlobStressAbnormal")
+
+			// b/399342221
+			skip(ALL, "test", ALL, "UserDefinedStableKeyTest")
 		}
 
 		// The Tegra3 doesn't support MSAA
@@ -480,11 +483,18 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					if b.extraConfig("TSAN") {
 						// b/389706939 - Dawn/Metal reports a data race for LazyClearCountForTesting w/ TSAN
 						skip(ALL, "test", ALL, "ThreadedPipelineCompilePurgingTest")
+						// The TSAN_Graphite_Dawn_Metal job seems to consistently get stuck on this unit test
+						skip(ALL, "test", ALL, "BigImageTest_Graphite")
 					}
 				}
 			} else if b.extraConfig("Native") {
 				if b.extraConfig("Metal") {
-					configs = []string{"grmtl"}
+					if b.extraConfig("TestPrecompile") {
+						configs = []string{"grmtltestprecompile"}
+					} else {
+						configs = []string{"grmtl"}
+					}
+
 					if b.gpu("IntelIrisPlus") {
 						// We get some 27/255 RGB diffs on the 45 degree
 						// rotation case on this device (skbug.com/14408)
@@ -492,7 +502,12 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					}
 				}
 				if b.extraConfig("Vulkan") {
-					configs = []string{"grvk"}
+					if b.extraConfig("TestPrecompile") {
+						configs = []string{"grvktestprecompile"}
+					} else {
+						configs = []string{"grvk"}
+					}
+
 					// Couldn't readback
 					skip(ALL, "gm", ALL, "aaxfermodes")
 					// Could not instantiate texture proxy for UploadTask!
@@ -1205,15 +1220,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		"async_rescale_and_read_dog_down",
 		"async_rescale_and_read_rose",
 		"async_rescale_and_read_no_bleed",
-		"async_rescale_and_read_alpha_type"} {
+		"async_rescale_and_read_alpha_type",
+		"blurrect_compare", // GM requires canvas->makeSurface() to return a valid surface.
+		"rrect_blurs"} {
 		skip("pic-8888", "gm", ALL, test)
 		skip("serialize-8888", "gm", ALL, test)
-
-		// GM requires canvas->makeSurface() to return a valid surface.
-		// TODO(borenet): These should be just outside of this block but are
-		// left here to match the recipe which has an indentation bug.
-		skip("pic-8888", "gm", ALL, "blurrect_compare")
-		skip("serialize-8888", "gm", ALL, "blurrect_compare")
 	}
 
 	// Extensions for RAW images
@@ -1413,11 +1424,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		match = append(match, "~^WritePixelsNonTextureMSAA_Gpu$")
 		match = append(match, "~^WritePixels_Gpu$")
 		match = append(match, "~^WritePixelsMSAA_Gpu$")
-	}
-
-	if b.extraConfig("Vulkan") && b.gpu("GTX660") && b.matchOs("Win") {
-		// skbug.com/8047
-		match = append(match, "~FloatingPointTextureTest$")
 	}
 
 	if b.extraConfig("Metal") && !b.extraConfig("Graphite") && b.gpu("RadeonHD8870M") && b.matchOs("Mac") {

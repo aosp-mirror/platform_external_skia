@@ -29,13 +29,13 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkFixed.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/base/SkEndian.h"
 #include "src/base/SkMathPriv.h"
+#include "src/core/SkColorData.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskGamma.h"
@@ -116,10 +116,10 @@ static CGAffineTransform MatrixToCGAffineTransform(const SkMatrix& matrix) {
                                   SkScalarToCGFloat(matrix[SkMatrix::kMTransY]));
 }
 
-SkScalerContext_Mac::SkScalerContext_Mac(sk_sp<SkTypeface_Mac> typeface,
+SkScalerContext_Mac::SkScalerContext_Mac(SkTypeface_Mac& typeface,
                                          const SkScalerContextEffects& effects,
                                          const SkDescriptor* desc)
-        : INHERITED(std::move(typeface), effects, desc)
+        : INHERITED(typeface, effects, desc)
         , fOffscreen(fRec.fForegroundColor)
         , fDoSubPosition(SkToBool(fRec.fFlags & kSubpixelPositioning_Flag))
 

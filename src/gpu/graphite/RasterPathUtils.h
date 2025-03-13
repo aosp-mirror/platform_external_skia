@@ -14,7 +14,7 @@
 #include "src/core/SkDrawBase.h"
 #include "src/core/SkRasterClip.h"
 #include "src/gpu/ResourceKey.h"
-#include "src/gpu/graphite/ClipStack_graphite.h"
+#include "src/gpu/graphite/ClipStack.h"
 
 namespace skgpu::graphite {
 
@@ -43,15 +43,9 @@ class RasterMaskHelper : SkNoncopyable {
 public:
     RasterMaskHelper(SkAutoPixmapStorage* pixels) : fPixels(pixels) {}
 
-    bool init(SkISize pixmapSize, skvx::float2 transformedMaskOffset);
+    bool init(SkISize pixmapSize, SkIVector transformedMaskOffset);
 
-    void clear(uint8_t alpha, const SkIRect& resultBounds) {
-        SkPaint paint;
-        SkMatrix identity;
-        paint.setColor(SkColorSetARGB(alpha, 0xFF, 0xFF, 0xFF));
-        fDraw.fCTM = &identity;
-        fDraw.drawRect(SkRect::Make(resultBounds), paint);
-    }
+    void clear(uint8_t alpha, const SkIRect& resultBounds);
 
     // Draw a single shape into the bitmap (as a path) at location resultBounds.
     void drawShape(const Shape& shape,
@@ -69,7 +63,7 @@ public:
 private:
     SkAutoPixmapStorage* fPixels;
     SkDrawBase           fDraw;
-    skvx::float2         fTransformedMaskOffset = {0};
+    SkIVector            fTransformedMaskOffset = {0, 0};
     SkRasterClip         fRasterClip;
 };
 

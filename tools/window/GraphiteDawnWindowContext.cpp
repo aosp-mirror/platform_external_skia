@@ -16,8 +16,7 @@
 #include "include/gpu/graphite/Recording.h"
 #include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/dawn/DawnBackendContext.h"
-#include "include/gpu/graphite/dawn/DawnTypes.h"
-#include "include/gpu/graphite/dawn/DawnUtils.h"
+#include "include/gpu/graphite/dawn/DawnGraphiteTypes.h"
 #include "src/gpu/graphite/ContextOptionsPriv.h"
 #include "tools/ToolUtils.h"
 #include "tools/graphite/GraphiteToolUtils.h"
@@ -31,9 +30,9 @@ namespace skwindow::internal {
 GraphiteDawnWindowContext::GraphiteDawnWindowContext(std::unique_ptr<const DisplayParams> params,
                                                      wgpu::TextureFormat surfaceFormat)
         : WindowContext(std::move(params)), fSurfaceFormat(surfaceFormat) {
-    WGPUInstanceDescriptor desc{};
+    wgpu::InstanceDescriptor desc{};
     // need for WaitAny with timeout > 0
-    desc.features.timedWaitAnyEnable = true;
+    desc.capabilities.timedWaitAnyEnable = true;
     fInstance = std::make_unique<dawn::native::Instance>(&desc);
 }
 
@@ -126,6 +125,10 @@ wgpu::Device GraphiteDawnWindowContext::createDevice(wgpu::BackendType type) {
     dawnProcSetProcs(&backendProcs);
 
     static constexpr const char* kToggles[] = {
+#if !defined(SK_DEBUG)
+        "skip_validation",
+#endif
+        "disable_lazy_clear_for_mapped_at_creation_buffer", // matches Chromes toggles
         "allow_unsafe_apis",  // Needed for dual-source blending, BufferMapExtendedUsages.
         "use_user_defined_labels_in_backend",
         // Robustness impacts performance and is always disabled when running Graphite in Chrome,

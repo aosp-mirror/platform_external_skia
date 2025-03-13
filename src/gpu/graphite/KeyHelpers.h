@@ -18,8 +18,8 @@
 #include "include/core/SkTileMode.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/graphite/Context.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkTArray.h"
+#include "src/core/SkColorData.h"
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/ReadSwizzle.h"
@@ -360,43 +360,37 @@ struct ColorSpaceTransformBlock {
                          const ColorSpaceTransformData&);
 };
 
-struct CircularRRectClipBlock {
-    struct CircularRRectClipData {
-        CircularRRectClipData(SkRect rect,
-                              SkPoint radiusPlusHalf,
-                              SkRect edgeSelect)
+struct NonMSAAClipBlock {
+    struct NonMSAAClipData {
+        NonMSAAClipData(SkRect rect,
+                        SkPoint radiusPlusHalf,
+                        SkRect edgeSelect,
+                        SkPoint texCoordOffset,
+                        SkRect maskBounds,
+                        sk_sp<TextureProxy> atlasTexture)
                 : fRect(rect)
                 , fRadiusPlusHalf(radiusPlusHalf)
-                , fEdgeSelect(edgeSelect) {}
+                , fEdgeSelect(edgeSelect)
+                , fTexCoordOffset(texCoordOffset)
+                , fMaskBounds(maskBounds)
+                , fAtlasTexture(std::move(atlasTexture)){}
+        // analytic clip
         SkRect  fRect;            // bounds, outset by 0.5
         SkPoint fRadiusPlusHalf;  // abs() of .x is radius+0.5, if < 0 indicates inverse fill
                                   // .y is 1/(radius+0.5)
         SkRect  fEdgeSelect;      // 1 indicates a rounded corner on that side (LTRB), 0 otherwise
-    };
 
-    static void AddBlock(const KeyContext&,
-                         PaintParamsKeyBuilder*,
-                         PipelineDataGatherer*,
-                         const CircularRRectClipData&);
-};
-
-struct AtlasClipBlock {
-    struct AtlasClipData {
-        AtlasClipData(SkPoint texCoordOffset,
-                      SkRect maskBounds,
-                      SkISize atlasSize)
-                : fTexCoordOffset(texCoordOffset)
-                , fMaskBounds(maskBounds)
-                , fAtlasSize(atlasSize) {}
-        SkPoint fTexCoordOffset;  // translation from fragCoords to unnormalized texel coords
+        // atlas clip
+        SkPoint fTexCoordOffset;  // translation from local coords to unnormalized texel coords
         SkRect  fMaskBounds;      // bounds of mask area, in unnormalized texel coords
-        SkISize fAtlasSize;       // size of atlas texture
+
+        sk_sp<TextureProxy> fAtlasTexture;
     };
 
     static void AddBlock(const KeyContext&,
                          PaintParamsKeyBuilder*,
                          PipelineDataGatherer*,
-                         const AtlasClipData&);
+                         const NonMSAAClipData&);
 };
 
 /**
@@ -436,10 +430,17 @@ struct RuntimeEffectBlock {
         sk_sp<const SkData>          fUniforms;
     };
 
-    static void BeginBlock(const KeyContext&,
+    // On a false return, no block has been started
+    static bool BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*,
                            const ShaderData&);
+
+    // Add a no-op placeholder for an incorrect runtime effect
+    static void AddNoOpEffect(const KeyContext&,
+                              PaintParamsKeyBuilder*,
+                              PipelineDataGatherer*,
+                              SkRuntimeEffect*);
 };
 
 void AddToKey(const KeyContext&,

@@ -28,13 +28,13 @@
 #include "include/gpu/graphite/Surface.h"
 #endif
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkCPUTypes.h"
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkSafe32.h"
 #include "include/private/base/SkTo.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkMathPriv.h"
+#include "src/core/SkColorData.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrCaps.h"
@@ -502,7 +502,7 @@ static void test_write_pixels(skiatest::Reporter* reporter,
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(WritePixels_Graphite,
                                          reporter,
                                          context,
-                                         CtsEnforcement::kApiLevel_V) {
+                                         CtsEnforcement::kApiLevel_202404) {
     std::unique_ptr<skgpu::graphite::Recorder> recorder = context->makeRecorder();
     test_write_pixels(reporter, recorder.get(), 1);
 }
