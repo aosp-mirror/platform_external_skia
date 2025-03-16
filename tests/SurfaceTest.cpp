@@ -11,7 +11,6 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorFilter.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkFont.h"
@@ -48,6 +47,7 @@
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkColorData.h"
+#include "src/core/SkColorPriv.h"
 #include "src/gpu/ganesh/Device.h"
 #include "src/gpu/ganesh/GrCanvas.h"
 #include "src/gpu/ganesh/GrCaps.h"
@@ -1119,6 +1119,47 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(SurfaceAttachStencil_Gpu,
                             resourceProvider->attachStencilAttachment(rt, rt->numSamples() > 1));
         }
     }
+}
+
+// This test makes a snapshot of a wrapped surface then draws the snapshot back into the surface.
+// This test is considered passed if we don't hit any of our internal asserts about reading and
+// writting the same texture in a single draw.
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(DrawSnapshotBackIntoWappedSurface,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kNextRelease) {
+    auto context = ctxInfo.directContext();
+
+    auto ii = SkImageInfo::Make(10, 10, kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr);
+    skgpu::Protected isProtected = skgpu::Protected(context->supportsProtectedContent());
+    auto mbet = sk_gpu_test::ManagedBackendTexture::MakeFromInfo(
+            context, ii, skgpu::Mipmapped::kNo, GrRenderable::kYes, isProtected);
+    REPORTER_ASSERT(reporter, mbet);
+
+    if (!mbet) {
+        return;
+    }
+    auto surf = SkSurfaces::WrapBackendTexture(context,
+                                               mbet->texture(),
+                                               kTopLeft_GrSurfaceOrigin,
+                                               1,
+                                               kRGBA_8888_SkColorType,
+                                               ii.refColorSpace(),
+                                               nullptr);
+    REPORTER_ASSERT(reporter, surf);
+    if (!surf) {
+        return;
+    }
+
+    auto tcanvas = surf->getCanvas();
+    tcanvas->clear(SK_ColorRED);
+    SkPaint p;
+    tcanvas->drawLine(20, 20, 100, 100, p);
+    auto img = surf->makeImageSnapshot();
+    SkPaint paint;
+    tcanvas->drawImage(img, 0,0, SkSamplingOptions(), &paint);
+
+    context->flushAndSubmit(GrSyncCpu::kYes);
 }
 
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ReplaceSurfaceBackendTexture,

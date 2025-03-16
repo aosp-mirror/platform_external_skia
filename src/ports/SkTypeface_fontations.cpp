@@ -29,9 +29,16 @@ namespace {
 [[maybe_unused]] static inline const constexpr bool kSkShowTextBlitCoverage = false;
 
 sk_sp<SkData> streamToData(const std::unique_ptr<SkStreamAsset>& font_data) {
-    // TODO(drott): From a stream this causes a full read/copy. Make sure
-    // we can instantiate this directly from the decompressed buffer that
-    // Blink has after OTS and woff2 decompression.
+    if (!font_data) {
+        return SkData::MakeEmpty();
+    }
+    // TODO(drott): Remove this once SkData::MakeFromStream is able to do this itself.
+    if (font_data->getData()) {
+        return font_data->getData();
+    }
+    if (font_data->getMemoryBase() && font_data->getLength()) {
+        return SkData::MakeWithCopy(font_data->getMemoryBase(), font_data->getLength());
+    }
     font_data->rewind();
     return SkData::MakeFromStream(font_data.get(), font_data->getLength());
 }
@@ -92,6 +99,11 @@ bool isAxisAligned(const SkScalerContextRec& rec) {
 sk_sp<SkTypeface> SkTypeface_Make_Fontations(std::unique_ptr<SkStreamAsset> fontData,
                                              const SkFontArguments& args) {
     return SkTypeface_Fontations::MakeFromStream(std::move(fontData), args);
+}
+
+sk_sp<SkTypeface> SkTypeface_Make_Fontations(sk_sp<SkData> fontData,
+                                             const SkFontArguments& args) {
+    return SkTypeface_Fontations::MakeFromData(std::move(fontData), args);
 }
 
 SkTypeface_Fontations::SkTypeface_Fontations(
@@ -244,11 +256,11 @@ bool SkTypeface_Fontations::onGlyphMaskNeedsCurrentColor() const {
 void SkTypeface_Fontations::onCharsToGlyphs(const SkUnichar* chars,
                                             int count,
                                             SkGlyphID glyphs[]) const {
-    sk_bzero(glyphs, count * sizeof(glyphs[0]));
-
-    for (int i = 0; i < count; ++i) {
-        glyphs[i] = fontations_ffi::lookup_glyph_or_zero(*fBridgeFontRef, *fMappingIndex, chars[i]);
-    }
+    size_t realCount = SkToSizeT(count);
+    rust::Slice<const uint32_t> codepointSlice{reinterpret_cast<const uint32_t*>(chars), realCount};
+    rust::Slice<uint16_t> glyphSlice{reinterpret_cast<uint16_t*>(glyphs), realCount};
+    fontations_ffi::lookup_glyph_or_zero(*fBridgeFontRef, *fMappingIndex,
+                                         codepointSlice, glyphSlice);
 }
 int SkTypeface_Fontations::onCountGlyphs() const {
     return fontations_ffi::num_glyphs(*fBridgeFontRef);
@@ -387,9 +399,12 @@ public:
         }
     }
 
-    bool getContourHeightForLetter(char letter, SkScalar& height) {
-        uint16_t glyphId =
-                fontations_ffi::lookup_glyph_or_zero(fBridgeFontRef, fMappingIndex, letter);
+    bool getContourHeightForLetter(SkUnichar letter, SkScalar& height) {
+        SkGlyphID glyphId;
+        rust::Slice<const uint32_t> codepointSlice{reinterpret_cast<const uint32_t*>(&letter), 1};
+        rust::Slice<uint16_t> glyphSlice{reinterpret_cast<uint16_t*>(&glyphId), 1};
+        fontations_ffi::lookup_glyph_or_zero(fBridgeFontRef, fMappingIndex,
+                                             codepointSlice, glyphSlice);
         if (!glyphId) {
             return false;
         }

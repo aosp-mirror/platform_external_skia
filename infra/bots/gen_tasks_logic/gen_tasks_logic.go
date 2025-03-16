@@ -877,6 +877,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Mac12":       "Mac-12",
 			"Mac13":       "Mac-13",
 			"Mac14":       "Mac-14.7", // Builds run on 14.5, tests on 14.7.
+			"Mac15":       "Mac-15.3",
 			"Mokey":       "Android",
 			"MokeyGo32":   "Android",
 			"Ubuntu18":    "Ubuntu-18.04",
@@ -963,6 +964,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"MacBookPro15.3": "arm64-64-Apple_M3",
 				},
 				"AppleIntel": {
+					"MacBookPro15.1": "x86-64",
 					"MacBookPro16.2": "x86-64",
 				},
 				"AVX": {
@@ -970,6 +972,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				},
 				"AVX2": {
 					"GCE":            "x86-64-Haswell_GCE",
+					"Golo":           "x86-64-E3-1230_v5",
 					"MacBookAir7.2":  "x86-64-i5-5350U",
 					"MacBookPro11.5": "x86-64-i7-4870HQ",
 					"MacMini7.1":     "x86-64-i5-4278U",
@@ -1018,10 +1021,15 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"QuadroP400":    "10de:1cb3-31.0.15.5222",
 					"RadeonVega6":   "1002:1636-31.0.14057.5006",
 					"RadeonVega8":   "1002:1638-31.0.21916.2",
-					"RTX3060":       "10de:2489-32.0.15.6094",
+					"RTX3060":       "10de:2489-32.0.15.7270",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in Win GPU mapping.", b.parts["cpu_or_gpu_value"])
+				}
+				// TODO(borenet): Remove this block once these machines are all
+				// migrated.
+				if b.os("Win10") && b.parts["cpu_or_gpu_value"] == "RTX3060" {
+					gpu = "10de:2489-32.0.15.6094"
 				}
 				d["gpu"] = gpu
 			} else if b.isLinux() {
@@ -1099,19 +1107,42 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				log.Fatalf("Unknown GPU mapping for OS %q.", b.parts["os"])
 			}
 		}
-	} else {
-		if d["os"] == DEBIAN_11_OS {
-			// The Debian11 compile machines in the skolo have
-			// GPUs, but we still use them for compiles also.
-
-			// Dodge Raspberry Pis.
-			d["cpu"] = "x86-64"
-			// Target the AMDRyzen 5 4500U machines, as they are beefy and we have
-			// 19 of them, and they are setup to compile.
-			d["gpu"] = "1002:1636"
-		} else {
-			d["gpu"] = "none"
+		if b.matchOs("Mac") {
+			// TODO(borenet): Remove empty and nested entries after all Macs
+			// are migrated to the new lab.
+			if macModel, ok := map[string]interface{}{
+				"MacBookAir7.2":  "",
+				"MacBookPro11.5": "MacBookPro11,5",
+				"MacBookPro15.1": "MacBookPro15,1",
+				"MacBookPro15.3": "Mac15,3",
+				"MacBookPro16.2": "",
+				"MacMini7.1":     "",
+				"MacMini8.1":     "Macmini8,1",
+				"MacMini9.1": map[string]string{
+					"Mac11": "",
+					"Mac12": "",
+					"Mac13": "",
+					"Mac14": "Macmini9,1",
+				},
+				// TODO(borenet): This is currently resolving to multiple
+				// different actual device types.
+				"VMware7.1": "",
+			}[b.parts["model"]]; ok {
+				if macModel != "" {
+					macModelDim, ok := macModel.(string)
+					if !ok {
+						macModelDim = macModel.(map[string]string)[b.parts["os"]]
+					}
+					if macModelDim != "" {
+						d["mac_model"] = macModelDim
+					}
+				}
+			} else {
+				log.Fatalf("No mac_model found for %q", b.parts["model"])
+			}
 		}
+	} else {
+		d["gpu"] = "none"
 		if d["os"] == DEFAULT_OS_LINUX_GCE {
 			if b.extraConfig("CanvasKit", "CMake", "Docker", "PathKit") || b.role("BuildStats", "CodeSize") {
 				b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
