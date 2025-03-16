@@ -273,10 +273,10 @@ browser_repositories(
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-GuRaQT0LlDOYcyDfKtQQ22oV+vtsiM8P0b87qsvoJts=",
+    sha256 = "671ddb3fe5ebcf9dd34d051eca7352fbaf33fa53bf61eed0b75a4c34829e5480",
     urls = gcs_mirror_url(
-        sha256 = "1ae45a413d0b9433987320df2ad410db6a15fafb6c88cf0fd1bf3baacbe826db",
-        url = "https://github.com/bazelbuild/rules_rust/releases/download/0.39.0/rules_rust-v0.39.0.tar.gz",
+        sha256 = "671ddb3fe5ebcf9dd34d051eca7352fbaf33fa53bf61eed0b75a4c34829e5480",
+        url = "https://github.com/bazelbuild/rules_rust/releases/download/0.52.2/rules_rust-v0.52.2.tar.gz",
     ),
 )
 
@@ -310,17 +310,17 @@ crate_universe_dependencies()
 http_archive(
     name = "cxxbridge_cmd",
     build_file = "//bazel/external/cxxbridge_cmd:BUILD.bazel.skia",
-    sha256 = "b20c2a31fb5a2e2aeebced19e35d78a974301171391b39e36d5ebb00bea2aa93",
-    strip_prefix = "cxxbridge-cmd-1.0.94",
+    sha256 = "5b12e3f7b0477bd2e469107b778d333171cae561a555e96157e67bbd9f42e54f",
+    strip_prefix = "cxxbridge-cmd-1.0.131",
     type = "tar.gz",
     urls = gcs_mirror_url(
         ext = ".tar.gz",
-        sha256 = "b20c2a31fb5a2e2aeebced19e35d78a974301171391b39e36d5ebb00bea2aa93",
-        url = "https://crates.io/api/v1/crates/cxxbridge-cmd/1.0.94/download",
+        sha256 = "5b12e3f7b0477bd2e469107b778d333171cae561a555e96157e67bbd9f42e54f",
+        url = "https://crates.io/api/v1/crates/cxxbridge-cmd/1.0.131/download",
     ),
 )
 
-load("@rules_rust//crate_universe:defs.bzl", "crates_repository")
+load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository")
 
 # This finds all the dependencies needed to build cxxbridge_cmd...
 crates_repository(
@@ -340,13 +340,13 @@ cxxbridge_cmd_deps()
 http_archive(
     name = "cxx",
     build_file = "//bazel/external/cxx:BUILD.bazel.skia",
-    sha256 = "f61f1b6389c3fe1c316bf8a4dccc90a38208354b330925bce1f74a6c4756eb93",
-    strip_prefix = "cxx-1.0.94",
+    sha256 = "2568d7d2cfc051e43414fe1ef80c712cbcd60c3624d1ad1cb4b2572324d0a5d9",
+    strip_prefix = "cxx-1.0.131",
     type = "tar.gz",
     urls = gcs_mirror_url(
         ext = ".tar.gz",
-        sha256 = "f61f1b6389c3fe1c316bf8a4dccc90a38208354b330925bce1f74a6c4756eb93",
-        url = "https://crates.io/api/v1/crates/cxx/1.0.94/download",
+        sha256 = "2568d7d2cfc051e43414fe1ef80c712cbcd60c3624d1ad1cb4b2572324d0a5d9",
+        url = "https://crates.io/api/v1/crates/cxx/1.0.131/download",
     ),
 )
 
@@ -391,6 +391,47 @@ crates_repository(
 load("@icu4x_deps//:defs.bzl", icu4x_deps = "crate_repositories")
 
 icu4x_deps()
+
+# The repository of third-party crates (currently just the `png` crate)
+# to support `//experimental/rust_png` code.
+crates_repository(
+    name = "rust_png",
+    annotations = {
+        "png": [crate.annotation(
+            patch_args = ["-p6"],
+            # Patches from https://crrev.com/c/5922033:
+            # New public API for `png` crate: `fn next_frame_info`.
+            #
+            # TODO(lukasza, kjlubick): Remove this whole annotation once a new
+            # version of `png` is released on crates.io (presumably including
+            # the already merged PRs).
+            patches = [
+                "@//experimental/rust_png/patches:0101-Add-test-coverage-for-PolledAfterEndOfImage-error.patch",
+                "@//experimental/rust_png/patches:0102-Add-test-showing-next_frame-after-next_row-is-tempor.patch",
+                "@//experimental/rust_png/patches:0103-Call-finish_decoding-after-last-next_row.patch",
+                "@//experimental/rust_png/patches:0104-Simplify-how-Reader-tracks-how-many-frames-remain-to.patch",
+                "@//experimental/rust_png/patches:0105-Fix-a-subset-of-issues-identified-by-cargo-clippy.patch",
+                "@//experimental/rust_png/patches:0106-Avoid-infinite-loop-when-retrying-after-earlier-fata.patch",
+                "@//experimental/rust_png/patches:0107-New-API-Reader.next_frame_control-for-advancing-to-t.patch",
+                "@//experimental/rust_png/patches:0201-Add-EXIF-and-ICC-encoding-and-fix-chunk-order.patch",
+                "@//experimental/rust_png/patches:0301-Add-support-for-parsing-mDCv-and-cLLi-chunks.-528.patch",
+                "@//experimental/rust_png/patches:0302-Add-support-for-parsing-cICP-chunks.-529.patch",
+            ],
+        )],
+    },
+    cargo_lockfile = "//experimental/rust_png/ffi:Cargo.lock",
+    packages = {
+        "png": crate.spec(
+            # Note: for additional performance gains `features = ["unstable"]`
+            # can be enabled, but this requires the nightly, unstable `rustc`.
+            version = "0.17",
+        ),
+    },
+)
+
+load("@rust_png//:defs.bzl", rust_png_crates = "crate_repositories")
+
+rust_png_crates()
 
 # Skia uses crates from the vello repository that are under development and have not been published
 # to crates.io. Normally we could fetch them directly from the git mirror in the Cargo.lock file as
@@ -444,6 +485,7 @@ local_repository(
 # @spirv_tools - https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git
 #
 # @dawn - //bazel/external/dawn:BUILD.bazel
+# @delaunator - //bazel/external/delaunator:BUILD.bazel
 # @dng_sdk - //bazel/external/dng_sdk:BUILD.bazel
 # @expat - //bazel/external/expat:BUILD.bazel
 # @freetype - //bazel/external/freetype:BUILD.bazel
@@ -653,7 +695,7 @@ load(
 # Pulls the gcr.io/skia-public/debugger-app-base container.
 container_pull(
     name = "debugger-app-base",
-    digest = "sha256:ebfa46371f66b4fe233c4470803ed1e1bdf7e149e2a30d93579e4f5cc78189c0",
+    digest = "sha256:e9a6ea69ff3d616e5757891be54a232902b65f790d69655dab25048abacbd84d",
     registry = "gcr.io",
     repository = "skia-public/debugger-app-base",
 )
@@ -661,7 +703,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/jsfiddle-base container.
 container_pull(
     name = "jsfiddle-base",
-    digest = "sha256:dadc8978c6e993f54c4020b05650faa8e074c0fdedc7d38db25a62baba630969",
+    digest = "sha256:fb2d48f7af982ed974832b6eef330985af8f640f5168188bbea3986543d4af90",
     registry = "gcr.io",
     repository = "skia-public/jsfiddle-base",
 )
@@ -669,7 +711,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/shaders-base container.
 container_pull(
     name = "shaders-base",
-    digest = "sha256:0417970a971ec1fbe73073d1f7ae2f01c1a9df80d54dbb65a97f07175645db8a",
+    digest = "sha256:9481c3eb25d23889071ead9351254cc96b295c5290794cb4a13298134d1c5b57",
     registry = "gcr.io",
     repository = "skia-public/shaders-base",
 )
@@ -677,7 +719,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:2814735474b8a78062aceeb817b2253eb0d5172df5c5cacb1f9a793d3b2b2c2e",
+    digest = "sha256:32e4afed6d80609923d419fd854ed7a999b6a3bf53efc09713c0488e908fc7f9",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )

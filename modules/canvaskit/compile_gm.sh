@@ -174,12 +174,17 @@ GLOBIGNORE+="tests/CodecTest.cpp:"\
 "tests/ColorSpaceTest.cpp:"\
 "tests/DrawOpAtlasTest.cpp:"\
 "tests/EncodeTest.cpp:"\
+"tests/FontMgrAndroidTest.cpp:"\
 "tests/FontMgrAndroidParserTest.cpp:"\
 "tests/FontMgrFontConfigTest.cpp:"\
 "tests/FontationsTest.cpp:"\
 "tests/FontationsFtCompTest.cpp:"\
+"tests/FontScanner_FontationsTest.cpp:"\
+"tests/FontScanner_FreeTypeTest.cpp:"\
 "tests/FCITest.cpp:"\
 "tests/JpegGainmapTest.cpp:"\
+"tests/SkPngRustDecoderTest.cpp:"\
+"tests/SkPngRustEncoderTest.cpp:"\
 "tests/TypefaceMacTest.cpp:"
 
 # These tests do complex things with TestContexts, which is not easily supported for the WASM
