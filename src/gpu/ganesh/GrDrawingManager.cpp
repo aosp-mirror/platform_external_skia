@@ -21,6 +21,7 @@
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkTInternalLList.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/GpuTypesPriv.h"
 #include "src/gpu/ganesh/GrAuditTrail.h"
 #include "src/gpu/ganesh/GrBufferTransferRenderTask.h"
 #include "src/gpu/ganesh/GrBufferUpdateRenderTask.h"
@@ -55,6 +56,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <utility>
 
 using namespace skia_private;
@@ -160,6 +162,10 @@ bool GrDrawingManager::flush(SkSpan<GrSurfaceProxy*> proxies,
 
     GrOpFlushState flushState(gpu, resourceProvider, &fTokenTracker, fCpuBufferCache);
 
+    std::optional<GrTimerQuery> timerQuery;
+    if (info.fFinishedWithStatsProc && (info.fGpuStatsFlags & skgpu::GpuStatsFlags::kElapsedTime)) {
+        timerQuery = gpu->startTimerQuery();
+    }
     GrOnFlushResourceProvider onFlushProvider(this);
 
     // Prepare any onFlush op lists (e.g. atlases).
@@ -204,7 +210,7 @@ bool GrDrawingManager::flush(SkSpan<GrSurfaceProxy*> proxies,
     }
     this->removeRenderTasks();
 
-    gpu->executeFlushInfo(proxies, access, info, newState);
+    gpu->executeFlushInfo(proxies, access, info, std::move(timerQuery), newState);
 
     // Give the cache a chance to purge resources that become purgeable due to flushing.
     if (cachePurgeNeeded) {
@@ -223,7 +229,7 @@ bool GrDrawingManager::flush(SkSpan<GrSurfaceProxy*> proxies,
     return true;
 }
 
-bool GrDrawingManager::submitToGpu(GrSyncCpu sync) {
+bool GrDrawingManager::submitToGpu() {
     if (fFlushing || this->wasAbandoned()) {
         return false;
     }
@@ -233,7 +239,7 @@ bool GrDrawingManager::submitToGpu(GrSyncCpu sync) {
         return false; // Can't submit while DDL recording
     }
     GrGpu* gpu = direct->priv().getGpu();
-    return gpu->submitToGpu(sync);
+    return gpu->submitToGpu();
 }
 
 bool GrDrawingManager::executeRenderTasks(GrOpFlushState* flushState) {
@@ -282,7 +288,7 @@ bool GrDrawingManager::executeRenderTasks(GrOpFlushState* flushState) {
             anyRenderTasksExecuted = true;
         }
         if (++numRenderTasksExecuted >= kMaxRenderTasksBeforeFlush) {
-            flushState->gpu()->submitToGpu(GrSyncCpu::kNo);
+            flushState->gpu()->submitToGpu();
             numRenderTasksExecuted = 0;
         }
     }
@@ -486,7 +492,7 @@ static void resolve_and_mipmap(GrGpu* gpu, GrSurfaceProxy* proxy) {
         if (rtProxy->isMSAADirty()) {
             SkASSERT(rtProxy->peekRenderTarget());
             gpu->resolveRenderTarget(rtProxy->peekRenderTarget(), rtProxy->msaaDirtyRect());
-            gpu->submitToGpu(GrSyncCpu::kNo);
+            gpu->submitToGpu();
             rtProxy->markMSAAResolved();
         }
     }
@@ -1070,7 +1076,7 @@ void GrDrawingManager::flushIfNecessary() {
     auto resourceCache = direct->priv().getResourceCache();
     if (resourceCache && resourceCache->requestsFlush()) {
         if (this->flush({}, SkSurfaces::BackendSurfaceAccess::kNoAccess, GrFlushInfo(), nullptr)) {
-            this->submitToGpu(GrSyncCpu::kNo);
+            this->submitToGpu();
         }
         resourceCache->purgeAsNeeded();
     }

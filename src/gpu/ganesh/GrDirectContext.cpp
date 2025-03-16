@@ -429,6 +429,10 @@ skgpu::ganesh::SmallPathAtlasMgr* GrDirectContext::onGetSmallPathAtlasMgr() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+skgpu::GpuStatsFlags GrDirectContext::supportedGpuStats() const {
+    return this->caps()->supportedGpuStats();
+}
+
 GrSemaphoresSubmitted GrDirectContext::flush(const GrFlushInfo& info) {
     ASSERT_SINGLE_OWNER
     if (this->abandoned()) {
@@ -445,7 +449,7 @@ GrSemaphoresSubmitted GrDirectContext::flush(const GrFlushInfo& info) {
             {}, SkSurfaces::BackendSurfaceAccess::kNoAccess, info, nullptr);
 }
 
-bool GrDirectContext::submit(GrSyncCpu sync) {
+bool GrDirectContext::submit(const GrSubmitInfo& info) {
     ASSERT_SINGLE_OWNER
     if (this->abandoned()) {
         return false;
@@ -455,7 +459,7 @@ bool GrDirectContext::submit(GrSyncCpu sync) {
         return false;
     }
 
-    return fGpu->submitToGpu(sync);
+    return fGpu->submitToGpu(info);
 }
 
 GrSemaphoresSubmitted GrDirectContext::flush(const sk_sp<const SkImage>& image,
@@ -530,7 +534,7 @@ void GrDirectContext::flush(SkSurface* surface) {
 
 void GrDirectContext::checkAsyncWorkCompletion() {
     if (fGpu) {
-        fGpu->checkFinishProcs();
+        fGpu->checkFinishedCallbacks();
     }
 }
 
