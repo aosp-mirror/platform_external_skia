@@ -139,7 +139,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/vulkan-deps": {
 		Id:      "chromium.googlesource.com/vulkan-deps",
-		Version: "9bd06de7d34592e662935e4cb2feea3b17ea38f6",
+		Version: "acafa2b3b5e227175c3edc8d33da4806ef54e28a",
 		Path:    "third_party/externals/vulkan-deps",
 	},
 	"chromium.googlesource.com/webm/libwebp": {
@@ -149,7 +149,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "b9b83d3a1dc791fe4ac3ba4bc573e90f108281ab",
+		Version: "c6ac86ef3ddb8c945f00aebcdc6ef0c5a53161fd",
 		Path:    "third_party/externals/dawn",
 	},
 	"infra/3pp/tools/ninja": {
