@@ -30,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "c6ac86ef3ddb8c945f00aebcdc6ef0c5a53161fd",
+        commit = "c5a1c32fe1664f79c1a6efb3accc15e72af918b7",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -225,7 +225,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "vulkan_utility_libraries",
         build_file = ws + "//bazel/external/vulkan_utility_libraries:BUILD.bazel",
-        commit = "ccae111ac678adbc9c74be10c8384cd1af835710",
+        commit = "04e2efb904a224bd7014cd4b0a8539bdc85e4658",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries",
     )
 
