@@ -78,6 +78,8 @@ def compile_fn(api, checkout_root, out_dir):
   target_arch   = api.vars.builder_cfg.get('target_arch',   '')
 
   clang_linux      = str(api.vars.workdir.joinpath('clang_linux'))
+  if 'MSAN' in extra_tokens:
+    clang_linux = str(api.vars.workdir.joinpath('clang_ubuntu_noble'))
   win_toolchain    = str(api.vars.workdir.joinpath('win_toolchain'))
   dwritecore       = str(api.vars.workdir.joinpath('dwritecore'))
 
@@ -212,6 +214,7 @@ def compile_fn(api, checkout_root, out_dir):
     util.set_dawn_args_and_env(args, env, api, extra_tokens, skia_dir)
   if 'ANGLE' in extra_tokens:
     args['skia_use_angle'] = 'true'
+    args['skia_use_cpp20'] = 'true'
   if 'SwiftShader' in extra_tokens:
     swiftshader_root = skia_dir.joinpath('third_party', 'externals', 'swiftshader')
     # Swiftshader will need to make ninja be on the path
