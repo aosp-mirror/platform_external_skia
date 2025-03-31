@@ -179,8 +179,7 @@
       "CCACHE_MAXSIZE": "50G",
       "CHROME_HEADLESS": "1",
       "MACOSX_DEPLOYMENT_TARGET": "10.15",
-      "PATH": "<PATH>:RECIPE_REPO[depot_tools]",
-      "PYTHONPATH": "[START_DIR]/cache/work/skia/third_party/externals:%(PYTHONPATH)s"
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "name": "ccache stats-start"
   },
@@ -188,8 +187,8 @@
     "cmd": [
       "[START_DIR]/cache/work/skia/bin/gn",
       "gen",
-      "[START_DIR]/cache/work/skia/out/Build-Mac-Clang-arm64-Debug-Graphite_Dawn_Metal_NoGpu/Debug",
-      "--args=cc=\"clang\" cc_wrapper=\"[START_DIR]/ccache_mac/bin/ccache\" cxx=\"clang++\" dawn_enable_d3d11=false dawn_enable_d3d12=false dawn_enable_desktop_gl=false dawn_enable_metal=true dawn_enable_opengles=false dawn_enable_vulkan=false extra_cflags=[\"-DREBUILD_IF_CHANGED_xcode_build_version=16a242d\", \"-O1\"] link_pool_depth=2 skia_enable_ganesh=false skia_enable_graphite=true skia_use_client_icu=true skia_use_dawn=true skia_use_gl=false skia_use_libgrapheme=true target_cpu=\"arm64\" werror=true"
+      "[START_DIR]/cache/work/skia/out/Build-Mac-Clang-arm64-Debug-Graphite_Native_Metal_NoGPU/Debug",
+      "--args=cc=\"clang\" cc_wrapper=\"[START_DIR]/ccache_mac/bin/ccache\" cxx=\"clang++\" extra_cflags=[\"-DREBUILD_IF_CHANGED_xcode_build_version=16a242d\", \"-O1\"] link_pool_depth=2 skia_enable_ganesh=false skia_enable_graphite=true skia_use_client_icu=true skia_use_gl=false skia_use_libgrapheme=true skia_use_metal=true target_cpu=\"arm64\" werror=true"
     ],
     "cwd": "[START_DIR]/cache/work/skia",
     "env": {
@@ -199,8 +198,7 @@
       "CCACHE_MAXSIZE": "50G",
       "CHROME_HEADLESS": "1",
       "MACOSX_DEPLOYMENT_TARGET": "10.15",
-      "PATH": "<PATH>:RECIPE_REPO[depot_tools]",
-      "PYTHONPATH": "[START_DIR]/cache/work/skia/third_party/externals:%(PYTHONPATH)s"
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "name": "gn gen"
   },
@@ -208,7 +206,7 @@
     "cmd": [
       "[START_DIR]/cache/work/skia/third_party/ninja/ninja",
       "-C",
-      "[START_DIR]/cache/work/skia/out/Build-Mac-Clang-arm64-Debug-Graphite_Dawn_Metal_NoGpu/Debug"
+      "[START_DIR]/cache/work/skia/out/Build-Mac-Clang-arm64-Debug-Graphite_Native_Metal_NoGPU/Debug"
     ],
     "cwd": "[START_DIR]/cache/work/skia",
     "env": {
@@ -218,8 +216,7 @@
       "CCACHE_MAXSIZE": "50G",
       "CHROME_HEADLESS": "1",
       "MACOSX_DEPLOYMENT_TARGET": "10.15",
-      "PATH": "<PATH>:RECIPE_REPO[depot_tools]",
-      "PYTHONPATH": "[START_DIR]/cache/work/skia/third_party/externals:%(PYTHONPATH)s"
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "name": "ninja"
   },
@@ -236,8 +233,7 @@
       "CCACHE_MAXSIZE": "50G",
       "CHROME_HEADLESS": "1",
       "MACOSX_DEPLOYMENT_TARGET": "10.15",
-      "PATH": "<PATH>:RECIPE_REPO[depot_tools]",
-      "PYTHONPATH": "[START_DIR]/cache/work/skia/third_party/externals:%(PYTHONPATH)s"
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "name": "ccache stats-end"
   },
@@ -245,7 +241,7 @@
     "cmd": [
       "python3",
       "RECIPE_MODULE[skia::build]/resources/copy_build_products.py",
-      "[START_DIR]/cache/work/skia/out/Build-Mac-Clang-arm64-Debug-Graphite_Dawn_Metal_NoGpu/Debug",
+      "[START_DIR]/cache/work/skia/out/Build-Mac-Clang-arm64-Debug-Graphite_Native_Metal_NoGPU/Debug",
       "[START_DIR]/[SWARM_OUT_DIR]/out/Debug",
       "dm,dm.exe,dm.app,nanobench.app,get_images_from_skps,get_images_from_skps.exe,nanobench,nanobench.exe,*.so,*.dll,*.dylib,skottie_tool,lib/*.so,run_testlab"
     ],
