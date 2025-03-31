@@ -1,5 +1,23 @@
 [
   {
+    "cmd": [
+      "vpython3",
+      "-u",
+      "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
+      "--json-output",
+      "/path/to/tmp/json",
+      "copy",
+      "[START_DIR]/cache/work/skia/infra/bots/assets/clang_linux/VERSION",
+      "/path/to/tmp/"
+    ],
+    "infra_step": true,
+    "name": "Get clang_linux VERSION",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@VERSION@42@@@",
+      "@@@STEP_LOG_END@VERSION@@@"
+    ]
+  },
+  {
     "cmd": [],
     "name": "Docker setup"
   },
@@ -23,7 +41,7 @@
       "ensure-directory",
       "--mode",
       "0o777",
-      "[START_DIR]/cache/work/skia/out/Build-Debian11-GCC-x86_64-Debug-Docker/Debug"
+      "[START_DIR]/cache/work/skia/out/Build-Ubuntu18-Clang-x86_64-Release-Docker/Release"
     ],
     "infra_step": true,
     "name": "Docker setup.mkdirs out_dir",
@@ -35,10 +53,10 @@
     "cmd": [
       "chmod",
       "777",
-      "[START_DIR]/cache/work/skia/out/Build-Debian11-GCC-x86_64-Debug-Docker/Debug"
+      "[START_DIR]/cache/work/skia/out/Build-Ubuntu18-Clang-x86_64-Release-Docker/Release"
     ],
     "infra_step": true,
-    "name": "Docker setup.chmod 777 [START_DIR]/cache/work/skia/out/Build-Debian11-GCC-x86_64-Debug-Docker/Debug",
+    "name": "Docker setup.chmod 777 [START_DIR]/cache/work/skia/out/Build-Ubuntu18-Clang-x86_64-Release-Docker/Release",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -78,7 +96,7 @@
       "--mount",
       "type=bind,source=[START_DIR],target=/SRC",
       "--mount",
-      "type=bind,source=[START_DIR]/cache/work/skia/out/Build-Debian11-GCC-x86_64-Debug-Docker/Debug,target=/OUT",
+      "type=bind,source=[START_DIR]/cache/work/skia/out/Build-Ubuntu18-Clang-x86_64-Release-Docker/Release,target=/OUT",
       "-e",
       "CCACHE_COMPILERCHECK=content",
       "-e",
@@ -87,9 +105,9 @@
       "CCACHE_MAXFILES=0",
       "-e",
       "CCACHE_MAXSIZE=75G",
-      "gcr.io/skia-public/gcc-debian11@sha256:1117ea368f43e45e0f543f74c8e3bf7ff6932df54ddaa4ba1fe6131209110d3d",
+      "gcr.io/skia-public/clang-ubuntu18@sha256:c46fdae57032646419baf125310c94363b5cb0e722ffcc63686468f485608aaa",
       "/SRC/../RECIPE_MODULE[skia::build]/resources/docker-compile.sh",
-      "cc=\"gcc\" cc_wrapper=\"/SRC/ccache_linux/bin/ccache\" cxx=\"g++\" extra_cflags=[\"-g1\", \"-O1\", \"-DREBUILD_IF_CHANGED_docker_image=gcr.io/skia-public/gcc-debian11@sha256:1117ea368f43e45e0f543f74c8e3bf7ff6932df54ddaa4ba1fe6131209110d3d\"] link_pool_depth=2 skia_use_client_icu=true skia_use_libgrapheme=true target_cpu=\"x86_64\" werror=true"
+      "cc=\"/SRC/clang_linux/bin/clang\" cc_wrapper=\"/SRC/ccache_linux/bin/ccache\" cxx=\"/SRC/clang_linux/bin/clang++\" extra_cflags=[\"-B/SRC/clang_linux/bin\", \"-DPLACEHOLDER_clang_linux_version=42\", \"-DREBUILD_IF_CHANGED_docker_image=gcr.io/skia-public/clang-ubuntu18@sha256:c46fdae57032646419baf125310c94363b5cb0e722ffcc63686468f485608aaa\"] extra_ldflags=[\"-B/SRC/clang_linux/bin\", \"-fuse-ld=lld\", \"-L/SRC/clang_linux/lib\"] is_debug=false link_pool_depth=2 skia_use_client_icu=true skia_use_libgrapheme=true target_cpu=\"x86_64\" werror=true"
     ],
     "env": {
       "CHROME_HEADLESS": "1",
@@ -102,8 +120,8 @@
     "cmd": [
       "python3",
       "RECIPE_MODULE[skia::build]/resources/copy_build_products.py",
-      "[START_DIR]/cache/work/skia/out/Build-Debian11-GCC-x86_64-Debug-Docker/Debug",
-      "[START_DIR]/[SWARM_OUT_DIR]/out/Debug",
+      "[START_DIR]/cache/work/skia/out/Build-Ubuntu18-Clang-x86_64-Release-Docker/Release",
+      "[START_DIR]/[SWARM_OUT_DIR]/out/Release",
       "dm,dm.exe,dm.app,nanobench.app,get_images_from_skps,get_images_from_skps.exe,nanobench,nanobench.exe,*.so,*.dll,*.dylib,skottie_tool,lib/*.so,run_testlab"
     ],
     "infra_step": true,
