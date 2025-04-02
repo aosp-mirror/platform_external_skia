@@ -774,7 +774,7 @@ protected:
 
         *path = path->makeTransform(fRemainingMatrix);
 
-        if (fScale.y() != 1.0f || !fRemainingMatrix.isIdentity()) {
+        if (!fRemainingMatrix.isIdentity()) {
             *modified = true;
         }
         return true;
@@ -1005,6 +1005,18 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> SkTypeface_Fontations::onGetAdvancedM
         info->fFlags |= SkAdvancedTypefaceMetrics::kVariable_FontFlag;
     }
 
+    switch (fontations_ffi::outline_format(*fOutlines)) {
+        case fontations_ffi::OutlineFormat::Glyf:
+            info->fType = SkAdvancedTypefaceMetrics::kTrueType_Font;
+            break;
+        case fontations_ffi::OutlineFormat::Cff:
+            info->fType = SkAdvancedTypefaceMetrics::kCFF_Font;
+            break;
+        default:
+            // leave info->fType SkAdvancedTypefaceMetrics::kOther;
+            break;
+    }
+
     // Metrics information.
     fontations_ffi::Metrics metrics =
             fontations_ffi::get_unscaled_metrics(*fBridgeFontRef, *fBridgeNormalizedCoords);
@@ -1020,6 +1032,11 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> SkTypeface_Fontations::onGetAdvancedM
     // Style information.
     if (fontations_ffi::is_fixed_pitch(*fBridgeFontRef)) {
         info->fStyle |= SkAdvancedTypefaceMetrics::kFixedPitch_Style;
+    }
+
+    rust::String readPsName;
+    if (fontations_ffi::postscript_name(*fBridgeFontRef, readPsName)) {
+        info->fPostScriptName = SkString(readPsName.data(), readPsName.size());
     }
 
     fontations_ffi::BridgeFontStyle fontStyle;

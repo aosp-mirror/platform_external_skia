@@ -401,8 +401,10 @@ TextureInfo VulkanCaps::getDefaultMSAATextureInfo(const TextureInfo& singleSampl
      * Graphite, unlike ganesh, does not require a dedicated MSAA attachment on every surface.
      * MSAA textures now get resolved within the scope of a render pass, which can be done simply
      * with the color attachment usage flag. So we no longer require transfer src/dst usage flags.
+     * All renderable textures in Vulkan are made with input attachment usage.
     */
-    VkImageUsageFlags flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkImageUsageFlags flags =
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     if (discardable == Discardable::kYes && fSupportsMemorylessAttachments) {
         flags = flags | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
     }
@@ -1631,24 +1633,14 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
     SkASSERT(i == num32DataCnt);
 }
 
-DstReadStrategy VulkanCaps::getDstReadStrategy(const TextureInfo& info) const {
+DstReadStrategy VulkanCaps::getDstReadStrategy() const {
     // We know the graphite Vulkan backend does not support frame buffer fetch, so make sure it is
     // not marked as supported and skip checking for it.
     SkASSERT(!this->shaderCaps()->fFBFetchSupport);
 
-    // TODO(b/383769988): Once DstReadStrategy::kReadFromInput is supported by the Vulkan backend,
-    // determine whether that strategy can be used.
-    // bool supportsInputAttachmentUsage =
-    //      GetVkUsageFlags(info) & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-// #ifdef SK_BUILD_FOR_ANDROID
-    // We expect that all Android target textures to support input attachment usage.
-    // SkASSERT(supportsInputAttachmentUsage);
-// #endif
-    // TODO(b/390458117): Add support to do this w/ MSAA textures. For now, simply default to using
-    // TextureCopy if the texture has a sample count >1.
-    // return supportsInputAttachmentUsage && info.numSamples() == 1
-    //      ? DstReadStrategy::kReadFromInput
-    //      : DstReadStrategy::kTextureCopy;
+    // TODO(b/383769988): Return DstReadStrategy::kReadFromInput once implemented for the Vulkan
+    // backend. We assume all target textures have input attachment usage (all internally-created
+    // render targets do).
 
     // For now, always return DstReadStrategy::kTextureCopy.
     return DstReadStrategy::kTextureCopy;
