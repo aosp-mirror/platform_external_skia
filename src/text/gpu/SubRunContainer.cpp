@@ -63,7 +63,6 @@
 #if defined(SK_GANESH) || defined(SK_USE_LEGACY_GANESH_TEXT_APIS)
 #include "include/core/SkRRect.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
-#include "src/core/SkColorData.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/gpu/ganesh/GrClip.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
@@ -121,15 +120,12 @@ SkPMColor4f calculate_colors(skgpu::ganesh::SurfaceDrawContext* sdc,
                              const SkMatrix& matrix,
                              MaskFormat maskFormat,
                              GrPaint* grPaint) {
-    GrRecordingContext* rContext = sdc->recordingContext();
-    const GrColorInfo& colorInfo = sdc->colorInfo();
-    const SkSurfaceProps& props = sdc->surfaceProps();
     if (maskFormat == MaskFormat::kARGB) {
-        SkPaintToGrPaintReplaceShader(rContext, colorInfo, paint, matrix, nullptr, props, grPaint);
+        SkPaintToGrPaintReplaceShader(sdc, paint, matrix, nullptr, grPaint);
         float a = grPaint->getColor4f().fA;
         return {a, a, a, a};
     }
-    SkPaintToGrPaint(rContext, colorInfo, paint, matrix, props, grPaint);
+    SkPaintToGrPaint(sdc, paint, matrix, grPaint);
     return grPaint->getColor4f();
 }
 
@@ -824,7 +820,7 @@ public:
         GrRecordingContext* const rContext = sdc->recordingContext();
 
         GrOp::Owner op = GrOp::Make<AtlasTextOp>(rContext,
-                                                 fVertexFiller.opMaskType(),
+                                                 fVertexFiller.grMaskType(),
                                                  !integerTranslate,
                                                  this->glyphCount(),
                                                  subRunDeviceBounds,
@@ -835,7 +831,7 @@ public:
     }
 
     void fillVertexData(void* vertexDst, int offset, int count,
-                        GrColor color,
+                        const SkPMColor4f& color,
                         const SkMatrix& drawMatrix, SkPoint drawOrigin,
                         SkIRect clip) const override {
         const SkMatrix positionMatrix = position_matrix(drawMatrix, drawOrigin);
@@ -1007,7 +1003,7 @@ public:
         SkMatrix positionMatrix = position_matrix(viewMatrix, drawOrigin);
         auto [_, deviceRect] = fVertexFiller.deviceRectAndCheckTransform(positionMatrix);
         GrOp::Owner op = GrOp::Make<AtlasTextOp>(rContext,
-                                                 fVertexFiller.opMaskType(),
+                                                 fVertexFiller.grMaskType(),
                                                  true,
                                                  this->glyphCount(),
                                                  deviceRect,
@@ -1019,7 +1015,7 @@ public:
 
     void fillVertexData(
             void* vertexDst, int offset, int count,
-            GrColor color,
+            const SkPMColor4f& color,
             const SkMatrix& drawMatrix, SkPoint drawOrigin,
             SkIRect clip) const override {
         const SkMatrix positionMatrix = position_matrix(drawMatrix, drawOrigin);
@@ -1255,7 +1251,7 @@ public:
 
     void fillVertexData(
             void *vertexDst, int offset, int count,
-            GrColor color,
+            const SkPMColor4f& color,
             const SkMatrix& drawMatrix, SkPoint drawOrigin,
             SkIRect clip) const override {
         const SkMatrix positionMatrix = position_matrix(drawMatrix, drawOrigin);
