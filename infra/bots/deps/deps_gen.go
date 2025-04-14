@@ -24,7 +24,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/angle/angle": {
 		Id:      "chromium.googlesource.com/angle/angle",
-		Version: "127aec7e6c2c3a429d33f625bd698580007f0158",
+		Version: "cbd6cdc90c3a6cef61c40c24282f3d37aaf3c064",
 		Path:    "third_party/externals/angle2",
 	},
 	"chromium.googlesource.com/chromium/deps/icu": {
@@ -89,12 +89,12 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools": {
 		Id:      "chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
-		Version: "289efccc7560f2b970e2b4e0f50349da87669311",
+		Version: "59dc56aa3023434317a5197d77be51855b5fd2fb",
 		Path:    "third_party/externals/vulkan-tools",
 	},
 	"chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries": {
 		Id:      "chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries",
-		Version: "01851ecae564f8d3da0123659c26a2f5bbfc0228",
+		Version: "abc2498bde8d65841f463431a6220701fad44c64",
 		Path:    "third_party/externals/vulkan-utility-libraries",
 	},
 	"chromium.googlesource.com/external/github.com/google/highway": {
@@ -139,7 +139,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"chromium.googlesource.com/vulkan-deps": {
 		Id:      "chromium.googlesource.com/vulkan-deps",
-		Version: "007b93a5bc8b62a325e6605fd3d7eb1612f585b4",
+		Version: "ddb9ba0fdcc3193af3c60f811fa4524d54943890",
 		Path:    "third_party/externals/vulkan-deps",
 	},
 	"chromium.googlesource.com/webm/libwebp": {
@@ -149,7 +149,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"dawn.googlesource.com/dawn": {
 		Id:      "dawn.googlesource.com/dawn",
-		Version: "db66eb3d2ec70c64d530716f6811ffcc1f37429f",
+		Version: "33862a3ffc8a511d320fbf938c3e956c27e5c6a0",
 		Path:    "third_party/externals/dawn",
 	},
 	"infra/3pp/tools/ninja": {
@@ -249,7 +249,7 @@ var deps = deps_parser.DepsEntries{
 	},
 	"swiftshader.googlesource.com/SwiftShader": {
 		Id:      "swiftshader.googlesource.com/SwiftShader",
-		Version: "4982425ff1bdcb2ce52a360edde58a379119bfde",
+		Version: "2b323370501c03d249c91b57fe8585e63960f9e9",
 		Path:    "third_party/externals/swiftshader",
 	},
 }
