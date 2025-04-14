@@ -1041,9 +1041,11 @@ void VulkanCommandBuffer::bindUniformBuffers() {
     }
     if (fActiveGraphicsPipeline->hasPaintUniforms() &&
         fUniformBuffersToBind[VulkanGraphicsPipeline::kPaintUniformBufferIndex].fBuffer) {
-        descriptors.push_back({ uniformBufferType, /*count=*/1,
-                                VulkanGraphicsPipeline::kPaintUniformBufferIndex,
-                                PipelineStageFlags::kFragmentShader });
+        descriptors.push_back({
+                uniformBufferType,
+                /*count=*/1,
+                VulkanGraphicsPipeline::kPaintUniformBufferIndex,
+                PipelineStageFlags::kVertexShader | PipelineStageFlags::kFragmentShader });
     }
     if (fActiveGraphicsPipeline->hasGradientBuffer() &&
         fUniformBuffersToBind[VulkanGraphicsPipeline::kGradientBufferIndex].fBuffer) {
@@ -1223,7 +1225,7 @@ void VulkanCommandBuffer::recordTextureAndSamplerDescSet(
                                    /*bindingIdx=*/numTexSamplers-1,
                                    PipelineStageFlags::kFragmentShader,
                                    /*immutableSampler=*/nullptr});
-                            }
+        }
         SkASSERT(descriptors.size() == numTexSamplers);
         set = fResourceProvider->findOrCreateDescriptorSet(
                 SkSpan<DescriptorData>{&descriptors.front(), descriptors.size()});
