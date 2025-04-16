@@ -5288,6 +5288,7 @@ cc_defaults {
         "tests/graphite/UpdateBackendTextureTest.cpp",
         "tests/graphite/UploadBufferManagerTest.cpp",
         "tests/graphite/VulkanBackendTextureTest.cpp",
+        "tests/graphite/VulkanDstReadRenderpassReuseTest.cpp",
         "tests/graphite/precompile/ChromePrecompileTest.cpp",
         "tests/graphite/precompile/CombinationBuilderTest.cpp",
         "tests/graphite/precompile/PaintParamsKeyTest.cpp",
