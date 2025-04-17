@@ -96459,6 +96459,13 @@
       ]
     },
     "Test-Mac14-Clang-MacMini9.1-GPU-AppleM1-arm64-Debug-All-Graphite_Native_Metal": {},
+    "Test-Mac14-Clang-MacMini9.1-GPU-AppleM1-arm64-Release-All-Graphite_Native_Metal_TestPrecompile": {
+      "location_regexes": [
+        "(include|src)/gpu/graphite/.*Precompile.*",
+        "(include|src)/gpu/graphite/precompile/.*",
+        "(tests|tools)/graphite/precompile/.*"
+      ]
+    },
     "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3_Vulkan": {},
     "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Graphite_Native_Vulkan": {
       "location_regexes": [
@@ -96470,6 +96477,13 @@
     },
     "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan": {},
     "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All": {},
+    "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-Graphite_Native_Vulkan_TestPrecompile": {
+      "location_regexes": [
+        "(include|src)/gpu/graphite/.*Precompile.*",
+        "(include|src)/gpu/graphite/precompile/.*",
+        "(tests|tools)/graphite/precompile/.*"
+      ]
+    },
     "Test-Ubuntu24.04-Clang-GCE-CPU-AVX2-x86_64-Debug-All": {},
     "Test-Ubuntu24.04-Clang-GCE-CPU-AVX2-x86_64-Debug-All-BonusConfigs": {},
     "Test-Ubuntu24.04-Clang-GCE-CPU-AVX2-x86_64-Debug-All-RustPNG": {},
