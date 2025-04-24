@@ -1114,6 +1114,47 @@ cc_library_static {
     ],
 }
 
+// Skia's ffi.rs pulls in a number of additional rust sources.
+// There isn't anywhere to explicitly mention them here, but the dependency
+// should be tracked by the Soong build. If not, it will be necessary to find
+// some means of adding them as dependencies here.
+rust_ffi_static {
+    name: "libskia_rust_ffi",
+    host_supported: true,
+    crate_name: "skia",
+    srcs: ["src/ports/fontations/src/ffi.rs"],
+    include_dirs: ["src/ports/fontations/src"],
+    rustlibs: [
+      "libcxx",
+      "libskrifa",
+      "libread_fonts",
+      "libfont_types",
+    ],
+    features: [ "cxx" ],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
+}
+
+gensrcs {
+    name: "libskia_cxx_bridge_code",
+    tools: ["cxxbridge"],
+    cmd: "$(location cxxbridge) $(in) >> $(out)",
+    srcs: ["src/ports/fontations/src/ffi.rs"],
+    output_extension: "cpp",
+}
+
+gensrcs {
+    name: "libskia_cxx_bridge_header",
+    tools: ["cxxbridge"],
+    cmd: "$(location cxxbridge) $(in) --header >> $(out)",
+    srcs: ["src/ports/fontations/src/ffi.rs"],
+    output_extension: "rs.h",
+    export_include_dirs: ["."]
+}
+
 cc_library_static {
     name: "libskia",
     host_supported: true,
@@ -1505,9 +1546,12 @@ cc_library_static {
         "src/ports/SkFontHost_FreeType_common.cpp",
         "src/ports/SkFontMgr_custom.cpp",
         "src/ports/SkFontMgr_custom_empty.cpp",
+        "src/ports/SkFontMgr_fontations_empty.cpp",
+        "src/ports/SkFontScanner_fontations.cpp",
         "src/ports/SkGlobalInitialization_default.cpp",
         "src/ports/SkMemory_malloc.cpp",
         "src/ports/SkOSFile_stdio.cpp",
+        "src/ports/SkTypeface_fontations.cpp",
         "src/sfnt/SkOTTable_name.cpp",
         "src/sfnt/SkOTUtils.cpp",
         "src/shaders/SkBitmapProcShader.cpp",
@@ -1682,6 +1726,12 @@ cc_library_static {
         "src/xml/SkXMLParser.cpp",
         "src/xml/SkXMLWriter.cpp",
         "tools/SkSharingProc.cpp",
+    ],
+    generated_headers: [
+      "libskia_cxx_bridge_header",
+    ],
+    generated_sources: [
+      "libskia_cxx_bridge_code",
     ],
 
     target: {
@@ -2130,6 +2180,10 @@ cc_defaults {
     cflags: [
         "-DSK_PDF_USE_HARFBUZZ_SUBSET",
     ],
+    whole_static_libs: [
+        "libskia_rust_ffi",
+        "libskrifa",
+    ],
     target: {
       android: {
         shared_libs: [
@@ -2389,6 +2443,8 @@ cc_defaults {
         "gm/filterfastbounds.cpp",
         "gm/filterindiabox.cpp",
         "gm/flippity.cpp",
+        "gm/fontations.cpp",
+        "gm/fontations_ft_compare.cpp",
         "gm/fontcache.cpp",
         "gm/fontmgr.cpp",
         "gm/fontregen.cpp",
@@ -2914,6 +2970,8 @@ cc_defaults {
         "src/codec/SkPngCodecBase.cpp",
         "src/codec/SkPngCompositeChunkReader.cpp",
         "src/gpu/ganesh/vk/GrVkSecondaryCBDrawContext.cpp",
+        "src/ports/SkFontScanner_fontations.cpp",
+        "src/ports/SkTypeface_fontations.cpp",
         "tests/AAClipTest.cpp",
         "tests/AdvancedBlendTest.cpp",
         "tests/AndroidCodecTest.cpp",
@@ -3006,7 +3064,10 @@ cc_defaults {
         "tests/FontMgrTest.cpp",
         "tests/FontNamesTest.cpp",
         "tests/FontScanner.cpp",
+        "tests/FontScanner_FontationsTest.cpp",
         "tests/FontTest.cpp",
+        "tests/FontationsFtCompTest.cpp",
+        "tests/FontationsTest.cpp",
         "tests/FrontBufferedStreamTest.cpp",
         "tests/GLBackendSurfaceTest.cpp",
         "tests/GainmapShaderTest.cpp",
