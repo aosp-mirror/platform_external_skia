@@ -1739,7 +1739,6 @@ cc_library_static {
         srcs: [
           "src/android/SkAndroidFrameworkPerfettoStaticStorage.cpp",
           "src/codec/SkCrabbyAvifCodec.cpp",
-          "src/codec/SkHeifCodec.cpp",
           "src/codec/SkJpegMultiPicture.cpp",
           "src/codec/SkJpegSegmentScan.cpp",
           "src/codec/SkJpegXmp.cpp",
@@ -2187,7 +2186,6 @@ cc_defaults {
     target: {
       android: {
         shared_libs: [
-            "libheif",
             "libmediandk", // Needed to link libcrabbyavif_ffi in some configurations.
         ],
         whole_static_libs: [
