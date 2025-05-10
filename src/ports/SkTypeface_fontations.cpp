@@ -535,10 +535,12 @@ protected:
                 fBridgeFontRef, fScale.y(), fBridgeNormalizedCoords, glyph.getGlyphID());
         if (!doLinearMetrics) {
             fontations_ffi::BridgeScalerMetrics scalerMetrics;
-            bool modified;
-            SkPath path;
-            if (generatePathImpl(glyph.getGlyphID(), &path, &modified, scalerMetrics)) {
-                mx.generatedPath = {path, modified};
+            SkScalerContext::GeneratedPath generatedPath = {SkPath(), false};
+            if (generatePathImpl(glyph.getGlyphID(),
+                                 &generatedPath.path,
+                                 &generatedPath.modified,
+                                 scalerMetrics)) {
+                mx.generatedPath = std::move(generatedPath);
 
                 if (scalerMetrics.has_adjusted_advance) {
                     // FreeType rounds the advance to full pixels when in hinting modes.
