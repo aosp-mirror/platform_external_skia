@@ -13,6 +13,7 @@
 #include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
 #include "include/gpu/vk/VulkanExtensions.h"
 #include "include/gpu/vk/VulkanTypes.h"
+#include "src/gpu/SwizzlePriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/GraphiteResourceKey.h"
@@ -36,6 +37,15 @@
 namespace skgpu::graphite {
 
 namespace {
+skgpu::UniqueKey::Domain get_pipeline_domain() {
+    static const skgpu::UniqueKey::Domain kVulkanGraphicsPipelineDomain =
+            skgpu::UniqueKey::GenerateDomain();
+
+    return kVulkanGraphicsPipelineDomain;
+}
+}  // namespace
+
+namespace {
 struct EnabledFeatures {
     // VkPhysicalDeviceFeatures
     bool fDualSrcBlend = false;
@@ -44,8 +54,8 @@ struct EnabledFeatures {
     // From VkPhysicalDeviceFaultFeaturesEXT:
     bool fDeviceFault = false;
     // From VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT:
-    bool fCoherentAdvancedBlends = false;
-    // TODO(b/393382700): Check for noncoherent HW advanced blending support
+    bool fAdvancedBlendModes = false;
+    bool fCoherentAdvancedBlendModes = false;
 };
 
 // Walk the feature chain once and extract any enabled features that Graphite cares about.
@@ -75,7 +85,11 @@ EnabledFeatures GetEnabledFeature(const VkPhysicalDeviceFeatures2* features) {
                 case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_PROPERTIES_EXT: {
                     const auto* feature = reinterpret_cast<
                             const VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT*>(pNext);
-                    enabled.fCoherentAdvancedBlends =
+                    // The feature struct being present at all indicated advanced blend mode
+                    // support. A member of it indicates whether the device offers coherent or
+                    // noncoherent support.
+                    enabled.fAdvancedBlendModes = true;
+                    enabled.fCoherentAdvancedBlendModes =
                             feature->advancedBlendCoherentOperations == VK_TRUE;
                 }
                 break;
@@ -244,11 +258,11 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
 
     fSupportsYcbcrConversion = enabledFeatures.fSamplerYcbcrConversion;
     fSupportsDeviceFaultInfo = enabledFeatures.fDeviceFault;
-    // TODO(b/393382700): Check noncoherent HW advanced blending support once implemented. For now,
-    // indicate support iff the device has coherent adv blend mode support (meaning overlap is
-    // permitted and no barriers are required).
-    if (enabledFeatures.fCoherentAdvancedBlends) {
-        fSupportsHardwareAdvancedBlending = true;
+
+    if (enabledFeatures.fAdvancedBlendModes) {
+        fBlendEqSupport = enabledFeatures.fCoherentAdvancedBlendModes
+                ? BlendEquationSupport::kAdvancedCoherent
+                : BlendEquationSupport::kAdvancedNoncoherent;
         fShaderCaps->fAdvBlendEqInteraction =
                 SkSL::ShaderCaps::AdvBlendEqInteraction::kAutomatic_AdvBlendEqInteraction;
     }
@@ -1574,22 +1588,22 @@ std::pair<SkColorType, bool /*isRGBFormat*/> VulkanCaps::supportedReadPixelsColo
     return {kUnknown_SkColorType, false};
 }
 
+// 3 uint32s for the render step id, paint id, and write swizzle.
+static constexpr int kVulkanGraphicsPipelineKeyHeaderData32Count = 3;
+
 UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipelineDesc,
                                               const RenderPassDesc& renderPassDesc) const {
     UniqueKey pipelineKey;
     {
-        static const skgpu::UniqueKey::Domain kGraphicsPipelineDomain = UniqueKey::GenerateDomain();
-
         VulkanRenderPass::Metadata rpMetadata{renderPassDesc, /*compatibleOnly=*/true};
 
-        // Reserve 3 uint32s for the render step id, paint id, and write swizzle.
-        static constexpr int kUint32sNeededForPipelineInfo = 3;
         // The uint32s needed for a RenderPass is variable number, so consult rpMetaData to
         // determine how many to reserve.
-        UniqueKey::Builder builder(&pipelineKey,
-                                   kGraphicsPipelineDomain,
-                                   kUint32sNeededForPipelineInfo + rpMetadata.keySize(),
-                                   "GraphicsPipeline");
+        UniqueKey::Builder builder(
+                &pipelineKey,
+                get_pipeline_domain(),
+                kVulkanGraphicsPipelineKeyHeaderData32Count + rpMetadata.keySize(),
+                "GraphicsPipeline");
 
         int idx = 0;
         // Add GraphicsPipelineDesc information
@@ -1604,6 +1618,75 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
     }
 
     return pipelineKey;
+}
+
+bool VulkanCaps::extractGraphicsDescs(const UniqueKey& key,
+                                      GraphicsPipelineDesc* pipelineDesc,
+                                      RenderPassDesc* renderPassDesc,
+                                      const RendererProvider* rendererProvider) const {
+    SkASSERT(key.domain() == get_pipeline_domain());
+    SkASSERT(key.dataSize() >= 4 * kVulkanGraphicsPipelineKeyHeaderData32Count);
+
+    const uint32_t* rawKeyData = key.data();
+
+    SkASSERT(RenderStep::IsValidRenderStepID(rawKeyData[0]));
+    RenderStep::RenderStepID renderStepID = static_cast<RenderStep::RenderStepID>(rawKeyData[0]);
+
+    SkDEBUGCODE(const RenderStep* renderStep = rendererProvider->lookup(renderStepID);)
+    *pipelineDesc = GraphicsPipelineDesc(renderStepID, UniquePaintParamsID(rawKeyData[1]));
+    SkASSERT(renderStep->performsShading() == pipelineDesc->paintParamsID().isValid());
+
+    *renderPassDesc = {};
+    renderPassDesc->fWriteSwizzle = SwizzleCtorAccessor::Make(rawKeyData[2] & 0xFFFF);
+
+    const uint32_t attachmentCount = rawKeyData[3] & 0xFF;
+    const uint32_t subpassCount = rawKeyData[3] >> 8;
+    SkASSERT(key.dataSize() ==
+             4 * (kVulkanGraphicsPipelineKeyHeaderData32Count + 1 + (attachmentCount + 1) / 2 + 1));
+    SkASSERT(subpassCount == 1 || subpassCount == 2);
+
+    SkASSERT(attachmentCount <= 3);
+    AttachmentDesc attachments[3] = {};
+
+    for (uint32_t i = 0; i < attachmentCount; i++) {
+        uint32_t desc = rawKeyData[4 + i / 2];
+        if (i % 2 == 0) {
+            desc &= 0xFFFF;
+        } else if (i % 2 == 1) {
+            desc >>= 16;
+        }
+
+        attachments[i].fFormat = static_cast<TextureFormat>(desc >> 8);
+        attachments[i].fLoadOp = static_cast<LoadOp>(desc >> 6 & 0x3);
+        attachments[i].fStoreOp = static_cast<StoreOp>(desc >> 4 & 0x3);
+        attachments[i].fSampleCount = desc & 0xF;
+    }
+
+    const uint32_t attachmentIndices = rawKeyData[3 + (attachmentCount + 1) / 2 + 1];
+    const uint32_t colorIndex = attachmentIndices & 0xFF;
+    const uint32_t resolveIndex = attachmentIndices >> 8 & 0xFF;
+    const uint32_t depthIndex = attachmentIndices >> 16 & 0xFF;
+
+    if (colorIndex < 3) {
+        renderPassDesc->fColorAttachment = attachments[colorIndex];
+    }
+    if (resolveIndex < 3) {
+        renderPassDesc->fColorResolveAttachment = attachments[resolveIndex];
+
+        const bool loadMSAAFromResolve = subpassCount == 2;
+        if (loadMSAAFromResolve) {
+            renderPassDesc->fColorResolveAttachment.fLoadOp = LoadOp::kLoad;
+            renderPassDesc->fColorResolveAttachment.fStoreOp = StoreOp::kStore;
+        }
+    }
+    if (depthIndex < 3) {
+        renderPassDesc->fDepthStencilAttachment = attachments[depthIndex];
+    }
+
+    renderPassDesc->fSampleCount = renderPassDesc->fColorAttachment.fSampleCount;
+    renderPassDesc->fDstReadStrategy = this->getDstReadStrategy();
+
+    return true;
 }
 
 void VulkanCaps::buildKeyForTexture(SkISize dimensions,

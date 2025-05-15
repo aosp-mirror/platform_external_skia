@@ -118,56 +118,81 @@ ShaderNode* PaintParamsKey::createNode(const ShaderCodeDictionary* dict,
 }
 
 // Traverse a ShaderNode tree, attempting to lift any coordinate modification expressions.
-int lift_coord_expressions(SkSpan<ShaderNode*> nodes, int availableVaryings) {
+// Returns whether any of the given nodes need local coordinate inputs after lifting.
+bool lift_coord_expressions(SkSpan<ShaderNode*> nodes, int* availableVaryings) {
+    bool anyNeedLocalCoords = false;
+
     for (ShaderNode* node : nodes) {
-        // If in the course of lifting expressions we've used up all of our available varyings,
-        // there's nothing more we can do.
-        if (availableVaryings == 0) {
-            return 0;
-        }
+        bool curNeedsLocalCoords =
+                SkToBool(node->requiredFlags() & SnippetRequirementFlags::kLocalCoords);
 
-        // If there are no local coords, there are no modifications to lift.
-        if (!(node->requiredFlags() & SnippetRequirementFlags::kLocalCoords)) {
-            continue;
-        }
+        // Lift expressions from nodes whose liftable expressions are on coordinate inputs.
+        if (*availableVaryings > 0 && curNeedsLocalCoords &&
+            node->entry()->fLiftableExpressionType ==
+                    ShaderSnippet::LiftableExpressionType::kLocalCoords) {
+            --*availableVaryings;
 
-        // If the node has a generator, we can lift its modification of its local coords input.
-        if (node->entry()->fLiftableExpressionGenerator) {
 #if !defined(SK_USE_LEGACY_UNIFORM_LIFTING_GRAPHITE)
             // We can potentially lift the nested expressions under here as well.
-            const int previouslyAvailableVaryings = availableVaryings - 1;
-            availableVaryings = lift_coord_expressions(node->children(), availableVaryings - 1);
-            // Don't emit a varying for this node if its output is used in other lifted expressions.
-            // TODO(b/412621191) In some cases we may want to emit varyings for nodes even when
-            // their children's expressions have been lifted. Specifically, a runtime shader node
-            // may use a lifted expression directly and also pass along the expression as input to
-            // children who further modify and use the expression. However, we don't currently
-            // detect such cases in Graphite (we never lift expressions from runtime shaders'
-            // children).
-            const bool childrenLifted = availableVaryings < previouslyAvailableVaryings;
-            if (childrenLifted) {
+            const bool childNeedsOurCoords =
+                    lift_coord_expressions(node->children(), availableVaryings);
+            // If no child needs our lifted coords, we can omit them from the fragment shader
+            // entirely, and only use them in the vertex shader for calculating other coords.
+            if (!childNeedsOurCoords) {
                 node->setOmitExpressionFlag();
             } else {
                 node->setLiftExpressionFlag();
             }
 #else
             node->setLiftExpressionFlag();
-            --availableVaryings;
 #endif
+            // Since we lifted the coordinate expression here, this node no longer needs a local
+            // coords argument.
+            curNeedsLocalCoords = false;
+            node->unsetLocalCoordsFlag();
 
 #if !defined(SK_USE_LEGACY_UNIFORM_LIFTING_GRAPHITE)
         // If the node passes through its local coords to its children, we check if those perform
         // modifications that can be lifted.
-        } else if (node->requiredFlags() & SnippetRequirementFlags::kPassthroughLocalCoords) {
-            availableVaryings = lift_coord_expressions(node->children(), availableVaryings);
+        } else if (*availableVaryings > 0 &&
+                   node->requiredFlags() & SnippetRequirementFlags::kPassthroughLocalCoords) {
+            // Assume that this node doesn't need local coordinates unless its actual shader snippet
+            // entry does, or one of its children does even after accounting for lifting.
+            const bool entryNeedsLocalCoords = node->entry()->needsLocalCoords();
+            const bool childNeedsLocalCoords = lift_coord_expressions(node->children(),
+                                                                      availableVaryings);
+            curNeedsLocalCoords = entryNeedsLocalCoords || childNeedsLocalCoords;
+            if (!curNeedsLocalCoords) {
+                node->unsetLocalCoordsFlag();
+            }
 #endif
         }
+
+        anyNeedLocalCoords |= curNeedsLocalCoords;
     }
 
-    return availableVaryings;
+    return anyNeedLocalCoords;
 }
 
-SkSpan<const ShaderNode*> PaintParamsKey::getRootNodes(const ShaderCodeDictionary* dict,
+// Traverse a list of ShaderNodes, attempting to lift any expressions that resolve to a color.
+// For now, this does not recurse into ShaderNodes' lists of children. In practice we only lift
+// solid color expressions, and we only care to lift such expressions if there is no other fragment
+// shader work (i.e., if the solid color expression is a root node in a shader's ShaderNode tree).
+// If there is other fragment shader work, we'll likely be accessing other fragment shader uniforms,
+// the color value will likely be cached, and lifting may not be worth the extra varying.
+void lift_color_expressions(SkSpan<ShaderNode*> nodes, int* availableVaryings) {
+    for (ShaderNode* node : nodes) {
+        if (*availableVaryings > 0 &&
+            node->entry()->fLiftableExpressionType ==
+                    ShaderSnippet::LiftableExpressionType::kPriorStageOutput) {
+            --*availableVaryings;
+            node->setLiftExpressionFlag();
+        }
+    }
+}
+
+SkSpan<const ShaderNode*> PaintParamsKey::getRootNodes(const Caps* caps,
+                                                       const ShaderCodeDictionary* dict,
                                                        SkArenaAlloc* arena,
                                                        int availableVaryings) const {
     // TODO: Once the PaintParamsKey creation is organized to represent a single tree starting at
@@ -187,11 +212,15 @@ SkSpan<const ShaderNode*> PaintParamsKey::getRootNodes(const ShaderCodeDictionar
         roots.push_back(root);
     }
 
-    // TODO(b/402402925) This doesn't attempt to combine lifted transformations, which we
-    // eventually want to allow.
+    // See what expressions we can lift to the vertex shader.
     const bool hasClipNode = roots.size() > 2;
-    const int liftableNodes = hasClipNode ? 2 : roots.size();
-    lift_coord_expressions(SkSpan(roots.data(), liftableNodes), availableVaryings);
+    SkSpan<ShaderNode*> liftableNodes(roots.data(), hasClipNode ? 2 : roots.size());
+    lift_coord_expressions(liftableNodes, &availableVaryings);
+    // Don't lift constant expressions if we're using regular UBOs, since lifting is likely only
+    // beneficial if we're avoiding a storage buffer access.
+    if (caps->storageBufferSupport()) {
+        lift_color_expressions(liftableNodes, &availableVaryings);
+    }
 
     // Copy the accumulated roots into a span stored in the arena
     const ShaderNode** rootSpan = arena->makeArray<const ShaderNode*>(roots.size());
@@ -203,7 +232,6 @@ static int key_to_string(SkString* str,
                          const ShaderCodeDictionary* dict,
                          SkSpan<const uint32_t> keyData,
                          int currentIndex,
-                         bool includeData,
                          int indent) {
     SkASSERT(currentIndex < SkTo<int>(keyData.size()));
 
@@ -236,23 +264,19 @@ static int key_to_string(SkString* str,
         const int dataIndexCount = keyData[currentIndex++];
         SkASSERT(currentIndex + dataIndexCount < SkTo<int>(keyData.size()));
 
-        // Define a compact representation for the common case of shader snippets using just one
-        // dynamic sampler. Immutable samplers require > 1 index of data to be represented while a
-        // dynamic sampler is represented with just one, so we can simply consult dataIndexCount.
-        if (dataIndexCount == 1) {
+        // We shorten the string for the common case of no extra data.
+        if (dataIndexCount == 0) {
             str->append("(0)");
         } else {
             str->append("(");
             str->appendU32(dataIndexCount);
-            if (includeData) {
-                str->append(": ");
-                // Encode data in base64 to shorten it
-                const size_t srcDataSize = dataIndexCount * sizeof(uint32_t); // size in bytes
-                SkAutoMalloc encodedData{SkBase64::EncodedSize(srcDataSize)};
-                char* dst = static_cast<char*>(encodedData.get());
-                size_t encodedLen = SkBase64::Encode(&keyData[currentIndex], srcDataSize, dst);
-                str->append(dst, encodedLen);
-            }
+            str->append(": ");
+            // Encode data in base64 to shorten it
+            const size_t srcDataSize = dataIndexCount * sizeof(uint32_t); // size in bytes
+            SkAutoMalloc encodedData{SkBase64::EncodedSize(srcDataSize)};
+            char* dst = static_cast<char*>(encodedData.get());
+            size_t encodedLen = SkBase64::Encode(&keyData[currentIndex], srcDataSize, dst);
+            str->append(dst, encodedLen);
             str->append(")");
         }
         // Increment current index past the indices which contain data
@@ -268,7 +292,7 @@ static int key_to_string(SkString* str,
         }
 
         for (int i = 0; i < entry->fNumChildren; ++i) {
-            currentIndex = key_to_string(str, dict, keyData, currentIndex, includeData, indent);
+            currentIndex = key_to_string(str, dict, keyData, currentIndex, indent);
         }
 
         if (!multiline) {
@@ -284,11 +308,11 @@ static int key_to_string(SkString* str,
     return currentIndex;
 }
 
-SkString PaintParamsKey::toString(const ShaderCodeDictionary* dict, bool includeData) const {
+SkString PaintParamsKey::toString(const ShaderCodeDictionary* dict) const {
     SkString str;
     const int keySize = SkTo<int>(fData.size());
     for (int currentIndex = 0; currentIndex < keySize;) {
-        currentIndex = key_to_string(&str, dict, fData, currentIndex, includeData, /*indent=*/-1);
+        currentIndex = key_to_string(&str, dict, fData, currentIndex, /*indent=*/-1);
     }
     return str.isEmpty() ? SkString("(empty)") : str;
 }
@@ -309,8 +333,7 @@ void PaintParamsKey::dump(const ShaderCodeDictionary* dict, UniquePaintParamsID 
     int currentIndex = 0;
     while (currentIndex < keySize) {
         SkString nodeStr;
-        currentIndex = key_to_string(&nodeStr, dict, fData, currentIndex,
-                                     /*includeData=*/true, /*indent=*/1);
+        currentIndex = key_to_string(&nodeStr, dict, fData, currentIndex, /*indent=*/1);
         SkDebugf("%s", nodeStr.c_str());
     }
 }
