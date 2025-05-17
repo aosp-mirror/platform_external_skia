@@ -52,7 +52,7 @@ def _c_plus_plus_modules_impl(ctx):
     new_git_repository(
         name = "expat",
         build_file = "//bazel/external/expat:BUILD.bazel",
-        commit = "624da0f593bb8d7e146b9f42b06d8e6c80d032a3",
+        commit = "8e49998f003d693213b538ef765814c7d21abada",
         remote = "https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git",
         patches = ["//bazel/external/expat:config_files.patch"],
     )
@@ -60,7 +60,7 @@ def _c_plus_plus_modules_impl(ctx):
     new_git_repository(
         name = "freetype",
         build_file = "//bazel/external/freetype:BUILD.bazel",
-        commit = "5d4e649f740c675426fbe4cdaffc53ee2a4cb954",
+        commit = "7172bd11badd468f6a86dba0b1769d624ead885c",
         remote = "https://chromium.googlesource.com/chromium/src/third_party/freetype2.git",
         patches = ["//bazel/external/freetype:config_files.patch"],
     )
@@ -68,7 +68,7 @@ def _c_plus_plus_modules_impl(ctx):
     new_git_repository(
         name = "harfbuzz",
         build_file = "//bazel/external/harfbuzz:BUILD.bazel",
-        commit = "ca3cd48fa3e06fa81d7c8a3f716cca44ed2de26a",
+        commit = "08b52ae2e44931eef163dbad71697f911fadc323",
         remote = "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git",
         patches = ["//bazel/external/harfbuzz:config_files.patch"],
     )

@@ -380,8 +380,10 @@ bool VulkanCommandBuffer::onAddRenderPass(const RenderPassDesc& rpDesc,
                                           const Texture* colorTexture,
                                           const Texture* resolveTexture,
                                           const Texture* depthStencilTexture,
+                                          SkIPoint resolveOffset,
                                           SkIRect viewport,
                                           const DrawPassList& drawPasses) {
+    SkASSERT(resolveOffset.isZero());
     for (const auto& drawPass : drawPasses) {
         // Our current implementation of setting texture image layouts does not allow layout changes
         // once we have already begun a render pass, so prior to any other commands, set the layout
@@ -791,16 +793,16 @@ bool VulkanCommandBuffer::beginRenderPass(const RenderPassDesc& rpDesc,
         frameBufferHeight = depthStencilTexture->dimensions().height();
     }
     sk_sp<VulkanFramebuffer> framebuffer =
-            fResourceProvider->createFramebuffer(fSharedContext,
-                                                 fTargetTexture,
-                                                 vulkanResolveTexture,
-                                                 vulkanDepthStencilTexture,
-                                                 rpDesc,
-                                                 *vulkanRenderPass,
-                                                 frameBufferWidth,
-                                                 frameBufferHeight);
+            fResourceProvider->findOrCreateFramebuffer(fSharedContext,
+                                                       fTargetTexture,
+                                                       vulkanResolveTexture,
+                                                       vulkanDepthStencilTexture,
+                                                       rpDesc,
+                                                       *vulkanRenderPass,
+                                                       frameBufferWidth,
+                                                       frameBufferHeight);
     if (!framebuffer) {
-        SKGPU_LOG_W("Could not create Vulkan Framebuffer");
+        SKGPU_LOG_W("Could not find or create Vulkan Framebuffer");
         return false;
     }
 
