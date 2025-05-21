@@ -10,6 +10,7 @@
 #if defined(SK_GRAPHITE)
 
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
+#include "include/gpu/graphite/precompile/PrecompileRuntimeEffect.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "src/base/SkMathPriv.h"
 #include "src/gpu/graphite/ContextPriv.h"
@@ -427,19 +428,228 @@ PaintOptions ImageHWOnlySRGBSrcover() {
     return paintOptions;
 }
 
+
+namespace {
+
+// Note: passing in a name to 'makeEffect' is a difference from Android's factory functions.
+sk_sp<SkRuntimeEffect> makeEffect(const SkString& sksl, const char* name) {
+    SkRuntimeEffect::Options options;
+    options.fName = name;
+
+    auto [effect, error] = SkRuntimeEffect::MakeForShader(sksl, options);
+    if (!effect) {
+        SkDebugf("%s\n", error.c_str());
+    }
+    return effect;
+}
+
+class MouriMap {
+public:
+    MouriMap() {
+        // The following code blocks are just stubs for the Android code. For Skia's testing
+        // purposes they only need to have the same name and number of children as the real code.
+        // When the following PaintOptions are used in Android the real SkSL must be supplied.
+        static const SkString kCrosstalkAndChunk16x16Code(R"(
+            uniform shader img;
+            vec4 main(vec2 xy) {
+                float3 linear = toLinearSrgb(float3(0.0, 0.0, 0.0));
+                return float4(fromLinearSrgb(linear), 1.0);
+            }
+        )");
+
+        fCrosstalkAndChunk16x16Effect = makeEffect(kCrosstalkAndChunk16x16Code,
+                                                   "RE_MouriMap_CrossTalkAndChunk16x16Effect");
+
+        static const SkString kChunk8x8Code(R"(
+            uniform shader img;
+            vec4 main(vec2 xy) {
+                return float4(0.0, 0.0, 0.0, 1.0);
+            }
+        )");
+
+        fChunk8x8Effect = makeEffect(kChunk8x8Code, "RE_MouriMap_Chunk8x8Effect");
+
+
+        static const SkString kBlurCode(R"(
+            uniform shader img;
+            vec4 main(vec2 xy) {
+                return float4(1.0, 0.0, 0.0, 1.0);
+            }
+        )");
+
+        fBlurEffect = makeEffect(kBlurCode, "RE_MouriMap_BlurEffect");
+
+        static const SkString kTonemapCode(R"(
+            uniform shader img1;
+            uniform shader img2;
+            vec4 main(vec2 xy) {
+                float3 linear = toLinearSrgb(float3(0.0, 0.0, 0.0));
+                return float4(fromLinearSrgb(linear), 1.0);
+            }
+        )");
+
+        fToneMapEffect = makeEffect(kTonemapCode, "RE_MouriMap_TonemapEffect");
+    }
+
+    sk_sp<SkRuntimeEffect> crosstalkAndChunk16x16Effect() const {
+        return fCrosstalkAndChunk16x16Effect;
+    }
+    sk_sp<SkRuntimeEffect> chunk8x8Effect() const { return fChunk8x8Effect; }
+    sk_sp<SkRuntimeEffect> blurEffect() const { return fBlurEffect; }
+    sk_sp<SkRuntimeEffect> toneMapEffect() const { return fToneMapEffect; }
+
+private:
+    sk_sp<SkRuntimeEffect> fCrosstalkAndChunk16x16Effect;
+    sk_sp<SkRuntimeEffect> fChunk8x8Effect;
+    sk_sp<SkRuntimeEffect> fBlurEffect;
+    sk_sp<SkRuntimeEffect> fToneMapEffect;
+};
+
+const MouriMap& MouriMap() {
+    static class MouriMap MouriMap;
+
+    return MouriMap;
+}
+
+} // anonymous namespace
+
+skgpu::graphite::PaintOptions MouriMapCrosstalkAndChunk16x16() {
+    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> crosstalk = PrecompileRuntimeEffects::MakePrecompileShader(
+            MouriMap().crosstalkAndChunk16x16Effect(),
+            { { std::move(img) } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(crosstalk) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrc });
+    return paintOptions;
+}
+
+skgpu::graphite::PaintOptions MouriMapChunk8x8Effect() {
+    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> chunk8x8 = PrecompileRuntimeEffects::MakePrecompileShader(
+            MouriMap().chunk8x8Effect(),
+            { { std::move(img) } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(chunk8x8) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrc });
+    return paintOptions;
+}
+
+skgpu::graphite::PaintOptions MouriMapBlur() {
+    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> blur = PrecompileRuntimeEffects::MakePrecompileShader(
+            MouriMap().blurEffect(),
+            { { std::move(img) } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(blur) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrc });
+    return paintOptions;
+}
+
+skgpu::graphite::PaintOptions MouriMapToneMap() {
+    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> toneMap = PrecompileRuntimeEffects::MakePrecompileShader(
+            MouriMap().toneMapEffect(),
+            { { img }, { img } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(toneMap) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrc });
+    return paintOptions;
+}
+
+skgpu::graphite::PaintOptions KawaseBlurLowSrcSrcOver() {
+    static const SkString kLowSampleBlurString(R"(
+        uniform shader img;
+
+        half4 main(float2 xy) {
+            half3 c = img.eval(xy).rgb;
+            return half4(c, 1.0);
+        }
+    )");
+
+    sk_sp<SkRuntimeEffect> lowSampleBlurEffect = makeEffect(
+            kLowSampleBlurString,
+            "RE_KawaseBlurDualFilter_LowSampleBlurEffect");
+
+    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> kawase = PrecompileRuntimeEffects::MakePrecompileShader(
+            std::move(lowSampleBlurEffect),
+            { { img } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(kawase) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrc, SkBlendMode::kSrcOver });
+    return paintOptions;
+}
+
+skgpu::graphite::PaintOptions KawaseBlurHighSrc() {
+    SkString kHighSampleBlurString(R"(
+        uniform shader img;
+
+        half4 main(float2 xy) {
+            half3 c = img.eval(xy).rgb;
+            return half4(c * 0.5, 1.0);
+        }
+    )");
+
+    sk_sp<SkRuntimeEffect> highSampleBlurEffect = makeEffect(
+            kHighSampleBlurString,
+            "RE_KawaseBlurDualFilter_HighSampleBlurEffect");
+
+    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> kawase = PrecompileRuntimeEffects::MakePrecompileShader(
+            std::move(highSampleBlurEffect),
+            { { img } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(kawase) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrc });
+    return paintOptions;
+}
+
 #if defined(SK_VULKAN)
 namespace {
-sk_sp<PrecompileShader> vulkan_ycbcr_709_image_shader(uint64_t format,
-                                                      VkSamplerYcbcrRange range) {
+sk_sp<PrecompileShader> vulkan_ycbcr_image_shader(uint64_t format,
+                                                  VkSamplerYcbcrModelConversion model,
+                                                  VkSamplerYcbcrRange range,
+                                                  VkChromaLocation location) {
     SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
 
     skgpu::VulkanYcbcrConversionInfo info;
 
     info.fExternalFormat = format;
-    info.fYcbcrModel     = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709;
+    info.fYcbcrModel     = model;
     info.fYcbcrRange     = range;
-    info.fXChromaOffset  = VK_CHROMA_LOCATION_MIDPOINT;
-    info.fYChromaOffset  = VK_CHROMA_LOCATION_MIDPOINT;
+    info.fXChromaOffset  = location;
+    info.fYChromaOffset  = location;
     info.fChromaFilter   = VK_FILTER_LINEAR;
 
     return PrecompileShaders::VulkanYCbCrImage(info,
@@ -454,8 +664,10 @@ PaintOptions ImagePremulYCbCr238Srcover() {
     PaintOptions paintOptions;
 
     // HardwareImage(3: kHoAAO4AAAAAAAAA)
-    paintOptions.setShaders({ vulkan_ycbcr_709_image_shader(238,
-                                                            VK_SAMPLER_YCBCR_RANGE_ITU_NARROW) });
+    paintOptions.setShaders({ vulkan_ycbcr_image_shader(238,
+                                                        VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709,
+                                                        VK_SAMPLER_YCBCR_RANGE_ITU_NARROW,
+                                                        VK_CHROMA_LOCATION_MIDPOINT) });
     paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
     return paintOptions;
 }
@@ -464,8 +676,10 @@ PaintOptions ImagePremulYCbCr240Srcover() {
     PaintOptions paintOptions;
 
     // HardwareImage(3: kHIAAPAAAAAAAAAA)
-    paintOptions.setShaders({ vulkan_ycbcr_709_image_shader(240,
-                                                            VK_SAMPLER_YCBCR_RANGE_ITU_FULL) });
+    paintOptions.setShaders({ vulkan_ycbcr_image_shader(240,
+                                                        VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709,
+                                                        VK_SAMPLER_YCBCR_RANGE_ITU_FULL,
+                                                        VK_CHROMA_LOCATION_MIDPOINT) });
     paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
     return paintOptions;
 }
@@ -474,10 +688,31 @@ PaintOptions TransparentPaintImagePremulYCbCr240Srcover() {
     PaintOptions paintOptions;
 
     // HardwareImage(3: kHIAAPAAAAAAAAAA)
-    paintOptions.setShaders({ vulkan_ycbcr_709_image_shader(240,
-                                                            VK_SAMPLER_YCBCR_RANGE_ITU_FULL) });
+    paintOptions.setShaders({ vulkan_ycbcr_image_shader(240,
+                                                        VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709,
+                                                        VK_SAMPLER_YCBCR_RANGE_ITU_FULL,
+                                                        VK_CHROMA_LOCATION_MIDPOINT) });
     paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
     paintOptions.setPaintColorIsOpaque(false);
+    return paintOptions;
+}
+
+skgpu::graphite::PaintOptions MouriMapCrosstalkAndChunk16x16YCbCr247() {
+    PaintOptions paintOptions;
+
+    // HardwareImage(3: kEwAAPcAAAAAAAAA)
+    sk_sp<PrecompileShader> img = vulkan_ycbcr_image_shader(
+            247,
+            VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_2020,
+            VK_SAMPLER_YCBCR_RANGE_ITU_NARROW,
+            VK_CHROMA_LOCATION_COSITED_EVEN);
+
+    sk_sp<PrecompileShader> crosstalk = PrecompileRuntimeEffects::MakePrecompileShader(
+            MouriMap().crosstalkAndChunk16x16Effect(),
+            { { std::move(img) } });
+
+    paintOptions.setShaders({ std::move(crosstalk) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrc });
     return paintOptions;
 }
 
@@ -635,8 +870,12 @@ void deduce_settings_from_label(const char* testStr, PrecompileSettings* result)
         strstr(testStr, "LinearGradient8 ColorSpaceTransformSRGB") ||
         strstr(testStr, "PrimitiveColor ColorSpaceTransformSRGB")) {
         result->fRenderPassProps.fDstCS = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB,
-                                                               SkNamedGamut::kAdobeRGB);
+                                                                SkNamedGamut::kAdobeRGB);
     } else if (strstr(testStr, "ColorSpaceTransformSRGB")) {
+        result->fRenderPassProps.fDstCS = SkColorSpace::MakeSRGB();
+    } else if (strstr(testStr, "] ColorSpaceTransform ColorSpaceTransform ]")) {
+        // The above string only appears for RuntimeEffects that use the
+        // toLinearSrgb/fromLinearSrgb intrinsics w/ a destination SRGB color space.
         result->fRenderPassProps.fDstCS = SkColorSpace::MakeSRGB();
     }
 }
@@ -666,7 +905,7 @@ bool PrecompileSettings::isSubsetOf(const PrecompileSettings& superSet) const {
 
     // 'superSet' may have a wider range of DrawTypeFlags
     return (fDrawTypeFlags & superSet.fDrawTypeFlags) &&
-           fRenderPassProps == superSet.fRenderPassProps;
+            fRenderPassProps == superSet.fRenderPassProps;
 }
 
 PipelineLabelInfoCollector::PipelineLabelInfoCollector(SkSpan<const PipelineLabel> cases,
