@@ -452,7 +452,7 @@ public:
         static const SkString kCrosstalkAndChunk16x16Code(R"(
             uniform shader img;
             vec4 main(vec2 xy) {
-                float3 linear = toLinearSrgb(float3(0.0, 0.0, 0.0));
+                float3 linear = toLinearSrgb(img.eval(0.25 * xy).rgb);
                 return float4(fromLinearSrgb(linear), 1.0);
             }
         )");
@@ -463,7 +463,7 @@ public:
         static const SkString kChunk8x8Code(R"(
             uniform shader img;
             vec4 main(vec2 xy) {
-                return float4(0.0, 0.0, 0.0, 1.0);
+                return float4(img.eval(0.33 * xy).rgb, 1.0);
             }
         )");
 
@@ -473,7 +473,7 @@ public:
         static const SkString kBlurCode(R"(
             uniform shader img;
             vec4 main(vec2 xy) {
-                return float4(1.0, 0.0, 0.0, 1.0);
+                return float4(img.eval(0.4 * xy).rgb, 0.0);
             }
         )");
 
@@ -483,8 +483,9 @@ public:
             uniform shader img1;
             uniform shader img2;
             vec4 main(vec2 xy) {
-                float3 linear = toLinearSrgb(float3(0.0, 0.0, 0.0));
-                return float4(fromLinearSrgb(linear), 1.0);
+                float alpha = img1.eval(xy).r;
+                float3 linear = toLinearSrgb(img2.eval(0.5 * xy).rgb);
+                return float4(fromLinearSrgb(linear), alpha);
             }
         )");
 
@@ -563,13 +564,16 @@ skgpu::graphite::PaintOptions MouriMapBlur() {
 
 skgpu::graphite::PaintOptions MouriMapToneMap() {
     SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                           { &ci, 1 },
-                                                           {});
+    sk_sp<PrecompileShader> img1 = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                            { &ci, 1 },
+                                                            {});
+    sk_sp<PrecompileShader> img2 = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                            { &ci, 1 },
+                                                            {});
 
     sk_sp<PrecompileShader> toneMap = PrecompileRuntimeEffects::MakePrecompileShader(
             MouriMap().toneMapEffect(),
-            { { img }, { img } });
+            { { std::move(img1) }, { std::move(img2) } });
 
     PaintOptions paintOptions;
     paintOptions.setShaders({ std::move(toneMap) });
@@ -578,17 +582,17 @@ skgpu::graphite::PaintOptions MouriMapToneMap() {
 }
 
 skgpu::graphite::PaintOptions KawaseBlurLowSrcSrcOver() {
-    static const SkString kLowSampleBlurString(R"(
+    static const SkString kLowSampleBlurCode(R"(
         uniform shader img;
 
         half4 main(float2 xy) {
-            half3 c = img.eval(xy).rgb;
+            half3 c = img.eval(0.55 * xy).rgb;
             return half4(c, 1.0);
         }
     )");
 
     sk_sp<SkRuntimeEffect> lowSampleBlurEffect = makeEffect(
-            kLowSampleBlurString,
+            kLowSampleBlurCode,
             "RE_KawaseBlurDualFilter_LowSampleBlurEffect");
 
     SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
@@ -607,17 +611,17 @@ skgpu::graphite::PaintOptions KawaseBlurLowSrcSrcOver() {
 }
 
 skgpu::graphite::PaintOptions KawaseBlurHighSrc() {
-    SkString kHighSampleBlurString(R"(
+    SkString kHighSampleBlurCode(R"(
         uniform shader img;
 
         half4 main(float2 xy) {
-            half3 c = img.eval(xy).rgb;
+            half3 c = img.eval(0.6 * xy).rgb;
             return half4(c * 0.5, 1.0);
         }
     )");
 
     sk_sp<SkRuntimeEffect> highSampleBlurEffect = makeEffect(
-            kHighSampleBlurString,
+            kHighSampleBlurCode,
             "RE_KawaseBlurDualFilter_HighSampleBlurEffect");
 
     SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
@@ -631,6 +635,33 @@ skgpu::graphite::PaintOptions KawaseBlurHighSrc() {
 
     PaintOptions paintOptions;
     paintOptions.setShaders({ std::move(kawase) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrc });
+    return paintOptions;
+}
+
+skgpu::graphite::PaintOptions BlurFilterMix() {
+    static const SkString kMixCode(R"(
+        uniform shader img1;
+        uniform shader img2;
+
+        half4 main(float2 xy) {
+            return half4(mix(img1.eval(xy), img2.eval(xy), 0.5)).rgb1;
+        }
+    )");
+
+    sk_sp<SkRuntimeEffect> mixEffect = makeEffect(kMixCode, "RE_BlurFilterMixEffect");
+
+    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> mix = PrecompileRuntimeEffects::MakePrecompileShader(
+            std::move(mixEffect),
+            { { img }, { img } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(mix) });
     paintOptions.setBlendModes({ SkBlendMode::kSrc });
     return paintOptions;
 }
@@ -934,7 +965,9 @@ int PipelineLabelInfoCollector::processLabel(const std::string& precompiledLabel
 
     // We expect each PrecompileSettings case to handle disjoint sets of labels. If this
     // assert fires some pair of PrecompileSettings are handling the same case.
-    SkASSERT(result->second.fPrecompileCase == PipelineLabelInfo::kUninit);
+    SkASSERTF(result->second.fPrecompileCase == PipelineLabelInfo::kUninit,
+              "cases %d and %d cover the same label",
+              result->second.fPrecompileCase, precompileCase);
     result->second.fPrecompileCase = precompileCase;
     return result->second.fCasesIndex;
 }
