@@ -1160,6 +1160,17 @@ gensrcs {
 }
 
 cc_library_static {
+    name: "libskia_skcms",
+    srcs: [
+        "modules/skcms/skcms.cc",
+        "modules/skcms/src/skcms_TransformBaseline.cc",
+    ],
+    export_include_dirs: [
+        "modules/skcms",
+    ],
+}
+
+cc_library_static {
     name: "libskia",
     host_supported: true,
     cppflags:[
