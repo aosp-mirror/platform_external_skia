@@ -35,6 +35,11 @@
         "BazelBuild-dm-release-linux_x64"
       ]
     },
+    "BazelBuild-fontations-release-linux_x64": {
+      "tasks": [
+        "BazelBuild-fontations-release-linux_x64"
+      ]
+    },
     "BazelBuild-full_library-enforce_iwyu-linux_x64": {
       "tasks": [
         "BazelBuild-full_library-enforce_iwyu-linux_x64"
@@ -4308,6 +4313,86 @@
         "--task_id=<(TASK_ID)",
         "--task_name=BazelBuild-dm-release-linux_x64",
         "--bazel_label=//dm",
+        "--bazel_config=release",
+        "--bazel_cache_dir=/home/chrome-bot/bazel_cache",
+        "--workdir=./skia",
+        "--bazel_arg=--config=for_linux_x64_with_rbe",
+        "--bazel_arg=--jobs=100",
+        "--bazel_arg=--remote_download_minimal"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "machine_type:n1-standard-16",
+        "os:Ubuntu-24.04",
+        "pool:Skia"
+      ],
+      "environment": {
+        "USE_BAZEL_FALLBACK_VERSION": "error"
+      },
+      "env_prefixes": {
+        "PATH": [
+          "cipd_bin_packages",
+          "cipd_bin_packages/bin",
+          "bazelisk_linux_amd64"
+        ]
+      },
+      "idempotent": true,
+      "max_attempts": 1,
+      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+    },
+    "BazelBuild-fontations-release-linux_x64": {
+      "caches": [
+        {
+          "name": "git",
+          "path": "cache/git"
+        },
+        {
+          "name": "git_cache",
+          "path": "cache/git_cache"
+        }
+      ],
+      "casSpec": "bazel",
+      "cipd_packages": [
+        {
+          "name": "infra/3pp/tools/git/linux-amd64",
+          "path": "cipd_bin_packages",
+          "version": "version:3@2.49.0.chromium.11"
+        },
+        {
+          "name": "infra/tools/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:74734688ffc9d2807cda0d1dc7752197480de29e"
+        },
+        {
+          "name": "infra/tools/luci-auth/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:74734688ffc9d2807cda0d1dc7752197480de29e"
+        },
+        {
+          "name": "infra/tools/luci/git-credential-luci/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:74734688ffc9d2807cda0d1dc7752197480de29e"
+        },
+        {
+          "name": "skia/bots/bazelisk_linux_amd64",
+          "path": "bazelisk_linux_amd64",
+          "version": "version:0"
+        },
+        {
+          "name": "skia/tools/bazel_build/${platform}",
+          "path": "task_drivers",
+          "version": "git_revision:b5d31abb7bc772a69f800de45783768768437675"
+        }
+      ],
+      "command": [
+        "luci-auth",
+        "context",
+        "task_drivers/bazel_build",
+        "--project_id=skia-swarming-bots",
+        "--task_id=<(TASK_ID)",
+        "--task_name=BazelBuild-fontations-release-linux_x64",
+        "--bazel_label=//src/ports:fontmgr_fontations_empty",
         "--bazel_config=release",
         "--bazel_cache_dir=/home/chrome-bot/bazel_cache",
         "--workdir=./skia",
