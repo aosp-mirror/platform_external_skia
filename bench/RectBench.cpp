@@ -242,7 +242,7 @@ protected:
             for (size_t i = 0; i < sizes; i++) {
                 paint.setStrokeWidth(gSizes[i]);
                 this->setupPaint(&paint);
-                canvas->drawPoints(fMode, N * 2, reinterpret_cast<SkPoint*>(fRects), paint);
+                canvas->drawPoints(fMode, {reinterpret_cast<SkPoint*>(fRects), N*2}, paint);
                 paint.setColor(fColors[i % N]);
             }
         }
@@ -272,6 +272,16 @@ public:
     }
 
 protected:
+    bool isSuitableFor(Backend backend) override {
+        if (backend == Backend::kNonRendering) {
+            return false;
+        }
+
+        // seems to be a bug on graphic (mali) + src_mode
+        auto showsBug = fBM == SkBlendMode::kSrc && backend == Backend::kGraphite;
+        return !showsBug;
+    }
+
     const char* onGetName() override { return fName.c_str(); }
 
     void onDelayedSetup() override {
@@ -291,7 +301,7 @@ protected:
 
         for (int loop = 0; loop < loops; loop++) {
             for (int i = 0; i < 1000; ++i)
-            canvas->drawPoints(SkCanvas::kPoints_PointMode, N, fPts.data(), paint);
+            canvas->drawPoints(SkCanvas::kPoints_PointMode, fPts, paint);
         }
     }
 };
@@ -362,7 +372,7 @@ protected:
                 this->setupPaint(&paint);
                 paint.setColor(color);
                 paint.setAlpha(alpha);
-                canvas->drawPoints(fMode, N * 2, reinterpret_cast<SkPoint*>(fRects), paint);
+                canvas->drawPoints(fMode, {reinterpret_cast<SkPoint*>(fRects), N*2}, paint);
            }
         }
     }
