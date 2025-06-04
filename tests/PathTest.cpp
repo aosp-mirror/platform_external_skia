@@ -947,17 +947,17 @@ static void test_rect_isfinite(skiatest::Reporter* reporter) {
         { 0, SK_Scalar1 },
     };
 
-    bool isFine = r.setBoundsCheck(pts, 3);
+    bool isFine = r.setBoundsCheck(pts);
     REPORTER_ASSERT(reporter, isFine);
     REPORTER_ASSERT(reporter, !r.isEmpty());
 
     pts[1].set(inf, 0);
-    isFine = r.setBoundsCheck(pts, 3);
+    isFine = r.setBoundsCheck(pts);
     REPORTER_ASSERT(reporter, !isFine);
     REPORTER_ASSERT(reporter, r.isEmpty());
 
     pts[1].set(nan, 0);
-    isFine = r.setBoundsCheck(pts, 3);
+    isFine = r.setBoundsCheck(pts);
     REPORTER_ASSERT(reporter, !isFine);
     REPORTER_ASSERT(reporter, r.isEmpty());
 }
@@ -5749,10 +5749,10 @@ DEF_TEST(path_last_move_to_index, r) {
     SkGlyphID glyphs[len];
 
     SkFont font = ToolUtils::DefaultFont();
-    font.textToGlyphs(text, len, SkTextEncoding::kUTF8, glyphs, len);
+    font.textToGlyphs(text, len, SkTextEncoding::kUTF8, glyphs);
 
     SkPath copyPath;
-    font.getPaths(glyphs, len, [](const SkPath* src, const SkMatrix& mx, void* ctx) {
+    font.getPaths(glyphs, [](const SkPath* src, const SkMatrix& mx, void* ctx) {
         if (src) {
             ((SkPath*)ctx)->addPath(*src, mx);
         }
