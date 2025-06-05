@@ -24,6 +24,7 @@
   // Staging flags
 
   #define SK_SUPPORT_LEGACY_EMBOSSMASKFILTER
+  #define SK_SUPPORT_UNSPANNED_APIS
 
   // Logging settings
   #define SKGPU_GRAPHITE_LOWEST_ACTIVE_LOG_PRIORITY skgpu::graphite::LogPriority::kWarning
