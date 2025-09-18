@@ -4,9 +4,11 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
+#include "bench/SkSLBench.h"
+
 #include "bench/Benchmark.h"
 #include "bench/ResultsWriter.h"
-#include "bench/SkSLBench.h"
 #include "include/core/SkCanvas.h"
 #include "src/base/SkArenaAlloc.h"
 #include "src/core/SkRasterPipeline.h"
@@ -18,6 +20,7 @@
 #include "src/sksl/SkSLParser.h"
 #include "src/sksl/codegen/SkSLGLSLCodeGenerator.h"
 #include "src/sksl/codegen/SkSLMetalCodeGenerator.h"
+#include "src/sksl/codegen/SkSLNativeShader.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "src/sksl/codegen/SkSLRasterPipelineCodeGenerator.h"
 #include "src/sksl/codegen/SkSLSPIRVCodeGenerator.h"
@@ -36,8 +39,6 @@
 #include "src/sksl/generated/sksl_vert.minified.sksl"
 #include "src/sksl/generated/sksl_graphite_frag.minified.sksl"
 #include "src/sksl/generated/sksl_graphite_vert.minified.sksl"
-#include "src/sksl/generated/sksl_graphite_frag_es2.minified.sksl"
-#include "src/sksl/generated/sksl_graphite_vert_es2.minified.sksl"
 
 class SkSLCompilerStartupBench : public Benchmark {
 protected:
@@ -153,7 +154,7 @@ protected:
             if (fCompiler.errorCount()) {
                 SK_ABORT("shader compilation failed: %s\n", fCompiler.errorText().c_str());
             }
-            std::string result;
+            SkSL::NativeShader result;
             switch (fOutput) {
                 case Output::kNone:
                     break;
@@ -562,7 +563,7 @@ layout(binding=0) sampler2D sampler_4;
 // [1]   1: ColorFilterShader
 half4 ColorFilterShader_1(half4 inColor, half4 destColor, float2 coords)
 {
-	return sk_color_space_transform(sk_conical_grad_8_shader(coords, fsUniformData[shadingSsboIndexVar].colors_2, fsUniformData[shadingSsboIndexVar].offsets_2, fsUniformData[shadingSsboIndexVar].point0_2, fsUniformData[shadingSsboIndexVar].point1_2, fsUniformData[shadingSsboIndexVar].radius0_2, fsUniformData[shadingSsboIndexVar].radius1_2, fsUniformData[shadingSsboIndexVar].tilemode_2, fsUniformData[shadingSsboIndexVar].colorSpace_2, fsUniformData[shadingSsboIndexVar].doUnPremul_2), fsUniformData[shadingSsboIndexVar].flags_3, fsUniformData[shadingSsboIndexVar].srcKind_3, fsUniformData[shadingSsboIndexVar].gamutTransform_3, fsUniformData[shadingSsboIndexVar].dstKind_3, fsUniformData[shadingSsboIndexVar].csXformCoeffs_3);
+	return sk_color_space_transform(sk_conical_grad_8_shader(coords, fsUniformData[shadingSsboIndexVar].colors_2, fsUniformData[shadingSsboIndexVar].offsets_2, fsUniformData[shadingSsboIndexVar].point0_2, fsUniformData[shadingSsboIndexVar].point1_2, fsUniformData[shadingSsboIndexVar].radius0_2, fsUniformData[shadingSsboIndexVar].radius1_2, fsUniformData[shadingSsboIndexVar].tilemode_2, fsUniformData[shadingSsboIndexVar].colorSpace_2, fsUniformData[shadingSsboIndexVar].doUnPremul_2), fsUniformData[shadingSsboIndexVar].flags_3, fsUniformData[shadingSsboIndexVar].srcKind_3, fsUniformData[shadingSsboIndexVar].gamutTransform_3, fsUniformData[shadingSsboIndexVar].dstKind_3, fsUniformData[shadingSsboIndexVar].csXformCoeffs_3, half4(0), half4(0));
 }
 void main()
 {
@@ -718,10 +719,6 @@ void RunSkSLModuleBenchmarks(NanoJSONResultsWriter* log) {
     int compilerGraphiteBinarySize = std::size(SKSL_MINIFIED_sksl_graphite_frag) +
                                      std::size(SKSL_MINIFIED_sksl_graphite_vert);
     bench(log, "sksl_binary_size_graphite", compilerGraphiteBinarySize);
-
-    int compilerGraphiteES2BinarySize = std::size(SKSL_MINIFIED_sksl_graphite_frag_es2) +
-                                        std::size(SKSL_MINIFIED_sksl_graphite_vert_es2);
-    bench(log, "sksl_binary_size_graphite_es2", compilerGraphiteES2BinarySize);
 
     int compilerComputeBinarySize = std::size(SKSL_MINIFIED_sksl_compute);
     bench(log, "sksl_binary_size_compute", compilerComputeBinarySize);

@@ -30,26 +30,25 @@ DawnTestContext::~DawnTestContext() {
     tick();
 }
 
-std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType backend,
-                                                           bool useTintIR) {
+std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType backend) {
     static std::unique_ptr<dawn::native::Instance> sInstance;
     static SkOnce sOnce;
 
     static constexpr const char* kToggles[] = {
-#if !defined(SK_DEBUG)
-        "skip_validation",
+#if defined(SK_DEBUG)
+            // Setting labels on backend objects has performance overhead.
+            "use_user_defined_labels_in_backend",
+#else
+            "skip_validation",
 #endif
-        "disable_lazy_clear_for_mapped_at_creation_buffer", // matches Chromes toggles
-        "allow_unsafe_apis",  // Needed for dual-source blending.
-        "use_user_defined_labels_in_backend",
-        // Robustness impacts performance and is always disabled when running Graphite in Chrome,
-        // so this keeps Skia's tests operating closer to real-use behavior.
-        "disable_robustness",
-        // Must be last to correctly respond to `useTintIR` parameter.
-        "use_tint_ir",
+            "disable_lazy_clear_for_mapped_at_creation_buffer",  // matches Chromes toggles
+            "allow_unsafe_apis",                                 // Needed for dual-source blending.
+            // Robustness impacts performance and is always disabled when running Graphite in
+            // Chrome, so this keeps Skia's tests operating closer to real-use behavior.
+            "disable_robustness",
     };
     wgpu::DawnTogglesDescriptor togglesDesc;
-    togglesDesc.enabledToggleCount  = std::size(kToggles) - (useTintIR ? 0 : 1);
+    togglesDesc.enabledToggleCount  = std::size(kToggles);
     togglesDesc.enabledToggles      = kToggles;
 
     // Creation of Instance is cheap but calling EnumerateAdapters can be expensive the first time,
@@ -60,7 +59,9 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType bac
         dawnProcSetProcs(&backendProcs);
         wgpu::InstanceDescriptor desc{};
         // need for WaitAny with timeout > 0
-        desc.capabilities.timedWaitAnyEnable = true;
+        static const auto kTimedWaitAny = wgpu::InstanceFeatureName::TimedWaitAny;
+        desc.requiredFeatureCount = 1;
+        desc.requiredFeatures = &kTimedWaitAny;
         sInstance = std::make_unique<dawn::native::Instance>(&desc);
     });
 
@@ -103,9 +104,12 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType bac
     }
 
 #if LOG_ADAPTER
-    wgpu::AdapterInfo info;
-    sAdapter.GetInfo(&info);
-    SkDebugf("GPU: %s\nDriver: %s\n", info.device, info.description);
+{
+    wgpu::AdapterInfo debugInfo;
+    wgpu::Adapter debugAdapter = matchedAdaptor.Get();
+    debugAdapter.GetInfo(&debugInfo);
+    SkDebugf("GPU: %s\nDriver: %s\n", debugInfo.device.data, debugInfo.description.data);
+}
 #endif
 
     std::vector<wgpu::FeatureName> features;
@@ -149,11 +153,19 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType bac
     if (adapter.HasFeature(wgpu::FeatureName::DawnTexelCopyBufferRowAlignment)) {
         features.push_back(wgpu::FeatureName::DawnTexelCopyBufferRowAlignment);
     }
+    if (adapter.HasFeature(wgpu::FeatureName::ImplicitDeviceSynchronization)) {
+        features.push_back(wgpu::FeatureName::ImplicitDeviceSynchronization);
+    }
 
     wgpu::DeviceDescriptor desc;
     desc.requiredFeatureCount  = features.size();
     desc.requiredFeatures      = features.data();
     desc.nextInChain           = &togglesDesc;
+
+    wgpu::Limits limits = {};
+    adapter.GetLimits(&limits);
+    desc.requiredLimits = &limits;
+
     desc.SetDeviceLostCallback(
             wgpu::CallbackMode::AllowSpontaneous,
             [](const wgpu::Device&, wgpu::DeviceLostReason reason, wgpu::StringView message) {
@@ -166,7 +178,7 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make(wgpu::BackendType bac
         SkDebugf("Device error: %.*s\n", static_cast<int>(message.length), message.data);
     });
 
-    wgpu::Device device = wgpu::Device::Acquire(matchedAdaptor.CreateDevice(&desc));
+    wgpu::Device device = adapter.CreateDevice(&desc);
     SkASSERT(device);
 
     skgpu::graphite::DawnBackendContext backendContext;

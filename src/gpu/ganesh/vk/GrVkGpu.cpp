@@ -205,6 +205,7 @@ GrVkGpu::GrVkGpu(GrDirectContext* direct,
         , fResourceProvider(this)
         , fStagingBufferManager(this)
         , fDisconnected(false)
+        , fHasNewVkPipelineCacheData(false)
         , fProtectedContext(backendContext.fProtectedContext)
         , fDeviceLostContext(backendContext.fDeviceLostContext)
         , fDeviceLostProc(backendContext.fDeviceLostProc) {
@@ -875,7 +876,7 @@ static size_t fill_in_compressed_regions(GrStagingBufferManager* stagingBufferMa
     SkASSERT(compression != SkTextureCompressionType::kNone);
     int numMipLevels = 1;
     if (mipmapped == skgpu::Mipmapped::kYes) {
-        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions) + 1;
     }
 
     regions->reserve_exact(regions->size() + numMipLevels);
@@ -1182,7 +1183,7 @@ sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(SkISize dimensions,
 
     int numMipLevels = 1;
     if (mipmapped == skgpu::Mipmapped::kYes) {
-        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height())+1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions)+1;
     }
 
     GrMipmapStatus mipmapStatus = (mipmapped == skgpu::Mipmapped::kYes)
@@ -1663,7 +1664,7 @@ bool GrVkGpu::createVkImageForBackendSurface(VkFormat vkFormat,
 
     int numMipLevels = 1;
     if (mipmapped == skgpu::Mipmapped::kYes) {
-        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions) + 1;
     }
 
     VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
@@ -2734,8 +2735,23 @@ void GrVkGpu::addDrawable(std::unique_ptr<SkDrawable::GpuDrawHandler> drawable) 
     fDrawables.emplace_back(std::move(drawable));
 }
 
-void GrVkGpu::storeVkPipelineCacheData() {
-    if (this->getContext()->priv().getPersistentCache()) {
-        this->resourceProvider().storePipelineCacheData();
+void GrVkGpu::pipelineCompileWasRequired() {
+    fHasNewVkPipelineCacheData = true;
+}
+
+bool GrVkGpu::canDetectNewVkPipelineCacheData() const {
+    return this->vkCaps().supportsPipelineCreationCacheControl();
+}
+
+bool GrVkGpu::hasNewVkPipelineCacheData() const {
+    return fHasNewVkPipelineCacheData;
+}
+
+void GrVkGpu::storeVkPipelineCacheData(size_t maxSize) {
+    if (!this->getContext()->priv().getPersistentCache()) {
+        return;
     }
+
+    this->resourceProvider().storePipelineCacheData(maxSize);
+    fHasNewVkPipelineCacheData = false;
 }

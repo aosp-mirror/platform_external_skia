@@ -52,6 +52,7 @@ namespace skgpu {
 enum class Mipmapped : bool;
 enum class Protected : bool;
 }
+namespace skgpu::ganesh { class SurfaceDrawContext; }
 
 class SkImage_Ganesh final : public SkImage_GaneshBase {
 public:
@@ -75,10 +76,9 @@ public:
     bool onHasMipmaps() const override;
     bool onIsProtected() const override;
 
-    using SkImage_GaneshBase::onMakeColorTypeAndColorSpace;
-    sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType,
-                                                sk_sp<SkColorSpace>,
-                                                GrDirectContext*) const final;
+    sk_sp<SkImage> onMakeColorTypeAndColorSpace(GrDirectContext*,
+                                                SkColorType,
+                                                sk_sp<SkColorSpace>) const final;
 
     sk_sp<SkImage> onReinterpretColorSpace(sk_sp<SkColorSpace>) const final;
 
@@ -108,7 +108,7 @@ public:
                                                        skgpu::Mipmapped,
                                                        GrImageTexGenPolicy) const override;
 
-    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(GrRecordingContext*,
+    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(skgpu::ganesh::SurfaceDrawContext*,
                                                              SkSamplingOptions,
                                                              const SkTileMode[2],
                                                              const SkMatrix&,

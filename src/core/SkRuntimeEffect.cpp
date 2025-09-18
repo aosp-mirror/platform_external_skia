@@ -188,7 +188,7 @@ sk_sp<const SkData> SkRuntimeEffectPriv::TransformUniforms(
     for (const auto& u : uniforms) {
         if (u.flags & Flags::kColor_Flag) {
             SkASSERT(u.type == Type::kFloat3 || u.type == Type::kFloat4);
-            if (steps.flags.mask()) {
+            if (steps.fFlags.mask()) {
                 float* color = SkTAddOffset<float>(writableData(), u.offset);
                 if (u.type == Type::kFloat4) {
                     // RGBA, easy case
@@ -324,7 +324,7 @@ void RuntimeEffectRPCallbacks::toLinearSrgb(const void* color) {
     if (fStage.fDstCS) {
         SkColorSpaceXformSteps xform{fStage.fDstCS,              kUnpremul_SkAlphaType,
                                      sk_srgb_linear_singleton(), kUnpremul_SkAlphaType};
-        if (xform.flags.mask()) {
+        if (xform.fFlags.mask()) {
             // We have a non-identity colorspace transform; apply it.
             this->applyColorSpaceXform(xform, color);
         }
@@ -335,7 +335,7 @@ void RuntimeEffectRPCallbacks::fromLinearSrgb(const void* color) {
     if (fStage.fDstCS) {
         SkColorSpaceXformSteps xform{sk_srgb_linear_singleton(), kUnpremul_SkAlphaType,
                                      fStage.fDstCS,              kUnpremul_SkAlphaType};
-        if (xform.flags.mask()) {
+        if (xform.fFlags.mask()) {
             // We have a non-identity colorspace transform; apply it.
             this->applyColorSpaceXform(xform, color);
         }
@@ -494,7 +494,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
     switch (kind) {
         case SkSL::ProgramKind::kPrivateRuntimeColorFilter:
         case SkSL::ProgramKind::kRuntimeColorFilter:
-            // TODO(skia:11209): Figure out a way to run ES3+ color filters on the CPU. This doesn't
+            // TODO(skbug.com/40042585): Figure out a way to run ES3+ color filters on the CPU. This doesn't
             // need to be fast - it could just be direct IR evaluation. But without it, there's no
             // way for us to fully implement the SkColorFilter API (eg, `filterColor4f`)
             if (!SkRuntimeEffectPriv::CanDraw(SkCapabilities::RasterBackend().get(),
@@ -589,7 +589,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
                 // If the child is never sampled, we pretend that it's actually in PassThrough mode.
                 // Otherwise, the GP code for collecting transforms and emitting transform code gets
                 // very confused, leading to asserts and bad (backend) shaders. There's an implicit
-                // assumption that every FP is used by its parent. (skbug.com/12429)
+                // assumption that every FP is used by its parent. (skbug.com/40043510)
                 sampleUsages.push_back(usage.isSampled() ? usage
                                                          : SkSL::SampleUsage::PassThrough());
             }

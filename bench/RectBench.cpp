@@ -242,7 +242,7 @@ protected:
             for (size_t i = 0; i < sizes; i++) {
                 paint.setStrokeWidth(gSizes[i]);
                 this->setupPaint(&paint);
-                canvas->drawPoints(fMode, N * 2, reinterpret_cast<SkPoint*>(fRects), paint);
+                canvas->drawPoints(fMode, {reinterpret_cast<SkPoint*>(fRects), N*2}, paint);
                 paint.setColor(fColors[i % N]);
             }
         }
@@ -253,6 +253,59 @@ private:
     SkString fName;
 
 };
+
+class HairPointsBench : public Benchmark {
+    static constexpr float W = 640;
+    static constexpr float H = 480;
+    static constexpr int   N = 300;
+
+    const SkBlendMode      fBM;
+    const float            fAlpha;
+    std::array<SkPoint, N> fPts;
+    SkString               fName;
+
+public:
+    HairPointsBench(SkBlendMode bm, float alpha) : fBM(bm), fAlpha(alpha) {
+
+        fName.printf("hair_points_mode_%s_alpha_%g",
+                     SkBlendMode_Name(bm), alpha);
+    }
+
+protected:
+    bool isSuitableFor(Backend backend) override {
+        if (backend == Backend::kNonRendering) {
+            return false;
+        }
+
+        // seems to be a bug on graphic (mali) + src_mode
+        auto showsBug = fBM == SkBlendMode::kSrc && backend == Backend::kGraphite;
+        return !showsBug;
+    }
+
+    const char* onGetName() override { return fName.c_str(); }
+
+    void onDelayedSetup() override {
+        SkRandom rand;
+        for (auto& p : fPts) {
+            const auto x = rand.nextF() * W;
+            const auto y = rand.nextF() * H;
+            p.set(x, y);
+        }
+    }
+
+    void onDraw(int loops, SkCanvas* canvas) override {
+        SkPaint paint;
+        paint.setBlendMode(fBM);
+        paint.setAlphaf(fAlpha);
+        paint.setStrokeWidth(0);    // we're hairpoints
+
+        for (int loop = 0; loop < loops; loop++) {
+            for (int i = 0; i < 1000; ++i)
+            canvas->drawPoints(SkCanvas::kPoints_PointMode, fPts, paint);
+        }
+    }
+};
+
 
 /*******************************************************************************
  * to bench BlitMask [Opaque, Black, color, shader]
@@ -319,7 +372,7 @@ protected:
                 this->setupPaint(&paint);
                 paint.setColor(color);
                 paint.setAlpha(alpha);
-                canvas->drawPoints(fMode, N * 2, reinterpret_cast<SkPoint*>(fRects), paint);
+                canvas->drawPoints(fMode, {reinterpret_cast<SkPoint*>(fRects), N*2}, paint);
            }
         }
     }
@@ -350,6 +403,12 @@ DEF_BENCH(return new RRectBench(1);)
 DEF_BENCH(return new RRectBench(1, 4);)
 DEF_BENCH(return new RRectBench(3);)
 DEF_BENCH(return new RRectBench(3, 4);)
+
+DEF_BENCH(return new HairPointsBench(SkBlendMode::kSrcOver, 0.5f);)
+DEF_BENCH(return new HairPointsBench(SkBlendMode::kSrcOver, 1);)
+DEF_BENCH(return new HairPointsBench(SkBlendMode::kSrc, 0.5f);)
+DEF_BENCH(return new HairPointsBench(SkBlendMode::kSrc, 1);)
+
 DEF_BENCH(return new PointsBench(SkCanvas::kPoints_PointMode, "points");)
 DEF_BENCH(return new PointsBench(SkCanvas::kLines_PointMode, "lines");)
 DEF_BENCH(return new PointsBench(SkCanvas::kPolygon_PointMode, "polygon");)
@@ -381,3 +440,42 @@ DEF_BENCH(return new BlitMaskBench(SkCanvas::kPoints_PointMode,
 DEF_BENCH(return new BlitMaskBench(SkCanvas::kPoints_PointMode,
                                    BlitMaskBench::KMaskShader,
                                    "maskshader");)
+
+class RectBoundsBench : public Benchmark {
+    SkString             fName;
+    std::vector<SkPoint> fPoints;
+
+public:
+    RectBoundsBench(size_t count)
+        : fName(SkStringPrintf("rect_bounds_%zu", count))
+        , fPoints(count)
+    {}
+
+protected:
+
+    const char* onGetName() override {
+        return fName.c_str();
+    }
+
+    void onDelayedSetup() override {
+        SkRandom rand;
+        for (auto& p : fPoints) {
+            float x = rand.nextF();
+            float y = rand.nextF();
+            p = {x, y};
+        }
+    }
+
+    bool isSuitableFor(Backend backend) override {
+        return backend == Backend::kNonRendering;
+    }
+
+    void onDraw(int loops, SkCanvas*) override {
+        for (int i = 0; i < loops; ++i) {
+            (void)SkRect::Bounds(fPoints);
+        }
+    }
+};
+
+DEF_BENCH(return new RectBoundsBench(4);)
+DEF_BENCH(return new RectBoundsBench(400);)

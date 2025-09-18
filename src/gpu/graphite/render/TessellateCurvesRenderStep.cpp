@@ -82,24 +82,28 @@ TessellateCurvesRenderStep::TessellateCurvesRenderStep(bool evenOdd,
                                                        StaticBufferManager* bufferManager)
         : RenderStep(evenOdd ? RenderStepID::kTessellateCurves_EvenOdd
                              : RenderStepID::kTessellateCurves_Winding,
-                     Flags::kRequiresMSAA,
+                     Flags::kRequiresMSAA |
+                     Flags::kAppendDynamicInstances |
+                     Flags::kIgnoreInverseFill,
                      /*uniforms=*/{{"localToDevice", SkSLType::kFloat4x4}},
                      PrimitiveType::kTriangles,
                      evenOdd ? kEvenOddStencilPass : kWindingStencilPass,
-                     /*vertexAttrs=*/  {{"resolveLevel_and_idx",
-                                         VertexAttribType::kFloat2, SkSLType::kFloat2}},
-                     /*instanceAttrs=*/kAttributes[infinitySupport])
+                     /*staticAttrs=*/{{"resolveLevel_and_idx",
+                                       VertexAttribType::kFloat2, SkSLType::kFloat2}},
+                     /*appendAttrs=*/kAttributes[infinitySupport])
         , fInfinitySupport(infinitySupport) {
-    SkASSERT(this->instanceStride() ==
+    SkASSERT(this->appendDataStride() ==
              PatchStride(infinitySupport ? kAttribs : kAttribsWithCurveType));
 
     // Initialize the static buffers we'll use when recording draw calls.
     // NOTE: Each instance of this RenderStep gets its own copy of the data. If this ends up causing
     // problems, we can modify StaticBufferManager to de-duplicate requests.
-    const size_t vertexSize = FixedCountCurves::VertexBufferSize();
-    auto vertexData = bufferManager->getVertexWriter(vertexSize, &fVertexBuffer);
+    auto vertexData = bufferManager->getVertexWriter(FixedCountCurves::VertexBufferVertexCount(),
+                                                     FixedCountCurves::VertexBufferStride(),
+                                                     &fVertexBuffer);
     if (vertexData) {
-        FixedCountCurves::WriteVertexBuffer(std::move(vertexData), vertexSize);
+        FixedCountCurves::WriteVertexBuffer(std::move(vertexData),
+                                            FixedCountCurves::VertexBufferSize());
     } // otherwise static buffer creation failed, so do nothing; Context initialization will fail.
 
     const size_t indexSize = FixedCountCurves::IndexBufferSize();
@@ -113,17 +117,15 @@ TessellateCurvesRenderStep::~TessellateCurvesRenderStep() {}
 
 std::string TessellateCurvesRenderStep::vertexSkSL() const {
     return SkSL::String::printf(
-            R"(
-                // TODO: Approximate perspective scaling to match how PatchWriter is configured (or
-                // provide explicit tessellation level in instance data instead of replicating
-                // work).
-                float2x2 vectorXform = float2x2(localToDevice[0].xy, localToDevice[1].xy);
-                float2 localCoord = tessellate_filled_curve(
-                        vectorXform, resolveLevel_and_idx.x, resolveLevel_and_idx.y, p01, p23, %s);
-                float4 devPosition = localToDevice * float4(localCoord, 0.0, 1.0);
-                devPosition.z = depth;
-                stepLocalCoords = localCoord;
-            )",
+            // TODO: Approximate perspective scaling to match how PatchWriter is configured (or
+            // provide explicit tessellation level in instance data instead of replicating
+            // work).
+            "float2x2 vectorXform = float2x2(localToDevice[0].xy, localToDevice[1].xy);\n"
+            "float2 localCoord = tessellate_filled_curve("
+                    "vectorXform, resolveLevel_and_idx.x, resolveLevel_and_idx.y, p01, p23, %s);\n"
+            "float4 devPosition = localToDevice * float4(localCoord, 0.0, 1.0);\n"
+            "devPosition.z = depth;\n"
+            "stepLocalCoords = localCoord;\n",
             fInfinitySupport ? "curve_type_using_inf_support(p23)" : "curveType");
 }
 
@@ -168,6 +170,7 @@ void TessellateCurvesRenderStep::writeVertices(DrawWriter* dw,
 
 void TessellateCurvesRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                                           PipelineDataGatherer* gatherer) const {
+    SkDEBUGCODE(gatherer->checkRewind());
     SkDEBUGCODE(UniformExpectationsValidator uev(gatherer, this->uniforms());)
 
     gatherer->write(params.transform().matrix());

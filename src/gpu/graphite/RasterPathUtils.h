@@ -11,7 +11,7 @@
 #include "include/private/base/SkNoncopyable.h"
 #include "src/base/SkVx.h"
 #include "src/core/SkAutoPixmapStorage.h"
-#include "src/core/SkDrawBase.h"
+#include "src/core/SkDraw.h"
 #include "src/core/SkRasterClip.h"
 #include "src/gpu/ResourceKey.h"
 #include "src/gpu/graphite/ClipStack.h"
@@ -45,24 +45,24 @@ public:
 
     bool init(SkISize pixmapSize, SkIVector transformedMaskOffset);
 
-    void clear(uint8_t alpha, const SkIRect& resultBounds);
+    void clear(uint8_t alpha, const SkIRect& drawBounds);
 
     // Draw a single shape into the bitmap (as a path) at location resultBounds.
     void drawShape(const Shape& shape,
                    const Transform& localToDevice,
                    const SkStrokeRec& strokeRec,
-                   const SkIRect& resultBounds);
+                   const SkIRect& drawBounds);
 
     // Draw a single shape into the bitmap (as a path) at location resultBounds.
     // Variant used for clipping.
     void drawClip(const Shape& shape,
                   const Transform& localToDevice,
                   uint8_t alpha,
-                  const SkIRect& resultBounds);
+                  const SkIRect& drawBounds);
 
 private:
     SkAutoPixmapStorage* fPixels;
-    SkDrawBase           fDraw;
+    skcpu::Draw          fDraw;
     SkIVector            fTransformedMaskOffset = {0, 0};
     SkRasterClip         fRasterClip;
 };
@@ -74,7 +74,11 @@ skgpu::UniqueKey GeneratePathMaskKey(const Shape& shape,
                                      skvx::half2 maskSize);
 
 skgpu::UniqueKey GenerateClipMaskKey(uint32_t stackRecordID,
-                                     const ClipStack::ElementList* elementsForMask);
+                                     const ClipStack::ElementList* elementsForMask,
+                                     SkIRect maskDeviceBounds,
+                                     bool includeBounds,
+                                     SkIRect* keyBounds,
+                                     bool* usesPathKey);
 
 }  // namespace skgpu::graphite
 

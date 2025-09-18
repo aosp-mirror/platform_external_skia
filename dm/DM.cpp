@@ -10,7 +10,6 @@
 #include "include/codec/SkCodec.h"
 #include "include/codec/SkEncodedImageFormat.h"
 #include "include/core/SkBBHFactory.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkDocument.h"
@@ -22,6 +21,7 @@
 #include "src/base/SkTime.h"
 #include "src/base/SkVx.h"
 #include "src/core/SkChecksum.h"
+#include "src/core/SkColorPriv.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkOSFile.h"
@@ -64,10 +64,6 @@
 
 #ifndef SK_BUILD_FOR_WIN
     #include <unistd.h>
-#endif
-
-#if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) && defined(SK_HAS_HEIF_LIBRARY)
-    #include <binder/IPCThreadState.h>
 #endif
 
 #if defined(SK_BUILD_FOR_MAC)
@@ -837,7 +833,7 @@ static void push_codec_srcs(Path path) {
         };
         for (const char* rawExt : rawExts) {
             if (0 == strcmp(rawExt, ext)) {
-                // RAW is not supported by image generator (skbug.com/5079) or BRD.
+                // RAW is not supported by image generator (skbug.com/40036243) or BRD.
                 return;
             }
         }
@@ -1360,6 +1356,12 @@ struct Task {
                 return SkStringPrintf("%.3g %.3g %.3g %.3g %.3g %.3g %.3g",
                                         tf.g, tf.a, tf.b, tf.c, tf.d, tf.e, tf.f);
 
+            case skcms_TFType_PQ:
+                return SkStringPrintf("PQ %.3g", tf.a);
+
+            case skcms_TFType_HLG:
+                return SkStringPrintf("HLGish %.3g %.3g %.3g", tf.a, tf.b, tf.c);
+
             case skcms_TFType_PQish:
                 if (eq(tf, SkNamedTransferFn::kPQ)) { return SkString("PQ"); }
                 return SkStringPrintf("PQish %.3g %.3g %.3g %.3g %.3g %.3g",
@@ -1370,8 +1372,7 @@ struct Task {
                 return SkStringPrintf("HLGish %.3g %.3g %.3g %.3g %.3g (%.3g)",
                                       tf.a, tf.b, tf.c, tf.d, tf.e, tf.f+1);
 
-            case skcms_TFType_HLGinvish: break;
-            case skcms_TFType_Invalid: break;
+            default: break;
         }
         return SkString("non-numeric");
     }
@@ -1573,9 +1574,6 @@ TestHarness CurrentTestHarness() {
 #endif // !SK_DISABLE_LEGACY_TESTS
 
 int main(int argc, char** argv) {
-#if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) && defined(SK_HAS_HEIF_LIBRARY)
-    android::ProcessState::self()->startThreadPool();
-#endif
     CommandLineFlags::Parse(argc, argv);
 
     initializeEventTracingForTools();

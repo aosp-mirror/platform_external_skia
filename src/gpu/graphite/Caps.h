@@ -4,34 +4,30 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 #ifndef skgpu_graphite_Caps_DEFINED
 #define skgpu_graphite_Caps_DEFINED
 
-#include <optional>
-#include <string>
-#include <string_view>
-#include <utility>
-
-#include "include/core/SkImageInfo.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/private/base/SkAlign.h"
+#include "include/private/base/SkAssert.h"
 #include "src/base/SkEnumBitMask.h"
 #include "src/gpu/ResourceKey.h"
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/ResourceTypes.h"
-#include "src/gpu/graphite/TextureProxy.h"
 #include "src/text/gpu/SubRunControl.h"
 
-#if defined(GPU_TEST_UTILS)
-#include "src/gpu/graphite/ContextOptionsPriv.h"
-#endif
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
 
-enum class SkBlendMode;
-enum class SkTextureCompressionType;
 class SkCapabilities;
-class SkStream;
-class SkWStream;
+enum class SkTextureCompressionType;
 
 namespace SkSL { struct ShaderCaps; }
 
@@ -39,53 +35,59 @@ namespace skgpu { class ShaderErrorHandler; }
 
 namespace skgpu::graphite {
 
-enum class BufferType : int;
-struct ContextOptions;
 class ComputePipelineDesc;
 class GraphicsPipelineDesc;
 class GraphiteResourceKey;
 class RendererProvider;
-struct RenderPassDesc;
 class TextureInfo;
+enum class DepthStencilFlags : int;
+enum class PathRendererStrategy;
+enum class TextureFormat : uint8_t;
+struct AttachmentDesc;
+struct ContextOptions;
+struct RenderPassDesc;
 
 struct ResourceBindingRequirements {
-    // The required data layout rules for the contents of a uniform buffer.
+    /* The API of the backend currently in use. */
+    BackendApi fBackendApi = BackendApi::kUnsupported;
+
+    /* The required data layout rules for the contents of a uniform buffer. */
     Layout fUniformBufferLayout = Layout::kInvalid;
 
-    // The required data layout rules for the contents of a storage buffer.
+    /* The required data layout rules for the contents of a storage buffer. */
     Layout fStorageBufferLayout = Layout::kInvalid;
 
-    // Whether combined texture-sampler types are supported. Backends that do not support
-    // combined image samplers (i.e. sampler2D) require a texture and sampler object to be bound
-    // separately and their binding indices explicitly specified in the shader text.
+    /**
+     * Whether combined texture-sampler types are supported. Backends that do not support combined
+     * image samplers (i.e. sampler2D) require a texture and sampler object to be bound separately
+     * and their binding indices explicitly specified in the shader text.
+     */
     bool fSeparateTextureAndSamplerBinding = false;
 
-    // Whether intrinsic constant information is stored as push constants (rather than normal UBO).
-    // Currently only relevant or possibly true for Vulkan.
-    bool fUseVulkanPushConstantsForIntrinsicConstants = false;
+    /**
+     * Whether intrinsic constant information is stored as push constants (rather than normal UBO).
+     * Currently only relevant or possibly true for Dawn or Vulkan.
+     */
+    bool fUsePushConstantsForIntrinsicConstants  = false;
 
-    // Whether compute shader textures use separate index ranges from other resources (i.e. buffers)
+    /**
+     * Whether compute shader textures use separate index ranges from other resources (i.e. buffers)
+     */
     bool fComputeUsesDistinctIdxRangesForTextures = false;
 
-    // Define set indices. We assume that even if textures and samplers must be bound separately,
-    // they will still be contained within the same set/group.
+    /**
+     * Define set indices. We assume that even if textures and samplers must be bound separately,
+     * they will still be contained within the same set/group.
+     */
     static constexpr int kUnassigned = -1;
     int fUniformsSetIdx              = kUnassigned;
     int fTextureSamplerSetIdx        = kUnassigned;
     int fInputAttachmentSetIdx       = kUnassigned;
-    // Define uniform buffer bindings
+    /* Define uniform buffer bindings */
     int fIntrinsicBufferBinding      = kUnassigned;
     int fRenderStepBufferBinding     = kUnassigned;
     int fPaintParamsBufferBinding    = kUnassigned;
     int fGradientBufferBinding       = kUnassigned;
-};
-
-enum class DstReadStrategy {
-    kNoneRequired,
-    kTextureCopy,
-    kTextureSample,
-    kReadFromInput,
-    kFramebufferFetch,
 };
 
 class Caps {
@@ -104,6 +106,18 @@ public:
     }
 #endif
 
+    /**
+     * TODO(b/390473370): Once backends initialize a Caps-level format table, these will not need
+     * to be virtual anymore:
+     */
+    virtual bool isSampleCountSupported(TextureFormat, uint8_t requestedSampleCount) const = 0;
+    /* Return the TextureFormat that satisfies `dsFlags`. */
+    virtual TextureFormat getDepthStencilFormat(SkEnumBitMask<DepthStencilFlags>) const = 0;
+
+    virtual TextureInfo getDefaultAttachmentTextureInfo(AttachmentDesc,
+                                                        Protected,
+                                                        Discardable) const = 0;
+
     virtual TextureInfo getDefaultSampledTextureInfo(SkColorType,
                                                      Mipmapped mipmapped,
                                                      Protected,
@@ -116,23 +130,9 @@ public:
                                                         Mipmapped mipmapped,
                                                         Protected) const = 0;
 
-    virtual TextureInfo getDefaultMSAATextureInfo(const TextureInfo& singleSampledInfo,
-                                                  Discardable discardable) const = 0;
-
-    // Currently the uses of this API always are asking for a discardable DepthStencil attachment.
-    // However, we still pass in the parameter here because we don't want the backend caps to be
-    // making decisons on if a thing should be discardable or not. This also allows us to eventual
-    // use non discardable DS attachments, but there aren't any current plans to do so. If we find
-    // out over time that we really will only ever use discardable ones, we could rename this
-    // function to be getDefaultDiscardableDepthStencilTextureInfo.
-    virtual TextureInfo getDefaultDepthStencilTextureInfo(SkEnumBitMask<DepthStencilFlags>,
-                                                          uint32_t sampleCount,
-                                                          Protected,
-                                                          Discardable discardable) const = 0;
-
     virtual TextureInfo getDefaultStorageTextureInfo(SkColorType) const = 0;
 
-    // Get required depth attachment dimensions for a givin color attachment info and dimensions.
+    /* Get required depth attachment dimensions for a givin color attachment info and dimensions. */
     virtual SkISize getDepthAttachmentDimensions(const TextureInfo&,
                                                  const SkISize colorAttachmentDimensions) const;
 
@@ -146,9 +146,6 @@ public:
                                       RenderPassDesc*,
                                       const RendererProvider*) const { return false; }
 
-    virtual bool serializeTextureInfo(const TextureInfo&, SkWStream*) const = 0;
-    virtual bool deserializeTextureInfo(SkStream*, TextureInfo*) const = 0;
-
     bool areColorTypeAndTextureInfoCompatible(SkColorType, const TextureInfo&) const;
 
     bool isTexturable(const TextureInfo&) const;
@@ -158,7 +155,13 @@ public:
     virtual bool loadOpAffectsMSAAPipelines() const { return false; }
 
     int maxTextureSize() const { return fMaxTextureSize; }
-    int defaultMSAASamplesCount() const { return fDefaultMSAASamples; }
+    uint8_t defaultMSAASamplesCount() const { return fDefaultMSAASamples; }
+
+    /**
+     * Returns the maximum number of varyings allowed in a render pipeline. Note that this is the
+     * number of varying variables, not the total number of varying scalars.
+     */
+    int maxVaryings() const { return fMaxVaryings; }
 
     virtual void buildKeyForTexture(SkISize dimensions,
                                     const TextureInfo&,
@@ -169,24 +172,32 @@ public:
         return fResourceBindingReqs;
     }
 
-    // Returns the required alignment in bytes for the offset into a uniform buffer when binding it
-    // to a draw.
+    /**
+     * Returns the required alignment in bytes for the offset into a uniform buffer when binding it
+     * to a draw.
+     */
     size_t requiredUniformBufferAlignment() const { return fRequiredUniformBufferAlignment; }
 
-    // Returns the required alignment in bytes for the offset into a storage buffer when binding it
-    // to a draw.
+    /**
+     * Returns the required alignment in bytes for the offset into a storage buffer when binding it
+     * to a draw.
+     */
     size_t requiredStorageBufferAlignment() const { return fRequiredStorageBufferAlignment; }
 
-    // Returns the required alignment in bytes for the offset and size of copies involving a buffer.
+    /**
+     * Returns the required alignment in bytes for the offset and size of copies involving a buffer.
+     */
     size_t requiredTransferBufferAlignment() const { return fRequiredTransferBufferAlignment; }
 
-    // Returns the aligned rowBytes when transfering to or from a Texture
+    /* Returns the aligned rowBytes when transfering to or from a Texture */
     size_t getAlignedTextureDataRowBytes(size_t rowBytes) const {
         return SkAlignTo(rowBytes, fTextureDataRowBytesAlignment);
     }
 
-    // Backends can optionally override this method to return meaningful sampler conversion info.
-    // By default, simply return a default ImmutableSamplerInfo (e.g. no immutable sampler).
+    /**
+     * Backends can optionally override this method to return meaningful sampler conversion info.
+     * By default, simply return a default ImmutableSamplerInfo (e.g. no immutable sampler).
+     */
     virtual ImmutableSamplerInfo getImmutableSamplerInfo(const TextureInfo&) const {
         return {};
     }
@@ -245,57 +256,78 @@ public:
      */
     SkColorType getRenderableColorType(SkColorType) const;
 
-    // Determines the orientation of the NDC coordinates emitted by the vertex stage relative to
-    // both Skia's presumed top-left Y-down system and the viewport coordinates (which are also
-    // always top-left, Y-down for all supported backends).)
-    //
-    // If true is returned, then (-1,-1) in normalized device coords maps to the top-left of the
-    // configured viewport and positive Y points down. This aligns with Skia's conventions.
-    // If false is returned, then (-1,-1) in NDC maps to the bottom-left of the viewport and
-    // positive Y points up (so NDC is flipped relative to sk_Position and the viewport coords).
-    //
-    // There is no backend difference in handling the X axis so it's assumed -1 maps to the left
-    // edge and +1 maps to the right edge.
+    /**
+     * Determines the orientation of the NDC coordinates emitted by the vertex stage relative to
+     * both Skia's presumed top-left Y-down system and the viewport coordinates (which are also
+     * always top-left, Y-down for all supported backends).)
+     *
+     * If true is returned, then (-1,-1) in normalized device coords maps to the top-left of the
+     * configured viewport and positive Y points down. This aligns with Skia's conventions.
+     * If false is returned, then (-1,-1) in NDC maps to the bottom-left of the viewport and
+     * positive Y points up (so NDC is flipped relative to sk_Position and the viewport coords).
+     *
+     * There is no backend difference in handling the X axis so it's assumed -1 maps to the left
+     * edge and +1 maps to the right edge.
+     */
     bool ndcYAxisPointsDown() const { return fNDCYAxisPointsDown; }
 
     bool clampToBorderSupport() const { return fClampToBorderSupport; }
 
     bool protectedSupport() const { return fProtectedSupport; }
 
-    // Supports BackendSemaphores
+    /* Supports BackendSemaphores */
     bool semaphoreSupport() const { return fSemaphoreSupport; }
 
-    // If false then calling Context::submit with SyncToCpu::kYes is an error.
+    /* If false then calling Context::submit with SyncToCpu::kYes is an error. */
     bool allowCpuSync() const { return fAllowCpuSync; }
 
-    // Returns whether storage buffers are supported and to be preferred over uniform buffers.
+    /* Returns whether storage buffers are supported and to be preferred over uniform buffers. */
     bool storageBufferSupport() const { return fStorageBufferSupport; }
 
-    // The gradient buffer is an unsized float array so it is only optimal memory-wise to use it if
-    // the storage buffer memory layout is std430 or in metal, which is also the only supported
-    // way the data is packed.
+    /**
+     * The gradient buffer is an unsized float array so it is only optimal memory-wise to use it if
+     * the storage buffer memory layout is std430 or in metal, which is also the only supported
+     * way the data is packed.
+     */
     bool gradientBufferSupport() const {
         return fStorageBufferSupport &&
                (fResourceBindingReqs.fStorageBufferLayout == Layout::kStd430 ||
                 fResourceBindingReqs.fStorageBufferLayout == Layout::kMetal);
     }
 
-    // Returns whether a draw buffer can be mapped.
+    /* Returns whether a draw buffer can be mapped. */
     bool drawBufferCanBeMapped() const { return fDrawBufferCanBeMapped; }
 
 #if defined(GPU_TEST_UTILS)
     bool drawBufferCanBeMappedForReadback() const { return fDrawBufferCanBeMappedForReadback; }
 #endif
 
-    // Returns whether using Buffer::asyncMap() must be used to map buffers. map() may only be
-    // called after asyncMap() is called and will fail if the asynchronous map is not complete. This
-    // excludes premapped buffers for which map() can be called freely until the first unmap() call.
+    /**
+     * Returns whether using Buffer::asyncMap() must be used to map buffers. map() may only be
+     * called after asyncMap() is called and will fail if the asynchronous map is not complete. This
+     * excludes premapped buffers for which map() can be called freely until the first unmap() call.
+     */
     bool bufferMapsAreAsync() const { return fBufferMapsAreAsync; }
 
-    // Returns whether multisampled render to single sampled is supported.
+    /* Returns whether multisampled render to single sampled is supported. */
     bool msaaRenderToSingleSampledSupport() const { return fMSAARenderToSingleSampledSupport; }
 
-    // Returns whether compute shaders are supported.
+    /* Returns whether multisampled render to single sampled is supported for a given texture. */
+    virtual bool msaaTextureRenderToSingleSampledSupport(const TextureInfo& info) const {
+        return this->msaaRenderToSingleSampledSupport();
+    }
+
+    /**
+     * Returns whether a render pass can have MSAA/depth/stencil attachments and a resolve
+     * attachment with mismatched sizes. Note: the MSAA attachment and the depth/stencil attachment
+     * still need to match their sizes.
+     * This also implies supporting partial load/resolve.
+     */
+    bool differentResolveAttachmentSizeSupport() const {
+        return fDifferentResolveAttachmentSizeSupport;
+    }
+
+    /* Returns whether compute shaders are supported. */
     bool computeSupport() const { return fComputeSupport; }
 
     /**
@@ -304,25 +336,93 @@ public:
      */
     bool supportsAHardwareBufferImages() const { return fSupportsAHardwareBufferImages; }
 
-    // Returns the skgpu::Swizzle to use when sampling or reading back from a texture with the
-    // passed in SkColorType and TextureInfo.
+    /**
+     * Enum representing the capabilities of the fixed function blend unit.
+     */
+    enum BlendEquationSupport : uint8_t {
+        kBasic = 0,           /* Default bare minimum support. Allows selecting the operator that
+                                 combines src + dst terms.*/
+        kAdvancedNoncoherent, /* Additional fixed function support for specific SVG/PDF blend modes.
+                                 Requires blend barriers.*/
+        kAdvancedCoherent     /* Advanced blend equation support that does not require blend
+                                 barriers and permits overlap.*/
+    };
+    /**
+     * Return the level of hardware advanced blend mode support.
+     */
+    BlendEquationSupport blendEquationSupport() const { return fBlendEqSupport; }
+    /**
+     * Simple helper for indicating whether the hardware supports advanced blend modes at all
+     * (coherent or noncoherent).
+     */
+    bool supportsHardwareAdvancedBlending() const {
+        return fBlendEqSupport > BlendEquationSupport::kBasic;
+    }
+
+    /**
+     * Returns the skgpu::Swizzle to use when sampling or reading back from a texture with the
+     * passed in SkColorType and TextureInfo.
+     */
     skgpu::Swizzle getReadSwizzle(SkColorType, const TextureInfo&) const;
 
-    // Returns the skgpu::Swizzle to use when writing colors to a surface with the passed in
-    // SkColorType and TextureInfo.
+    /**
+     * Returns the skgpu::Swizzle to use when writing colors to a surface with the passed in
+     * SkColorType and TextureInfo.
+     */
     skgpu::Swizzle getWriteSwizzle(SkColorType, const TextureInfo&) const;
+
+    /**
+     * Includes the following dynamic state:
+     *
+     * * Line width, depth bias, depth bounds, stencil compare mask, stencil write mask and stencil
+     *   reference.
+     *   This set corresponds to Vulkan 1.0 dynamic state.  Blend constants does not depend on this
+     *   flag as it is always dynamic with all graphite backends.
+     *
+     * * Depth test enable, depth write enable, depth compare op, depth bounds test enable, depth
+     *   bias enable, stencil test enable and stencil op.
+     *   This set corresponds to depth and stencil related state from VK_EXT_extended_dynamic_state
+     *   and VK_EXT_extended_dynamic_state2.
+     *
+     * * Primitive topology and primitive restart enable.
+     *   Note that the primitive topology _class_ is not dynamic.
+     *   This set corresponds to input assembly state from VK_EXT_extended_dynamic_state and
+     *   VK_EXT_extended_dynamic_state2.
+     *
+     * * Cull mode, front face and rasterizer discard.
+     *   This set corresponds to rasterizer state from VK_EXT_extended_dynamic_state and
+     *   VK_EXT_extended_dynamic_state2.
+     */
+    bool useBasicDynamicState() const { return fUseBasicDynamicState; }
+    /**
+     * Whether all vertex input state is dynamic.
+     * This set corresponds to state from VK_EXT_vertex_input_dynamic_state.  This state is
+     * equivalently pulled out of the shaders pipeline via VK_EXT_graphics_pipeline_library
+     * (usePipelineLibraries()).
+     */
+    bool useVertexInputDynamicState() const { return fUseVertexInputDynamicState; }
+    /**
+     * Whether VK_EXT_graphics_pipeline_library should be used.  In this case, the "shaders" subset
+     * of the pipeline is compiled separately, then fast-linked with the vertex input and fragment
+     * output state to create the final library.  Currently, this is a detail of the Vulkan backend,
+     * which helps VkPipelineCache hits (because the shaders pipeline hits the cache, and blend
+     * state is patched in).  However, this is most useful once exposed to the front-end, such that
+     * it can track the (fewer) shaders pipeline separately, have the complete pipelines point to
+     * the shaders pipeline, avoid unnecessary cache look ups, and more.  (skbug.com/414645289)
+     */
+    bool usePipelineLibraries() const { return fUsePipelineLibraries; }
+
+    bool supportsHostImageCopy() const { return fSupportsHostImageCopy; }
 
     skgpu::ShaderErrorHandler* shaderErrorHandler() const { return fShaderErrorHandler; }
 
-    // Returns what method of dst read a draw should use for obtaining the dst color. Backends can
-    // use the default implementation or override this method as needed.
-    // TODO(b/390458117): Once the Vulkan backend supports DstReadStrategy::kReadFromInput for
-    // MSAA textures (and if we are comfortable assuming by this point that all render targets, at
-    // least on Android, support input attachment usage) then the TextureInfo argument can be
-    // removed and backend Caps implementations can report kReadFromInput support some other way
-    // (such as a simple member attribute bool). For now, we must check each render target's info.
-    virtual DstReadStrategy getDstReadStrategy(const TextureInfo&) const;
+    /**
+     * Returns what method of dst read a draw should use for obtaining the dst color. Backends can
+     * use the default implementation or override this method as needed.
+     */
+    virtual DstReadStrategy getDstReadStrategy() const;
 
+    float minPathSizeForMSAA() const { return fMinMSAAPathSize; }
     float minDistanceFieldFontSize() const { return fMinDistanceFieldFontSize; }
     float glyphsAsPathsFontSize() const { return fGlyphsAsPathsFontSize; }
 
@@ -334,8 +434,10 @@ public:
 
     bool requireOrderedRecordings() const { return fRequireOrderedRecordings; }
 
-    // When uploading to a full compressed texture do we need to pad the size out to a multiple of
-    // the block width and height.
+    /**
+     * When uploading to a full compressed texture do we need to pad the size out to a multiple of
+     * the block width and height.
+     */
     bool fullCompressedUploadSizeMustAlignToBlockDims() const {
         return fFullCompressedUploadSizeMustAlignToBlockDims;
     }
@@ -349,8 +451,10 @@ public:
 protected:
     Caps();
 
-    // Subclasses must call this at the end of their init method in order to do final processing on
-    // the caps.
+    /**
+     * Subclasses must call this at the end of their init method in order to do final processing on
+     * the caps.
+     */
     void finishInitialization(const ContextOptions&);
 
 #if defined(GPU_TEST_UTILS)
@@ -359,8 +463,10 @@ protected:
     }
 #endif
 
-    // There are only a few possible valid sample counts (1, 2, 4, 8, 16). So we can key on those 5
-    // options instead of the actual sample value.
+    /**
+     * There are only a few possible valid sample counts (1, 2, 4, 8, 16). So we can key on those 5
+     * options instead of the actual sample value.
+     */
     static inline uint32_t SamplesToKey(uint32_t numSamples) {
         switch (numSamples) {
             case 1:
@@ -378,7 +484,7 @@ protected:
         }
     }
 
-    // ColorTypeInfo for a specific format. Used in format tables.
+    /* ColorTypeInfo for a specific format. Used in format tables. */
     struct ColorTypeInfo {
         ColorTypeInfo() = default;
         ColorTypeInfo(SkColorType ct, SkColorType transferCt, uint32_t flags,
@@ -393,8 +499,10 @@ protected:
         SkColorType fTransferColorType = kUnknown_SkColorType;
         enum {
             kUploadData_Flag = 0x1,
-            // Does Graphite itself support rendering to this colorType & format pair. Renderability
-            // still additionally depends on if the format itself is renderable.
+            /**
+             * Does Graphite itself support rendering to this colorType & format pair. Renderability
+             * still additionally depends on if the format itself is renderable.
+             */
             kRenderable_Flag = 0x2,
         };
         uint32_t fFlags = 0;
@@ -404,11 +512,13 @@ protected:
     };
 
     int fMaxTextureSize = 0;
-    int fDefaultMSAASamples = 4;
+    uint8_t fDefaultMSAASamples = 4;
     size_t fRequiredUniformBufferAlignment = 0;
     size_t fRequiredStorageBufferAlignment = 0;
     size_t fRequiredTransferBufferAlignment = 0;
     size_t fTextureDataRowBytesAlignment = 1;
+
+    int fMaxVaryings = 0;
 
     std::unique_ptr<SkSL::ShaderCaps> fShaderCaps;
 
@@ -421,9 +531,11 @@ protected:
     bool fDrawBufferCanBeMapped = true;
     bool fBufferMapsAreAsync = false;
     bool fMSAARenderToSingleSampledSupport = false;
+    bool fDifferentResolveAttachmentSizeSupport = false;
 
     bool fComputeSupport = false;
     bool fSupportsAHardwareBufferImages = false;
+    BlendEquationSupport fBlendEqSupport = BlendEquationSupport::kBasic;
     bool fFullCompressedUploadSizeMustAlignToBlockDims = false;
 
 #if defined(GPU_TEST_UTILS)
@@ -450,6 +562,7 @@ protected:
 #endif
     size_t fGlyphCacheTextureMaximumBytes = 2048 * 1024 * 4;
 
+    float fMinMSAAPathSize = 0;
     float fMinDistanceFieldFontSize = 18;
     float fGlyphsAsPathsFontSize = 324;
 
@@ -461,6 +574,19 @@ protected:
     bool fRequireOrderedRecordings = false;
 
     bool fSetBackendLabels = false;
+
+    // Dynamic state.  The granularity is less fine than Vulkan's, but there is still some
+    // granularity to allow for some dynamic state to be disabled due to driver bugs without having
+    // to disable everything.  Eventually, these can be used to create fewer pipelines in the first
+    // place (b/414645289).
+    bool fUseBasicDynamicState = false;
+    bool fUseVertexInputDynamicState = false;
+    bool fUsePipelineLibraries = false;
+
+    // Whether it's possible to upload data to images using the CPU (host) instead of the device.
+    // Under certain circumstances, it's more efficient to upload data in this way instead of
+    // through a staging buffer.
+    bool fSupportsHostImageCopy = false;
 
 private:
     virtual bool onIsTexturable(const TextureInfo&) const = 0;

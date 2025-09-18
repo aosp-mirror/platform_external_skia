@@ -330,6 +330,7 @@ skia_ganesh_private = [
   "$_src/gpu/ganesh/PathRenderer.h",
   "$_src/gpu/ganesh/PathRendererChain.cpp",
   "$_src/gpu/ganesh/PathRendererChain.h",
+  "$_src/gpu/ganesh/SkGaneshRecorder.h",
   "$_src/gpu/ganesh/SkGr.cpp",
   "$_src/gpu/ganesh/SkGr.h",
   "$_src/gpu/ganesh/StencilClip.h",
@@ -545,6 +546,7 @@ skia_ganesh_private = [
   "$_src/gpu/ganesh/tessellate/StrokeTessellator.cpp",
   "$_src/gpu/ganesh/tessellate/StrokeTessellator.h",
   "$_src/gpu/ganesh/tessellate/VertexChunkPatchAllocator.h",
+  "$_src/gpu/ganesh/text/GaneshVertexFiller.cpp",
   "$_src/gpu/ganesh/text/GrAtlasManager.cpp",
   "$_src/gpu/ganesh/text/GrAtlasManager.h",
 ]
@@ -665,6 +667,7 @@ skia_gpu_vk_public = [
   "$_include/gpu/vk/VulkanExtensions.h",
   "$_include/gpu/vk/VulkanMemoryAllocator.h",
   "$_include/gpu/vk/VulkanMutableTextureState.h",
+  "$_include/gpu/vk/VulkanPreferredFeatures.h",
   "$_include/gpu/vk/VulkanTypes.h",
 ]
 
@@ -987,6 +990,7 @@ skia_shared_vk_sources = [
   "$_src/gpu/vk/VulkanMemory.h",
   "$_src/gpu/vk/VulkanMutableTextureState.cpp",
   "$_src/gpu/vk/VulkanMutableTextureStatePriv.h",
+  "$_src/gpu/vk/VulkanPreferredFeatures.cpp",
   "$_src/gpu/vk/VulkanUtilsPriv.cpp",
   "$_src/gpu/vk/VulkanUtilsPriv.h",
 ]

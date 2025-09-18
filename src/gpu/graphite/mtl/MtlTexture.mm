@@ -34,8 +34,7 @@ sk_cfp<id<MTLTexture>> MtlTexture::MakeMtlTexture(const MtlSharedContext* shared
         return nullptr;
     }
 
-    if (mtlInfo.fUsage & MTLTextureUsageRenderTarget &&
-        !(caps->isRenderable(info) || MtlFormatIsDepthOrStencil(mtlInfo.fFormat))) {
+    if (mtlInfo.fUsage & MTLTextureUsageRenderTarget && !caps->isRenderable(info)) {
         return nullptr;
     }
 
@@ -45,7 +44,7 @@ sk_cfp<id<MTLTexture>> MtlTexture::MakeMtlTexture(const MtlSharedContext* shared
 
     int numMipLevels = 1;
     if (info.mipmapped() == Mipmapped::kYes) {
-        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions) + 1;
     }
 
     sk_cfp<MTLTextureDescriptor*> desc([[MTLTextureDescriptor alloc] init]);
@@ -80,7 +79,7 @@ MtlTexture::MtlTexture(const MtlSharedContext* sharedContext,
         : Texture(sharedContext,
                   dimensions,
                   info,
-                  has_transient_usage(info),
+                  /*isTransient=*/has_transient_usage(info),
                   /*mutableState=*/nullptr,
                   ownership)
         , fTexture(std::move(texture)) {}

@@ -60,12 +60,14 @@ public:
         bool fHasStepUniforms   = false;
         bool fHasGradientBuffer = false;
 
+#if defined(SK_TRACE_GRAPHITE_PIPELINE_USE) || defined(GPU_TEST_UTILS)
+        std::string fLabel;
+#endif
+
         // In test-enabled builds, we preserve the generated shader code to display in the viewer
         // slide UI. This is not quite enough information to fully recreate the pipeline, as the
         // RenderPassDesc used to make the pipeline is not preserved.
 #if defined(GPU_TEST_UTILS)
-        std::string fLabel;
-
         std::string fSkSLVertexShader;
         std::string fSkSLFragmentShader;
         std::string fNativeVertexShader;
@@ -77,15 +79,22 @@ public:
         const uint32_t fCompilationID = 0;
         const bool fFromPrecompile = false;
         bool fWasUsed = false;
+        uint16_t fEpoch = 0;   // the last epoch in which this Pipeline was touched
     };
 
-    const PipelineInfo& getPipelineInfo() const {
-        return fPipelineInfo;
-    }
+    const PipelineInfo& getPipelineInfo() const { return fPipelineInfo; }
     bool fromPrecompile() const { return fPipelineInfo.fFromPrecompile; }
 
     void markUsed() { fPipelineInfo.fWasUsed = true; }
     bool wasUsed() const { return fPipelineInfo.fWasUsed; }
+
+    void markEpoch(uint16_t epoch) { fPipelineInfo.fEpoch = epoch; }
+    uint16_t epoch() const { return fPipelineInfo.fEpoch; }
+
+    // GraphicsPipeline compiles can take a while. If the underlying compilation is performed
+    // asynchronously, we may create a GraphicsPipeline object that later "fails" and need to remove
+    // it from the GlobalCache.
+    virtual bool didAsyncCompilationFail() const { return false; }
 
 protected:
     GraphicsPipeline(const SharedContext*, const PipelineInfo&);

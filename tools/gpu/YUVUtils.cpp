@@ -10,7 +10,6 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkData.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/ganesh/GrRecordingContext.h"
@@ -18,6 +17,7 @@
 #include "include/gpu/ganesh/SkImageGanesh.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "src/codec/SkCodecImageGenerator.h"
+#include "src/core/SkColorPriv.h"
 #include "src/core/SkYUVAInfoLocation.h"
 #include "src/core/SkYUVMath.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
@@ -287,7 +287,7 @@ bool LazyYUVImage::reset(SkYUVAPixmaps pixmaps,
 bool LazyYUVImage::ensureYUVImage(GrRecordingContext* rContext, Type type) {
     size_t idx = static_cast<size_t>(type);
     SkASSERT(idx < std::size(fYUVImage));
-    if (fYUVImage[idx] && fYUVImage[idx]->isValid(rContext)) {
+    if (fYUVImage[idx] && fYUVImage[idx]->isValid(rContext->asRecorder())) {
         return true;  // Have already made a YUV image valid for this context.
     }
     // Try to make a new YUV image for this context.

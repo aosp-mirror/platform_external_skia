@@ -35,6 +35,7 @@
 #include "src/gpu/ganesh/GrTextureProxy.h"
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/SurfaceContext.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
 #include "src/gpu/ganesh/SurfaceFillContext.h"
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
 #include "src/gpu/ganesh/image/GrImageUtils.h"
@@ -305,9 +306,9 @@ bool SkImage_Ganesh::getExistingBackendTexture(GrBackendTexture* outTexture,
 
 size_t SkImage_Ganesh::textureSize() const { return fChooser.gpuMemorySize(); }
 
-sk_sp<SkImage> SkImage_Ganesh::onMakeColorTypeAndColorSpace(SkColorType targetCT,
-                                                            sk_sp<SkColorSpace> targetCS,
-                                                            GrDirectContext* dContext) const {
+sk_sp<SkImage> SkImage_Ganesh::onMakeColorTypeAndColorSpace(GrDirectContext* dContext,
+                                                            SkColorType targetCT,
+                                                            sk_sp<SkColorSpace> targetCS) const {
     SkColorInfo info(targetCT, this->alphaType(), std::move(targetCS));
     if (!fContext->priv().matches(dContext)) {
         return nullptr;
@@ -429,12 +430,13 @@ std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Ganesh::asView(
 }
 
 std::unique_ptr<GrFragmentProcessor> SkImage_Ganesh::asFragmentProcessor(
-        GrRecordingContext* rContext,
+        skgpu::ganesh::SurfaceDrawContext* sdc,
         SkSamplingOptions sampling,
         const SkTileMode tileModes[2],
         const SkMatrix& m,
         const SkRect* subset,
         const SkRect* domain) const {
+    GrRecordingContext* rContext = sdc->recordingContext();
     if (!fContext->priv().matches(rContext)) {
         return {};
     }

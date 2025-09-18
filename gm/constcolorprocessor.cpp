@@ -39,7 +39,7 @@
 #include "src/gpu/ganesh/ops/GrOp.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/FontToolUtils.h"
-#include "tools/gpu/TestOps.h"
+#include "tools/ganesh/TestOps.h"
 
 #include <utility>
 
@@ -114,7 +114,7 @@ protected:
                 if (paintType >= std::size(kPaintColors)) {
                     GrColorInfo colorInfo;
                     SkSurfaceProps props;
-                    GrFPArgs args(rContext, &colorInfo, props, GrFPArgs::Scope::kDefault);
+                    GrFPArgs args(sdc, &colorInfo, props, GrFPArgs::Scope::kDefault);
                     baseFP = GrFragmentProcessors::Make(fShader.get(), args, SkMatrix::I());
                 } else {
                     baseFP = GrFragmentProcessor::MakeColor(

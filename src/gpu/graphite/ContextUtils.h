@@ -8,41 +8,41 @@
 #ifndef skgpu_graphite_ContextUtils_DEFINED
 #define skgpu_graphite_ContextUtils_DEFINED
 
-#include "include/core/SkBlendMode.h"
-#include "src/gpu/graphite/PipelineData.h"
+#include "src/core/SkSLTypeShared.h"
+#include "src/gpu/graphite/Uniform.h"
 
+#include <cstdint>
 #include <optional>
+#include <string>
 
 class SkColorInfo;
 class SkM44;
+enum class SkBlendMode;
+struct SkIRect;
 
 namespace skgpu {
 enum class BackendApi : unsigned int;
 
 namespace graphite {
+class Caps;
 class ComputeStep;
 enum class Coverage;
-enum class DstReadStrategy;
+class FloatStorageManager;
 class Geometry;
 class PaintParams;
+class PaintParamsKeyBuilder;
 class PipelineDataGatherer;
 class Recorder;
 struct RenderPassDesc;
 class RenderStep;
+struct ResourceBindingRequirements;
 class ShaderCodeDictionary;
+enum class TextureFormat : uint8_t;
 class UniformManager;
 class UniquePaintParamsID;
 
-struct ResourceBindingRequirements;
 
-UniquePaintParamsID ExtractPaintData(Recorder*,
-                                     PipelineDataGatherer* gatherer,
-                                     PaintParamsKeyBuilder* builder,
-                                     const Layout layout,
-                                     const SkM44& local2Dev,
-                                     const PaintParams&,
-                                     const Geometry& geometry,
-                                     const SkColorInfo& targetColorInfo);
+enum class Layout : uint8_t;
 
 // Intrinsic uniforms used by every program created in Graphite.
 //
@@ -64,7 +64,9 @@ void CollectIntrinsicUniforms(const Caps* caps,
                               SkIRect dstReadBounds,
                               UniformManager*);
 
-bool IsDstReadRequired(const Caps*, std::optional<SkBlendMode>, Coverage);
+// Returns whether or not hardware blending can be used. If not, we must perform a dst read within
+// the shader.
+bool CanUseHardwareBlending(const Caps*, TextureFormat, std::optional<SkBlendMode>, Coverage);
 
 std::string GetPipelineLabel(const ShaderCodeDictionary*,
                              const RenderPassDesc& renderPassDesc,

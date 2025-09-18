@@ -8,6 +8,7 @@
 #ifndef skgpu_graphite_Surface_Graphite_DEFINED
 #define skgpu_graphite_Surface_Graphite_DEFINED
 
+#include "include/core/SkRecorder.h"
 #include "src/image/SkSurface_Base.h"
 
 #include "include/gpu/GpuTypes.h"
@@ -19,6 +20,7 @@ namespace skgpu::graphite {
 
 class Context;
 class Device;
+class DrawContext;
 class Image;
 class Recorder;
 class TextureProxy;
@@ -60,6 +62,7 @@ public:
     SkSurface_Base::Type type() const override { return SkSurface_Base::Type::kGraphite; }
 
     Recorder* onGetRecorder() const override;
+    SkRecorder* onGetBaseRecorder() const override;
     SkCanvas* onNewCanvas() override;
     sk_sp<SkSurface> onNewSurface(const SkImageInfo&) override;
     sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subset) override;
@@ -87,6 +90,8 @@ public:
     sk_sp<Image> asImage() const;
     sk_sp<Image> makeImageCopy(const SkIRect* subset, Mipmapped) const;
     TextureProxy* backingTextureProxy() const;
+
+    void flushToDrawContext(DrawContext*);
 
 private:
     // Regular and scratch surfaces differ by initial clear and if they are registered or not,
@@ -117,7 +122,6 @@ private:
 // work when looping in a benchmark, as the controlling code expects.
 void Flush(sk_sp<SkSurface> surface);
 void Flush(SkSurface* surface);
-
 } // namespace skgpu::graphite
 
 #endif // skgpu_graphite_Surface_Graphite_DEFINED

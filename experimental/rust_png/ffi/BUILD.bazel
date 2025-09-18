@@ -49,14 +49,13 @@ rust_cxx_bridge(
 rust_static_library(
     name = "ffi_rs",
     srcs = [":rs_srcs"],
-    crate_features = ["png_0_18"],
     rustc_flags = ["-Dwarnings"],
     visibility = [
         "//experimental/rust_png:__subpackages__",
     ],
     deps = [
         ":ffi_cpp",
-        "@cxx",
-        "@rust_png//:png",
+        "@crates//:cxx",
+        "@crates//:png",
     ],
 )

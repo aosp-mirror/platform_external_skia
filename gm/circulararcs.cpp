@@ -164,7 +164,7 @@ DEF_SIMPLE_GM(circular_arcs_weird, canvas, 1000, 400) {
     paints.push_back().setStroke(true);
     paints.back().setStrokeWidth(kS / 6.f);
     constexpr SkScalar kDashIntervals[] = {kS / 15, 2 * kS / 15};
-    paints.back().setPathEffect(SkDashPathEffect::Make(kDashIntervals, 2, 0.f));
+    paints.back().setPathEffect(SkDashPathEffect::Make(kDashIntervals, 0.f));
 
     constexpr SkScalar kPad = 20.f;
     canvas->translate(kPad, kPad);
@@ -342,4 +342,25 @@ DEF_SIMPLE_GM(crbug_1472747, canvas, 400, 400) {
     SkPaint fill;
     fill.setAntiAlias(true);
     canvas->drawPath(strokedCircle, fill);
+}
+
+DEF_SIMPLE_GM(bug406747427, canvas, 400, 400) {
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    paint.setStyle(SkPaint::kStroke_Style);
+    paint.setStrokeCap(SkPaint::kRound_Cap);
+    paint.setColor(SkColorSetARGB(255,255,0,0));
+    paint.setStrokeWidth(50);
+    SkRect oval = SkRect::MakeXYWH(100, 40, 50, 50);
+    canvas->drawArc(oval, 45, 275, false, paint);
+
+    paint.setColor(SkColorSetARGB(255,0,0,255));
+    paint.setStrokeWidth(48);
+    oval = SkRect::MakeXYWH(100, 140, 50, 50);
+    canvas->drawArc(oval, 45, 275, false, paint);
+
+    paint.setColor(SkColorSetARGB(255,0,255,0));
+    paint.setStrokeWidth(80);
+    oval = SkRect::MakeXYWH(100, 280, 50, 50);
+    canvas->drawArc(oval, 45, 275, false, paint);
 }

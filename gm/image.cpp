@@ -10,7 +10,6 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkFont.h"
@@ -29,31 +28,34 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
-#include "include/gpu/ganesh/GrDirectContext.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkMalloc.h"
 #include "src/core/SkAutoPixmapStorage.h"
+#include "src/core/SkColorPriv.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/image/SkImage_Base.h"
+#include "tools/DecodeUtils.h"
 #include "tools/GpuToolUtils.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/FontToolUtils.h"
 
+#if defined(SK_GANESH)
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#endif
+
 #if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/Image.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Surface.h"
 #endif
 
 #include <functional>
 #include <utility>
-
-#if defined(SK_GRAPHITE)
-#include "include/gpu/graphite/Image.h"
-#endif
 
 const SkSamplingOptions gSamplings[] = {
     SkSamplingOptions(SkFilterMode::kNearest),
@@ -179,8 +181,10 @@ protected:
         SkImageInfo info = SkImageInfo::MakeN32Premul(W, H);
         sk_sp<SkSurface> surf0(SkSurfaces::WrapPixels(info, fBuffer, RB));
         sk_sp<SkSurface> surf1(SkSurfaces::Raster(info));
-        sk_sp<SkSurface> surf2(
-                SkSurfaces::RenderTarget(canvas->recordingContext(), skgpu::Budgeted::kNo, info));
+        sk_sp<SkSurface> surf2;
+#if defined(SK_GANESH)
+        surf2 = SkSurfaces::RenderTarget(canvas->recordingContext(), skgpu::Budgeted::kNo, info);
+#endif
 
         test_surface(canvas, surf0.get(), true);
         canvas->translate(80, 0);
@@ -222,7 +226,7 @@ static void show_scaled_pixels(SkCanvas* canvas, SkImage* image, bool useImageSc
         canvas->save();
         for (auto s : gSamplings) {
             if (useImageScaling) {
-                if (auto scaled = image->makeScaled(canvas->recorder() ,info, s)) {
+                if (auto scaled = image->makeScaled(canvas->baseRecorder(), info, s)) {
                     canvas->drawImage(scaled, 0, 0);
                 }
             } else {
@@ -280,9 +284,11 @@ static sk_sp<SkImage> make_gpu(const SkImageInfo& info,
                                skgpu::graphite::Recorder* recorder,
                                void (*draw)(SkCanvas*)) {
     sk_sp<SkSurface> surface;
+#if defined(SK_GANESH)
     if (ctx) {
         surface = SkSurfaces::RenderTarget(ctx, skgpu::Budgeted::kNo, info);
     }
+#endif
 #if defined(SK_GRAPHITE)
     if (recorder) {
         surface = SkSurfaces::RenderTarget(recorder, info);
@@ -342,9 +348,12 @@ DEF_GM( return new ScalePixelsGM(true); )
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEF_SIMPLE_GM_CAN_FAIL(new_texture_image, canvas, errorMsg, 280, 115) {
+    bool isGPU = false;
 
+#if defined(SK_GANESH)
     GrDirectContext* dContext = GrAsDirectContext(canvas->recordingContext());
-    bool isGPU = SkToBool(dContext);
+    isGPU = isGPU || SkToBool(dContext);
+#endif
 
 #if defined(SK_GRAPHITE)
     skgpu::graphite::Recorder* recorder = canvas->recorder();
@@ -410,13 +419,16 @@ DEF_SIMPLE_GM_CAN_FAIL(new_texture_image, canvas, errorMsg, 280, 115) {
             // Create a texture image
             [&]() -> sk_sp<SkImage> {
                 sk_sp<SkSurface> surface;
+#if defined(SK_GANESH)
                 if (dContext) {
                     surface = SkSurfaces::RenderTarget(dContext, skgpu::Budgeted::kYes, ii);
-                } else {
-#if defined(SK_GRAPHITE)
-                    surface = SkSurfaces::RenderTarget(recorder, ii);
-#endif
                 }
+#endif
+#if defined(SK_GRAPHITE)
+                if (recorder) {
+                    surface = SkSurfaces::RenderTarget(recorder, ii);
+                }
+#endif
 
                 if (!surface) {
                     return nullptr;
@@ -432,16 +444,19 @@ DEF_SIMPLE_GM_CAN_FAIL(new_texture_image, canvas, errorMsg, 280, 115) {
         if (image) {
             for (auto mm : { false, true }) {
                 sk_sp<SkImage> texImage;
+#if defined(SK_GANESH)
                 if (dContext) {
                     texImage = SkImages::TextureFromImage(dContext,
                                                           image,
                                                           mm ? skgpu::Mipmapped::kYes
                                                              : skgpu::Mipmapped::kNo);
-                } else {
-#if defined(SK_GRAPHITE)
-                    texImage = SkImages::TextureFromImage(recorder, image, {mm});
-#endif
                 }
+#endif
+#if defined(SK_GRAPHITE)
+                if (recorder) {
+                    texImage = SkImages::TextureFromImage(recorder, image, {mm});
+                }
+#endif
                 if (texImage) {
                     canvas->drawImage(texImage, 0, mm ? kSize + kPad : 0);
                 }
@@ -531,26 +546,52 @@ DEF_SIMPLE_GM_CAN_FAIL(image_subset, canvas, errorMsg, 440, 220) {
         return skiagm::DrawResult::kFail;
     }
 
-    GrDirectContext* dContext = GrAsDirectContext(canvas->recordingContext());
-#if defined(SK_GRAPHITE)
-    auto recorder = canvas->recorder();
-#endif
+    auto recorder = canvas->baseRecorder();
 
     canvas->drawImage(img, 10, 10);
 
-    sk_sp<SkImage> subset;
-
-#if defined(SK_GRAPHITE)
-    if (recorder) {
-        subset = img->makeSubset(recorder, {100, 100, 200, 200}, {});
-    } else
-#endif
-    {
-        subset = img->makeSubset(dContext, {100, 100, 200, 200});
-    }
+    sk_sp<SkImage> subset = img->makeSubset(recorder, {100, 100, 200, 200}, {});
 
     canvas->drawImage(subset, 220, 10);
     subset = serial_deserial(subset.get());
     canvas->drawImage(subset, 220+110, 10);
     return skiagm::DrawResult::kOk;
+}
+
+DEF_SIMPLE_GM(crbug_404394639, canvas, 500, 500) {
+    // Define SkImage with height > 32768.
+    const int SOURCE_WIDTH = 500;
+    const int SOURCE_HEIGHT = 40000;
+    SkImageInfo source_info = SkImageInfo::MakeN32Premul(SOURCE_WIDTH, SOURCE_HEIGHT);
+
+    auto surf =  SkSurfaces::Raster(source_info);
+    SkCanvas* canv = surf->getCanvas();
+
+    SkPoint pts[] = {SkPoint::Make(0, 0), SkPoint::Make(0, SOURCE_HEIGHT)};
+    SkColor4f colors[] = {SkColor4f::FromColor(SK_ColorCYAN), SkColor4f::FromColor(SK_ColorMAGENTA)};
+    sk_sp<SkShader> gradient_shader = SkGradientShader::MakeLinear(
+        pts,
+        colors,
+        nullptr,
+        nullptr,
+        2,
+        SkTileMode::kClamp,
+        0
+    );
+
+    SkPaint paint;
+    paint.setShader(gradient_shader);
+
+    canv->drawRect(SkRect::MakeXYWH(0, 0, SOURCE_WIDTH, SOURCE_HEIGHT), paint);
+
+    // Create an immutable source image.
+    sk_sp<SkImage> large_source_image = surf->makeImageSnapshot();
+
+    SkSamplingOptions sampling(SkFilterMode::kLinear);
+    sk_sp<SkImage> scaled_image = large_source_image->makeScaled(
+        large_source_image->imageInfo().makeWH(500, 500),
+        sampling
+    );
+    // Image shouldn't be different based on compiler.
+    canvas->drawImage(scaled_image, 0, 0);
 }

@@ -7,6 +7,7 @@
 
 #include "src/codec/SkPngCodecBase.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <tuple>
 #include <utility>
@@ -99,17 +100,15 @@ SkCodec::Result SkPngCodecBase::initializeXforms(const SkImageInfo& dstInfo,
 
         // We assume that `frameWidth` and `bitsPerPixel` have been already sanitized
         // earlier (and that the multiplication and addition below won't overflow).
-        SkASSERT(0 < frameWidth);
-        SkASSERT(frameWidth < 0xFFFFFF);
-        SkASSERT(encodedBitsPerPixel < 128);
+        SkASSERT_RELEASE(0 < frameWidth);
+        SkASSERT_RELEASE(frameWidth < 0xFFFFFF);
+        SkASSERT_RELEASE(encodedBitsPerPixel < 128);
 
         size_t encodedBitsPerRow = static_cast<size_t>(frameWidth) * encodedBitsPerPixel;
         fEncodedRowBytes = (encodedBitsPerRow + 7) / 8;  // Round up to the next byte.
 
-#if defined(SK_DEBUG)
         size_t dstBytesPerPixel = dstInfo.bytesPerPixel();
         fDstRowBytes = static_cast<size_t>(frameWidth) * dstBytesPerPixel;
-#endif
     }
 
     // Reset fSwizzler and this->colorXform().  We can't do this in onRewind() because the
@@ -214,18 +213,18 @@ SkCodec::Result SkPngCodecBase::initializeSwizzler(const SkImageInfo& dstInfo,
     SkIRect frameRect = SkIRect::MakeWH(frameWidth, 1);
     const SkIRect* frameRectPtr = nullptr;
     if (options.fSubset) {
-        SkASSERT(frameWidth == dstInfo.width());
+        SkASSERT_RELEASE(frameWidth == dstInfo.width());
     } else {
         frameRectPtr = &frameRect;
     }
 
     if (skipFormatConversion) {
         // We cannot skip format conversion when there is a color table.
-        SkASSERT(!fColorTable);
+        SkASSERT_RELEASE(!fColorTable);
         int srcBPP = 0;
         switch (this->getEncodedInfo().color()) {
             case SkEncodedInfo::kRGB_Color:
-                SkASSERT(this->getEncodedInfo().bitsPerComponent() == 16);
+                SkASSERT_RELEASE(this->getEncodedInfo().bitsPerComponent() == 16);
                 srcBPP = 6;
                 break;
             case SkEncodedInfo::kRGBA_Color:
@@ -235,7 +234,7 @@ SkCodec::Result SkPngCodecBase::initializeSwizzler(const SkImageInfo& dstInfo,
                 srcBPP = 1;
                 break;
             default:
-                SkASSERT(false);
+                SkASSERT_RELEASE(false);
                 break;
         }
         fSwizzler = SkSwizzler::MakeSimple(srcBPP, swizzlerInfo, swizzlerOptions, frameRectPtr);
@@ -263,8 +262,8 @@ SkSampler* SkPngCodecBase::getSampler(bool createIfNecessary) {
 }
 
 void SkPngCodecBase::applyXformRow(SkSpan<uint8_t> dstRow, SkSpan<const uint8_t> srcRow) {
-    SkASSERT(dstRow.size() >= fDstRowBytes);
-    SkASSERT(srcRow.size() >= fEncodedRowBytes);
+    SkASSERT_RELEASE(dstRow.size() >= fDstRowBytes);
+    SkASSERT_RELEASE(srcRow.size() >= fEncodedRowBytes);
     applyXformRow(dstRow.data(), srcRow.data());
 }
 
@@ -297,11 +296,13 @@ bool SkPngCodecBase::createColorTable(const SkImageInfo& dstInfo) {
         return false;
     }
     const PaletteColorEntry* palette = maybePlteChunk->data();
+    constexpr size_t kMaxCountOfPaletteEntries = 256;
     size_t numColors = maybePlteChunk->size();
+    numColors = std::min(numColors, kMaxCountOfPaletteEntries);
 
     // Contents depend on tableColorType and our choice of if/when to premultiply:
     // { kPremul, kUnpremul, kOpaque } x { RGBA, BGRA }
-    SkPMColor colorTable[256];
+    SkPMColor colorTable[kMaxCountOfPaletteEntries];
     SkColorType tableColorType = this->colorXform() ? kXformSrcColorType : dstInfo.colorType();
 
     std::optional<SkSpan<const uint8_t>> maybeTrnsChunk = this->onTryGetTrnsChunk();
@@ -310,6 +311,7 @@ bool SkPngCodecBase::createColorTable(const SkImageInfo& dstInfo) {
     if (maybeTrnsChunk.has_value()) {
         alphas = maybeTrnsChunk->data();
         numColorsWithAlpha = maybeTrnsChunk->size();
+        numColorsWithAlpha = std::min(numColorsWithAlpha, numColors);
     }
 
     bool shouldApplyColorXformToColorTable = this->colorXform() && !this->xformOnDecode();

@@ -9,7 +9,6 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMallocPixelRef.h"
@@ -23,6 +22,7 @@
 #include "include/gpu/ganesh/GrBackendSurface.h"
 #include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/GrTypes.h"
+#include "src/core/SkColorPriv.h"
 #if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Surface.h"
@@ -564,7 +564,7 @@ static sk_sp<SkImage> upload(const sk_sp<SkSurface>& surf, SkColor color) {
 // in between uses of the shared backing resource).
 // The unit test fails on Nexus 6P/Android M with driver 129.0 without the
 // "DisallowTexSubImageForUnormConfigTexturesEverBoundToFBO" workaround enabled.
-// skbug.com/11834
+// skbug.com/40042902
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(WritePixelsPendingIO,
                                        reporter,
                                        ctxInfo,

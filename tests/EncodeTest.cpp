@@ -12,7 +12,6 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
 #include "include/core/SkDataTable.h"
@@ -31,6 +30,7 @@
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTemplates.h"
 #include "modules/skcms/src/skcms_public.h"
+#include "src/core/SkColorPriv.h"
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "tests/Test.h"
@@ -41,7 +41,11 @@
 #endif
 
 #if defined(SK_CODEC_DECODES_PNG_WITH_RUST)
-#include "experimental/rust_png/decoder/SkPngRustDecoder.h"
+#include "include/codec/SkPngRustDecoder.h"
+#endif
+
+#if defined(SK_CODEC_ENCODES_PNG_WITH_RUST)
+#include "include/encode/SkPngRustEncoder.h"
 #endif
 
 #include <png.h>
@@ -206,51 +210,10 @@ void test_png_encoding_roundtrip_from_specific_source_format(skiatest::Reporter*
                 originalBitmapRgba8.info().makeColorType(colorType).makeAlphaType(alphaType);
         originalBitmap.allocPixels(dstInfo);
 
-        skcms_PixelFormat dstFormat;
-        switch (colorType) {
-            case kRGBA_8888_SkColorType:
-                dstFormat = skcms_PixelFormat_RGBA_8888;
-                break;
-            case kBGRA_8888_SkColorType:
-                dstFormat = skcms_PixelFormat_BGRA_8888;
-                break;
-            case kRGBA_F16_SkColorType:
-                dstFormat = skcms_PixelFormat_RGBA_hhhh;
-                break;
-            case kRGBA_F32_SkColorType:
-                dstFormat = skcms_PixelFormat_RGBA_ffff;
-                break;
-            default:
-                SkUNREACHABLE;
-        }
+        bool success = SkConvertPixels(dstInfo, originalBitmap.getPixels(), dstInfo.minRowBytes(),
+                                       originalBitmapRgba8.info(), originalBitmapRgba8.getPixels(),
+                                       originalBitmapRgba8.info().minRowBytes());
 
-        auto to_skcms_alpha = [](SkAlphaType alpha) -> skcms_AlphaFormat {
-            switch (alpha) {
-                case kOpaque_SkAlphaType:
-                    return skcms_AlphaFormat_Opaque;
-                case kPremul_SkAlphaType:
-                    return skcms_AlphaFormat_PremulAsEncoded;
-                case kUnpremul_SkAlphaType:
-                    return skcms_AlphaFormat_Unpremul;
-                    break;
-                case kUnknown_SkAlphaType:
-                    SkUNREACHABLE;
-            }
-            SkUNREACHABLE;
-        };
-        skcms_AlphaFormat srcAlpha = to_skcms_alpha(originalBitmapRgba8.alphaType());
-        skcms_AlphaFormat dstAlpha = to_skcms_alpha(alphaType);
-
-        size_t npixels = originalBitmapRgba8.width() * originalBitmapRgba8.height();
-        bool success = skcms_Transform(originalBitmapRgba8.getAddr(0, 0),
-                                       skcms_PixelFormat_RGBA_8888,
-                                       srcAlpha,
-                                       nullptr,
-                                       originalBitmap.getAddr(0, 0),
-                                       dstFormat,
-                                       dstAlpha,
-                                       nullptr,
-                                       npixels);
         REPORTER_ASSERT(r, success);
         if (!success) {
             return;
@@ -268,7 +231,11 @@ void test_png_encoding_roundtrip_from_specific_source_format(skiatest::Reporter*
             return;
         }
         SkDynamicMemoryWStream buf;
+#if defined(SK_CODEC_ENCODES_PNG_WITH_RUST)
+        success = SkPngRustEncoder::Encode(&buf, src, SkPngRustEncoder::Options());
+#else
         success = SkPngEncoder::Encode(&buf, src, SkPngEncoder::Options());
+#endif
         REPORTER_ASSERT(r, success);
         if (!success) {
             return;
@@ -338,6 +305,8 @@ DEF_TEST(Encode_png_roundtrip_for_different_source_formats, r) {
             r, kN32_SkColorType, kUnpremul_SkAlphaType, 0);
     test_png_encoding_roundtrip_from_specific_source_format(
             r, kN32_SkColorType, kPremul_SkAlphaType, 0);
+    test_png_encoding_roundtrip_from_specific_source_format(
+            r, kRGB_565_SkColorType, kOpaque_SkAlphaType, 1);
 
     // PNG encoder used to narrow down `kRGBA_F16_SkColorType` from RGBA to RGB
     // (BE16) by skipping the alpha channel via `png_set_filler`.  But this
@@ -346,6 +315,8 @@ DEF_TEST(Encode_png_roundtrip_for_different_source_formats, r) {
     // more details.
     test_png_encoding_roundtrip_from_specific_source_format(
             r, kRGBA_F16_SkColorType, kOpaque_SkAlphaType, 0);
+    test_png_encoding_roundtrip_from_specific_source_format(
+            r, kRGBA_F16_SkColorType, kPremul_SkAlphaType, 1);
     test_png_encoding_roundtrip_from_specific_source_format(
             r, kRGBA_F32_SkColorType, kOpaque_SkAlphaType, 0);
 }
@@ -773,8 +744,11 @@ DEF_TEST(Encode_jpeg_blend_to_black, r) {
                                       kPremul_SkAlphaType}) {
             for (bool blendOnBlack : {true, false}) {
                 skiatest::ReporterContext rc(r,
-                                             SkStringPrintf("colorType=0x%x alphaType=0x%x blendOnBlack=%d",
-                                                            colorType, alphaType, blendOnBlack));
+                                             SkStringPrintf(
+                                                  "colorType=0x%x alphaType=0x%x blendOnBlack=%d",
+                                                  unsigned(colorType),
+                                                  unsigned(alphaType),
+                                                  blendOnBlack));
                 /////////////////////////////////////////////////////////////////
                 // Decode the test image into `originalBitmap` into correct alpha
                 // and color type.

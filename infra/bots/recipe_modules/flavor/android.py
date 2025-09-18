@@ -41,10 +41,20 @@ class AndroidFlavor(default.DefaultFlavor):
 
     # A list of devices we can't root.  If rooting fails and a device is not
     # on the list, we fail the task to avoid perf inconsistencies.
-    self.cant_root = ['GalaxyS7_G930FD',
-                      'GalaxyS20', 'MotoG4',
-                      'P30', 'Pixel4','Pixel4XL', 'Pixel5', 'TecnoSpark3Pro', 'JioNext',
-                      'GalaxyS24', 'MotoG73']
+    self.cant_root = [
+      'GalaxyS7_G930FD',
+      'GalaxyS9',
+      'GalaxyS20',
+      'GalaxyS24',
+      'JioNext',
+      'MotoG4',
+      'MotoG73',
+      'P30',
+      'Pixel4',
+      'Pixel4XL',
+      'Pixel5',
+      'TecnoSpark3Pro',
+    ]
 
     self.use_performance_governor_for_dm = [
       'Pixel3a',
@@ -53,12 +63,14 @@ class AndroidFlavor(default.DefaultFlavor):
       'Wembley',
       'Pixel6',
       'Pixel7',
+      'Pixel7Pro',
       'Pixel9',
     ]
 
     self.use_powersave_governor_for_nanobench = [
       'Pixel6',
       'Pixel7',
+      'Pixel7Pro',
       'Pixel9',
     ]
 
@@ -156,10 +168,14 @@ class AndroidFlavor(default.DefaultFlavor):
 
     with self.m.context(cwd=self.m.path.start_dir.joinpath('skia')):
       with self.m.env({'ADB_VENDOR_KEYS': self.ADB_PUB_KEY}):
-        return self.m.run.with_retry(self.m.step, title, attempts,
-                                     cmd=[self.ADB_BINARY]+list(cmd),
-                                     between_attempts_fn=wait_for_device,
-                                     **kwargs)
+        if attempts == 1:
+          return self.m.run(self.m.step, title,
+                            cmd=[self.ADB_BINARY]+list(cmd), **kwargs)
+        else:
+          return self.m.run.with_retry(self.m.step, title, attempts,
+                                       cmd=[self.ADB_BINARY]+list(cmd),
+                                       between_attempts_fn=wait_for_device,
+                                       **kwargs)
 
   def _scale_for_dm(self):
     device = self.m.vars.builder_cfg.get('model')
@@ -273,10 +289,12 @@ class AndroidFlavor(default.DefaultFlavor):
 
 
   def install(self):
+    if self.m.vars.internal_hardware_label == '6':
+      self._adb('adb connect', 'connect', 'variable_lab_dut_hostname')
     self._adb('mkdir ' + self.device_dirs.resource_dir,
               'shell', 'mkdir', '-p', self.device_dirs.resource_dir)
-    if self.m.vars.builder_cfg.get('model') == 'GalaxyS20':
-      # See skia:10184, should be moot once upgraded to Android 11?
+    if self.m.vars.builder_cfg.get('model') in ('GalaxyS20', 'GalaxyS9'):
+      # See skbug.com/40041532, should be moot once upgraded to Android 11?
       self._adb('cp libGLES_mali.so to ' + self.device_dirs.bin_dir,
                  'shell', 'cp',
                 '/vendor/lib64/egl/libGLES_mali.so',
@@ -385,11 +403,12 @@ class AndroidFlavor(default.DefaultFlavor):
     self._adb('push %s %s' % (host, device), 'push', host, device)
 
   def copy_directory_contents_to_device(self, host, device):
-    contents = self.m.file.glob_paths('ls %s/*' % host,
-                                      host, '*',
-                                      test_data=['foo.png', 'bar.jpg'])
-    args = contents + [device]
-    self._adb('push %s/* %s' % (host, device), 'push', *args)
+    with self.m.step.nest('copy %s %s' % (host, device)):
+      contents = self.m.file.glob_paths('ls %s/*' % host,
+                                        host, '*',
+                                        test_data=['foo.png', 'bar.jpg'])
+      for file in contents:
+        self._adb('push %s %s' % (file, device), 'push', file, device)
 
   def copy_directory_contents_to_host(self, device, host):
     # TODO(borenet): When all of our devices are on Android 6.0 and up, we can

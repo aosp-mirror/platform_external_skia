@@ -44,7 +44,9 @@ bool SkFontScanner_Fontations::scanFile(SkStreamAsset* stream, int* numFaces) co
     if (!fontations_ffi::font_or_collection(slice, num_fonts)) {
         return false;
     }
-    *numFaces = num_fonts == 0 ? 1 : num_fonts;
+    if (numFaces) {
+        *numFaces = num_fonts == 0 ? 1 : num_fonts;
+    }
     return true;
 }
 
@@ -165,8 +167,7 @@ bool SkFontScanner_Fontations::scanInstance(SkStreamAsset* stream,
         axes->reset(size);
         auto variationAxes = std::make_unique<SkFontParameters::Variation::Axis[]>(size);
         sk_fontations::AxisWrapper axisWrapper(variationAxes.get(), size);
-        auto size1 = fontations_ffi::populate_axes(*bridgeFontNamedInstanceRef, axisWrapper);
-        SkASSERT(size == size1);
+        SkASSERT(size == fontations_ffi::populate_axes(*bridgeFontNamedInstanceRef, axisWrapper));
         for (auto i = 0; i < size; ++i) {
             const auto var = variationAxes[i];
             (*axes)[i].tag = var.tag;

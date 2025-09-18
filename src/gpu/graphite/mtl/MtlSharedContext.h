@@ -39,16 +39,31 @@ public:
                                                            uint32_t recorderID,
                                                            size_t resourceBudget) override;
 
+    sk_cfp<id<MTLDepthStencilState>> getCompatibleDepthStencilState(
+        const DepthStencilSettings&) const;
+
+
 private:
 
     MtlSharedContext(sk_cfp<id<MTLDevice>>,
-                     sk_sp<skgpu::MtlMemoryAllocator> memoryAllocator,
+                     sk_sp<skgpu::MtlMemoryAllocator>,
                      std::unique_ptr<const MtlCaps>,
+                     SkExecutor*,
                      SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects);
+
+    void createCompatibleDepthStencilState(const DepthStencilSettings&);
 
     sk_sp<skgpu::MtlMemoryAllocator> fMemoryAllocator;
 
     sk_cfp<id<MTLDevice>> fDevice;
+
+    // In the current Graphite class structure 'fDepthStencilStates' would more appropriately
+    // go in a new MtlGlobalCache class. However, GlobalCache may go away as a concept, in
+    // which case, this would be a reasonable place for this cache.
+    // TODO(robertphillips): Come up with a scheme to map from DepthStencilSettings to tightly
+    // packed ints and switch this to be a std::array.
+    skia_private::THashMap<DepthStencilSettings, sk_cfp<id<MTLDepthStencilState>>>
+            fDepthStencilStates;
 };
 
 } // namespace skgpu::graphite

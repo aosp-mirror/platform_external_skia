@@ -22,6 +22,7 @@
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkSurfaceProps.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkNoncopyable.h"
@@ -29,12 +30,10 @@
 #include "src/core/SkMatrixPriv.h"
 #include "src/shaders/SkShaderBase.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <utility>
 
 struct SkArc;
-class SkBitmap;
 class SkColorSpace;
 class SkMesh;
 struct SkDrawShadowRec;
@@ -49,6 +48,7 @@ class SkPaint;
 class SkPath;
 class SkPixmap;
 class SkRRect;
+class SkRecorder;
 class SkSurface;
 class SkVertices;
 enum SkColorType : int;
@@ -283,6 +283,7 @@ public:
 
     virtual GrRecordingContext* recordingContext() const { return nullptr; }
     virtual skgpu::graphite::Recorder* recorder() const { return nullptr; }
+    virtual SkRecorder* baseRecorder() const { return nullptr; }
 
     virtual skgpu::ganesh::Device* asGaneshDevice() { return nullptr; }
     virtual skgpu::graphite::Device* asGraphiteDevice() { return nullptr; }
@@ -333,8 +334,7 @@ public:
     virtual void drawSlug(SkCanvas*, const sktext::gpu::Slug* slug, const SkPaint& paint);
 
     virtual void drawPaint(const SkPaint& paint) = 0;
-    virtual void drawPoints(SkCanvas::PointMode mode, size_t count,
-                            const SkPoint[], const SkPaint& paint) = 0;
+    virtual void drawPoints(SkCanvas::PointMode, SkSpan<const SkPoint>, const SkPaint&) = 0;
     virtual void drawRect(const SkRect& r,
                           const SkPaint& paint) = 0;
     virtual void drawRegion(const SkRegion& r,
@@ -386,14 +386,14 @@ public:
                               const SkPaint&,
                               bool skipColorXform = false) = 0;
     virtual void drawMesh(const SkMesh& mesh, sk_sp<SkBlender>, const SkPaint&) = 0;
-    virtual void drawShadow(const SkPath&, const SkDrawShadowRec&);
+    virtual void drawShadow(SkCanvas*, const SkPath&, const SkDrawShadowRec&);
 
     // default implementation calls drawVertices
     virtual void drawPatch(const SkPoint cubics[12], const SkColor colors[4],
                            const SkPoint texCoords[4], sk_sp<SkBlender>, const SkPaint& paint);
 
     // default implementation calls drawVertices
-    virtual void drawAtlas(const SkRSXform[], const SkRect[], const SkColor[], int count,
+    virtual void drawAtlas(SkSpan<const SkRSXform>, SkSpan<const SkRect>, SkSpan<const SkColor>,
                            sk_sp<SkBlender>, const SkPaint&);
 
     virtual void drawAnnotation(const SkRect&, const char[], SkData*) {}
@@ -485,11 +485,6 @@ public:
                            const SkImageFilter*, const SkSamplingOptions&, const SkPaint&);
 
 protected:
-    // DEPRECATED: Can be deleted once SkCanvas::onDrawImage() uses skif::FilterResult so don't
-    // bother re-arranging.
-    virtual sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&);
-    virtual sk_sp<SkSpecialImage> makeSpecial(const SkImage*);
-
     // Configure the device's coordinate spaces, specifying both how its device image maps back to
     // the global space (via 'deviceToGlobal') and the initial CTM of the device (via
     // 'localToDevice', i.e. what geometry drawn into this device will be transformed with).
@@ -599,7 +594,7 @@ public:
 protected:
 
     void drawPaint(const SkPaint& paint) override {}
-    void drawPoints(SkCanvas::PointMode, size_t, const SkPoint[], const SkPaint&) override {}
+    void drawPoints(SkCanvas::PointMode, SkSpan<const SkPoint>, const SkPaint&) override {}
     void drawImageRect(const SkImage*, const SkRect*, const SkRect&,
                        const SkSamplingOptions&, const SkPaint&,
                        SkCanvas::SrcRectConstraint) override {}

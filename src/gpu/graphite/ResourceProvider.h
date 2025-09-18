@@ -38,6 +38,7 @@ class ComputePipeline;
 class ComputePipelineDesc;
 class GlobalCache;
 class GraphicsPipelineDesc;
+class GraphicsPipelineHandle;
 class GraphiteResourceKey;
 class ResourceCache;
 class RuntimeEffectDictionary;
@@ -51,15 +52,33 @@ class ResourceProvider {
 public:
     virtual ~ResourceProvider();
 
+    GraphicsPipelineHandle createGraphicsPipelineHandle(
+            const GraphicsPipelineDesc&,
+            const RenderPassDesc&,
+            SkEnumBitMask<PipelineCreationFlags>);
+    void startPipelineCreationTask(sk_sp<const RuntimeEffectDictionary>,
+                                   const GraphicsPipelineHandle&);
+    sk_sp<GraphicsPipeline> resolveHandle(const GraphicsPipelineHandle&);
+
+    sk_sp<GraphicsPipeline> findGraphicsPipeline(
+            const UniqueKey& pipelineKey,
+            SkEnumBitMask<PipelineCreationFlags>,
+            uint32_t *compilationID = nullptr);
+
     // The runtime effect dictionary provides a link between SkCodeSnippetIds referenced in the
     // paint key and the current SkRuntimeEffect that provides the SkSL for that id.
     sk_sp<GraphicsPipeline> findOrCreateGraphicsPipeline(
             const RuntimeEffectDictionary*,
+            const UniqueKey& pipelineKey,
             const GraphicsPipelineDesc&,
             const RenderPassDesc&,
-            SkEnumBitMask<PipelineCreationFlags> = PipelineCreationFlags::kNone);
+            SkEnumBitMask<PipelineCreationFlags>);
 
     sk_sp<ComputePipeline> findOrCreateComputePipeline(const ComputePipelineDesc&);
+
+    sk_sp<Texture> findOrCreateShareableTexture(SkISize,
+                                                const TextureInfo&,
+                                                std::string_view label);
 
     sk_sp<Texture> findOrCreateNonShareableTexture(SkISize,
                                                    const TextureInfo&,
@@ -71,12 +90,6 @@ public:
                                               const ResourceCache::ScratchResourceSet& unavailable);
 
     sk_sp<Texture> createWrappedTexture(const BackendTexture&, std::string_view label);
-
-    sk_sp<Texture> findOrCreateDepthStencilAttachment(SkISize dimensions,
-                                                      const TextureInfo&);
-
-    sk_sp<Texture> findOrCreateDiscardableMSAAAttachment(SkISize dimensions,
-                                                         const TextureInfo&);
 
     sk_sp<Buffer> findOrCreateBuffer(size_t size,
                                      BufferType type,
@@ -111,6 +124,8 @@ public:
     ResourceCache* resourceCache() { return fResourceCache.get(); }
     const SharedContext* sharedContext() { return fSharedContext; }
 #endif
+
+    const Caps* caps() const;
 
 #ifdef SK_BUILD_FOR_ANDROID
     virtual BackendTexture createBackendTexture(AHardwareBuffer*,

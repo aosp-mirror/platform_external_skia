@@ -63,7 +63,7 @@ func TestRun_Success(t *testing.T) {
 				// Make sure we use UTC instead of the system timezone. The GCS path reflects the fact that
 				// we convert from UTC+1 to UTC.
 				fakeNow := time.Date(2022, time.January, 31, 2, 2, 3, 0, time.FixedZone("UTC+1", 60*60))
-				ctx = now.TimeTravelingContext(fakeNow).WithContext(ctx)
+				ctx = now.TimeTravelingContext(ctx, fakeNow)
 				ctx = td.WithExecRunFn(ctx, commandCollector.Run)
 				var bazelCacheDirPath string
 				ctx, bazelCacheDirPath = common.WithEnoughSpaceOnBazelCachePartitionTestOnlyContext(ctx)
@@ -94,7 +94,7 @@ func TestRun_Success(t *testing.T) {
 				"Read "+outputsZIPExtractionDir+"/results.json",
 				"Upload gs://skia-perf/nano-json-v1/2022/01/31/01/ff99ff99ff99ff99ff99ff99ff99ff99ff99ff99/BazelTest-Foo-Bar/results_1234567890.json",
 				"Clean Bazel cache if disk space is too low",
-				"No need to clear the Bazel cache: free space on partition /mnt/pd0 is 20000000000 bytes, which is above the threshold of 15000000000 bytes",
+				"No need to clear the Bazel cache: free space on partition /home/chrome-bot is 20000000000 bytes, which is above the threshold of 15000000000 bytes",
 			)
 
 			// Command "bazelisk test ..." should be called from the checkout directory.

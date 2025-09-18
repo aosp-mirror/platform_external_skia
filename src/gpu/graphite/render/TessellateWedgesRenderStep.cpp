@@ -13,6 +13,7 @@
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkPoint_impl.h"
 #include "include/private/base/SkSpan_impl.h"
+#include "src/base/SkEnumBitMask.h"
 #include "src/core/SkSLTypeShared.h"
 #include "src/gpu/BufferWriter.h"
 #include "src/gpu/graphite/Attribute.h"
@@ -84,25 +85,29 @@ TessellateWedgesRenderStep::TessellateWedgesRenderStep(RenderStepID renderStepID
                                                        StaticBufferManager* bufferManager)
         : RenderStep(renderStepID,
                      Flags::kRequiresMSAA |
+                     Flags::kAppendDynamicInstances |
+                     Flags::kIgnoreInverseFill |
                      (depthStencilSettings.fDepthWriteEnabled ? Flags::kPerformsShading
                                                               : Flags::kNone),
                      /*uniforms=*/{{"localToDevice", SkSLType::kFloat4x4}},
                      PrimitiveType::kTriangles,
                      depthStencilSettings,
-                     /*vertexAttrs=*/  {{"resolveLevel_and_idx",
-                                         VertexAttribType::kFloat2, SkSLType::kFloat2}},
-                     /*instanceAttrs=*/kAttributes[infinitySupport])
+                     /*staticAttrs=*/{{"resolveLevel_and_idx",
+                                       VertexAttribType::kFloat2, SkSLType::kFloat2}},
+                     /*appendAttrs=*/kAttributes[infinitySupport])
         , fInfinitySupport(infinitySupport) {
-    SkASSERT(this->instanceStride() ==
+    SkASSERT(this->appendDataStride() ==
              PatchStride(infinitySupport ? kAttribs : kAttribsWithCurveType));
 
     // Initialize the static buffers we'll use when recording draw calls.
     // NOTE: Each instance of this RenderStep gets its own copy of the data. If this ends up causing
     // problems, we can modify StaticBufferManager to de-duplicate requests.
-    const size_t vertexSize = FixedCountWedges::VertexBufferSize();
-    auto vertexData = bufferManager->getVertexWriter(vertexSize, &fVertexBuffer);
+    auto vertexData = bufferManager->getVertexWriter(FixedCountWedges::VertexBufferVertexCount(),
+                                                     FixedCountWedges::VertexBufferStride(),
+                                                     &fVertexBuffer);
     if (vertexData) {
-        FixedCountWedges::WriteVertexBuffer(std::move(vertexData), vertexSize);
+        FixedCountWedges::WriteVertexBuffer(std::move(vertexData),
+                                            FixedCountWedges::VertexBufferSize());
     } // otherwise static buffer creation failed, so do nothing; Context initialization will fail.
 
     const size_t indexSize = FixedCountWedges::IndexBufferSize();
@@ -116,23 +121,21 @@ TessellateWedgesRenderStep::~TessellateWedgesRenderStep() {}
 
 std::string TessellateWedgesRenderStep::vertexSkSL() const {
     return SkSL::String::printf(
-            R"(
-                float2 localCoord;
-                if (resolveLevel_and_idx.x < 0) {
-                    // A negative resolve level means this is the fan point.
-                    localCoord = fanPointAttrib;
-                } else {
-                    // TODO: Approximate perspective scaling to match how PatchWriter is configured
-                    // (or provide explicit tessellation level in instance data instead of
-                    // replicating work)
-                    float2x2 vectorXform = float2x2(localToDevice[0].xy, localToDevice[1].xy);
-                    localCoord = tessellate_filled_curve(
-                        vectorXform, resolveLevel_and_idx.x, resolveLevel_and_idx.y, p01, p23, %s);
-                }
-                float4 devPosition = localToDevice * float4(localCoord, 0.0, 1.0);
-                devPosition.z = depth;
-                stepLocalCoords = localCoord;
-            )",
+            "float2 localCoord;\n"
+            "if (resolveLevel_and_idx.x < 0) {\n"
+                // A negative resolve level means this is the fan point.
+                "localCoord = fanPointAttrib;\n"
+            "} else {\n"
+                // TODO: Approximate perspective scaling to match how PatchWriter is configured
+                // (or provide explicit tessellation level in instance data instead of
+                // replicating work)
+                "float2x2 vectorXform = float2x2(localToDevice[0].xy, localToDevice[1].xy);\n"
+                "localCoord = tessellate_filled_curve("
+                    "vectorXform, resolveLevel_and_idx.x, resolveLevel_and_idx.y, p01, p23, %s);\n"
+            "}\n"
+            "float4 devPosition = localToDevice * float4(localCoord, 0.0, 1.0);\n"
+            "devPosition.z = depth;\n"
+            "stepLocalCoords = localCoord;\n",
             fInfinitySupport ? "curve_type_using_inf_support(p23)" : "curveType");
 }
 
@@ -204,6 +207,7 @@ void TessellateWedgesRenderStep::writeVertices(DrawWriter* dw,
 
 void TessellateWedgesRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                                           PipelineDataGatherer* gatherer) const {
+    SkDEBUGCODE(gatherer->checkRewind());
     SkDEBUGCODE(UniformExpectationsValidator uev(gatherer, this->uniforms());)
 
     gatherer->write(params.transform().matrix());

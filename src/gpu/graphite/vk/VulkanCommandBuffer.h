@@ -72,11 +72,15 @@ private:
     void prepareSurfaceForStateUpdate(SkSurface* targetSurface,
                                       const MutableTextureState* newState) override;
 
+    const Sampler* getSampler(const DrawPassCommands::BindTexturesAndSamplers* command,
+                              int32_t index);
+
     bool onAddRenderPass(const RenderPassDesc&,
                          SkIRect renderPassBounds,
                          const Texture* colorTexture,
                          const Texture* resolveTexture,
                          const Texture* depthStencilTexture,
+                         SkIPoint resolveOffset,
                          SkIRect viewport,
                          const DrawPassList&) override;
 
@@ -85,9 +89,12 @@ private:
                          const Texture* colorTexture,
                          const Texture* resolveTexture,
                          const Texture* depthStencilTexture);
+
+    void performOncePerRPUpdates(SkIRect viewport, bool bindDstAsInputAttachment);
+
     void endRenderPass();
 
-    void addDrawPass(const DrawPass*);
+    [[nodiscard]] bool addDrawPass(DrawPass*);
 
     // Track descriptor changes for binding prior to draw calls
     void recordBufferBindingInfo(const BindBufferInfo& info, UniformSlot);
@@ -96,7 +103,7 @@ private:
     void recordTextureAndSamplerDescSet(
             const DrawPass*, const DrawPassCommands::BindTexturesAndSamplers*);
 
-    bool updateAndBindInputAttachment(const VulkanTexture&, const int setIdx);
+    bool updateAndBindInputAttachment(const VulkanTexture&, const int setIdx, VkPipelineLayout);
     void bindTextureSamplers();
     void bindUniformBuffers();
     void syncDescriptorSets();
@@ -110,13 +117,7 @@ private:
     void bindGraphicsPipeline(const GraphicsPipeline*);
     void pushConstants(const PushConstantInfo&, VkPipelineLayout compatibleLayout);
 
-    void setBlendConstants(float* blendConstants);
-    void bindDrawBuffers(const BindBufferInfo& vertices,
-                         const BindBufferInfo& instances,
-                         const BindBufferInfo& indices,
-                         const BindBufferInfo& indirect);
-    void bindVertexBuffers(const Buffer* vertexBuffer, size_t vertexOffset,
-                           const Buffer* instanceBuffer, size_t instanceOffset);
+    void setBlendConstants(std::array<float, 4> blendConstants);
     void bindInputBuffer(const Buffer* buffer, VkDeviceSize offset, uint32_t binding);
     void bindIndexBuffer(const Buffer* indexBuffer, size_t offset);
     void bindIndirectBuffer(const Buffer* indirectBuffer, size_t offset);
@@ -197,7 +198,10 @@ private:
     // Track whether there is currently an active render pass (beginRenderPass has been called, but
     // not endRenderPass)
     bool fActiveRenderPass = false;
-
+    // Store a ptr to the active RenderPass's target texture so we have access to it for any
+    // AddBarrier DrawPassCommands that pertain to the dst. A raw ptr is acceptable here because the
+    // target texture is kept alive via a command buffer reference.
+    VulkanTexture* fTargetTexture = nullptr;
     const VulkanGraphicsPipeline* fActiveGraphicsPipeline = nullptr;
 
     VkFence fSubmitFence = VK_NULL_HANDLE;
@@ -222,17 +226,13 @@ private:
 
     int fNumTextureSamplers = 0;
 
-    VkBuffer fBoundInputBuffers[VulkanGraphicsPipeline::kNumInputBuffers];
-    size_t fBoundInputBufferOffsets[VulkanGraphicsPipeline::kNumInputBuffers];
-
-    VkBuffer fBoundIndexBuffer = VK_NULL_HANDLE;
+    // Tracking for whether an indirect buffer should be rebound.
     VkBuffer fBoundIndirectBuffer = VK_NULL_HANDLE;
-    size_t fBoundIndexBufferOffset = 0;
     size_t fBoundIndirectBufferOffset = 0;
 
-    float fCachedBlendConstant[4];
+    std::array<float, 4> fCachedBlendConstant;
 };
 
 } // namespace skgpu::graphite
 
-#endif // skgpu_graphite_VulkanCommandBuffer_DEFINED
+#endif  // skgpu_graphite_VulkanCommandBuffer_DEFINED

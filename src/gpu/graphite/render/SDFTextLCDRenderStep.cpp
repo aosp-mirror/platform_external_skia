@@ -50,16 +50,16 @@ constexpr int kNumSDFAtlasTextures = 4;
 SDFTextLCDRenderStep::SDFTextLCDRenderStep()
         : RenderStep(RenderStepID::kSDFTextLCD,
                      Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage |
-                     Flags::kLCDCoverage,
+                     Flags::kLCDCoverage | Flags::kAppendInstances,
                      /*uniforms=*/{{"subRunDeviceMatrix", SkSLType::kFloat4x4},
                                    {"deviceToLocal", SkSLType::kFloat4x4},
                                    {"atlasSizeInv", SkSLType::kFloat2},
                                    {"pixelGeometryDelta", SkSLType::kHalf2},
                                    {"gammaParams", SkSLType::kHalf4}},
                      PrimitiveType::kTriangleStrip,
-                     kDirectDepthGEqualPass,
-                     /*vertexAttrs=*/ {},
-                     /*instanceAttrs=*/
+                     kDirectDepthLEqualPass,
+                     /*staticAttrs=*/ {},
+                     /*appendAttrs=*/
                      {{"size", VertexAttribType::kUShort2, SkSLType::kUShort2},
                       {"uvPos", VertexAttribType::kUShort2, SkSLType::kUShort2},
                       {"xyPos", VertexAttribType::kFloat2, SkSLType::kFloat2},
@@ -140,6 +140,7 @@ void SDFTextLCDRenderStep::writeVertices(DrawWriter* dw,
 
 void SDFTextLCDRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                                     PipelineDataGatherer* gatherer) const {
+    SkDEBUGCODE(gatherer->checkRewind());
     SkDEBUGCODE(UniformExpectationsValidator uev(gatherer, this->uniforms());)
 
     const SubRunData& subRunData = params.geometry().subRunData();

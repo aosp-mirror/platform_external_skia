@@ -21,7 +21,7 @@
 #include "src/text/gpu/StrikeCache.h"
 #include "src/text/gpu/TextBlob.h"
 #include "tools/fonts/FontToolUtils.h"
-#include "tools/gpu/TestCanvas.h"
+#include "tools/ganesh/TestCanvas.h"
 #include "tools/text/gpu/TextBlobTools.h"
 
 // From Project Guttenberg. This is UTF-8 text.
@@ -79,12 +79,12 @@ class DirectMaskGlyphVertexFillBenchmark : public Benchmark {
 
         SkIRect clip = SkIRect::MakeEmpty();
         SkPaint paint;
-        GrColor grColor = SkColorToPremulGrColor(paint.getColor());
+        SkPMColor4f pmColor = SkColorToPMColor4f(paint.getColor(), /*colorInfo=*/{});
         SkMatrix positionMatrix = SkMatrix::Translate(100, 100);
 
         for (int loop = 0; loop < loops; loop++) {
             subRun->fillVertexData(fVertices.get(), 0, subRun->glyphCount(),
-                                   grColor, positionMatrix, {0, 0}, clip);
+                                   pmColor, positionMatrix, {0, 0}, clip);
         }
     }
 

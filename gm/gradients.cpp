@@ -421,7 +421,7 @@ private:
 DEF_GM( return new GradientsDegenrate2PointGM(true); )
 DEF_GM( return new GradientsDegenrate2PointGM(false); )
 
-/* bug.skia.org/517
+/* skbug.com/40031542
 <canvas id="canvas"></canvas>
 <script>
 var c = document.getElementById("canvas");
@@ -537,7 +537,7 @@ private:
 
     SkISize getISize() override { return {800, 400}; }
 
-    // Reproduces the example given in bug 7671058.
+    // Reproduces the example given in b/7671058.
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint1, paint2, paint3;
         paint1.setStyle(SkPaint::kFill_Style);
@@ -1114,7 +1114,7 @@ DEF_SIMPLE_GM(gradients_interesting, canvas, 640, 1300) {
     }
 }
 
-// TODO(skia:13774): Still need to test degenerate gradients in strange color spaces
+// TODO(skbug.com/40044214): Still need to test degenerate gradients in strange color spaces
 DEF_SIMPLE_GM_BG(gradients_color_space, canvas, 265, 355, SK_ColorGRAY) {
     using CS = SkGradientShader::Interpolation::ColorSpace;
 
@@ -1193,7 +1193,7 @@ DEF_SIMPLE_GM_BG(gradients_hue_method, canvas, 285, 155, SK_ColorGRAY) {
         canvas->translate(0, 25);
     }
 
-    // Test a bug (skia:13941) with how gradient shaders handle explicit positions.
+    // Test a bug (skbug.com/40044215) with how gradient shaders handle explicit positions.
     // If there are no explicit positions at 0 or 1, those are automatically added, with copies of
     // the first/last color. When using kLonger, this can produce extra gradient that should
     // actually be solid. This gradient *should* be:
@@ -1269,6 +1269,38 @@ DEF_SIMPLE_GM_BG(gradients_color_space_many_stops, canvas, 500, 500, SK_ColorGRA
                                              nullptr));
 
     canvas->drawRect(SkRect::MakeXYWH(0, 0, 500, 500), p);
+}
+
+DEF_SIMPLE_GM(gradients_alpha_many_stops, canvas, 100, 100) {
+    static const SkPoint kPts[] = {{0.f, 0.f}, {0.f, 100.f}};
+
+    // From https://issues.chromium.org/issues/401546700, this encounters Graphite's
+    // storage buffer option for storing gradient buffers AND uses colors that emphasize
+    // premul vs. unpremul handling of the color data.
+    static const float kPos[] = {0.f, 0.19f, 0.34f, 0.47f, 0.565f, 0.65f,
+                                 0.73f, 0.802f, 0.861f, 0.91f, 0.952f, 0.982f, 1.f};
+
+    static constexpr float kG = 34 / 255.f;
+    static const SkColor4f kColors[] = {{kG, kG, kG, 1.f},
+                                        {kG, kG, kG, 0.738f},
+                                        {kG, kG, kG, 0.541f},
+                                        {kG, kG, kG, 0.382f},
+                                        {kG, kG, kG, 0.278f},
+                                        {kG, kG, kG, 0.194f},
+                                        {kG, kG, kG, 0.126f},
+                                        {kG, kG, kG, 0.075f},
+                                        {kG, kG, kG, 0.042f},
+                                        {kG, kG, kG, 0.021f},
+                                        {kG, kG, kG, 0.008f},
+                                        {kG, kG, kG, 0.002f},
+                                        {kG, kG, kG, 0.f}};
+
+    canvas->clear(SkColor4f{0.5f, 0.5f, 0.5f, 1.f});
+
+    SkPaint paint;
+    paint.setShader(SkGradientShader::MakeLinear(
+            kPts, kColors, /*colorSpace=*/nullptr, kPos, std::size(kPos), SkTileMode::kClamp));
+    canvas->drawPaint(paint);
 }
 
 static void draw_powerless_hue_gradients(SkCanvas* canvas,

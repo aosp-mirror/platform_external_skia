@@ -58,14 +58,14 @@ RenderStep::RenderStepID variant_id(skgpu::MaskFormat variant) {
 
 BitmapTextRenderStep::BitmapTextRenderStep(skgpu::MaskFormat variant)
         : RenderStep(variant_id(variant),
-                     Flags(variant),
+                     Flags(variant) | Flags::kAppendInstances,
                      /*uniforms=*/{{"subRunDeviceMatrix", SkSLType::kFloat4x4},
                                    {"deviceToLocal"     , SkSLType::kFloat4x4},
                                    {"atlasSizeInv"      , SkSLType::kFloat2}},
                      PrimitiveType::kTriangleStrip,
-                     kDirectDepthGEqualPass,
-                     /*vertexAttrs=*/ {},
-                     /*instanceAttrs=*/
+                     kDirectDepthLEqualPass,
+                     /*staticAttrs=*/ {},
+                     /*appendAttrs=*/
                      {{"size", VertexAttribType::kUShort2, SkSLType::kUShort2},
                       {"uvPos", VertexAttribType::kUShort2, SkSLType::kUShort2},
                       {"xyPos", VertexAttribType::kFloat2, SkSLType::kFloat2},
@@ -152,6 +152,8 @@ const char* BitmapTextRenderStep::fragmentCoverageSkSL() const {
                                                     "int(maskFormat));";
 }
 
+bool BitmapTextRenderStep::usesUniformsInFragmentSkSL() const { return false; }
+
 void BitmapTextRenderStep::writeVertices(DrawWriter* dw,
                                          const DrawParams& params,
                                          skvx::uint2 ssboIndices) const {
@@ -168,6 +170,7 @@ void BitmapTextRenderStep::writeVertices(DrawWriter* dw,
 
 void BitmapTextRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                                     PipelineDataGatherer* gatherer) const {
+    SkDEBUGCODE(gatherer->checkRewind());
     SkDEBUGCODE(UniformExpectationsValidator uev(gatherer, this->uniforms());)
 
     const SubRunData& subRunData = params.geometry().subRunData();

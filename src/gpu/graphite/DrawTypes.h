@@ -8,15 +8,13 @@
 #ifndef skgpu_graphite_DrawTypes_DEFINED
 #define skgpu_graphite_DrawTypes_DEFINED
 
-#include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/private/base/SkAssert.h"
+#include "src/base/SkEnumBitMask.h"
 
-#include "src/gpu/graphite/ResourceTypes.h"
-
-#include <array>
+#include <cstddef>
+#include <cstdint>
 
 namespace skgpu::graphite {
-
-class Buffer;
 
 /**
  * Geometric primitives used for drawing.
@@ -70,7 +68,6 @@ enum class VertexAttribType : uint8_t {
     kLast = kUShort4_norm
 };
 static const int kVertexAttribTypeCount = (int)(VertexAttribType::kLast) + 1;
-
 
 /**
  * Returns the size of the attrib type in bytes.
@@ -181,6 +178,15 @@ enum class BarrierType : uint8_t {
     kAdvancedNoncoherentBlend,
     kReadDstFromInput,
 };
+
+enum class RenderStateFlags : unsigned {
+    kNone                   = 0b0000,
+    kFixed                  = 0b0001,   // Uses explicit DrawWriter::draw functions
+    kAppendVertices         = 0b0010,   // Appends vertices
+    kAppendInstances        = 0b0100,   // Appends instances with static vertex count
+    kAppendDynamicInstances = 0b1000,   // Appends instances with a flexible vertex count
+};
+SK_MAKE_BITMASK_OPS(RenderStateFlags)
 
 struct DepthStencilSettings {
     // Per-face settings for stencil

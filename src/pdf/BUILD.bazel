@@ -1,4 +1,4 @@
-load("//bazel:skia_rules.bzl", "generate_cpp_files_for_headers", "skia_cc_library", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "skia_cc_library", "split_srcs_and_hdrs")
 
 package(
     default_applicable_licenses = ["//:license"],
@@ -60,16 +60,6 @@ split_srcs_and_hdrs(
     files = PDF_FILES,
 )
 
-generate_cpp_files_for_headers(
-    name = "headers_to_compile",
-    headers = [
-        "SkBitmapKey.h",
-        "SkPDFDocumentPriv.h",
-        "SkPDFUnion.h",
-        "SkUUID.h",
-    ],
-)
-
 skia_cc_library(
     name = "pdf",
     srcs = [
@@ -92,7 +82,7 @@ skia_cc_library(
         "//src/utils:clip_stack_utils",
         "//src/utils:float_to_decimal",
         "//modules/skcms",
-        "@zlib_skia//:zlib",
+        "@zlib",
         # TODO(kjlubick) Remove this dependency after migrating clients
         ":jpeg_helpers",
     ] +

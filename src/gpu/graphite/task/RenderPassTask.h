@@ -8,13 +8,25 @@
 #ifndef skgpu_graphite_task_RenderPassTask_DEFINED
 #define skgpu_graphite_task_RenderPassTask_DEFINED
 
-#include "src/gpu/graphite/CommandBuffer.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/base/SkTArray.h"
+#include "src/gpu/graphite/DrawPass.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/task/Task.h"
 
+#include <functional>
+#include <memory>
+
 namespace skgpu::graphite {
 
-class DrawPass;
+class TextureProxy;
+class CommandBuffer;
+class Context;
+class GraphicsPipeline;
+class ResourceProvider;
+class RuntimeEffectDictionary;
+class ScratchResourceManager;
 
 /**
  * RenderPassTask handles preparing and recording DrawLists into a single render pass within a
@@ -41,9 +53,13 @@ public:
 
     Status prepareResources(ResourceProvider*,
                             ScratchResourceManager*,
-                            const RuntimeEffectDictionary*) override;
+                            sk_sp<const RuntimeEffectDictionary>) override;
 
     Status addCommands(Context*, CommandBuffer*, ReplayTargetData) override;
+
+    bool visitPipelines(const std::function<bool(const GraphicsPipeline*)>& visitor) override;
+
+    bool visitProxies(const std::function<bool(const TextureProxy*)>& visitor) override;
 
 private:
     RenderPassTask(DrawPassList,

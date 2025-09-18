@@ -60,13 +60,17 @@ CoverageMaskRenderStep::CoverageMaskRenderStep()
         : RenderStep(RenderStepID::kCoverageMask,
                      // The mask will have AA outsets baked in, but the original bounds for clipping
                      // still require the outset for analytic coverage.
-                     Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage |
-                     Flags::kOutsetBoundsForAA,
+                     Flags::kPerformsShading |
+                     Flags::kHasTextures |
+                     Flags::kEmitsCoverage |
+                     Flags::kOutsetBoundsForAA |
+                     Flags::kInverseFillsScissor |
+                     Flags::kAppendInstances,
                      /*uniforms=*/{{"maskToDeviceRemainder", SkSLType::kFloat3x3}},
                      PrimitiveType::kTriangleStrip,
-                     kDirectDepthGreaterPass,
-                     /*vertexAttrs=*/{},
-                     /*instanceAttrs=*/
+                     kDirectDepthLessPass,
+                     /*staticAttrs=*/ {},
+                     /*appendAttrs=*/
                      // Draw bounds and mask bounds are in normalized relative to the mask texture,
                      // but 'drawBounds' is stored in float since the coords may map outside of
                      // [0,1] for inverse-filled masks. 'drawBounds' is relative to the logical mask
@@ -109,11 +113,12 @@ std::string CoverageMaskRenderStep::texturesAndSamplersSkSL(
 }
 
 const char* CoverageMaskRenderStep::fragmentCoverageSkSL() const {
-    return R"(
-        half c = sample(pathAtlas, clamp(textureCoords, maskBounds.LT, maskBounds.RB)).r;
-        outputCoverage = half4(mix(c, 1 - c, invert));
-    )";
+    return
+        "half c = sample(pathAtlas, clamp(textureCoords, maskBounds.LT, maskBounds.RB)).r;\n"
+        "outputCoverage = half4(mix(c, 1 - c, invert));\n";
 }
+
+bool CoverageMaskRenderStep::usesUniformsInFragmentSkSL() const { return false; }
 
 void CoverageMaskRenderStep::writeVertices(DrawWriter* dw,
                                            const DrawParams& params,
@@ -143,10 +148,12 @@ void CoverageMaskRenderStep::writeVertices(DrawWriter* dw,
 
         // If the mask is fully clipped out, then the shape's mask info should be (0,0,0,0).
         // If it's not fully clipped out, then the mask info should be non-empty.
-        SkASSERT(!params.clip().transformedShapeBounds().isEmptyNegativeOrNaN() ^
-                 all(maskBounds == 0.f));
+        const bool emptyMask = all(maskBounds == 0.f);
+        SkDEBUGCODE(Rect clippedShapeBounds =
+                    params.clip().transformedShapeBounds().makeIntersect(params.clip().scissor()));
+        SkASSERT(!clippedShapeBounds.isEmptyNegativeOrNaN() ^ emptyMask);
 
-        if (params.clip().transformedShapeBounds().isEmptyNegativeOrNaN()) {
+        if (emptyMask) {
             // The inversion check is strict inequality, so (0,0,0,0) would not be detected. Adjust
             // to (0,0,1/2,1/2) to restrict sampling to the top-left quarter of the top-left pixel,
             // which should have a value of 0 regardless of filtering mode.
@@ -205,6 +212,7 @@ void CoverageMaskRenderStep::writeVertices(DrawWriter* dw,
 
 void CoverageMaskRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                                       PipelineDataGatherer* gatherer) const {
+    SkDEBUGCODE(gatherer->checkRewind());
     SkDEBUGCODE(UniformExpectationsValidator uev(gatherer, this->uniforms());)
 
     const CoverageMaskShape& coverageMask = params.geometry().coverageMaskShape();

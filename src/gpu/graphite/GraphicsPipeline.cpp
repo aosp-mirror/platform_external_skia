@@ -52,7 +52,12 @@ GraphicsPipeline::PipelineInfo::PipelineInfo(
 #if defined(GPU_TEST_UTILS)
     fSkSLVertexShader = SkShaderUtils::PrettyPrint(shaderInfo.vertexSkSL());
     fSkSLFragmentShader = SkShaderUtils::PrettyPrint(shaderInfo.fragmentSkSL());
-    fLabel = shaderInfo.fsLabel();
+#endif
+
+#if defined(SK_TRACE_GRAPHITE_PIPELINE_USE) || defined(GPU_TEST_UTILS)
+    // For pipelines that shade, the FS label includes the same info as the VS label. But for
+    // depth-only clip draws there is no FS label, so switch to the VS label.
+    fLabel = shaderInfo.fsLabel().empty() ? shaderInfo.vsLabel() : shaderInfo.fsLabel();
 #endif
 }
 
@@ -65,7 +70,7 @@ SkString GraphicsPipelineDesc::toString(ShaderCodeDictionary* dict) const {
 
     PaintParamsKey key = dict->lookup(fPaintID);
 
-    tmp.append(key.toString(dict, true));
+    tmp.append(key.toString(dict));
 
     return tmp;
 }

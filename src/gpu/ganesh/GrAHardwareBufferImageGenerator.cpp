@@ -28,6 +28,7 @@
 #include "src/gpu/ganesh/GrResourceProviderPriv.h"
 #include "src/gpu/ganesh/GrTexture.h"
 #include "src/gpu/ganesh/GrTextureProxy.h"
+#include "src/gpu/ganesh/SkGaneshRecorder.h"
 #include "src/gpu/ganesh/SkGr.h"
 
 #include <android/hardware_buffer.h>
@@ -205,12 +206,17 @@ GrSurfaceProxyView GrAHardwareBufferImageGenerator::onGenerateTexture(
                                     /*label=*/"AHardwareBufferImageGenerator_GenerateTexture");
 }
 
-bool GrAHardwareBufferImageGenerator::onIsValid(GrRecordingContext* context) const {
-    if (nullptr == context) {
-        return false; //CPU backend is not supported, because hardware buffer can be swizzled
+bool GrAHardwareBufferImageGenerator::onIsValid(SkRecorder* recorder) const {
+    if (!recorder) {
+        return false;
     }
-    return GrBackendApi::kOpenGL == context->backend() ||
-           GrBackendApi::kVulkan == context->backend();
+    if (recorder->type() != SkRecorder::Type::kGanesh) {
+        return false;
+    }
+    auto ctx = static_cast<SkGaneshRecorder*>(recorder)->recordingContext();
+    SkASSERT(ctx);
+    return GrBackendApi::kOpenGL == ctx->backend() ||
+           GrBackendApi::kVulkan == ctx->backend();
 }
 
 #endif //SK_BUILD_FOR_ANDROID_FRAMEWORK

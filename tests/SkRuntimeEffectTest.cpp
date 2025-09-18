@@ -6,6 +6,7 @@
  */
 
 #include "include/core/SkAlphaType.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkBlender.h"
 #include "include/core/SkCanvas.h"
@@ -37,7 +38,6 @@
 #include "include/sksl/SkSLDebugTrace.h"
 #include "include/sksl/SkSLVersion.h"
 #include "src/base/SkStringView.h"
-#include "src/base/SkTLazy.h"
 #include "src/core/SkColorData.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkRuntimeEffectPriv.h"
@@ -54,6 +54,7 @@
 #include "src/sksl/SkSLString.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
+#include "tools/GpuToolUtils.h"
 
 #include <array>
 #include <cstdint>
@@ -461,7 +462,7 @@ public:
             ERRORF(fReporter, "Effect didn't compile: %s", errorText.c_str());
             return;
         }
-        fBuilder.init(std::move(effect));
+        fBuilder.emplace(std::move(effect));
     }
 
     SkRuntimeShaderBuilder::BuilderUniform uniform(const char* name) {
@@ -485,7 +486,7 @@ public:
         // with a `source` blend mode. However, there are a few devices where the background can
         // leak through when we paint with MSAA on. (This seems to be a driver/hardware bug.)
         // Graphite, at present, uses MSAA to do `drawPaint`. To avoid flakiness in this test on
-        // those devices, we explicitly clear the canvas here. (skia:13761)
+        // those devices, we explicitly clear the canvas here. (skbug.com/40044848)
         canvas->clear(SK_ColorBLACK);
 
         SkPaint paint;
@@ -529,7 +530,7 @@ private:
     GrRecordingContext*             fGrContext;
     const GraphiteInfo*             fGraphite;
     SkISize                         fSize;
-    SkTLazy<SkRuntimeShaderBuilder> fBuilder;
+    std::optional<SkRuntimeShaderBuilder> fBuilder;
 };
 
 class TestBlend {
@@ -549,7 +550,7 @@ public:
             ERRORF(fReporter, "Effect didn't compile: %s", errorText.c_str());
             return;
         }
-        fBuilder.init(std::move(effect));
+        fBuilder.emplace(std::move(effect));
     }
 
     SkSurface* surface() {
@@ -590,7 +591,7 @@ private:
     sk_sp<SkSurface>               fSurface;
     GrRecordingContext*            fGrContext;
     const GraphiteInfo*            fGraphite;
-    SkTLazy<SkRuntimeBlendBuilder> fBuilder;
+    std::optional<SkRuntimeBlendBuilder> fBuilder;
 };
 
 // Produces a shader which will paint these opaque colors in a 2x2 rectangle:
@@ -649,7 +650,7 @@ static void test_RuntimeEffect_Shaders(skiatest::Reporter* r,
     effect.build("vec4 main(float2 p) { return float4(p - 0.5, 0, 1); }");
     effect.test({0xFF000000, 0xFF0000FF, 0xFF00FF00, 0xFF00FFFF});
 
-    // Mutating coords should work. (skbug.com/10918)
+    // Mutating coords should work. (skbug.com/40042292)
     effect.build("vec4 main(vec2 p) { p -= 0.5; return vec4(p, 0, 1); }");
     effect.test({0xFF000000, 0xFF0000FF, 0xFF00FF00, 0xFF00FFFF});
     effect.build("void moveCoords(inout vec2 p) { p -= 0.5; }"
@@ -700,7 +701,7 @@ static void test_RuntimeEffect_Shaders(skiatest::Reporter* r,
     effect.test({0xFF0000FF, 0xFFFF0000, 0xFF00FF00, 0xFFFFFFFF});
 
     // Bind an image shader, but don't use it - ensure that we don't assert or generate bad shaders.
-    // (skbug.com/12429)
+    // (skbug.com/40043510)
     effect.build("uniform shader child;"
                  "half4 main(float2 p) { return half4(0, 1, 0, 1); }");
     effect.child("child") = rgbwShader;
@@ -710,7 +711,7 @@ static void test_RuntimeEffect_Shaders(skiatest::Reporter* r,
     // Helper functions
     //
 
-    // Test case for inlining in the pipeline-stage and fragment-shader passes (skbug.com/10526):
+    // Test case for inlining in the pipeline-stage and fragment-shader passes (skbug.com/40041860):
     effect.build("float2 helper(float2 x) { return x + 1; }"
                  "half4 main(float2 p) { float2 v = helper(p); return half4(half2(v), 0, 1); }");
     effect.test(0xFF00FFFF);
@@ -1218,7 +1219,7 @@ DEF_TEST(SkRuntimeShaderBuilderReuse, r) {
     sk_sp<SkRuntimeEffect> effect = SkRuntimeEffect::MakeForShader(SkString(kSource)).effect;
     REPORTER_ASSERT(r, effect);
 
-    // Test passes if this sequence doesn't assert.  skbug.com/10667
+    // Test passes if this sequence doesn't assert.  skbug.com/40042013
     SkRuntimeShaderBuilder b(std::move(effect));
     b.uniform("x") = 0.0f;
     auto shader_0 = b.makeShader();
@@ -1275,7 +1276,7 @@ DEF_TEST(SkRuntimeShaderBuilderSetUniforms, r) {
 DEF_TEST(SkRuntimeEffectThreaded, r) {
     // This tests that we can safely use SkRuntimeEffect::MakeForShader from more than one thread,
     // and also that programs don't refer to shared structures owned by the compiler.
-    // skbug.com/10589
+    // skbug.com/40041933
     static constexpr char kSource[] = "half4 main(float2 p) { return sk_FragCoord.xyxy; }";
 
     std::thread threads[16];
@@ -1593,6 +1594,105 @@ DEF_TEST(SkRuntimeShaderIsOpaque, r) {
     test("return uOnes;",          false);
     test("return cOnes.eval(xy);", false);
 }
+
+// This test verifies that when a runtime shader's input coordinates are previously transformed
+// by a local matrix (which may be lifted to the vertex shader on GPU backends), the coordinates
+// resolve correctly for the runtime shader and any child shaders.
+void test_using_transformed_coords(skiatest::Reporter* reporter,
+                                   GrDirectContext* ganeshContext,
+                                   GraphiteInfo* graphiteInfo) {
+    const SkImageInfo surfaceImageInfo = SkImageInfo::Make(SkISize::Make(12, 1),
+                                                           SkColorType::kRGBA_8888_SkColorType,
+                                                           SkAlphaType::kPremul_SkAlphaType);
+    sk_sp<SkSurface> surface;
+    if (ganeshContext) {
+        surface = SkSurfaces::RenderTarget(ganeshContext, skgpu::Budgeted::kNo, surfaceImageInfo);
+    } else if (graphiteInfo) {
+#if defined(SK_GRAPHITE)
+        surface = SkSurfaces::RenderTarget(graphiteInfo->recorder, surfaceImageInfo);
+#endif
+    }
+    REPORTER_ASSERT(reporter, surface);
+    if (!surface) {
+        return;
+    }
+
+    SkCanvas* canvas = surface->getCanvas();
+
+    // Make a 1x12 pixel image with left 1/4 red and right 3/4 green.
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(12, 1, true);
+    SkCanvas bitmapCanvas(bitmap);
+    bitmapCanvas.drawIRect(SkIRect::MakeXYWH(0, 0, 3, 1), SkPaint(SkColors::kRed));
+    bitmapCanvas.drawIRect(SkIRect::MakeXYWH(3, 0, 9, 1), SkPaint(SkColors::kGreen));
+
+    sk_sp<SkShader> imageShader = ToolUtils::MakeTextureImage(canvas, bitmap.asImage())
+                                          ->makeShader(SkFilterMode::kNearest);
+
+    // Runtime effect that sets the blue channel to 1 in the right half of its child.
+    SkString src(
+            "uniform shader s;"
+            "half4 main(float2 p) {"
+                // round() doesn't seem to be legal in runtime shaders for some reason.
+                "return half4(s.eval(p).rg, max(0.0, sign(p.x / 12.0 - 0.5)), 1.0);"
+            "}");
+    SkRuntimeEffect::Result runtimeEffectResult = SkRuntimeEffect::MakeForShader(src);
+    auto [effect, errorText] = SkRuntimeEffect::MakeForShader(SkString(src));
+    REPORTER_ASSERT(reporter, effect);
+    if (!effect) {
+        return;
+    }
+
+    // Nest the image shader under the runtime shader, all under a local matrix transformation that
+    // translates the draw right 1/4 of the way.
+    SkPaint paint;
+    paint.setShader(runtimeEffectResult.effect->makeShader(nullptr, &imageShader, 1)
+                            ->makeWithLocalMatrix(SkMatrix::Translate(3.0f, 0.0f)));
+
+    canvas->drawPaint(paint);
+
+    // Read pixels.
+    SkBitmap readBitmap;
+    SkPixmap pixmap;
+    readBitmap.allocPixels(surfaceImageInfo);
+    SkAssertResult(readBitmap.peekPixels(&pixmap));
+    if (!surface->readPixels(pixmap, 0, 0)) {
+        ERRORF(reporter, "readPixels failed");
+        return;
+    }
+
+    // The first half of the canvas should be red, since the image was drawn shifted to the right
+    // with clamp tiling.
+    REPORTER_ASSERT(reporter, pixmap.getColor4f(1, 0) == SkColors::kRed);
+    REPORTER_ASSERT(reporter, pixmap.getColor4f(4, 0) == SkColors::kRed);
+
+    // The third quarter of the canvas should be green. This is the second quarter of the image,
+    // translated right, and not affected by the runtime shader which should only touch the right
+    // half of the image.
+    REPORTER_ASSERT(reporter, pixmap.getColor4f(7, 0) == SkColors::kGreen);
+
+    // The last quarter of the canvas should be cyan, since the green in the image has its blue
+    // channel set to 1 by the runtime shader.
+    REPORTER_ASSERT(reporter, pixmap.getColor4f(10, 0) == SkColors::kCyan);
+}
+
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRuntimeShader_TransformedCoords_Ganesh,
+                                       reporter,
+                                       contextInfo,
+                                       CtsEnforcement::kNextRelease) {
+    test_using_transformed_coords(reporter, contextInfo.directContext(), /*graphiteInfo=*/nullptr);
+}
+
+#if defined(SK_GRAPHITE)
+DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SkRuntimeShader_TransformedCoords_Graphite,
+                                         reporter,
+                                         context,
+                                         CtsEnforcement::kNextRelease) {
+    std::unique_ptr<skgpu::graphite::Recorder> recorder = context->makeRecorder();
+    GraphiteInfo graphiteInfo = {context, recorder.get()};
+    test_using_transformed_coords(reporter, /*ganeshContext=*/nullptr, &graphiteInfo);
+}
+#endif
 
 DEF_GANESH_TEST_FOR_ALL_CONTEXTS(GrSkSLFP_Specialized, r, ctxInfo, CtsEnforcement::kApiLevel_T) {
     struct FpAndKey {

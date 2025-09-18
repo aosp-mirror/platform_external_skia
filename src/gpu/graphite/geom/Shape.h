@@ -69,6 +69,12 @@ public:
     bool isArc()   const { return fType == Type::kArc;   }
     bool isPath()  const { return fType == Type::kPath;  }
 
+    bool isFloodFill() const { return this->isEmpty() && this->inverted(); }
+
+    bool isVolatilePath() const {
+        return fType == Type::kPath && this->path().isVolatile();
+    }
+
     bool inverted() const {
         SkASSERT(fType != Type::kPath || fInverted == fPath.isInverseFillType());
         return fInverted;
@@ -113,6 +119,12 @@ public:
     const SkRRect& rrect() const { SkASSERT(this->isRRect()); return fRRect;           }
     const SkArc&   arc()   const { SkASSERT(this->isArc());   return fArc;             }
     const SkPath&  path()  const { SkASSERT(this->isPath());  return fPath;            }
+
+    // Non-const access to the more complex types
+    Rect&    rect()  { SkASSERT(this->isRect());  return fRect;  }
+    SkRRect& rrect() { SkASSERT(this->isRRect()); return fRRect; }
+    SkArc&   arc()   { SkASSERT(this->isArc());   return fArc;   }
+    SkPath&  path()  { SkASSERT(this->isPath());  return fPath;  }
 
     // Update the geometry stored in the Shape and update its associated type to match. This
     // performs no simplification, so calling setRRect() with a round rect that has isRect() return
@@ -165,17 +177,13 @@ public:
 
     /**
      * Gets the size of the key for the shape represented by this Shape.
-     * A negative value is returned if the shape has no key (shouldn't be cached).
      */
     int keySize() const;
 
-    bool hasKey() const { return this->keySize() >= 0; }
-
     /**
      * Writes keySize() bytes into the provided pointer. Assumes that there is enough
-     * space allocated for the key and that keySize() does not return a negative value
-     * for this shape. If includeInverted is false, non-inverted state will be written
-     * into the key regardless of the Shape's state.
+     * space allocated for the key. If includeInverted is false, non-inverted state will
+     * be written into the key regardless of the Shape's state.
      */
     void writeKey(uint32_t* key, bool includeInverted) const;
 

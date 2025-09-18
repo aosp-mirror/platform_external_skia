@@ -13,6 +13,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/private/base/SkAssert.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkPoint_impl.h"
 #include "src/base/SkEnumBitMask.h"
 #include "src/core/SkSLTypeShared.h"
@@ -23,6 +24,7 @@
 #include "src/gpu/graphite/DrawParams.h"
 #include "src/gpu/graphite/DrawTypes.h"
 #include "src/gpu/graphite/DrawWriter.h"
+#include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/geom/Shape.h"
 #include "src/gpu/graphite/geom/Transform.h"
@@ -126,14 +128,15 @@ static void write_vertex_buffer(VertexWriter writer) {
 
 CircularArcRenderStep::CircularArcRenderStep(StaticBufferManager* bufferManager)
         : RenderStep(RenderStepID::kCircularArc,
-                     Flags::kPerformsShading | Flags::kEmitsCoverage | Flags::kOutsetBoundsForAA,
+                     Flags::kPerformsShading | Flags::kEmitsCoverage | Flags::kOutsetBoundsForAA |
+                     Flags::kAppendInstances,
                      /*uniforms=*/{},
                      PrimitiveType::kTriangleStrip,
-                     kDirectDepthGreaterPass,
-                     /*vertexAttrs=*/{
+                     kDirectDepthLessPass,
+                     /*staticAttrs=*/{
                              {"position", VertexAttribType::kFloat3, SkSLType::kFloat3},
                      },
-                     /*instanceAttrs=*/{
+                     /*appendAttrs=*/{
                              // Center plus radii, used to transform to local position
                              {"centerScales", VertexAttribType::kFloat4, SkSLType::kFloat4},
                              // Outer (device space) and inner (normalized) radii
@@ -146,7 +149,7 @@ CircularArcRenderStep::CircularArcRenderStep(StaticBufferManager* bufferManager)
                              {"fragClipPlane1", VertexAttribType::kFloat3, SkSLType::kFloat3},
                              // Roundcap positions, if needed
                              {"inRoundCapPos", VertexAttribType::kFloat4, SkSLType::kFloat4},
-
+                             {"inRoundCapRadius", VertexAttribType::kFloat, SkSLType::kFloat},
                              {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
                              {"ssboIndices", VertexAttribType::kUInt2, SkSLType::kUInt2},
 
@@ -168,7 +171,7 @@ CircularArcRenderStep::CircularArcRenderStep(StaticBufferManager* bufferManager)
     // Initialize the static buffer we'll use when recording draw calls.
     // NOTE: Each instance of this RenderStep gets its own copy of the data. Since there should only
     // ever be one CircularArcRenderStep at a time, this shouldn't be an issue.
-    write_vertex_buffer(bufferManager->getVertexWriter(sizeof(Vertex) * kVertexCount,
+    write_vertex_buffer(bufferManager->getVertexWriter(kVertexCount, sizeof(Vertex),
                                                        &fVertexBuffer));
 }
 
@@ -178,11 +181,11 @@ std::string CircularArcRenderStep::vertexSkSL() const {
     // Returns the body of a vertex function, which must define a float4 devPosition variable and
     // must write to an already-defined float2 stepLocalCoords variable.
     return "float4 devPosition = circular_arc_vertex_fn("
-                   // Vertex Attributes
+                   // Static Data Attributes
                    "position, "
-                   // Instance Attributes
+                   // Append Data Attributes
                    "centerScales, radiiAndFlags, geoClipPlane, fragClipPlane0, fragClipPlane1, "
-                   "inRoundCapPos, depth, float3x3(mat0, mat1, mat2), "
+                   "inRoundCapPos, inRoundCapRadius, depth, float3x3(mat0, mat1, mat2), "
                    // Varyings
                    "circleEdge, clipPlane, isectPlane, unionPlane, "
                    "roundCapRadius, roundCapPos, "
@@ -297,10 +300,11 @@ void CircularArcRenderStep::writeVertices(DrawWriter* writer,
     static constexpr float kIntersection_NoRoundCaps = 1;
     static constexpr float kIntersection_RoundCaps = 2;
 
+    float roundCapRadius = 0;
     // Default to intersection and no round caps.
     float flags = kIntersection_NoRoundCaps;
     // Determine if we need round caps.
-    if (isStroke && innerRadius > -SK_ScalarHalf &&
+    if (isStroke &&
         params.strokeStyle().halfWidth() > 0 &&
         params.strokeStyle().cap() == SkPaint::kRound_Cap) {
         // Compute the cap center points in the normalized space.
@@ -308,6 +312,8 @@ void CircularArcRenderStep::writeVertices(DrawWriter* writer,
         roundCapPos0 = startPoint * midRadius;
         roundCapPos1 = stopPoint * midRadius;
         flags = kIntersection_RoundCaps;
+        // Compute the cap radius in the normalized space.
+        roundCapRadius = (outerRadius - innerRadius) / (2 * outerRadius);
     }
 
     // Determine clip planes.
@@ -359,13 +365,20 @@ void CircularArcRenderStep::writeVertices(DrawWriter* writer,
         clipPlane1 = {0.f, 0.f, 1.f}; // no clipping
     }
 
+    if (isStroke && innerRadius < -SK_ScalarHalf) {
+        // Reset the inner radius to render a filled arc instead of a stroked arc, as the stroke
+        // width is greater than or equal to the oval's width.
+        innerRadius = -SK_ScalarHalf;
+        localInnerRadius = 0.f;
+    }
+
     // The inner radius in the vertex data must be specified in normalized space.
     innerRadius = innerRadius / outerRadius;
 
     vw << localCenter << localOuterRadius << localInnerRadius
        << outerRadius << innerRadius << flags
        << geoClipPlane << clipPlane0 << clipPlane1
-       << roundCapPos0 << roundCapPos1
+       << roundCapPos0 << roundCapPos1 << roundCapRadius
        << params.order().depthAsFloat()
        << ssboIndices
        << m.rc(0,0) << m.rc(1,0) << m.rc(3,0)  // mat0
@@ -374,8 +387,9 @@ void CircularArcRenderStep::writeVertices(DrawWriter* writer,
 }
 
 void CircularArcRenderStep::writeUniformsAndTextures(const DrawParams&,
-                                                     PipelineDataGatherer*) const {
+                                                     PipelineDataGatherer* gatherer) const {
     // All data is uploaded as instance attributes, so no uniforms are needed.
+    SkDEBUGCODE(gatherer->checkRewind());
 }
 
 }  // namespace skgpu::graphite

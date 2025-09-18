@@ -37,11 +37,17 @@ SkPMColor4f SkColorFilterBase::onFilterColor4f(const SkPMColor4f& color,
     SkRasterPipeline    pipeline(&alloc);
     pipeline.appendConstantColor(&alloc, color.vec());
     SkSurfaceProps props{}; // default OK; colorFilters don't render text
-    SkStageRec rec = {&pipeline, &alloc, kRGBA_F32_SkColorType, dstCS, color.unpremul(), props};
+    SkStageRec rec = {&pipeline,
+                      &alloc,
+                      kRGBA_F32_SkColorType,
+                      dstCS,
+                      color.unpremul(),
+                      props,
+                      SkRect::MakeEmpty()};
 
     if (as_CFB(this)->appendStages(rec, color.fA == 1)) {
         SkPMColor4f dst;
-        SkRasterPipeline_MemoryCtx dstPtr = { &dst, 0 };
+        SkRasterPipelineContexts::MemoryCtx dstPtr = {&dst, 0};
         pipeline.append(SkRasterPipelineOp::store_f32, &dstPtr);
         pipeline.run(0,0, 1,1);
         return dst;

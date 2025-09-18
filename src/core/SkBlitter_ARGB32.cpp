@@ -6,7 +6,6 @@
  */
 
 #include "include/core/SkColor.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPixmap.h"
@@ -21,7 +20,9 @@
 #include "src/base/SkVx.h"
 #include "src/core/SkBlitMask.h"
 #include "src/core/SkBlitRow.h"
+#include "src/core/SkBlitter.h"
 #include "src/core/SkColorData.h"
+#include "src/core/SkColorPriv.h"
 #include "src/core/SkCoreBlitters.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMemset.h"
@@ -30,6 +31,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 static inline int upscale_31_to_32(int value) {
     SkASSERT((unsigned)value <= 31);
@@ -1450,16 +1452,7 @@ SkARGB32_Blitter::SkARGB32_Blitter(const SkPixmap& device, const SkPaint& paint)
     SkColor color = paint.getColor();
     fColor = color;
     fSrcA = SkColorGetA(color);
-#if !defined(SK_USE_LEGACY_MISMATCHED_BLIT)
     fPMColor = SkPreMultiplyColor(fColor);
-#else
-    unsigned scale = SkAlpha255To256(fSrcA);
-    auto srcR = SkAlphaMul(SkColorGetR(color), scale);
-    auto srcG = SkAlphaMul(SkColorGetG(color), scale);
-    auto srcB = SkAlphaMul(SkColorGetB(color), scale);
-
-    fPMColor = SkPackARGB32(fSrcA, srcR, srcG, srcB);
-#endif
 }
 
 #if defined _WIN32  // disable warning : local variable used without having been initialized
@@ -1643,6 +1636,10 @@ void SkARGB32_Opaque_Blitter::blitAntiV2(int x, int y, U8CPU a0, U8CPU a1) {
     device[0] = SkFastFourByteInterp(fPMColor, device[0], a0);
     device = (uint32_t*)((char*)device + fDevice.rowBytes());
     device[0] = SkFastFourByteInterp(fPMColor, device[0], a1);
+}
+
+std::optional<SkBlitter::DirectBlit> SkARGB32_Opaque_Blitter::canDirectBlit() {
+    return {{ fDevice, fPMColor }};
 }
 
 ///////////////////////////////////////////////////////////////////////////////

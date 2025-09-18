@@ -14,12 +14,13 @@
 
 class SkColorSpace;
 class GrDirectContext;
+class GrRecordingContext;
 class SkPixmap;
 struct AHardwareBuffer;
 
 namespace SkImages {
 
-/** (See Skia bug 7447)
+/** (See skbug.com/40038695)
     Creates SkImage from Android hardware buffer.
     Returned SkImage takes a reference on the buffer.
     Only available on Android, when __ANDROID_API__ is defined to be 26 or greater.
@@ -57,13 +58,6 @@ SK_API sk_sp<SkImage> TextureFromAHardwareBufferWithData(
 SK_API sk_sp<SkImage> PinnableRasterFromBitmap(const SkBitmap&);
 
 }  // namespace SkImages
-
-// TODO(kjlubick) remove this after Android has been ported.
-namespace sk_image_factory {
-inline sk_sp<SkImage> MakePinnableFromRasterBitmap(const SkBitmap& b) {
-    return SkImages::PinnableRasterFromBitmap(b);
-}
-}  // namespace sk_image_factory
 
 namespace skgpu::ganesh {
 /**
